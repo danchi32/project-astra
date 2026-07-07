@@ -43,3 +43,7 @@ infra/data/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+portal/node_modules/
+portal/.next/
+portal/out/

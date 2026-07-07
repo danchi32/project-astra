@@ -15,6 +15,7 @@ public interface IAstraApiClient
 {
     Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct);
     Task<HeartbeatStatus> HeartbeatAsync(string deviceToken, HeartbeatRequest request, CancellationToken ct);
+    Task<bool> PushTelemetryAsync(string deviceToken, TelemetryPush payload, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -28,6 +29,19 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
             return null;
         }
         return await response.Content.ReadFromJsonAsync<EnrollResponse>(ct);
+    }
+
+    public async Task<bool> PushTelemetryAsync(string deviceToken, TelemetryPush payload, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/telemetry")
+        {
+            Content = JsonContent.Create(payload),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        var response = await http.SendAsync(message, ct);
+        if (!response.IsSuccessStatusCode)
+            logger.LogWarning("Telemetry push failed with status {Status}", response.StatusCode);
+        return response.IsSuccessStatusCode;
     }
 
     public async Task<HeartbeatStatus> HeartbeatAsync(

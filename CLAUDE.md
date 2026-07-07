@@ -44,8 +44,8 @@ Workflow: intent recognition → knowledge search (Qdrant) → telemetry collect
 
 1. Docker infra + DB schema + Auth (JWT, RBAC) ✅
 2. Devices API + Windows agent heartbeat (60s) + enrollment ✅
-3. Telemetry collection (CPU/RAM/disk/events/apps/services/updates) + dashboard ← current phase
-4. AI conversation + Cognitive Engine + Knowledge Base (Qdrant)
+3. Telemetry collection (CPU/RAM/disk/events/apps/services/updates) + dashboard ✅
+4. AI conversation + Cognitive Engine + Knowledge Base (Qdrant) ← current phase
 5. Self-healing with approval tiers + audit logs
 6. Assets, reporting, notifications
 

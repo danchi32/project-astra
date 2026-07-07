@@ -2,6 +2,7 @@ using AstraAgent.Service;
 using AstraAgent.Service.Api;
 using AstraAgent.Service.Enrollment;
 using AstraAgent.Service.Security;
+using AstraAgent.Service.Telemetry.Collectors;
 using AstraAgent.Service.Workers;
 using Microsoft.Extensions.Options;
 
@@ -23,6 +24,15 @@ builder.Services.AddHttpClient<IAstraApiClient, AstraApiClient>((provider, http)
     http.Timeout = TimeSpan.FromSeconds(30);
 });
 
+builder.Services.AddSingleton<ICpuCollector, CpuCollector>();
+builder.Services.AddSingleton<IMemoryCollector, MemoryCollector>();
+builder.Services.AddSingleton<IDiskCollector, DiskCollector>();
+builder.Services.AddSingleton<IEventLogCollector, EventLogCollector>();
+builder.Services.AddSingleton<IInstalledAppsCollector, InstalledAppsCollector>();
+builder.Services.AddSingleton<IServicesCollector, ServicesCollector>();
+builder.Services.AddSingleton<IWindowsUpdateCollector, WindowsUpdateCollector>();
+
 builder.Services.AddHostedService<HeartbeatWorker>();
+builder.Services.AddHostedService<TelemetryWorker>();
 
 builder.Build().Run();
