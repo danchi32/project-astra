@@ -6,8 +6,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import decode_access_token
-from app.models import User, UserRole
+from app.core.security import decode_access_token, hash_opaque_token
+from app.models import Device, User, UserRole
+from app.repositories.devices import DeviceRepository
 from app.repositories.users import UserRepository
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -34,6 +35,21 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise _credentials_error
     return user
+
+
+async def get_current_device(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_db),
+) -> Device:
+    """Authenticates the Windows agent by its opaque device token (agent routes only)."""
+    if credentials is None:
+        raise _credentials_error
+    device = await DeviceRepository(session).get_by_token_hash(
+        hash_opaque_token(credentials.credentials)
+    )
+    if device is None or not device.is_active:
+        raise _credentials_error
+    return device
 
 
 def require_roles(*roles: UserRole):

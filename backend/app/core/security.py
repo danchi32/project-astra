@@ -44,10 +44,15 @@ def decode_access_token(token: str) -> dict[str, Any]:
     return payload
 
 
-def generate_refresh_token() -> str:
+def generate_opaque_token() -> str:
     return secrets.token_urlsafe(48)
 
 
-def hash_refresh_token(token: str) -> str:
-    # Refresh tokens are opaque secrets; only their SHA-256 digest is stored.
+def hash_opaque_token(token: str) -> str:
+    # Opaque secrets (refresh, enrollment, device tokens): only the SHA-256 digest is stored.
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+# Refresh tokens are one kind of opaque token.
+generate_refresh_token = generate_opaque_token
+hash_refresh_token = hash_opaque_token

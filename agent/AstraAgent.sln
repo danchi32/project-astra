@@ -1,0 +1,22 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraAgent.Service", "src\AstraAgent.Service\AstraAgent.Service.csproj", "{8F6A1D0E-2B3C-4D5E-9F70-A1B2C3D4E5F6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraAgent.Service.Tests", "tests\AstraAgent.Service.Tests\AstraAgent.Service.Tests.csproj", "{1A2B3C4D-5E6F-4708-9A0B-C1D2E3F4A5B6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8F6A1D0E-2B3C-4D5E-9F70-A1B2C3D4E5F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F6A1D0E-2B3C-4D5E-9F70-A1B2C3D4E5F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F6A1D0E-2B3C-4D5E-9F70-A1B2C3D4E5F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F6A1D0E-2B3C-4D5E-9F70-A1B2C3D4E5F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A2B3C4D-5E6F-4708-9A0B-C1D2E3F4A5B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A2B3C4D-5E6F-4708-9A0B-C1D2E3F4A5B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A2B3C4D-5E6F-4708-9A0B-C1D2E3F4A5B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A2B3C4D-5E6F-4708-9A0B-C1D2E3F4A5B6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
