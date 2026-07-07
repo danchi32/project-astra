@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(py -0p 2>&1)",
+      "PowerShell(py -3.13 -m venv D:\\\\Astra\\\\backend\\\\.venv 2>&1)",
+      "PowerShell(& \"C:\\\\Users\\\\Danish\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" -m venv D:\\\\Astra\\\\backend\\\\.venv; echo \"exit: $LASTEXITCODE\")",
+      "PowerShell(py -3.13 --version 2>&1)",
+      "PowerShell(python -m venv D:\\\\Astra\\\\backend\\\\.venv 2>&1)",
+      "PowerShell(D:\\\\Astra\\\\backend\\\\.venv\\\\Scripts\\\\python.exe -m pip install -q --disable-pip-version-check -r D:\\\\Astra\\\\backend\\\\requirements-dev.txt 2>&1 | Select-Object -Last 15; echo \"exit: $LASTEXITCODE\")",
+      "PowerShell(py -3.11 --version 2>&1)",
+      "PowerShell(uv --version 2>&1)",
+      "PowerShell(Remove-Item -Recurse -Force D:\\\\Astra\\\\backend\\\\.venv; py -3.11 -m venv D:\\\\Astra\\\\backend\\\\.venv && D:\\\\Astra\\\\backend\\\\.venv\\\\Scripts\\\\python.exe -m pip install -q --disable-pip-version-check -r D:\\\\Astra\\\\backend\\\\requirements-dev.txt 2>&1 | Select-Object -Last 10; echo \"exit: $LASTEXITCODE\")"
+    ]
+  }
+}
