@@ -79,6 +79,8 @@ class StubProvider:
     _PROBLEM_WORDS = (
         "crash", "frozen", "freeze", "freezing", "not responding", "hang", "hung",
         "stuck", "fix", "restart", "won't open", "wont open", "keeps closing",
+        "not open", "not opening", "not working", "not launching", "not starting",
+        "won't start", "wont start", "broken", "keeps closing", "keeps crashing",
     )
     _APP_ACTIONS = {"outlook": "restart_outlook", "teams": "restart_teams", "zoom": "restart_zoom"}
 

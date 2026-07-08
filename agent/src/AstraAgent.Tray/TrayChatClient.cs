@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -35,23 +36,41 @@ public sealed class TrayChatClient
         if (token is null)
             return "This device isn't enrolled with ASTRA yet. Please contact your IT administrator.";
 
+        var response = await PostChatAsync(token, message, ct);
+
+        // A 404 means our cached conversation no longer exists (e.g. the server was reset).
+        // Drop it and start a fresh conversation, then retry once.
+        if (response.StatusCode == HttpStatusCode.NotFound && _conversationId is not null)
+        {
+            response.Dispose();
+            _conversationId = null;
+            response = await PostChatAsync(token, message, ct);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+                return $"Sorry, I couldn't reach ASTRA right now (error {(int)response.StatusCode}). "
+                     + "Please try again in a moment.";
+
+            var body = await response.Content.ReadFromJsonAsync<ChatResponse>(ct);
+            if (body is null)
+                return "Sorry, I received an empty response from ASTRA.";
+
+            _conversationId = body.ConversationId;
+            return body.Reply;
+        }
+    }
+
+    private async Task<HttpResponseMessage> PostChatAsync(
+        string token, string message, CancellationToken ct)
+    {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/chat")
         {
             Content = JsonContent.Create(new ChatRequest(message, _conversationId)),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var response = await _http.SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-            return $"Sorry, I couldn't reach ASTRA right now (error {(int)response.StatusCode}). "
-                 + "Please try again in a moment.";
-
-        var body = await response.Content.ReadFromJsonAsync<ChatResponse>(ct);
-        if (body is null)
-            return "Sorry, I received an empty response from ASTRA.";
-
-        _conversationId = body.ConversationId;
-        return body.Reply;
+        return await _http.SendAsync(request, ct);
     }
 
     private sealed record ChatRequest(
