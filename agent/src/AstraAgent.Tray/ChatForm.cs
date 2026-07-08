@@ -18,18 +18,34 @@ public sealed class ChatForm : Form
     private static readonly Color AccentColor = Color.FromArgb(37, 99, 235);
     private static readonly Color TextColor = Color.FromArgb(15, 23, 42);
 
+    /// <summary>Raised when the window minimizes or is closed to the tray, so the tray
+    /// icon can nudge the user on how to bring it back.</summary>
+    public event EventHandler? HiddenToTray;
+
     public ChatForm(TrayChatClient client)
     {
         _client = client;
 
         Text = "ASTRA Assistant";
-        FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        // FixedSingle gives a real title bar with a minimize button (a tool window has none).
+        FormBorderStyle = FormBorderStyle.FixedSingle;
         StartPosition = FormStartPosition.Manual;
-        ShowInTaskbar = false;
+        ShowInTaskbar = false;   // lives in the tray, not the taskbar
+        MinimizeBox = true;
+        MaximizeBox = false;
         Size = new Size(380, 520);
-        MinimumSize = new Size(320, 400);
         BackColor = BgColor;
         Font = new Font("Segoe UI", 9F);
+
+        // Minimizing hides the window back to the tray instead of shrinking to the taskbar.
+        Resize += (_, _) =>
+        {
+            if (WindowState == FormWindowState.Minimized)
+            {
+                Hide();
+                HiddenToTray?.Invoke(this, EventArgs.Empty);
+            }
+        };
 
         _messages = new FlowLayoutPanel
         {
@@ -70,9 +86,12 @@ public sealed class ChatForm : Form
 
     public void ShowInLowerRight()
     {
+        // Restore from minimized/hidden and pin to the lower-right corner above the taskbar.
+        WindowState = FormWindowState.Normal;
         var area = Screen.PrimaryScreen!.WorkingArea;
         Location = new Point(area.Right - Width - 12, area.Bottom - Height - 12);
         Show();
+        BringToFront();
         Activate();
         _input.Focus();
     }
@@ -84,6 +103,7 @@ public sealed class ChatForm : Form
         {
             e.Cancel = true;
             Hide();
+            HiddenToTray?.Invoke(this, EventArgs.Empty);
         }
         else
         {

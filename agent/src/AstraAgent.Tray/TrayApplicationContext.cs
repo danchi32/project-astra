@@ -41,19 +41,24 @@ public sealed class TrayApplicationContext : ApplicationContext
             if (e.Button == MouseButtons.Left)
                 ShowChat();
         };
-        _icon.ShowBalloonTip(
-            4000, "ASTRA", "Having a computer problem? Click here to chat with ASTRA.",
-            ToolTipIcon.Info);
 
-        // Open the chat window on launch so the user gets immediate, visible feedback —
-        // Windows 11 otherwise tucks new tray icons into the hidden overflow area.
-        ShowChat();
+        // Tell the user where the icon lives; clicking it opens the chat.
+        _icon.ShowBalloonTip(
+            5000, "ASTRA Assistant",
+            "ASTRA is running. Click this icon whenever you need help. "
+            + "(If you don't see the icon, click the ^ arrow near the clock.)",
+            ToolTipIcon.Info);
     }
 
     private void ShowChat()
     {
         if (_chatForm is null || _chatForm.IsDisposed)
+        {
             _chatForm = new ChatForm(_client);
+            _chatForm.HiddenToTray += (_, _) => _icon.ShowBalloonTip(
+                2500, "ASTRA Assistant",
+                "I'm still here — click this icon to chat again.", ToolTipIcon.Info);
+        }
         _chatForm.ShowInLowerRight();
     }
 
