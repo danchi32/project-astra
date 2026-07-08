@@ -44,6 +44,10 @@ public sealed class TrayApplicationContext : ApplicationContext
         _icon.ShowBalloonTip(
             4000, "ASTRA", "Having a computer problem? Click here to chat with ASTRA.",
             ToolTipIcon.Info);
+
+        // Open the chat window on launch so the user gets immediate, visible feedback —
+        // Windows 11 otherwise tucks new tray icons into the hidden overflow area.
+        ShowChat();
     }
 
     private void ShowChat()
