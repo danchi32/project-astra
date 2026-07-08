@@ -19,6 +19,13 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # AI engine — when the API key is unset, a deterministic stub provider is used
+    # (local demo + tests run without a key or network).
+    anthropic_api_key: str | None = None
+    ai_model: str = "claude-opus-4-8"
+    ai_max_tokens: int = 4096
+    ai_max_tool_iterations: int = 6
+
 
 @lru_cache
 def get_settings() -> Settings:

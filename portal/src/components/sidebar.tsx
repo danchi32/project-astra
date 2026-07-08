@@ -3,13 +3,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Monitor, Package, Users, Activity,
-  BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield,
+  BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield, Sparkles,
 } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useRouter } from "next/navigation";
 
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/assistant", icon: Sparkles, label: "AI Assistant" },
   { href: "/devices", icon: Monitor, label: "Devices" },
   { href: "/assets", icon: Package, label: "Assets" },
   { href: "/users", icon: Users, label: "Users" },
