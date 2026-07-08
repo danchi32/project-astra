@@ -31,6 +31,7 @@ builder.Services.AddSingleton<IEventLogCollector, EventLogCollector>();
 builder.Services.AddSingleton<IInstalledAppsCollector, InstalledAppsCollector>();
 builder.Services.AddSingleton<IServicesCollector, ServicesCollector>();
 builder.Services.AddSingleton<IWindowsUpdateCollector, WindowsUpdateCollector>();
+builder.Services.AddSingleton<IHardwareCollector, HardwareCollector>();
 
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();

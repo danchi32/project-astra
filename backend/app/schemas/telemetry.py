@@ -44,6 +44,14 @@ class WindowsUpdateEntry(BaseModel):
     installed_on: str | None = Field(default=None, max_length=30)
 
 
+class HardwareInfo(BaseModel):
+    manufacturer: str | None = Field(default=None, max_length=150)
+    model: str | None = Field(default=None, max_length=150)
+    cpu_name: str | None = Field(default=None, max_length=200)
+    total_ram_mb: int | None = Field(default=None, ge=0)
+    total_storage_gb: float | None = Field(default=None, ge=0)
+
+
 class TelemetryPush(BaseModel):
     """Single payload the agent sends each cycle."""
 
@@ -56,6 +64,7 @@ class TelemetryPush(BaseModel):
     disks: list[DiskInfo]
 
     # Inventory — sent periodically (agent may omit if unchanged)
+    hardware: HardwareInfo | None = None
     event_logs: list[EventLogEntry] = []
     installed_apps: list[InstalledAppEntry] = []
     services: list[ServiceEntry] = []

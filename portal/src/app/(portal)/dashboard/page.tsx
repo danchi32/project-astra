@@ -5,6 +5,7 @@ import { getDashboardSummary, getDevices } from "@/lib/api/dashboard";
 import { StatCard } from "@/components/stat-card";
 import { Gauge } from "@/components/gauge";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
+import { formatRam, formatStorage } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { data: summary, isLoading: summaryLoading } = useQuery({
@@ -73,10 +74,10 @@ export default function DashboardPage() {
           </span>
         </div>
         <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Hostname", "User", "OS", "Agent", "Status", "Last Seen"].map((h) => (
+                {["Hostname", "Brand / Model", "RAM", "Storage", "Software", "User", "Status"].map((h) => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide"
                     style={{ color: "var(--text-secondary)" }}>{h}</th>
                 ))}
@@ -84,23 +85,27 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {devicesLoading && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>
+                <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>
               )}
               {!devicesLoading && (!devices || devices.length === 0) && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
+                <tr><td colSpan={7} className="px-5 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
                   No devices enrolled yet. Create an enrollment token and run the Windows agent.
                 </td></tr>
               )}
               {devices?.map((d) => (
                 <tr key={d.id} className="transition-colors hover:bg-blue-500/5" style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-5 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{d.hostname}</td>
-                  <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>{d.logged_in_user ?? "—"}</td>
-                  <td className="px-5 py-3 max-w-[180px] truncate" style={{ color: "var(--text-secondary)" }} title={d.os_version}>{d.os_version}</td>
-                  <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>v{d.agent_version}</td>
-                  <td className="px-5 py-3"><DeviceStatusBadge status={d.status} /></td>
-                  <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>
-                    {d.last_seen_at ? new Date(d.last_seen_at).toLocaleTimeString() : "—"}
+                  <td className="px-5 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
+                    {d.hostname}
+                    <div className="text-xs font-normal max-w-[160px] truncate" style={{ color: "var(--text-secondary)" }} title={d.os_version}>{d.os_version}</div>
                   </td>
+                  <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>
+                    {d.manufacturer ?? "—"}{d.model ? ` ${d.model}` : ""}
+                  </td>
+                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{formatRam(d.total_ram_mb)}</td>
+                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{formatStorage(d.total_storage_gb)}</td>
+                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{d.installed_app_count > 0 ? d.installed_app_count : "—"}</td>
+                  <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>{d.logged_in_user ?? "—"}</td>
+                  <td className="px-5 py-3"><DeviceStatusBadge status={d.status} /></td>
                 </tr>
               ))}
             </tbody>

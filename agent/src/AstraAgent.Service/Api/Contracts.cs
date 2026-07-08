@@ -52,12 +52,20 @@ public sealed record TelemetryWindowsUpdate(
     [property: JsonPropertyName("is_installed")] bool IsInstalled,
     [property: JsonPropertyName("installed_on")] string? InstalledOn);
 
+public sealed record TelemetryHardware(
+    [property: JsonPropertyName("manufacturer")] string? Manufacturer,
+    [property: JsonPropertyName("model")] string? Model,
+    [property: JsonPropertyName("cpu_name")] string? CpuName,
+    [property: JsonPropertyName("total_ram_mb")] long? TotalRamMb,
+    [property: JsonPropertyName("total_storage_gb")] double? TotalStorageGb);
+
 public sealed record TelemetryPush(
     [property: JsonPropertyName("collected_at")] DateTimeOffset CollectedAt,
     [property: JsonPropertyName("cpu_percent")] float CpuPercent,
     [property: JsonPropertyName("ram_total_mb")] long RamTotalMb,
     [property: JsonPropertyName("ram_used_mb")] long RamUsedMb,
     [property: JsonPropertyName("disks")] IReadOnlyList<TelemetryDiskInfo> Disks,
+    [property: JsonPropertyName("hardware")] TelemetryHardware? Hardware,
     [property: JsonPropertyName("event_logs")] IReadOnlyList<TelemetryEventLogEntry> EventLogs,
     [property: JsonPropertyName("installed_apps")] IReadOnlyList<TelemetryInstalledApp> InstalledApps,
     [property: JsonPropertyName("services")] IReadOnlyList<TelemetryServiceEntry> Services,

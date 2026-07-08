@@ -92,6 +92,20 @@ class TelemetryRepository:
         )
         return list(result.scalars().all())
 
+    async def count_apps_for_device(self, device_id: uuid.UUID) -> int:
+        result = await self.session.execute(
+            select(func.count()).where(DeviceInstalledApp.device_id == device_id)
+        )
+        return result.scalar_one()
+
+    async def count_apps_by_device_for_org(self, org_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        result = await self.session.execute(
+            select(DeviceInstalledApp.device_id, func.count())
+            .where(DeviceInstalledApp.org_id == org_id)
+            .group_by(DeviceInstalledApp.device_id)
+        )
+        return {row[0]: row[1] for row in result.all()}
+
     # ── Services ───────────────────────────────────────────────────────────
 
     async def replace_services(

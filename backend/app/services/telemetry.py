@@ -28,6 +28,19 @@ class TelemetryService:
     async def ingest(self, *, device: Device, data: TelemetryPush) -> None:
         now = data.collected_at
 
+        if data.hardware is not None:
+            hw = data.hardware
+            if hw.manufacturer is not None:
+                device.manufacturer = hw.manufacturer
+            if hw.model is not None:
+                device.model = hw.model
+            if hw.cpu_name is not None:
+                device.cpu_name = hw.cpu_name
+            if hw.total_ram_mb is not None:
+                device.total_ram_mb = hw.total_ram_mb
+            if hw.total_storage_gb is not None:
+                device.total_storage_gb = hw.total_storage_gb
+
         await self.repo.add_snapshot(
             TelemetrySnapshot(
                 device_id=device.id,

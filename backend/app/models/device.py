@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -25,3 +25,10 @@ class Device(TimestampMixin, Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+
+    # Hardware asset attributes — refreshed from the agent's inventory push.
+    manufacturer: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    cpu_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    total_ram_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_storage_gb: Mapped[float | None] = mapped_column(Float, nullable=True)

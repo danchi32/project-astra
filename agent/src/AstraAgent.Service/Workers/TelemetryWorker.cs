@@ -17,6 +17,7 @@ public sealed class TelemetryWorker(
     IInstalledAppsCollector apps,
     IServicesCollector services,
     IWindowsUpdateCollector updates,
+    IHardwareCollector hardware,
     IOptions<AgentOptions> options,
     ILogger<TelemetryWorker> logger) : BackgroundService
 {
@@ -66,6 +67,7 @@ public sealed class TelemetryWorker(
             RamTotalMb: mem.TotalMb,
             RamUsedMb: mem.UsedMb,
             Disks: diskList.Select(d => new TelemetryDiskInfo(d.Drive, d.TotalGb, d.UsedGb, d.FreeGb)).ToList(),
+            Hardware: collectInventory ? ToHardware(hardware.GetHardwareInfo()) : null,
             EventLogs: eventList.Select(e => new TelemetryEventLogEntry(e.LogName, e.Source, e.EventId, e.Level, e.Message, e.OccurredAt)).ToList(),
             InstalledApps: collectInventory
                 ? apps.GetInstalledApps().Select(a => new TelemetryInstalledApp(a.Name, a.Version, a.Publisher, a.InstallDate)).ToList()
@@ -84,4 +86,7 @@ public sealed class TelemetryWorker(
             "Telemetry pushed — CPU {Cpu:F1}% RAM {Ram}/{Total}MB Disks:{Disks}",
             cpuPct, mem.UsedMb, mem.TotalMb, diskList.Count);
     }
+
+    private static TelemetryHardware ToHardware(HardwareInfo h) =>
+        new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb);
 }

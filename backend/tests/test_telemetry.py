@@ -25,6 +25,13 @@ TELEMETRY_PAYLOAD = {
     "windows_updates": [
         {"kb_article_id": "KB5012345", "title": "2026-07 Cumulative Update", "is_installed": False, "installed_on": None}
     ],
+    "hardware": {
+        "manufacturer": "Dell Inc.",
+        "model": "Latitude 5540",
+        "cpu_name": "Intel(R) Core(TM) i7-1355U",
+        "total_ram_mb": 16065,
+        "total_storage_gb": 476.9,
+    },
 }
 
 
@@ -144,6 +151,37 @@ async def test_dashboard_summary_reflects_telemetry(client, admin_headers):
     assert body["avg_cpu_percent"] == 42.5
     assert body["critical_event_count"] == 1
     assert body["pending_update_count"] == 1
+
+
+async def test_hardware_asset_details_populated(client, admin_headers):
+    device_token = await _enroll_device(client, admin_headers)
+    await client.post(
+        "/api/v1/agent/telemetry",
+        json=TELEMETRY_PAYLOAD,
+        headers={"Authorization": f"Bearer {device_token}"},
+    )
+    devices = await client.get("/api/v1/devices", headers=admin_headers)
+    device = devices.json()[0]
+    assert device["manufacturer"] == "Dell Inc."
+    assert device["model"] == "Latitude 5540"
+    assert device["cpu_name"] == "Intel(R) Core(TM) i7-1355U"
+    assert device["total_ram_mb"] == 16065
+    assert device["total_storage_gb"] == 476.9
+    # Installed-app count is derived from the ingested inventory.
+    assert device["installed_app_count"] == 1
+
+
+async def test_hardware_optional_when_omitted(client, admin_headers):
+    device_token = await _enroll_device(client, admin_headers)
+    payload = {k: v for k, v in TELEMETRY_PAYLOAD.items() if k != "hardware"}
+    resp = await client.post(
+        "/api/v1/agent/telemetry",
+        json=payload,
+        headers={"Authorization": f"Bearer {device_token}"},
+    )
+    assert resp.status_code == 200
+    devices = await client.get("/api/v1/devices", headers=admin_headers)
+    assert devices.json()[0]["manufacturer"] is None
 
 
 async def test_regular_user_cannot_read_telemetry(client, user_headers, admin_headers):

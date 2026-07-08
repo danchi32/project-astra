@@ -25,6 +25,13 @@ export interface Device {
   last_seen_at: string | null;
   is_active: boolean;
   created_at: string;
+  // Hardware asset attributes
+  manufacturer: string | null;
+  model: string | null;
+  cpu_name: string | null;
+  total_ram_mb: number | null;
+  total_storage_gb: number | null;
+  installed_app_count: number;
 }
 
 export interface TelemetrySnapshot {

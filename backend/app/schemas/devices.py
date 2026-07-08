@@ -75,8 +75,16 @@ class DeviceRead(BaseModel):
     is_active: bool
     created_at: datetime
 
+    # Hardware asset attributes
+    manufacturer: str | None
+    model: str | None
+    cpu_name: str | None
+    total_ram_mb: int | None
+    total_storage_gb: float | None
+    installed_app_count: int
+
     @classmethod
-    def from_device(cls, device: Device) -> "DeviceRead":
+    def from_device(cls, device: Device, installed_app_count: int = 0) -> "DeviceRead":
         online = (
             device.last_seen_at is not None
             and utcnow() - as_utc(device.last_seen_at) < ONLINE_THRESHOLD
@@ -94,4 +102,10 @@ class DeviceRead(BaseModel):
             last_seen_at=device.last_seen_at,
             is_active=device.is_active,
             created_at=device.created_at,
+            manufacturer=device.manufacturer,
+            model=device.model,
+            cpu_name=device.cpu_name,
+            total_ram_mb=device.total_ram_mb,
+            total_storage_gb=device.total_storage_gb,
+            installed_app_count=installed_app_count,
         )

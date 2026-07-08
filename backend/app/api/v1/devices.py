@@ -13,6 +13,7 @@ from app.schemas.devices import (
     EnrollmentTokenCreated,
     EnrollmentTokenRead,
 )
+from app.repositories.telemetry import TelemetryRepository
 from app.services.devices import DeviceService
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -69,8 +70,10 @@ async def list_devices(
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
 ) -> list[DeviceRead]:
-    devices = await DeviceService(session).list_devices(actor=actor)
-    return [DeviceRead.from_device(d) for d in devices]
+    service = DeviceService(session)
+    devices = await service.list_devices(actor=actor)
+    counts = await TelemetryRepository(session).count_apps_by_device_for_org(actor.org_id)
+    return [DeviceRead.from_device(d, counts.get(d.id, 0)) for d in devices]
 
 
 @router.get("/{device_id}", response_model=DeviceRead, summary="Get a device")
@@ -80,7 +83,8 @@ async def get_device(
     session: AsyncSession = Depends(get_db),
 ) -> DeviceRead:
     device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
-    return DeviceRead.from_device(device)
+    count = await TelemetryRepository(session).count_apps_for_device(device.id)
+    return DeviceRead.from_device(device, count)
 
 
 @router.patch("/{device_id}", response_model=DeviceRead, summary="Update a device (admin only)")
