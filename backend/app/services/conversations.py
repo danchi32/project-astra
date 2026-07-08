@@ -87,6 +87,7 @@ class ConversationService:
             history=history,
             user_message=content,
             device_hostname=device.hostname,
+            acting_device_id=device.id,
         )
 
         assistant_message = await self.messages.add(

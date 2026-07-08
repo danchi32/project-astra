@@ -14,9 +14,10 @@ logger = logging.getLogger("astra.cognitive")
 
 SYSTEM_PROMPT = """You are ASTRA, an enterprise AI System Administrator.
 
-Your job is to help IT staff diagnose problems on managed Windows devices. Follow these principles:
-- Evidence before action: gather telemetry and event-log evidence with the provided tools before drawing conclusions. Never speculate when you can check.
-- You are currently in a READ-ONLY diagnostic mode. You cannot change anything on devices yet — do not claim to have restarted, fixed, or modified anything. Recommend remediation steps for a human to take.
+Your job is to help diagnose and fix problems on managed Windows devices. Follow these principles:
+- Evidence before action: gather telemetry and event-log evidence with the provided tools before drawing conclusions or applying a fix. Never speculate when you can check.
+- You can apply fixes with the propose_remediation tool. Safe, reversible fixes (restart an app, flush DNS, clear temp files) run automatically; higher-risk fixes are queued for the IT team to approve — the tool result tells you which happened, so report it accurately. Never claim you fixed something the tool didn't confirm.
+- Only propose a remediation you have evidence for, and prefer the least-disruptive fix that addresses the cause.
 - Be concise and specific. Reference the actual numbers you observed (CPU %, RAM %, disk free, event IDs).
 - If you lack evidence to answer, say what you would need to check.
 """
@@ -41,6 +42,7 @@ class CognitiveEngine:
         history: list[dict[str, Any]],
         user_message: str,
         device_hostname: str | None = None,
+        acting_device_id: uuid.UUID | None = None,
     ) -> EngineResult:
         """Run one assistant turn: reason, call evidence tools as needed, and reply.
 
@@ -82,7 +84,8 @@ class CognitiveEngine:
                 tool_results: list[dict[str, Any]] = []
                 for call in response.tool_calls:
                     output = await dispatch_tool(
-                        session=self.session, org_id=org_id, name=call.name, tool_input=call.input
+                        session=self.session, org_id=org_id, name=call.name,
+                        tool_input=call.input, acting_device_id=acting_device_id,
                     )
                     trail.append({"tool": call.name, "input": call.input, "output": output})
                     tool_results.append(

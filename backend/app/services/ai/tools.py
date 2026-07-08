@@ -10,10 +10,15 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import RemediationSource
 from app.repositories.devices import DeviceRepository
 from app.repositories.telemetry import TelemetryRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
+from app.services.remediation.actions import ACTIONS
+from app.services.remediation.service import RemediationError, RemediationService
+
+_ACTION_IDS = sorted(ACTIONS.keys())
 
 # Anthropic tool schemas advertised to the model.
 TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -47,15 +52,56 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "required": ["hostname"],
         },
     },
+    {
+        "name": "propose_remediation",
+        "description": "Propose a fix for a problem on the user's own device. Call this only "
+        "after you have gathered evidence and are confident of the cause. Automatic fixes "
+        "(restarting an app, flushing DNS, clearing temp files) are applied immediately; "
+        "higher-risk fixes are queued for the IT team to approve. Tell the user plainly what "
+        "you did or that it's awaiting approval.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action_id": {
+                    "type": "string",
+                    "enum": _ACTION_IDS,
+                    "description": "The remediation action to apply.",
+                },
+                "service_name": {
+                    "type": "string",
+                    "description": "Only for restart_service: the Windows service to restart.",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "A short, plain-language reason for this fix.",
+                },
+            },
+            "required": ["action_id", "reason"],
+        },
+    },
 ]
 
 
 async def dispatch_tool(
-    *, session: AsyncSession, org_id: uuid.UUID, name: str, tool_input: dict[str, Any]
+    *,
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    name: str,
+    tool_input: dict[str, Any],
+    acting_device_id: uuid.UUID | None = None,
 ) -> str:
-    """Execute a tool call within the org's scope and return a JSON string result."""
+    """Execute a tool call within the org's scope and return a JSON string result.
+
+    `acting_device_id` is the device whose tray the chat came from; remediation acts on it.
+    """
     devices = DeviceRepository(session)
     telemetry = TelemetryRepository(session)
+
+    if name == "propose_remediation":
+        return await _propose_remediation(
+            session=session, org_id=org_id, acting_device_id=acting_device_id,
+            tool_input=tool_input or {}
+        )
 
     if name == "list_devices":
         rows = await devices.list_by_org(org_id)
@@ -118,3 +164,46 @@ async def _find_by_hostname(repo: DeviceRepository, org_id: uuid.UUID, hostname:
         if device.hostname.lower() == hostname.lower():
             return device
     return None
+
+
+async def _propose_remediation(
+    *,
+    session: AsyncSession,
+    org_id: uuid.UUID,
+    acting_device_id: uuid.UUID | None,
+    tool_input: dict[str, Any],
+) -> str:
+    if acting_device_id is None:
+        return json.dumps(
+            {"error": "Remediation can only be applied from the device's own assistant."}
+        )
+
+    device = await DeviceRepository(session).get(acting_device_id)
+    if device is None:
+        return json.dumps({"error": "Device not found."})
+
+    action_id = tool_input.get("action_id", "")
+    reason = tool_input.get("reason", "Requested via the device assistant.")
+    params: dict[str, Any] = {}
+    if tool_input.get("service_name"):
+        params["service_name"] = tool_input["service_name"]
+
+    try:
+        task = await RemediationService(session).create_task(
+            org_id=org_id,
+            device=device,
+            action_id=action_id,
+            params=params or None,
+            reason=reason,
+            source=RemediationSource.ASSISTANT,
+            actor_user_id=None,
+        )
+    except RemediationError as exc:
+        return json.dumps({"error": str(exc)})
+
+    action = ACTIONS[action_id]
+    if task.status.value == "approved":
+        outcome = f"Applied automatically ({action.label}). The agent will run it shortly."
+    else:
+        outcome = f"Queued for IT approval ({action.label}); it needs a {task.tier} sign-off."
+    return json.dumps({"task_id": str(task.id), "action": action.label, "outcome": outcome})

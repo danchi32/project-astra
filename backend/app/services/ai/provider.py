@@ -76,6 +76,11 @@ class StubProvider:
         "cpu", "ram", "memory", "disk", "slow", "performance", "health",
         "telemetry", "device", "status", "event", "error",
     )
+    _PROBLEM_WORDS = (
+        "crash", "frozen", "freeze", "freezing", "not responding", "hang", "hung",
+        "stuck", "fix", "restart", "won't open", "wont open", "keeps closing",
+    )
+    _APP_ACTIONS = {"outlook": "restart_outlook", "teams": "restart_teams", "zoom": "restart_zoom"}
 
     async def generate(
         self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
@@ -89,6 +94,18 @@ class StubProvider:
 
         # Otherwise inspect the latest user text.
         user_text = self._latest_user_text(messages).lower()
+
+        # A clear "app X is broken — fix it" → propose the matching automatic remediation.
+        action = self._match_remediation(user_text)
+        if action is not None:
+            return LLMResponse(
+                text="I can fix that for you — applying it now.",
+                tool_calls=[ToolCall(
+                    id="stub-remediate", name="propose_remediation",
+                    input={"action_id": action, "reason": "User reported this app is misbehaving."},
+                )],
+            )
+
         if any(kw in user_text for kw in self._DIAGNOSTIC_KEYWORDS):
             return LLMResponse(
                 text="Let me gather the current device telemetry before answering.",
@@ -101,6 +118,14 @@ class StubProvider:
                 "health, performance, or recent errors and I'll investigate."
             )
         )
+
+    def _match_remediation(self, text: str) -> str | None:
+        if not any(w in text for w in self._PROBLEM_WORDS):
+            return None
+        for app, action in self._APP_ACTIONS.items():
+            if app in text:
+                return action
+        return None
 
     @staticmethod
     def _extract_tool_results(message: dict[str, Any]) -> list[str] | None:
@@ -126,10 +151,16 @@ class StubProvider:
         for raw in tool_results:
             try:
                 data = json.loads(raw)
-                if isinstance(data, list):
-                    count += len(data)
             except (json.JSONDecodeError, TypeError):
-                pass
+                continue
+            if isinstance(data, dict) and ("outcome" in data or "task_id" in data):
+                outcome = data.get("outcome", "I've applied the fix.")
+                return f"Done — {outcome} Anything else?"
+            if isinstance(data, dict) and "error" in data:
+                error = data["error"]
+                return f"I wasn't able to apply that fix: {error}"
+            if isinstance(data, list):
+                count += len(data)
         return (
             f"Based on the evidence I gathered ({count} device record(s)), everything I can see "
             "is reporting normally. Tell me which device to look at in detail and I'll dig deeper."

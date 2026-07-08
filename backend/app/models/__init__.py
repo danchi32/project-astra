@@ -5,6 +5,7 @@ from app.models.device import Device
 from app.models.enrollment_token import EnrollmentToken
 from app.models.organization import Organization
 from app.models.refresh_token import RefreshToken
+from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
@@ -28,6 +29,9 @@ __all__ = [
     "MessageRole",
     "Organization",
     "RefreshToken",
+    "RemediationSource",
+    "RemediationStatus",
+    "RemediationTask",
     "TelemetrySnapshot",
     "User",
     "UserRole",
