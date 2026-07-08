@@ -3,6 +3,9 @@ import os
 # Must be set before any app import triggers Settings validation.
 os.environ.setdefault("ASTRA_JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ.setdefault("ASTRA_DATABASE_URL", "sqlite+aiosqlite://")
+# Force the deterministic stub AI provider — tests must never call the real API,
+# even if a developer has ASTRA_ANTHROPIC_API_KEY set in the environment or backend/.env.
+os.environ["ASTRA_ANTHROPIC_API_KEY"] = ""
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient

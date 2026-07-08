@@ -1,4 +1,5 @@
 """The ASTRA cognitive engine: an agentic tool-use loop over read-only evidence tools."""
+import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.services.ai.provider import LLMProvider, get_provider
 from app.services.ai.tools import TOOL_SCHEMAS, dispatch_tool
+
+logger = logging.getLogger("astra.cognitive")
 
 SYSTEM_PROMPT = """You are ASTRA, an enterprise AI System Administrator.
 
@@ -56,35 +59,47 @@ class CognitiveEngine:
         messages: list[dict[str, Any]] = [*history, {"role": "user", "content": user_message}]
         trail: list[dict[str, Any]] = []
 
-        for _ in range(self.max_iterations):
-            response = await self.provider.generate(
-                system=system, messages=messages, tools=TOOL_SCHEMAS
+        try:
+            for _ in range(self.max_iterations):
+                response = await self.provider.generate(
+                    system=system, messages=messages, tools=TOOL_SCHEMAS
+                )
+
+                if not response.tool_calls:
+                    return EngineResult(text=response.text, tool_trail=trail)
+
+                # Record the assistant's tool-use turn.
+                assistant_content: list[dict[str, Any]] = []
+                if response.text:
+                    assistant_content.append({"type": "text", "text": response.text})
+                for call in response.tool_calls:
+                    assistant_content.append(
+                        {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}
+                    )
+                messages.append({"role": "assistant", "content": assistant_content})
+
+                # Execute each tool and feed results back.
+                tool_results: list[dict[str, Any]] = []
+                for call in response.tool_calls:
+                    output = await dispatch_tool(
+                        session=self.session, org_id=org_id, name=call.name, tool_input=call.input
+                    )
+                    trail.append({"tool": call.name, "input": call.input, "output": output})
+                    tool_results.append(
+                        {"type": "tool_result", "tool_use_id": call.id, "content": output}
+                    )
+                messages.append({"role": "user", "content": tool_results})
+        except Exception:
+            # An LLM/provider failure (auth, billing, rate limit, network) must not crash
+            # the request — degrade to a friendly message for the end user; operators see
+            # the full stack in the logs.
+            logger.exception("Cognitive engine provider call failed")
+            return EngineResult(
+                text="I'm sorry — I couldn't finish looking into this because the AI service is "
+                "temporarily unavailable. Please try again in a few minutes, or contact your IT "
+                "team if it keeps happening.",
+                tool_trail=trail,
             )
-
-            if not response.tool_calls:
-                return EngineResult(text=response.text, tool_trail=trail)
-
-            # Record the assistant's tool-use turn.
-            assistant_content: list[dict[str, Any]] = []
-            if response.text:
-                assistant_content.append({"type": "text", "text": response.text})
-            for call in response.tool_calls:
-                assistant_content.append(
-                    {"type": "tool_use", "id": call.id, "name": call.name, "input": call.input}
-                )
-            messages.append({"role": "assistant", "content": assistant_content})
-
-            # Execute each tool and feed results back.
-            tool_results: list[dict[str, Any]] = []
-            for call in response.tool_calls:
-                output = await dispatch_tool(
-                    session=self.session, org_id=org_id, name=call.name, tool_input=call.input
-                )
-                trail.append({"tool": call.name, "input": call.input, "output": output})
-                tool_results.append(
-                    {"type": "tool_result", "tool_use_id": call.id, "content": output}
-                )
-            messages.append({"role": "user", "content": tool_results})
 
         # Iteration cap hit — return whatever the last text was.
         return EngineResult(
