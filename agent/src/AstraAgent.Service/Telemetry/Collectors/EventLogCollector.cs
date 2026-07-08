@@ -37,9 +37,7 @@ public sealed class EventLogCollector(ILogger<EventLogCollector> logger) : IEven
                                 record.Id,
                                 LevelName(record.Level),
                                 TruncateMessage(record.FormatDescription() ?? string.Empty),
-                                record.TimeCreated.HasValue
-                                    ? new DateTimeOffset(record.TimeCreated.Value, TimeSpan.Zero)
-                                    : DateTimeOffset.UtcNow));
+                                    ToOffset(record.TimeCreated)));
                         }
                     }
                 }
@@ -54,6 +52,24 @@ public sealed class EventLogCollector(ILogger<EventLogCollector> logger) : IEven
             logger.LogWarning(ex, "Event log collection failed");
         }
         return results;
+    }
+
+    /// <summary>EventRecord.TimeCreated is a local (or unspecified) DateTime; converting it
+    /// to UTC first avoids the "UTC Offset does not match" exception that a naive
+    /// DateTimeOffset(local, TimeSpan.Zero) construction throws.</summary>
+    internal static DateTimeOffset ToOffset(DateTime? timeCreated)
+    {
+        if (!timeCreated.HasValue)
+            return DateTimeOffset.UtcNow;
+
+        var value = timeCreated.Value;
+        var utc = value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            // Treat Unspecified as local time, which is how the event log reports it.
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Local).ToUniversalTime(),
+        };
+        return new DateTimeOffset(utc, TimeSpan.Zero);
     }
 
     private static string LevelName(byte? level) => level switch

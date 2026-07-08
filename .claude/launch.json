@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "D:\\Astra\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["D:\\Astra\\backend\\scripts\\run_demo.py"],
+      "port": 8000
+    },
+    {
+      "name": "portal",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": [
+        "D:\\Astra\\portal\\node_modules\\next\\dist\\bin\\next",
+        "dev",
+        "D:\\Astra\\portal"
+      ],
+      "port": 3000
+    }
+  ]
+}

@@ -22,6 +22,11 @@ public sealed class EnrollmentService(
     IOptions<AgentOptions> options,
     ILogger<EnrollmentService> logger) : IEnrollmentService
 {
+    // The heartbeat and telemetry workers both request the credential concurrently.
+    // Serialise enrollment so only one HTTP enroll happens; the other waits and
+    // then reuses the freshly stored token instead of racing a second enroll.
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     public async Task<string?> GetDeviceTokenAsync(CancellationToken ct)
     {
         var stored = store.Load();
@@ -32,11 +37,36 @@ public sealed class EnrollmentService(
 
     public async Task<string?> ReEnrollAsync(CancellationToken ct)
     {
-        store.Clear();
-        return await EnrollAsync(ct);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            store.Clear();
+            return await EnrollLockedAsync(ct);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private async Task<string?> EnrollAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            // Double-check: another worker may have enrolled while we waited.
+            var stored = store.Load();
+            if (stored is not null)
+                return stored;
+            return await EnrollLockedAsync(ct);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task<string?> EnrollLockedAsync(CancellationToken ct)
     {
         var enrollmentToken = options.Value.EnrollmentToken;
         if (string.IsNullOrWhiteSpace(enrollmentToken))
