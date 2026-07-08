@@ -3,7 +3,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Conversation, Message, MessageRole, User
+from app.models import Conversation, Device, Message, MessageRole, User
 from app.repositories.conversations import ConversationRepository, MessageRepository
 from app.services.ai.cognitive import CognitiveEngine
 from app.services.ai.provider import LLMProvider
@@ -57,6 +57,48 @@ class ConversationService:
         )
         await self.session.commit()
         return user_message, assistant_message
+
+    # -- Device-initiated chat (Windows tray, no user login) -------------------
+
+    async def device_chat(
+        self, *, device: Device, content: str, conversation_id: uuid.UUID | None
+    ) -> tuple[Conversation, Message]:
+        """Handle a chat turn from a device's tray app, focused on that device."""
+        if conversation_id is not None:
+            conversation = await self.conversations.get(conversation_id)
+            if conversation is None or conversation.device_id != device.id:
+                raise NotFoundError("Conversation not found")
+        else:
+            conversation = await self.conversations.add(
+                Conversation(
+                    org_id=device.org_id,
+                    device_id=device.id,
+                    title=f"{device.hostname} support",
+                )
+            )
+
+        history = self._build_history(await self.messages.list_by_conversation(conversation.id))
+        await self.messages.add(
+            Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
+        )
+
+        result = await self.engine.run(
+            org_id=device.org_id,
+            history=history,
+            user_message=content,
+            device_hostname=device.hostname,
+        )
+
+        assistant_message = await self.messages.add(
+            Message(
+                conversation_id=conversation.id,
+                role=MessageRole.ASSISTANT,
+                content=result.text,
+                tool_trail=result.tool_trail or None,
+            )
+        )
+        await self.session.commit()
+        return conversation, assistant_message
 
     async def _get_owned(self, actor: User, conversation_id: uuid.UUID) -> Conversation:
         conversation = await self.conversations.get(conversation_id)

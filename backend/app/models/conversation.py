@@ -20,8 +20,12 @@ class Conversation(TimestampMixin, Base):
     org_id: Mapped[uuid.UUID] = mapped_column(
         GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    # A conversation is owned by either a portal user or an enrolled device (tray chat).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
 

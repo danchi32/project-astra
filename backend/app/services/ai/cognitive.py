@@ -32,18 +32,33 @@ class CognitiveEngine:
         self.max_iterations = get_settings().ai_max_tool_iterations
 
     async def run(
-        self, *, org_id: uuid.UUID, history: list[dict[str, Any]], user_message: str
+        self,
+        *,
+        org_id: uuid.UUID,
+        history: list[dict[str, Any]],
+        user_message: str,
+        device_hostname: str | None = None,
     ) -> EngineResult:
         """Run one assistant turn: reason, call evidence tools as needed, and reply.
 
         `history` is prior user/assistant text turns in Anthropic wire format.
+        When `device_hostname` is set (tray chat), the AI focuses on that device.
         """
+        system = SYSTEM_PROMPT
+        if device_hostname:
+            system += (
+                f"\n\nThe person chatting with you is the logged-in user of device "
+                f"'{device_hostname}'. They are reporting a problem on THIS device. Focus your "
+                f"investigation on '{device_hostname}' unless they explicitly ask about another. "
+                f"Speak to them as the end user (not an IT admin): be friendly and avoid jargon."
+            )
+
         messages: list[dict[str, Any]] = [*history, {"role": "user", "content": user_message}]
         trail: list[dict[str, Any]] = []
 
         for _ in range(self.max_iterations):
             response = await self.provider.generate(
-                system=SYSTEM_PROMPT, messages=messages, tools=TOOL_SCHEMAS
+                system=system, messages=messages, tools=TOOL_SCHEMAS
             )
 
             if not response.tool_calls:

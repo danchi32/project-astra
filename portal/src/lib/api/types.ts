@@ -53,23 +53,3 @@ export interface DashboardSummary {
   critical_event_count: number;
   pending_update_count: number;
 }
-
-export interface Conversation {
-  id: string;
-  title: string;
-  created_at: string;
-}
-
-export interface ToolTrailEntry {
-  tool: string;
-  input: Record<string, unknown>;
-  output: string;
-}
-
-export interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  tool_trail: ToolTrailEntry[] | null;
-  created_at: string;
-}

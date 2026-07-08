@@ -36,3 +36,15 @@ class SendMessageRequest(BaseModel):
 class SendMessageResponse(BaseModel):
     user_message: MessageRead
     assistant_message: MessageRead
+
+
+class AgentChatRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    # Omit on the first message; reuse the returned id to continue the conversation.
+    conversation_id: uuid.UUID | None = None
+
+
+class AgentChatResponse(BaseModel):
+    conversation_id: uuid.UUID
+    reply: str
+    tool_trail: list[dict[str, Any]] | None

@@ -21,6 +21,15 @@ class ConversationRepository:
         )
         return list(result.scalars().all())
 
+    async def latest_for_device(self, device_id: uuid.UUID) -> Conversation | None:
+        result = await self.session.execute(
+            select(Conversation)
+            .where(Conversation.device_id == device_id)
+            .order_by(Conversation.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def add(self, conversation: Conversation) -> Conversation:
         self.session.add(conversation)
         await self.session.flush()

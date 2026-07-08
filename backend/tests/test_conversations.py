@@ -112,6 +112,87 @@ async def test_send_to_unknown_conversation_is_404(client, user_headers):
     assert resp.status_code == 404
 
 
+async def test_device_tray_chat(client, admin_headers):
+    # A device chats via its device token — no user login involved.
+    await _enroll_and_push_telemetry(client, admin_headers)
+    # Grab the device token by re-enrolling would rotate it; instead read it from the
+    # enroll flow used above by enrolling a second device with its own token here.
+    tok = await client.post(
+        "/api/v1/devices/enrollment-tokens", json={"name": "tray"}, headers=admin_headers
+    )
+    enroll = await client.post(
+        "/api/v1/agent/enroll",
+        json={
+            "enrollment_token": tok.json()["token"],
+            "hostname": "TRAY-PC",
+            "machine_id": "tray-machine",
+            "os_version": "Windows 11",
+            "agent_version": "0.1.0",
+        },
+    )
+    device_headers = {"Authorization": f"Bearer {enroll.json()['device_token']}"}
+
+    first = await client.post(
+        "/api/v1/agent/chat", json={"content": "my pc feels slow"}, headers=device_headers
+    )
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert body["conversation_id"]
+    assert body["reply"]
+    # Diagnostic keyword triggered evidence gathering.
+    assert body["tool_trail"]
+
+    # Continue the same conversation with the returned id.
+    second = await client.post(
+        "/api/v1/agent/chat",
+        json={"content": "thanks", "conversation_id": body["conversation_id"]},
+        headers=device_headers,
+    )
+    assert second.status_code == 200
+    assert second.json()["conversation_id"] == body["conversation_id"]
+
+
+async def test_device_chat_requires_device_token(client, admin_headers):
+    # A portal user's JWT is not a device token — the agent chat endpoint rejects it.
+    resp = await client.post(
+        "/api/v1/agent/chat", json={"content": "hello"}, headers=admin_headers
+    )
+    assert resp.status_code == 401
+
+
+async def test_device_cannot_use_another_devices_conversation(client, admin_headers):
+    tok = await client.post(
+        "/api/v1/devices/enrollment-tokens", json={"name": "tray"}, headers=admin_headers
+    )
+
+    async def enroll(hostname, machine_id):
+        r = await client.post(
+            "/api/v1/agent/enroll",
+            json={
+                "enrollment_token": tok.json()["token"],
+                "hostname": hostname,
+                "machine_id": machine_id,
+                "os_version": "Windows 11",
+                "agent_version": "0.1.0",
+            },
+        )
+        return {"Authorization": f"Bearer {r.json()['device_token']}"}
+
+    a = await enroll("DEV-A", "machine-a")
+    b = await enroll("DEV-B", "machine-b")
+
+    made = await client.post("/api/v1/agent/chat", json={"content": "hi"}, headers=a)
+    cid = made.json()["conversation_id"]
+
+    # Device B tries to post into Device A's conversation.
+    resp = await client.post(
+        "/api/v1/agent/chat",
+        json={"content": "intrude", "conversation_id": cid},
+        headers=b,
+    )
+    assert resp.status_code == 404
+
+
 async def test_tool_dispatch_reads_telemetry_directly(session_factory, admin_user):
     # Unit-level: the telemetry tool returns real data for an enrolled device.
     from app.core.security import hash_opaque_token
