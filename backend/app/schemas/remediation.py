@@ -20,7 +20,9 @@ class RemediationTaskRead(BaseModel):
 
     id: uuid.UUID
     device_id: uuid.UUID
+    device_hostname: str | None = None
     action_id: str
+    action_label: str | None = None
     params: dict[str, Any] | None
     tier: str
     status: RemediationStatus

@@ -20,6 +20,14 @@ router = APIRouter(prefix="/remediations", tags=["remediation"])
 staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 
 
+def _enrich(task, hostname_by_id: dict) -> RemediationTaskRead:
+    read = RemediationTaskRead.model_validate(task)
+    read.device_hostname = hostname_by_id.get(task.device_id)
+    action = ACTIONS.get(task.action_id)
+    read.action_label = action.label if action else task.action_id
+    return read
+
+
 @router.get("/actions", response_model=list[RemediationActionRead], summary="List remediation actions")
 async def list_actions(_: User = Depends(get_current_user)) -> list[RemediationActionRead]:
     return [
@@ -36,8 +44,12 @@ async def list_tasks(
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
 ) -> list[RemediationTaskRead]:
+    from app.repositories.devices import DeviceRepository
+
     rows = await RemediationService(session).list_for_org(actor=actor)
-    return [RemediationTaskRead.model_validate(t) for t in rows]
+    devices = await DeviceRepository(session).list_by_org(actor.org_id)
+    hostname_by_id = {d.id: d.hostname for d in devices}
+    return [_enrich(t, hostname_by_id) for t in rows]
 
 
 @router.post(
@@ -63,7 +75,7 @@ async def create_task(
     except RemediationError as exc:
         from fastapi import HTTPException
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return RemediationTaskRead.model_validate(task)
+    return _enrich(task, {device.id: device.hostname})
 
 
 @router.post("/{task_id}/approve", response_model=RemediationTaskRead, summary="Approve a pending task")
@@ -77,7 +89,7 @@ async def approve_task(
     except RemediationError as exc:
         from fastapi import HTTPException
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-    return RemediationTaskRead.model_validate(task)
+    return _enrich(task, await _hostname_map(session, task))
 
 
 @router.post("/{task_id}/reject", response_model=RemediationTaskRead, summary="Reject a pending task")
@@ -87,4 +99,11 @@ async def reject_task(
     session: AsyncSession = Depends(get_db),
 ) -> RemediationTaskRead:
     task = await RemediationService(session).reject_task(actor=actor, task_id=task_id)
-    return RemediationTaskRead.model_validate(task)
+    return _enrich(task, await _hostname_map(session, task))
+
+
+async def _hostname_map(session: AsyncSession, task) -> dict:
+    from app.repositories.devices import DeviceRepository
+
+    device = await DeviceRepository(session).get(task.device_id)
+    return {device.id: device.hostname} if device else {}

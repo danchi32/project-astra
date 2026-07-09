@@ -53,3 +53,27 @@ export interface DashboardSummary {
   critical_event_count: number;
   pending_update_count: number;
 }
+
+export type RemediationTier = "automatic" | "approval_required" | "admin_only";
+export type RemediationStatus =
+  | "pending_approval"
+  | "approved"
+  | "dispatched"
+  | "succeeded"
+  | "failed"
+  | "rejected";
+
+export interface RemediationTask {
+  id: string;
+  device_id: string;
+  device_hostname: string | null;
+  action_id: string;
+  action_label: string | null;
+  tier: RemediationTier;
+  status: RemediationStatus;
+  reason: string;
+  source: "assistant" | "user";
+  result: { output?: string } | null;
+  created_at: string;
+  completed_at: string | null;
+}
