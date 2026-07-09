@@ -13,6 +13,13 @@ from app.schemas.devices import (
     EnrollmentTokenCreated,
     EnrollmentTokenRead,
 )
+from app.schemas.telemetry import (
+    DeviceEventLogRead,
+    DeviceInstalledAppRead,
+    DeviceServiceRead,
+    DeviceWindowsUpdateRead,
+    TelemetrySnapshotRead,
+)
 from app.repositories.telemetry import TelemetryRepository
 from app.services.devices import DeviceService
 
@@ -109,3 +116,84 @@ async def delete_device(
     session: AsyncSession = Depends(get_db),
 ) -> None:
     await DeviceService(session).delete_device(actor=actor, device_id=device_id)
+
+
+# ── Per-device detail (telemetry history + inventory) ───────────────────────
+# Each first resolves the device via DeviceService.get_device, which raises 404
+# if the device is not in the actor's organization — keeping these org-scoped.
+
+
+@router.get(
+    "/{device_id}/telemetry",
+    response_model=list[TelemetrySnapshotRead],
+    summary="Recent telemetry snapshots for a device",
+)
+async def get_device_telemetry(
+    device_id: uuid.UUID,
+    limit: int = 60,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[TelemetrySnapshotRead]:
+    device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
+    rows = await TelemetryRepository(session).get_snapshots(device.id, limit=limit)
+    return [TelemetrySnapshotRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/{device_id}/events",
+    response_model=list[DeviceEventLogRead],
+    summary="Recent Windows event-log entries for a device",
+)
+async def get_device_events(
+    device_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[DeviceEventLogRead]:
+    device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
+    rows = await TelemetryRepository(session).get_event_logs(device.id)
+    return [DeviceEventLogRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/{device_id}/apps",
+    response_model=list[DeviceInstalledAppRead],
+    summary="Installed applications for a device",
+)
+async def get_device_apps(
+    device_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[DeviceInstalledAppRead]:
+    device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
+    rows = await TelemetryRepository(session).get_installed_apps(device.id)
+    return [DeviceInstalledAppRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/{device_id}/services",
+    response_model=list[DeviceServiceRead],
+    summary="Windows services for a device",
+)
+async def get_device_services(
+    device_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[DeviceServiceRead]:
+    device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
+    rows = await TelemetryRepository(session).get_services(device.id)
+    return [DeviceServiceRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/{device_id}/updates",
+    response_model=list[DeviceWindowsUpdateRead],
+    summary="Windows updates for a device",
+)
+async def get_device_updates(
+    device_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[DeviceWindowsUpdateRead]:
+    device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
+    rows = await TelemetryRepository(session).get_windows_updates(device.id)
+    return [DeviceWindowsUpdateRead.model_validate(r) for r in rows]

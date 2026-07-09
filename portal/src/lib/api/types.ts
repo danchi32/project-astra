@@ -44,6 +44,50 @@ export interface TelemetrySnapshot {
   collected_at: string;
 }
 
+export interface DeviceEventLog {
+  id: string;
+  level: string;
+  source: string;
+  event_id: number;
+  message: string;
+  occurred_at: string;
+}
+
+export interface DeviceInstalledApp {
+  id: string;
+  name: string;
+  version: string | null;
+  publisher: string | null;
+  install_date: string | null;
+}
+
+export interface DeviceServiceRow {
+  id: string;
+  name: string;
+  display_name: string;
+  status: string;
+  start_type: string;
+}
+
+export interface DeviceWindowsUpdate {
+  id: string;
+  kb_article_id: string;
+  title: string;
+  is_installed: boolean;
+  installed_on: string | null;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  actor_id: string | null;
+  actor_email: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
+}
+
 export interface DashboardSummary {
   total_devices: number;
   online_devices: number;
