@@ -54,6 +54,14 @@ export interface DashboardSummary {
   pending_update_count: number;
 }
 
+export interface KnowledgeArticle {
+  id: string;
+  title: string;
+  content: string;
+  source: "manual" | "resolved_issue";
+  created_at: string;
+}
+
 export type RemediationTier = "automatic" | "approval_required" | "admin_only";
 export type RemediationStatus =
   | "pending_approval"

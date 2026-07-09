@@ -53,6 +53,19 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "search_knowledge_base",
+        "description": "Search the organization's IT knowledge base (runbooks, how-to guides, "
+        "known fixes) for relevant articles. Use this to answer how-to questions or find a "
+        "documented solution before proposing your own. Ground your answer in what you find.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to look up."}
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "propose_remediation",
         "description": "Propose a fix for a problem on the user's own device. Call this only "
         "after you have gathered evidence and are confident of the cause. Automatic fixes "
@@ -101,6 +114,16 @@ async def dispatch_tool(
         return await _propose_remediation(
             session=session, org_id=org_id, acting_device_id=acting_device_id,
             tool_input=tool_input or {}
+        )
+
+    if name == "search_knowledge_base":
+        from app.services.ai.knowledge import KnowledgeBaseService
+
+        articles = await KnowledgeBaseService(session).search(
+            org_id=org_id, query=(tool_input or {}).get("query", "")
+        )
+        return json.dumps(
+            {"articles": [{"title": a.title, "content": a.content[:1000]} for a in articles]}
         )
 
     if name == "list_devices":

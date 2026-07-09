@@ -5,6 +5,7 @@ from app.api.v1 import (
     auth,
     conversations,
     devices,
+    knowledge,
     remediation,
     telemetry,
     users,
@@ -18,3 +19,4 @@ api_router.include_router(agent.router)
 api_router.include_router(telemetry.router)
 api_router.include_router(conversations.router)
 api_router.include_router(remediation.router)
+api_router.include_router(knowledge.router)

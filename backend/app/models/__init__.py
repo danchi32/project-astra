@@ -3,6 +3,7 @@ from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.device import Device
 from app.models.enrollment_token import EnrollmentToken
+from app.models.knowledge import KnowledgeArticle, KnowledgeSource
 from app.models.organization import Organization
 from app.models.refresh_token import RefreshToken
 from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
@@ -26,6 +27,8 @@ __all__ = [
     "DeviceService",
     "DeviceWindowsUpdate",
     "EnrollmentToken",
+    "KnowledgeArticle",
+    "KnowledgeSource",
     "Message",
     "MessageRole",
     "Organization",

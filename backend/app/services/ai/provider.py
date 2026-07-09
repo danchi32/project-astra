@@ -83,6 +83,10 @@ class StubProvider:
         "won't start", "wont start", "broken", "keeps closing", "keeps crashing",
     )
     _APP_ACTIONS = {"outlook": "restart_outlook", "teams": "restart_teams", "zoom": "restart_zoom"}
+    _KB_TRIGGERS = (
+        "how do i", "how to", "how can i", "how do you", "steps to", "guide",
+        "set up", "setup", "configure", "connect to", "where do i", "where can i",
+    )
 
     async def generate(
         self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
@@ -105,6 +109,15 @@ class StubProvider:
                 tool_calls=[ToolCall(
                     id="stub-remediate", name="propose_remediation",
                     input={"action_id": action, "reason": "User reported this app is misbehaving."},
+                )],
+            )
+
+        # A how-to / knowledge question → search the knowledge base.
+        if any(trigger in user_text for trigger in self._KB_TRIGGERS):
+            return LLMResponse(
+                text="Let me check our knowledge base for that.",
+                tool_calls=[ToolCall(
+                    id="stub-kb", name="search_knowledge_base", input={"query": user_text},
                 )],
             )
 
@@ -161,6 +174,17 @@ class StubProvider:
             if isinstance(data, dict) and "error" in data:
                 error = data["error"]
                 return f"I wasn't able to apply that fix: {error}"
+            # Knowledge-base search results: {"articles": [{title, content}, ...]}.
+            if isinstance(data, dict) and "articles" in data:
+                articles = data["articles"]
+                if articles:
+                    top = articles[0]
+                    snippet = str(top.get("content", ""))[:400]
+                    return f"From our knowledge base — **{top['title']}**:\n\n{snippet}"
+                return (
+                    "I couldn't find a relevant article in our knowledge base for that. "
+                    "You may want to add one, or tell me more about the problem."
+                )
             if isinstance(data, list):
                 count += len(data)
         return (
