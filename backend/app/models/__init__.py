@@ -1,3 +1,4 @@
+from app.models.asset import Asset, AssetCategory, AssetStatus
 from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
@@ -18,6 +19,9 @@ from app.models.telemetry import (
 from app.models.user import User, UserRole
 
 __all__ = [
+    "Asset",
+    "AssetCategory",
+    "AssetStatus",
     "AuditLog",
     "Base",
     "Conversation",

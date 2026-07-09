@@ -88,6 +88,48 @@ export interface AuditLog {
   created_at: string;
 }
 
+export type AssetCategory =
+  | "laptop" | "desktop" | "server" | "monitor" | "phone" | "tablet"
+  | "peripheral" | "network" | "license" | "software" | "other";
+
+export type AssetStatus = "in_use" | "in_storage" | "in_repair" | "retired" | "lost";
+
+export interface Asset {
+  id: string;
+  org_id: string;
+  asset_tag: string | null;
+  name: string;
+  category: AssetCategory;
+  status: AssetStatus;
+  assigned_to_user_id: string | null;
+  device_id: string | null;
+  assigned_to_name: string | null;
+  device_hostname: string | null;
+  manufacturer: string | null;
+  model: string | null;
+  serial_number: string | null;
+  location: string | null;
+  purchase_date: string | null;
+  warranty_expiry: string | null;
+  purchase_cost: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetSummary {
+  total: number;
+  by_status: Record<string, number>;
+  by_category: Record<string, number>;
+  total_value: number;
+  warranty_expiring_soon: number;
+}
+
+export type AssetInput = Partial<Omit<Asset,
+  "id" | "org_id" | "assigned_to_name" | "device_hostname" | "created_at" | "updated_at">> & {
+  name: string;
+};
+
 export interface DashboardSummary {
   total_devices: number;
   online_devices: number;
