@@ -1,13 +1,25 @@
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import Conversation, Device, Message, MessageRole, User
 from app.repositories.conversations import ConversationRepository, MessageRepository
+from app.services.ai.cache import SemanticCache
 from app.services.ai.cognitive import CognitiveEngine
+from app.services.ai.intent import OFF_TOPIC_REPLY, is_off_topic
 from app.services.ai.provider import LLMProvider
 from app.services.exceptions import NotFoundError
+
+
+@dataclass
+class Reply:
+    text: str
+    tool_trail: list[dict[str, Any]] | None
+    # Where the answer came from: "intent_gate" and "cache" cost no LLM call.
+    source: str
 
 
 class ConversationService:
@@ -17,6 +29,7 @@ class ConversationService:
         self.messages = MessageRepository(session)
         # Provider is injectable so tests can pass a deterministic stub.
         self.engine = CognitiveEngine(session, provider=provider)
+        self.cache = SemanticCache(session)
 
     async def create(self, *, actor: User, title: str) -> Conversation:
         conversation = await self.conversations.add(
@@ -36,23 +49,18 @@ class ConversationService:
         self, *, actor: User, conversation_id: uuid.UUID, content: str
     ) -> tuple[Message, Message]:
         conversation = await self._get_owned(actor, conversation_id)
-
         history = self._build_history(await self.messages.list_by_conversation(conversation_id))
 
         user_message = await self.messages.add(
             Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
         )
-
-        result = await self.engine.run(
-            org_id=actor.org_id, history=history, user_message=content
-        )
-
+        reply = await self._reply(org_id=actor.org_id, history=history, content=content)
         assistant_message = await self.messages.add(
             Message(
                 conversation_id=conversation.id,
                 role=MessageRole.ASSISTANT,
-                content=result.text,
-                tool_trail=result.tool_trail or None,
+                content=reply.text,
+                tool_trail=reply.tool_trail,
             )
         )
         await self.session.commit()
@@ -62,8 +70,9 @@ class ConversationService:
 
     async def device_chat(
         self, *, device: Device, content: str, conversation_id: uuid.UUID | None
-    ) -> tuple[Conversation, Message]:
-        """Handle a chat turn from a device's tray app, focused on that device."""
+    ) -> tuple[Conversation, Message, str]:
+        """Handle a chat turn from a device's tray app, focused on that device.
+        Returns (conversation, assistant_message, source)."""
         if conversation_id is not None:
             conversation = await self.conversations.get(conversation_id)
             if conversation is None or conversation.device_id != device.id:
@@ -81,25 +90,55 @@ class ConversationService:
         await self.messages.add(
             Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
         )
-
-        result = await self.engine.run(
-            org_id=device.org_id,
-            history=history,
-            user_message=content,
-            device_hostname=device.hostname,
-            acting_device_id=device.id,
+        reply = await self._reply(
+            org_id=device.org_id, history=history, content=content,
+            device_hostname=device.hostname, acting_device_id=device.id,
         )
-
         assistant_message = await self.messages.add(
             Message(
                 conversation_id=conversation.id,
                 role=MessageRole.ASSISTANT,
-                content=result.text,
-                tool_trail=result.tool_trail or None,
+                content=reply.text,
+                tool_trail=reply.tool_trail,
             )
         )
         await self.session.commit()
-        return conversation, assistant_message
+        return conversation, assistant_message, reply.source
+
+    # -- Shared reply path: intent gate → semantic cache → cognitive engine ----
+
+    async def _reply(
+        self,
+        *,
+        org_id: uuid.UUID,
+        history: list[dict[str, Any]],
+        content: str,
+        device_hostname: str | None = None,
+        acting_device_id: uuid.UUID | None = None,
+    ) -> Reply:
+        settings = get_settings()
+
+        # 1. Intent gate — reject clearly off-topic queries with no LLM call.
+        if settings.ai_intent_gate_enabled and is_off_topic(content):
+            return Reply(text=OFF_TOPIC_REPLY, tool_trail=None, source="intent_gate")
+
+        # 2. Semantic cache — a repeated/near-duplicate question is served for free.
+        if settings.ai_cache_enabled:
+            cached = await self.cache.lookup(org_id=org_id, query=content)
+            if cached is not None:
+                return Reply(text=cached, tool_trail=None, source="cache")
+
+        # 3. Cognitive engine (the only path that costs an LLM call).
+        result = await self.engine.run(
+            org_id=org_id, history=history, user_message=content,
+            device_hostname=device_hostname, acting_device_id=acting_device_id,
+        )
+
+        # 4. Cache only device-independent, successful answers (no tools, cacheable).
+        if settings.ai_cache_enabled and result.cacheable and not result.tool_trail:
+            await self.cache.store(org_id=org_id, query=content, answer=result.text)
+
+        return Reply(text=result.text, tool_trail=result.tool_trail or None, source="engine")
 
     async def _get_owned(self, actor: User, conversation_id: uuid.UUID) -> Conversation:
         conversation = await self.conversations.get(conversation_id)

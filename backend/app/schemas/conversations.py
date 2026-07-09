@@ -48,3 +48,5 @@ class AgentChatResponse(BaseModel):
     conversation_id: uuid.UUID
     reply: str
     tool_trail: list[dict[str, Any]] | None
+    # "engine" (an LLM call was made), "cache" or "intent_gate" (served for free).
+    source: str = "engine"

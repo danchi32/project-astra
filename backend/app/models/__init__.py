@@ -6,6 +6,7 @@ from app.models.enrollment_token import EnrollmentToken
 from app.models.organization import Organization
 from app.models.refresh_token import RefreshToken
 from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
+from app.models.semantic_cache import SemanticCacheEntry
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
@@ -32,6 +33,7 @@ __all__ = [
     "RemediationSource",
     "RemediationStatus",
     "RemediationTask",
+    "SemanticCacheEntry",
     "TelemetrySnapshot",
     "User",
     "UserRole",

@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     ai_max_tokens: int = 4096
     ai_max_tool_iterations: int = 6
 
+    # Cost controls — an intent gate rejects off-topic queries before any LLM call,
+    # and a semantic cache serves repeated questions from stored answers (no LLM call).
+    ai_intent_gate_enabled: bool = True
+    ai_cache_enabled: bool = True
+    ai_cache_similarity_threshold: float = 0.85
+
 
 @lru_cache
 def get_settings() -> Settings:

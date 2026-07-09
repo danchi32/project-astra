@@ -27,6 +27,7 @@ Your job is to help diagnose and fix problems on managed Windows devices. Follow
 class EngineResult:
     text: str
     tool_trail: list[dict[str, Any]] = field(default_factory=list)
+    cacheable: bool = True  # False for error/unavailable answers — never cache those
 
 
 class CognitiveEngine:
@@ -102,6 +103,7 @@ class CognitiveEngine:
                 "temporarily unavailable. Please try again in a few minutes, or contact your IT "
                 "team if it keeps happening.",
                 tool_trail=trail,
+                cacheable=False,
             )
 
         # Iteration cap hit — return whatever the last text was.
@@ -109,4 +111,5 @@ class CognitiveEngine:
             text="I gathered evidence but need to stop here to avoid an overly long investigation. "
             "Ask a more specific follow-up and I'll continue.",
             tool_trail=trail,
+            cacheable=False,
         )

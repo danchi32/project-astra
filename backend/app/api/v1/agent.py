@@ -47,13 +47,14 @@ async def chat(
     device: Device = Depends(get_current_device),
     session: AsyncSession = Depends(get_db),
 ) -> AgentChatResponse:
-    conversation, assistant = await ConversationService(session).device_chat(
+    conversation, assistant, source = await ConversationService(session).device_chat(
         device=device, content=body.content, conversation_id=body.conversation_id
     )
     return AgentChatResponse(
         conversation_id=conversation.id,
         reply=assistant.content,
         tool_trail=assistant.tool_trail,
+        source=source,
     )
 
 
