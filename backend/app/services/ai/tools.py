@@ -84,6 +84,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "Only for restart_service: the Windows service to restart.",
                 },
+                "process_name": {
+                    "type": "string",
+                    "description": "Only for restart_application: the app's process name "
+                    "(e.g. WINWORD, EXCEL, slack). Must be an allowlisted user application.",
+                },
                 "reason": {
                     "type": "string",
                     "description": "A short, plain-language reason for this fix.",
@@ -210,6 +215,8 @@ async def _propose_remediation(
     params: dict[str, Any] = {}
     if tool_input.get("service_name"):
         params["service_name"] = tool_input["service_name"]
+    if tool_input.get("process_name"):
+        params["process_name"] = tool_input["process_name"]
 
     try:
         task = await RemediationService(session).create_task(

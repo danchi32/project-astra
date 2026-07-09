@@ -50,3 +50,15 @@ class AgentChatResponse(BaseModel):
     tool_trail: list[dict[str, Any]] | None
     # "engine" (an LLM call was made), "cache" or "intent_gate" (served for free).
     source: str = "engine"
+
+
+class AgentHistoryMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AgentConversationHistory(BaseModel):
+    """The device's most recent conversation, so the tray can restore it on open."""
+
+    conversation_id: uuid.UUID | None = None
+    messages: list[AgentHistoryMessage] = []

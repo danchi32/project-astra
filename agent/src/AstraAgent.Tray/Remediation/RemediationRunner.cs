@@ -63,7 +63,7 @@ public sealed class RemediationRunner : IDisposable
 
         foreach (var task in tasks)
         {
-            var (success, output) = await _executor.ExecuteAsync(task.ActionId, ct);
+            var (success, output) = await _executor.ExecuteAsync(task.ActionId, task.Params, ct);
             using var report = new HttpRequestMessage(
                 HttpMethod.Post, $"/api/v1/agent/tasks/{task.Id}/result")
             {
@@ -85,7 +85,8 @@ public sealed class RemediationRunner : IDisposable
 
     private sealed record AgentTask(
         [property: JsonPropertyName("id")] Guid Id,
-        [property: JsonPropertyName("action_id")] string ActionId);
+        [property: JsonPropertyName("action_id")] string ActionId,
+        [property: JsonPropertyName("params")] Dictionary<string, string>? Params);
 
     private sealed record ResultBody(
         [property: JsonPropertyName("success")] bool Success,

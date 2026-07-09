@@ -6,7 +6,12 @@ import uuid
 from app.api.deps import get_current_device
 from app.core.database import get_db
 from app.models import Device
-from app.schemas.conversations import AgentChatRequest, AgentChatResponse
+from app.schemas.conversations import (
+    AgentChatRequest,
+    AgentChatResponse,
+    AgentConversationHistory,
+    AgentHistoryMessage,
+)
 from app.schemas.devices import (
     EnrollRequest,
     EnrollResponse,
@@ -55,6 +60,22 @@ async def chat(
         reply=assistant.content,
         tool_trail=assistant.tool_trail,
         source=source,
+    )
+
+
+@router.get(
+    "/conversation",
+    response_model=AgentConversationHistory,
+    summary="Get this device's most recent conversation so the tray can restore it",
+)
+async def conversation_history(
+    device: Device = Depends(get_current_device),
+    session: AsyncSession = Depends(get_db),
+) -> AgentConversationHistory:
+    conversation_id, messages = await ConversationService(session).device_history(device=device)
+    return AgentConversationHistory(
+        conversation_id=conversation_id,
+        messages=[AgentHistoryMessage(role=r, content=c) for r, c in messages],
     )
 
 

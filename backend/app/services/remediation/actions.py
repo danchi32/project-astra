@@ -22,6 +22,18 @@ SAFE_SERVICES: frozenset[str] = frozenset(
     {"Spooler", "WSearch", "Audiosrv", "Themes", "wuauserv"}
 )
 
+# User-facing application processes the generic restart_application action may kill and
+# relaunch. Least privilege: only these names are accepted, so the action can never be
+# used to terminate a security agent or a system-critical process. Matched case-insensitively.
+SAFE_APP_PROCESSES: frozenset[str] = frozenset(
+    {
+        "WINWORD", "EXCEL", "POWERPNT", "ONENOTE", "MSACCESS", "OUTLOOK",
+        "slack", "Skype", "notepad", "notepad++", "firefox", "brave",
+        "Acrobat", "AcroRd32", "Code", "onedrive", "WhatsApp", "Spotify",
+        "Discord", "Zoom", "ms-teams", "chrome", "msedge",
+    }
+)
+
 
 @dataclass(frozen=True)
 class RemediationAction:
@@ -43,10 +55,22 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "Closes and reopens Microsoft Teams."),
     RemediationAction("restart_zoom", "Restart Zoom", RemediationTier.AUTOMATIC,
                       "Closes and reopens Zoom."),
+    RemediationAction("restart_application", "Restart an application", RemediationTier.AUTOMATIC,
+                      "Closes and reopens a user application (kill + relaunch) to clear a hang or "
+                      "a window that won't open. Limited to a safe allowlist of user apps.",
+                      params=("process_name",)),
     RemediationAction("flush_dns", "Flush DNS cache", RemediationTier.AUTOMATIC,
                       "Clears the DNS resolver cache to fix name-resolution / website-loading issues."),
     RemediationAction("clear_temp", "Clear temporary files", RemediationTier.AUTOMATIC,
                       "Deletes temp files to free disk space and clear corrupt caches."),
+    RemediationAction("clear_browser_cache", "Clear browser cache", RemediationTier.AUTOMATIC,
+                      "Clears the HTTP cache for Chrome, Edge and Firefox to fix slow or broken "
+                      "page loads. Does NOT touch history, passwords, bookmarks or cookies."),
+    RemediationAction("restart_chrome", "Restart Google Chrome", RemediationTier.AUTOMATIC,
+                      "Closes and reopens Chrome to clear a hang or runaway memory use. Chrome "
+                      "restores the previous tabs on relaunch."),
+    RemediationAction("restart_edge", "Restart Microsoft Edge", RemediationTier.AUTOMATIC,
+                      "Closes and reopens Microsoft Edge. Edge restores the previous tabs."),
     RemediationAction("restart_network_adapter", "Restart network adapter", RemediationTier.AUTOMATIC,
                       "Disables and re-enables the network adapter to recover a dropped connection."),
     RemediationAction("restart_service", "Restart a Windows service", RemediationTier.AUTOMATIC,

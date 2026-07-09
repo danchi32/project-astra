@@ -49,3 +49,33 @@ def is_off_topic(text: str) -> bool:
     if any(marker in lowered for marker in _OFF_TOPIC_MARKERS):
         return True
     return False
+
+
+# An app the assistant can act on, or a word signalling a problem/cleanup request.
+# When present, the message needs the live engine (it may perform a fix) — so the
+# semantic cache must NOT serve or store it, or a cached text answer would shadow the
+# action. Includes Hinglish/Hindi markers, since end users chat that way.
+_ACTIONABLE_APPS = (
+    "outlook", "teams", "zoom", "chrome", "edge", "firefox", "brave", "word", "excel",
+    "powerpoint", "onenote", "slack", "skype", "notepad", "explorer", "taskbar",
+    "acrobat", "adobe", "browser",
+)
+_ACTIONABLE_MARKERS = (
+    "crash", "frozen", "freeze", "freezing", "not responding", "hang", "hung", "stuck",
+    "fix", "restart", "won't open", "wont open", "not open", "not opening", "not working",
+    "not launching", "not starting", "won't start", "wont start", "broken", "keeps closing",
+    "keeps crashing", "error", "issue", "problem", "slow", "lag", "stopped",
+    "clear", "clean", "cache", "temp", "flush", "dns",
+    # Hinglish / Hindi
+    "nahi", "nhi", "band", "khul", "kaam nahi", "kaam nhi", "dikkat", "kharab", "atak",
+    "ruk", "chal nahi", "chal nhi", "ho raha", "ho rha",
+)
+
+
+def requires_live_action(text: str) -> bool:
+    """True when the message names an app or reports a problem/cleanup — such messages
+    must reach the engine live and bypass the semantic cache entirely."""
+    lowered = text.lower()
+    return any(a in lowered for a in _ACTIONABLE_APPS) or any(
+        m in lowered for m in _ACTIONABLE_MARKERS
+    )

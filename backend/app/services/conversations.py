@@ -9,7 +9,7 @@ from app.models import Conversation, Device, Message, MessageRole, User
 from app.repositories.conversations import ConversationRepository, MessageRepository
 from app.services.ai.cache import SemanticCache
 from app.services.ai.cognitive import CognitiveEngine
-from app.services.ai.intent import OFF_TOPIC_REPLY, is_off_topic
+from app.services.ai.intent import OFF_TOPIC_REPLY, is_off_topic, requires_live_action
 from app.services.ai.provider import LLMProvider
 from app.services.exceptions import NotFoundError
 
@@ -105,6 +105,17 @@ class ConversationService:
         await self.session.commit()
         return conversation, assistant_message, reply.source
 
+    async def device_history(
+        self, *, device: Device
+    ) -> tuple[uuid.UUID | None, list[tuple[str, str]]]:
+        """The device's most recent conversation and its messages, so the tray can
+        restore the chat when the user reopens it."""
+        conversation = await self.conversations.latest_for_device(device.id)
+        if conversation is None:
+            return None, []
+        messages = await self.messages.list_by_conversation(conversation.id)
+        return conversation.id, [(m.role.value, m.content) for m in messages]
+
     # -- Shared reply path: intent gate → semantic cache → cognitive engine ----
 
     async def _reply(
@@ -122,8 +133,12 @@ class ConversationService:
         if settings.ai_intent_gate_enabled and is_off_topic(content):
             return Reply(text=OFF_TOPIC_REPLY, tool_trail=None, source="intent_gate")
 
-        # 2. Semantic cache — a repeated/near-duplicate question is served for free.
-        if settings.ai_cache_enabled:
+        # An actionable message (names an app, reports a problem, or asks for a cleanup)
+        # must always reach the engine — a cached text answer must never shadow a fix.
+        actionable = requires_live_action(content)
+
+        # 2. Semantic cache — a repeated/near-duplicate general question is served free.
+        if settings.ai_cache_enabled and not actionable:
             cached = await self.cache.lookup(org_id=org_id, query=content)
             if cached is not None:
                 return Reply(text=cached, tool_trail=None, source="cache")
@@ -134,8 +149,13 @@ class ConversationService:
             device_hostname=device_hostname, acting_device_id=acting_device_id,
         )
 
-        # 4. Cache only device-independent, successful answers (no tools, cacheable).
-        if settings.ai_cache_enabled and result.cacheable and not result.tool_trail:
+        # 4. Cache only device-independent, non-actionable, successful answers.
+        if (
+            settings.ai_cache_enabled
+            and not actionable
+            and result.cacheable
+            and not result.tool_trail
+        ):
             await self.cache.store(org_id=org_id, query=content, answer=result.text)
 
         return Reply(text=result.text, tool_trail=result.tool_trail or None, source="engine")

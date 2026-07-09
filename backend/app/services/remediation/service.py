@@ -16,7 +16,13 @@ from app.repositories.devices import DeviceRepository
 from app.repositories.remediation import RemediationRepository
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ServiceError
-from app.services.remediation.actions import ACTIONS, SAFE_SERVICES, RemediationTier, get_action
+from app.services.remediation.actions import (
+    ACTIONS,
+    SAFE_APP_PROCESSES,
+    SAFE_SERVICES,
+    RemediationTier,
+    get_action,
+)
 
 
 class RemediationError(ServiceError):
@@ -101,6 +107,13 @@ class RemediationService:
             if name not in SAFE_SERVICES:
                 raise RemediationError(
                     f"Service '{name}' is not on the allowlist of restartable services."
+                )
+        if "process_name" in action.params:
+            name = params.get("process_name") or ""
+            # Case-insensitive allowlist check — the agent will match the process the same way.
+            if name.lower() not in {p.lower() for p in SAFE_APP_PROCESSES}:
+                raise RemediationError(
+                    f"Application '{name}' is not on the allowlist of restartable applications."
                 )
         return params
 

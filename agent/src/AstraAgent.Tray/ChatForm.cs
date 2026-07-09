@@ -13,6 +13,7 @@ public sealed class ChatForm : Form
     private readonly FlowLayoutPanel _messages;
     private readonly TextBox _input;
     private readonly Button _send;
+    private bool _historyLoaded;
 
     private static readonly Color BgColor = Color.FromArgb(248, 250, 252);
     private static readonly Color AccentColor = Color.FromArgb(37, 99, 235);
@@ -94,6 +95,28 @@ public sealed class ChatForm : Form
         BringToFront();
         Activate();
         _input.Focus();
+
+        // Restore the prior conversation the first time the window is shown.
+        if (!_historyLoaded)
+        {
+            _historyLoaded = true;
+            _ = LoadHistoryAsync();
+        }
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        try
+        {
+            var history = await _client.LoadHistoryAsync(CancellationToken.None);
+            if (history.Count == 0)
+                return;   // keep the friendly greeting for a brand-new chat
+
+            _messages.Controls.Clear();   // drop the placeholder greeting
+            foreach (var (role, content) in history)
+                AddBubble(content, fromUser: role == "user");
+        }
+        catch { /* leave the greeting in place if history can't be loaded */ }
     }
 
     // Hide on close instead of disposing, so the conversation stays visible next time.
