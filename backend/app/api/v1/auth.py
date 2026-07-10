@@ -5,6 +5,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models import User
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.settings import ChangePasswordRequest, ProfileUpdate
 from app.schemas.users import UserRead
 from app.services.auth import AuthService
 
@@ -31,3 +32,31 @@ async def logout(body: RefreshRequest, session: AsyncSession = Depends(get_db)) 
 @router.get("/me", response_model=UserRead, summary="Current authenticated user")
 async def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
+
+
+@router.patch("/me", response_model=UserRead, summary="Update your own profile")
+async def update_me(
+    body: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> User:
+    return await AuthService(session).update_profile(
+        user=current_user, full_name=body.full_name
+    )
+
+
+@router.post(
+    "/change-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change your own password",
+)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    await AuthService(session).change_password(
+        user=current_user,
+        current_password=body.current_password,
+        new_password=body.new_password,
+    )

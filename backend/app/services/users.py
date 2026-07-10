@@ -8,7 +8,8 @@ from app.repositories.refresh_tokens import RefreshTokenRepository
 from app.repositories.users import UserRepository
 from app.schemas.users import UserCreate, UserUpdate
 from app.services.audit import AuditService
-from app.services.exceptions import ConflictError, NotFoundError
+from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.settings import SettingsService
 
 
 class UserService:
@@ -19,10 +20,19 @@ class UserService:
         self.users = UserRepository(session)
         self.tokens = RefreshTokenRepository(session)
         self.audit = AuditService(session)
+        self.settings = SettingsService(session)
+
+    async def _enforce_password_policy(self, org_id: uuid.UUID, password: str) -> None:
+        min_length = (await self.settings.ensure(org_id)).min_password_length
+        if len(password) < min_length:
+            raise ValidationError(
+                f"Your organization requires a password of at least {min_length} characters"
+            )
 
     async def create_user(self, *, actor: User, data: UserCreate) -> User:
         if await self.users.get_by_email(data.email) is not None:
             raise ConflictError("A user with this email already exists")
+        await self._enforce_password_policy(actor.org_id, data.password)
         user = await self.users.add(
             User(
                 org_id=actor.org_id,
@@ -67,6 +77,7 @@ class UserService:
             if not data.is_active:
                 await self.tokens.revoke_all_for_user(user.id)
         if data.password is not None:
+            await self._enforce_password_policy(actor.org_id, data.password)
             user.hashed_password = hash_password(data.password)
             changes["password"] = "changed"
             await self.tokens.revoke_all_for_user(user.id)

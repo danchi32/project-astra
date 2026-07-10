@@ -19,6 +19,7 @@ from app.repositories.remediation import RemediationRepository
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ServiceError
 from app.services.notifications import NotificationService
+from app.services.settings import SettingsService
 from app.services.remediation.actions import (
     ACTIONS,
     SAFE_APP_PROCESSES,
@@ -46,6 +47,7 @@ class RemediationService:
         self.devices = DeviceRepository(session)
         self.audit = AuditService(session)
         self.notifications = NotificationService(session)
+        self.settings = SettingsService(session)
 
     # -- Creation --------------------------------------------------------------
 
@@ -67,7 +69,9 @@ class RemediationService:
 
         # Tier drives the initial status: automatic is pre-approved; everything else
         # waits for a human. This is enforced here in the service, never by the client.
-        if action.tier is RemediationTier.AUTOMATIC:
+        # The org-level automation kill-switch can force even automatic actions to wait.
+        org_settings = await self.settings.ensure(org_id)
+        if action.tier is RemediationTier.AUTOMATIC and org_settings.auto_approve_automatic:
             status = RemediationStatus.APPROVED
         else:
             status = RemediationStatus.PENDING_APPROVAL
@@ -140,6 +144,11 @@ class RemediationService:
 
         tier = RemediationTier(task.tier)
         allowed = _APPROVER_ROLES.get(tier, set())
+        # Org policy can tighten the standard tier to admin-only approval.
+        if tier is RemediationTier.APPROVAL_REQUIRED:
+            org_settings = await self.settings.ensure(actor.org_id)
+            if org_settings.require_admin_for_approval_tier:
+                allowed = {UserRole.ADMIN}
         if actor.role not in allowed:
             # A technician cannot approve an admin-only action; a user cannot approve anything.
             raise RemediationError("Your role cannot approve a task at this trust tier.")

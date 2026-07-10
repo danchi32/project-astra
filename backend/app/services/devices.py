@@ -16,6 +16,7 @@ from app.schemas.devices import (
 )
 from app.services.audit import AuditService
 from app.services.exceptions import AuthenticationError, NotFoundError
+from app.services.settings import SettingsService
 
 
 class DeviceService:
@@ -27,6 +28,7 @@ class DeviceService:
         self.devices = DeviceRepository(session)
         self.enrollment_tokens = EnrollmentTokenRepository(session)
         self.audit = AuditService(session)
+        self.settings = SettingsService(session)
 
     # -- Enrollment tokens (admin) --------------------------------------------
 
@@ -34,12 +36,15 @@ class DeviceService:
         self, *, actor: User, data: EnrollmentTokenCreate
     ) -> tuple[EnrollmentToken, str]:
         raw = generate_opaque_token()
+        days = data.expires_in_days
+        if days is None:
+            days = (await self.settings.ensure(actor.org_id)).enrollment_token_default_days
         record = await self.enrollment_tokens.add(
             EnrollmentToken(
                 org_id=actor.org_id,
                 name=data.name,
                 token_hash=hash_opaque_token(raw),
-                expires_at=utcnow() + timedelta(days=data.expires_in_days),
+                expires_at=utcnow() + timedelta(days=days),
                 created_by=actor.id,
             )
         )
@@ -49,7 +54,7 @@ class DeviceService:
             action="enrollment_token.create",
             target_type="enrollment_token",
             target_id=str(record.id),
-            detail={"name": data.name, "expires_in_days": data.expires_in_days},
+            detail={"name": data.name, "expires_in_days": days},
         )
         await self.session.commit()
         return record, raw

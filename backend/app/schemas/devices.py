@@ -13,7 +13,8 @@ ONLINE_THRESHOLD = timedelta(seconds=180)
 
 class EnrollmentTokenCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    expires_in_days: int = Field(default=7, ge=1, le=90)
+    # Omit to use the organization's configured default expiry.
+    expires_in_days: int | None = Field(default=None, ge=1, le=90)
 
 
 class EnrollmentTokenCreated(BaseModel):

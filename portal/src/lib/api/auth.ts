@@ -23,3 +23,12 @@ export async function getMe(): Promise<User> {
   const { data } = await apiClient.get<User>("/auth/me");
   return data;
 }
+
+export async function updateProfile(full_name: string): Promise<User> {
+  const { data } = await apiClient.patch<User>("/auth/me", { full_name });
+  return data;
+}
+
+export async function changePassword(current_password: string, new_password: string): Promise<void> {
+  await apiClient.post("/auth/change-password", { current_password, new_password });
+}

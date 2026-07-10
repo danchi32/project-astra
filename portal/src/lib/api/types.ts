@@ -226,6 +226,31 @@ export interface AssetReport {
   assets: Asset[];
 }
 
+export interface OrganizationSettings {
+  org_name: string;
+  auto_approve_automatic: boolean;
+  require_admin_for_approval_tier: boolean;
+  min_password_length: number;
+  enrollment_token_default_days: number;
+  updated_at: string;
+}
+
+export type OrganizationSettingsInput = Partial<
+  Omit<OrganizationSettings, "updated_at">
+>;
+
+export interface RolePermissions {
+  role: string;
+  label: string;
+  description: string;
+  capabilities: Record<string, boolean>;
+}
+
+export interface PermissionMatrix {
+  capabilities: { key: string; label: string }[];
+  roles: RolePermissions[];
+}
+
 export type NotificationCategory = "remediation" | "telemetry" | "asset" | "system";
 export type NotificationSeverity = "info" | "warning" | "critical";
 

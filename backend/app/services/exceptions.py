@@ -12,3 +12,8 @@ class NotFoundError(ServiceError):
 
 class ConflictError(ServiceError):
     pass
+
+
+class ValidationError(ServiceError):
+    """A well-formed request that violates a business rule (e.g. password policy)."""
+    pass

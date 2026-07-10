@@ -6,6 +6,7 @@ from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
+    hash_password,
     hash_refresh_token,
     verify_password,
 )
@@ -14,7 +15,8 @@ from app.models.base import as_utc, utcnow
 from app.repositories.refresh_tokens import RefreshTokenRepository
 from app.repositories.users import UserRepository
 from app.services.audit import AuditService
-from app.services.exceptions import AuthenticationError
+from app.services.exceptions import AuthenticationError, ValidationError
+from app.services.settings import SettingsService
 
 
 class AuthService:
@@ -71,6 +73,43 @@ class AuthService:
                 target_id=str(record.user_id),
             )
         # Idempotent: logging out an unknown/revoked token is not an error.
+        await self.session.commit()
+
+    async def update_profile(self, *, user: User, full_name: str) -> User:
+        user.full_name = full_name
+        await self.audit.record(
+            org_id=user.org_id,
+            actor_id=user.id,
+            action="profile.update",
+            target_type="user",
+            target_id=str(user.id),
+            detail={"full_name": full_name},
+        )
+        await self.session.commit()
+        return user
+
+    async def change_password(
+        self, *, user: User, current_password: str, new_password: str
+    ) -> None:
+        if not verify_password(current_password, user.hashed_password):
+            raise ValidationError("Your current password is incorrect")
+
+        min_length = (await SettingsService(self.session).ensure(user.org_id)).min_password_length
+        if len(new_password) < min_length:
+            raise ValidationError(
+                f"Your organization requires a password of at least {min_length} characters"
+            )
+
+        user.hashed_password = hash_password(new_password)
+        # Force re-login everywhere else — a password change invalidates old sessions.
+        await self.tokens.revoke_all_for_user(user.id)
+        await self.audit.record(
+            org_id=user.org_id,
+            actor_id=user.id,
+            action="password.change",
+            target_type="user",
+            target_id=str(user.id),
+        )
         await self.session.commit()
 
     async def _issue_refresh_token(self, user: User) -> str:

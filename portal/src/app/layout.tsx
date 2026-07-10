@@ -7,9 +7,15 @@ export const metadata: Metadata = {
   description: "AI-powered IT operations platform",
 };
 
+// Applies the saved theme before first paint to avoid a light/dark flash.
+const themeScript = `(function(){try{var t=localStorage.getItem('astra-theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

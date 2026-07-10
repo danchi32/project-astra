@@ -4,7 +4,12 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
-from app.services.exceptions import AuthenticationError, ConflictError, NotFoundError
+from app.services.exceptions import (
+    AuthenticationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 
 settings = get_settings()
 
@@ -42,6 +47,11 @@ async def not_found_error_handler(request: Request, exc: NotFoundError) -> JSONR
 @app.exception_handler(ConflictError)
 async def conflict_error_handler(request: Request, exc: ConflictError) -> JSONResponse:
     return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
+
+
+@app.exception_handler(ValidationError)
+async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": str(exc)})
 
 
 @app.get("/health", tags=["system"], summary="Liveness probe")
