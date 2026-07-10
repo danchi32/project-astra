@@ -23,6 +23,12 @@ function downloadScript(installer: AgentInstaller) {
   URL.revokeObjectURL(url);
 }
 
+// Where the compiled installer lives — a GitHub Release asset built by CI.
+// Override per-deployment with NEXT_PUBLIC_AGENT_DOWNLOAD_URL.
+const AGENT_EXE_URL =
+  process.env.NEXT_PUBLIC_AGENT_DOWNLOAD_URL ??
+  "https://github.com/danchi32/project-astra/releases/latest/download/AstraAgentSetup.exe";
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -50,10 +56,9 @@ function InstallAgentPanel() {
     try {
       const installer = await generateAgentInstaller(name.trim(), serverUrl.trim());
       setResult(installer);
-      downloadScript(installer);
       await queryClient.invalidateQueries({ queryKey: ["enrollment-tokens"] });
     } catch {
-      setError("Couldn't generate the installer. Check the details and try again.");
+      setError("Couldn't generate the token. Check the details and try again.");
     } finally { setBusy(false); }
   }
 
@@ -61,7 +66,9 @@ function InstallAgentPanel() {
     setResult(null); setName(""); setServerUrl(""); setError("");
   }
 
-  const runCommand = "powershell -ExecutionPolicy Bypass -File .\\Install-AstraAgent.ps1 -Source .\\dist";
+  const silentCmd = result
+    ? `AstraAgentSetup.exe /VERYSILENT /SERVERURL=${result.server_url} /TOKEN=${result.token}`
+    : "";
 
   return (
     <div className="rounded-xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
@@ -73,8 +80,8 @@ function InstallAgentPanel() {
           <div>
             <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Install the ASTRA agent</h2>
             <p className="text-xs mt-0.5 max-w-xl" style={{ color: "var(--text-secondary)" }}>
-              Generate a Windows installer pre-configured with your server URL and a one-time
-              enrollment token. Run it on the target machine to enroll it into your fleet.
+              Download the Windows installer and enroll a machine with a one-time token.
+              Once installed, the device appears here automatically within a minute.
             </p>
           </div>
         </div>
@@ -108,7 +115,7 @@ function InstallAgentPanel() {
             <button type="submit" disabled={busy}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
               style={{ background: "var(--accent)" }}>
-              <Download size={15} /> {busy ? "Generating…" : "Generate & download"}
+              <KeyRound size={15} /> {busy ? "Generating…" : "Generate enrollment token"}
             </button>
             <button type="button" onClick={() => setOpen(false)}
               className="px-3 py-2 rounded-lg text-sm font-medium"
@@ -120,38 +127,49 @@ function InstallAgentPanel() {
       {result && (
         <div className="mt-4 space-y-3 max-w-xl">
           <div className="flex items-center gap-2 text-sm font-medium" style={{ color: "#10b981" }}>
-            <Check size={16} /> Installer downloaded — {result.filename}
+            <Check size={16} /> Enrollment token ready — install on the target machine
           </div>
+
+          {/* Step 1 — download the installer .exe */}
+          <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>1. Download the installer on the target Windows machine</p>
+            <a href={AGENT_EXE_URL} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
+              style={{ background: "var(--accent)" }}>
+              <Download size={15} /> AstraAgentSetup.exe
+            </a>
+          </div>
+
+          {/* Step 2 — run it, pre-keyed with this token */}
           <div className="rounded-lg p-3 space-y-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
             <div>
-              <p className="text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>One-time enrollment token (also baked into the script)</p>
+              <p className="text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>2. Silent install — run in an elevated Command Prompt / PowerShell</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{silentCmd}</code>
+                <CopyButton text={silentCmd} />
+              </div>
+              <p className="text-xs mt-1.5" style={{ color: "var(--text-secondary)" }}>
+                Or just double-click the installer and paste the token below on the wizard page.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>One-time enrollment token</p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{result.token}</code>
                 <CopyButton text={result.token} />
               </div>
             </div>
-            <div>
-              <p className="text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Run on the target machine (elevated PowerShell)</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{runCommand}</code>
-                <CopyButton text={runCommand} />
-              </div>
-            </div>
           </div>
+
           <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            Pair the script with a published agent build (<code className="font-mono">dist</code> folder). See{" "}
-            <span className="font-mono">agent/install/README.md</span>. The token is shown once — copy it now.
+            The token is shown once — copy it now. Prefer scripting? {" "}
+            <button onClick={() => downloadScript(result)} className="underline" style={{ color: "var(--accent)" }}>
+              Download the PowerShell installer
+            </button>{" "}instead (see <span className="font-mono">agent/install/README.md</span>).
           </p>
-          <div className="flex gap-2">
-            <button onClick={() => downloadScript(result)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-              <Download size={15} /> Download again
-            </button>
-            <button onClick={reset}
-              className="px-3 py-2 rounded-lg text-sm font-medium text-white"
-              style={{ background: "var(--accent)" }}>Generate another</button>
-          </div>
+          <button onClick={reset}
+            className="px-3 py-2 rounded-lg text-sm font-medium"
+            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Generate another</button>
         </div>
       )}
     </div>

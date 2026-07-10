@@ -1,0 +1,48 @@
+# Render Blueprint — provisions the ASTRA backend + a managed Postgres.
+# In Render: New +  ->  Blueprint  ->  point at this repo. It reads this file.
+# Redis and Qdrant are not required by the current backend (semantic cache lives
+# in Postgres); add them later if the vector KB is enabled.
+
+databases:
+  - name: astra-postgres
+    databaseName: astra
+    user: astra
+    plan: free
+
+services:
+  - type: web
+    name: astra-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Wired automatically from the database above (postgresql:// — the app
+      # coerces it to the asyncpg driver).
+      - key: ASTRA_DATABASE_URL
+        fromDatabase:
+          name: astra-postgres
+          property: connectionString
+      - key: ASTRA_JWT_SECRET_KEY
+        generateValue: true
+      - key: ASTRA_ENVIRONMENT
+        value: production
+      # Set after the first deploy to this service's own https URL — baked into
+      # the agent installer as the default server URL.
+      - key: ASTRA_PUBLIC_API_URL
+        sync: false
+      # Your Vercel portal origin as a JSON array, e.g. ["https://astra.vercel.app"]
+      - key: ASTRA_CORS_ORIGINS
+        sync: false
+      # Optional — without it the deterministic stub AI provider is used.
+      - key: ASTRA_ANTHROPIC_API_KEY
+        sync: false
+      # First-login bootstrap on the fresh DB (see scripts/bootstrap_admin.py).
+      - key: ASTRA_BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: ASTRA_BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: ASTRA_BOOTSTRAP_ORG_NAME
+        sync: false

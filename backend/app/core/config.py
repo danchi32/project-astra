@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,19 @@ class Settings(BaseSettings):
     # No defaults for secrets — must come from the environment.
     database_url: str
     jwt_secret_key: str
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _coerce_async_driver(cls, value: str) -> str:
+        """Managed Postgres providers (Render, Neon, Heroku) hand out
+        `postgres://` or `postgresql://` URLs; SQLAlchemy's async engine needs the
+        asyncpg driver. Normalize so those URLs work unchanged."""
+        if isinstance(value, str):
+            if value.startswith("postgres://"):
+                value = "postgresql+asyncpg://" + value[len("postgres://"):]
+            elif value.startswith("postgresql://"):
+                value = "postgresql+asyncpg://" + value[len("postgresql://"):]
+        return value
 
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
