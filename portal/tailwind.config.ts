@@ -1,8 +1,14 @@
 import type { Config } from "tailwindcss";
+import { join } from "path";
+
+// Resolve content from this file's directory (jiti provides __dirname), not
+// process.cwd(), so utilities are generated even when the dev server is
+// launched from the monorepo root. Forward slashes are required by fast-glob.
+const srcGlob = join(__dirname, "src/**/*.{ts,tsx}").replace(/\\/g, "/");
 
 const config: Config = {
   darkMode: "class",
-  content: ["./src/**/*.{ts,tsx}"],
+  content: [srcGlob],
   theme: {
     extend: {
       colors: {
