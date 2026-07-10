@@ -47,7 +47,7 @@ Workflow: intent recognition → knowledge search (Qdrant) → telemetry collect
 3. Telemetry collection (CPU/RAM/disk/events/apps/services/updates) + dashboard ✅
 4. AI conversation + Cognitive Engine + Knowledge Base (Qdrant) ✅
 5. Self-healing with approval tiers + audit logs ✅
-6. Assets, reporting, notifications ← current phase (Assets ✅; Reports, Notifications ⬜)
+6. Assets, reporting, notifications ✅
 
 ## UI theme
 

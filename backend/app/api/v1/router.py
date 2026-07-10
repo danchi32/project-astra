@@ -8,6 +8,7 @@ from app.api.v1 import (
     conversations,
     devices,
     knowledge,
+    notifications,
     remediation,
     reports,
     telemetry,
@@ -26,3 +27,4 @@ api_router.include_router(remediation.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(audit.router)
 api_router.include_router(reports.router)
+api_router.include_router(notifications.router)

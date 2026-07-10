@@ -1,11 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Package, Users, Activity,
   BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield,
 } from "lucide-react";
 import { logout } from "@/lib/api/auth";
+import { getUnreadCount } from "@/lib/api/notifications";
 import { useRouter } from "next/navigation";
 
 const NAV = [
@@ -25,6 +27,11 @@ const NAV = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: unreadCount } = useQuery({
+    queryKey: ["unread-notifications"],
+    queryFn: getUnreadCount,
+    refetchInterval: 30_000,
+  });
 
   async function handleLogout() {
     await logout();
@@ -56,7 +63,15 @@ export function Sidebar() {
               }}
             >
               <Icon size={16} />
-              {label}
+              <span className="flex-1">{label}</span>
+              {href === "/notifications" && !!unreadCount && (
+                <span
+                  className="text-xs font-semibold px-1.5 py-0.5 rounded-full leading-none"
+                  style={{ background: "#ef4444", color: "white" }}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </Link>
           );
         })}

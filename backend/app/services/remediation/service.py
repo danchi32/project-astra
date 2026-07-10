@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Device,
+    NotificationCategory,
+    NotificationSeverity,
     RemediationSource,
     RemediationStatus,
     RemediationTask,
@@ -16,6 +18,7 @@ from app.repositories.devices import DeviceRepository
 from app.repositories.remediation import RemediationRepository
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ServiceError
+from app.services.notifications import NotificationService
 from app.services.remediation.actions import (
     ACTIONS,
     SAFE_APP_PROCESSES,
@@ -42,6 +45,7 @@ class RemediationService:
         self.repo = RemediationRepository(session)
         self.devices = DeviceRepository(session)
         self.audit = AuditService(session)
+        self.notifications = NotificationService(session)
 
     # -- Creation --------------------------------------------------------------
 
@@ -90,6 +94,16 @@ class RemediationService:
             detail={"action": action_id, "tier": action.tier.value, "status": status.value,
                     "device": device.hostname, "source": source.value},
         )
+        if status is RemediationStatus.PENDING_APPROVAL:
+            approver = "an admin" if action.tier is RemediationTier.ADMIN_ONLY else "a technician or admin"
+            await self.notifications.notify(
+                org_id=org_id,
+                category=NotificationCategory.REMEDIATION,
+                severity=NotificationSeverity.WARNING,
+                title="Approval needed",
+                message=f"{action.label} on {device.hostname} needs approval from {approver}.",
+                link="/self-healing",
+            )
         await self.session.commit()
         return task
 
@@ -191,6 +205,17 @@ class RemediationService:
             target_id=str(task.id),
             detail={"action": task.action_id, "success": success},
         )
+        if not success:
+            action = get_action(task.action_id)
+            label = action.label if action else task.action_id
+            await self.notifications.notify(
+                org_id=device.org_id,
+                category=NotificationCategory.REMEDIATION,
+                severity=NotificationSeverity.CRITICAL,
+                title="Remediation failed",
+                message=f"{label} failed on {device.hostname}.",
+                link="/self-healing",
+            )
         await self.session.commit()
         return task
 

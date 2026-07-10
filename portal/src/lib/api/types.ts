@@ -225,3 +225,17 @@ export interface AssetReport {
   summary: AssetSummary;
   assets: Asset[];
 }
+
+export type NotificationCategory = "remediation" | "telemetry" | "asset" | "system";
+export type NotificationSeverity = "info" | "warning" | "critical";
+
+export interface Notification {
+  id: string;
+  category: NotificationCategory;
+  severity: NotificationSeverity;
+  title: string;
+  message: string;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
