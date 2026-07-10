@@ -171,3 +171,57 @@ export interface RemediationTask {
   created_at: string;
   completed_at: string | null;
 }
+
+export interface FleetHealthDeviceRow {
+  device_id: string;
+  hostname: string;
+  status: DeviceStatus;
+  cpu_percent: number | null;
+  ram_percent: number | null;
+  disk_free_percent_min: number | null;
+  critical_event_count: number;
+  pending_update_count: number;
+  last_seen_at: string | null;
+}
+
+export interface FleetHealthReport {
+  generated_at: string;
+  total_devices: number;
+  online_devices: number;
+  offline_devices: number;
+  avg_cpu_percent: number;
+  avg_ram_percent: number;
+  total_critical_events: number;
+  total_pending_updates: number;
+  devices: FleetHealthDeviceRow[];
+}
+
+export interface RemediationReportRow {
+  task_id: string;
+  device_hostname: string | null;
+  action_id: string;
+  tier: string;
+  status: string;
+  source: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface RemediationReport {
+  generated_at: string;
+  period_days: number;
+  total_tasks: number;
+  succeeded: number;
+  failed: number;
+  pending_approval: number;
+  success_rate: number;
+  by_tier: Record<string, number>;
+  by_action: Record<string, number>;
+  tasks: RemediationReportRow[];
+}
+
+export interface AssetReport {
+  generated_at: string;
+  summary: AssetSummary;
+  assets: Asset[];
+}
