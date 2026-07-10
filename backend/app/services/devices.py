@@ -3,17 +3,21 @@ from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.security import generate_opaque_token, hash_opaque_token
 from app.models import Device, EnrollmentToken, User
 from app.models.base import as_utc, utcnow
 from app.repositories.devices import DeviceRepository
 from app.repositories.enrollment_tokens import EnrollmentTokenRepository
 from app.schemas.devices import (
+    AgentInstallerRequest,
+    AgentInstallerResponse,
     DeviceUpdate,
     EnrollmentTokenCreate,
     EnrollRequest,
     HeartbeatRequest,
 )
+from app.services.agent_installer import build_install_script
 from app.services.audit import AuditService
 from app.services.exceptions import AuthenticationError, NotFoundError
 from app.services.settings import SettingsService
@@ -58,6 +62,24 @@ class DeviceService:
         )
         await self.session.commit()
         return record, raw
+
+    async def generate_agent_installer(
+        self, *, actor: User, data: AgentInstallerRequest
+    ) -> AgentInstallerResponse:
+        """Mint a fresh enrollment token and return a pre-configured install script."""
+        server_url = (data.server_url or get_settings().public_api_url).rstrip("/")
+        record, raw = await self.create_enrollment_token(
+            actor=actor,
+            data=EnrollmentTokenCreate(name=data.name, expires_in_days=data.expires_in_days),
+        )
+        script = build_install_script(server_url=server_url, enrollment_token=raw)
+        return AgentInstallerResponse(
+            token=raw,
+            server_url=server_url,
+            filename="Install-AstraAgent.ps1",
+            script=script,
+            expires_at=record.expires_at,
+        )
 
     async def list_enrollment_tokens(self, *, actor: User) -> list[EnrollmentToken]:
         return await self.enrollment_tokens.list_by_org(actor.org_id)

@@ -7,6 +7,8 @@ from app.api.deps import require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.devices import (
+    AgentInstallerRequest,
+    AgentInstallerResponse,
     DeviceRead,
     DeviceUpdate,
     EnrollmentTokenCreate,
@@ -45,6 +47,20 @@ async def create_enrollment_token(
     return EnrollmentTokenCreated(
         id=record.id, name=record.name, token=raw, expires_at=record.expires_at
     )
+
+
+@router.post(
+    "/agent-installer",
+    response_model=AgentInstallerResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate a pre-configured Windows agent installer (admin only)",
+)
+async def generate_agent_installer(
+    body: AgentInstallerRequest,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> AgentInstallerResponse:
+    return await DeviceService(session).generate_agent_installer(actor=actor, data=body)
 
 
 @router.get(

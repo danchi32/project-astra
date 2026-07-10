@@ -19,6 +19,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Public base URL of this backend as reached by Windows agents. Baked into the
+    # generated agent installer as the default ServerUrl; the portal can override it.
+    public_api_url: str = "http://localhost:8000"
+
     # AI engine — when the API key is unset, a deterministic stub provider is used
     # (local demo + tests run without a key or network).
     anthropic_api_key: str | None = None

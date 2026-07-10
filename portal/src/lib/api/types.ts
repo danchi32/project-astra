@@ -226,6 +226,22 @@ export interface AssetReport {
   assets: Asset[];
 }
 
+export interface EnrollmentToken {
+  id: string;
+  name: string;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export interface AgentInstaller {
+  token: string;
+  server_url: string;
+  filename: string;
+  script: string;
+  expires_at: string;
+}
+
 export interface OrganizationSettings {
   org_name: string;
   auto_approve_automatic: boolean;
