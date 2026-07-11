@@ -63,7 +63,33 @@ def _ensure_database_url() -> None:
         os.environ["ASTRA_DATABASE_URL"] = railway_url
         astra_url = railway_url
 
+    # Last resort: reconstruct from Railway's individual Postgres PG* variables
+    # if they were referenced into this service (PGHOST/PGUSER/PGPASSWORD/...).
     if not astra_url:
+        host = os.getenv("PGHOST") or os.getenv("POSTGRES_HOST")
+        user = os.getenv("PGUSER") or os.getenv("POSTGRES_USER")
+        password = os.getenv("PGPASSWORD") or os.getenv("POSTGRES_PASSWORD")
+        db_name = os.getenv("PGDATABASE") or os.getenv("POSTGRES_DB")
+        port = os.getenv("PGPORT") or "5432"
+        if host and user and password and db_name:
+            astra_url = f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+            os.environ["ASTRA_DATABASE_URL"] = astra_url
+            print("[config] Reconstructed database URL from PG* environment variables")
+
+    if not astra_url:
+        # Diagnostic: prove exactly what env vars the container received (NAMES ONLY,
+        # no values, so nothing secret is leaked). This tells us what Railway injected.
+        all_keys = sorted(os.environ.keys())
+        db_keys = [
+            k for k in all_keys
+            if any(t in k.upper() for t in ("DATA", "PG", "POSTGR", "SQL", "URL", "RAILWAY"))
+        ]
+        print("=" * 60)
+        print("[config] FATAL: no database URL in container environment.")
+        print(f"[config] DB/Railway-related env var NAMES present: {db_keys}")
+        print(f"[config] TOTAL env vars present: {len(all_keys)}")
+        print(f"[config] ALL env var NAMES: {all_keys}")
+        print("=" * 60)
         raise RuntimeError(
             "No database URL found. Set ASTRA_DATABASE_URL (or DATABASE_URL) in the "
             "Railway backend service Variables tab to your Postgres connection string, "
