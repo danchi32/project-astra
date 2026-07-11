@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 from pydantic import field_validator
@@ -53,4 +54,10 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    # Debug: Print what we're reading from environment
+    db_url = os.getenv("ASTRA_DATABASE_URL", "NOT_SET")
+    print(f"[DEBUG] ASTRA_DATABASE_URL from env: {db_url[:50] if db_url != 'NOT_SET' else 'NOT_SET'}...")
+
+    settings = Settings()
+    print(f"[DEBUG] Settings.database_url: {settings.database_url[:50] if settings.database_url else 'EMPTY'}...")
+    return settings
