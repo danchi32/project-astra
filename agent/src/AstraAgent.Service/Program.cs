@@ -6,7 +6,14 @@ using AstraAgent.Service.Telemetry.Collectors;
 using AstraAgent.Service.Workers;
 using Microsoft.Extensions.Options;
 
-var builder = Host.CreateApplicationBuilder(args);
+// Pin the content root to the executable's directory. A Windows service starts
+// with its working directory set to C:\Windows\System32, so without this the host
+// would look for appsettings.json there and miss the server URL + enrollment token.
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
 
 builder.Services.AddWindowsService(options => options.ServiceName = "AstraAgent");
 
