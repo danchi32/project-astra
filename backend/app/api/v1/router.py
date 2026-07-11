@@ -7,6 +7,7 @@ from app.api.v1 import (
     auth,
     conversations,
     devices,
+    downloads,
     knowledge,
     notifications,
     remediation,
@@ -30,3 +31,4 @@ api_router.include_router(audit.router)
 api_router.include_router(reports.router)
 api_router.include_router(notifications.router)
 api_router.include_router(settings.router)
+api_router.include_router(downloads.router)
