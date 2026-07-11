@@ -23,12 +23,6 @@ function downloadScript(installer: AgentInstaller) {
   URL.revokeObjectURL(url);
 }
 
-// Where the compiled installer lives — served from the backend API.
-// Override per-deployment with NEXT_PUBLIC_AGENT_DOWNLOAD_URL.
-const AGENT_EXE_URL =
-  process.env.NEXT_PUBLIC_AGENT_DOWNLOAD_URL ??
-  "https://astra-backend-production-9ee2.up.railway.app/api/v1/downloads/agent";
-
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -65,10 +59,6 @@ function InstallAgentPanel() {
   function reset() {
     setResult(null); setName(""); setServerUrl(""); setError("");
   }
-
-  const silentCmd = result
-    ? `AstraAgentSetup.exe /VERYSILENT /SERVERURL=${result.server_url} /TOKEN=${result.token}`
-    : "";
 
   return (
     <div className="rounded-xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
@@ -127,46 +117,51 @@ function InstallAgentPanel() {
       {result && (
         <div className="mt-4 space-y-3 max-w-xl">
           <div className="flex items-center gap-2 text-sm font-medium" style={{ color: "#10b981" }}>
-            <Check size={16} /> Enrollment token ready — install on the target machine
+            <Check size={16} /> Installer ready — one file, runs on the target machine
           </div>
 
-          {/* Step 1 — download the installer .exe */}
+          {/* Step 1 — download the one self-contained installer script */}
           <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>1. Download the installer on the target Windows machine</p>
-            <a href={AGENT_EXE_URL} target="_blank" rel="noreferrer"
+            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+              1. On the target Windows machine, download the installer
+            </p>
+            <button onClick={() => downloadScript(result)}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
               style={{ background: "var(--accent)" }}>
-              <Download size={15} /> AstraAgentSetup.exe
-            </a>
+              <Download size={15} /> Download Install-AstraAgent.ps1
+            </button>
+            <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
+              The server URL and a one-time enrollment token are already baked in. The script
+              downloads the agent from your server and installs it — nothing else to configure.
+            </p>
           </div>
 
-          {/* Step 2 — run it, pre-keyed with this token */}
-          <div className="rounded-lg p-3 space-y-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-            <div>
-              <p className="text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>2. Silent install — run in an elevated Command Prompt / PowerShell</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{silentCmd}</code>
-                <CopyButton text={silentCmd} />
-              </div>
-              <p className="text-xs mt-1.5" style={{ color: "var(--text-secondary)" }}>
-                Or just double-click the installer and paste the token below on the wizard page.
-              </p>
+          {/* Step 2 — run it elevated */}
+          <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+            <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              2. Right-click the file → <span className="font-semibold">Run with PowerShell</span> (approve the
+              admin prompt). Or run in an elevated PowerShell:
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>
+                powershell -ExecutionPolicy Bypass -File .\Install-AstraAgent.ps1
+              </code>
+              <CopyButton text={"powershell -ExecutionPolicy Bypass -File .\\Install-AstraAgent.ps1"} />
             </div>
-            <div>
-              <p className="text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>One-time enrollment token</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{result.token}</code>
-                <CopyButton text={result.token} />
-              </div>
-            </div>
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              The device enrolls automatically and appears under Devices within a minute.
+            </p>
           </div>
 
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            The token is shown once — copy it now. Prefer scripting? {" "}
-            <button onClick={() => downloadScript(result)} className="underline" style={{ color: "var(--accent)" }}>
-              Download the PowerShell installer
-            </button>{" "}instead (see <span className="font-mono">agent/install/README.md</span>).
-          </p>
+          <details className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            <summary className="cursor-pointer">Need the raw enrollment token?</summary>
+            <div className="flex items-center gap-2 mt-2">
+              <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{result.token}</code>
+              <CopyButton text={result.token} />
+            </div>
+            <p className="mt-1">Shown once — copy it now if you need it.</p>
+          </details>
+
           <button onClick={reset}
             className="px-3 py-2 rounded-lg text-sm font-medium"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Generate another</button>

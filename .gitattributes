@@ -3,3 +3,6 @@
 entrypoint.sh text eol=lf
 Dockerfile text eol=lf
 agent/install/dist.zip filter=lfs diff=lfs merge=lfs -text
+# The agent binary served by the backend is baked into the Docker image — keep it a
+# plain binary blob (never LFS, never line-ending conversion).
+backend/downloads/*.zip binary
