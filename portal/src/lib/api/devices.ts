@@ -12,9 +12,10 @@ export const generateAgentInstaller = (name: string, server_url?: string) =>
     .post<AgentInstaller>("/devices/agent-installer", { name, server_url: server_url || undefined })
     .then((r) => r.data);
 
-// Downloads the single-file offline installer bundle (.zip) for mass deployment.
-// The bundle embeds the agent binary + a pre-keyed script, so target machines
-// need no download at install time. Triggers a browser download.
+// Downloads the portable installer bundle (.zip) for mass deployment. The bundle
+// embeds the agent binaries + a pre-keyed installer with the enrollment token
+// already baked in, and handles locked-down machines (runs via the dotnet host,
+// installs the .NET runtime, adds a DNS hosts entry). Triggers a browser download.
 export const downloadOfflineInstaller = async (name: string, server_url?: string) => {
   const res = await apiClient.post(
     "/devices/offline-installer",
@@ -24,7 +25,7 @@ export const downloadOfflineInstaller = async (name: string, server_url?: string
   const url = URL.createObjectURL(res.data as Blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "AstraAgent-Offline.zip";
+  a.download = "AstraAgent-Portable.zip";
   document.body.appendChild(a);
   a.click();
   a.remove();

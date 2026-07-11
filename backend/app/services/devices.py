@@ -95,7 +95,7 @@ class DeviceService:
         content = build_offline_bundle_zip(
             server_url=server_url, enrollment_token=raw, expires_label=expires_label
         )
-        return "AstraAgent-Offline.zip", content
+        return "AstraAgent-Portable.zip", content
 
     async def list_enrollment_tokens(self, *, actor: User) -> list[EnrollmentToken]:
         return await self.enrollment_tokens.list_by_org(actor.org_id)

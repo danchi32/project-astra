@@ -122,16 +122,17 @@ function InstallAgentPanel() {
             <button type="button" onClick={downloadOffline} disabled={busy || offlineBusy}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
               style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-              <Download size={15} /> {offlineBusy ? "Preparing…" : "Offline installer (many PCs)"}
+              <Download size={15} /> {offlineBusy ? "Preparing…" : "Portable installer (many PCs)"}
             </button>
             <button type="button" onClick={() => setOpen(false)}
               className="px-3 py-2 rounded-lg text-sm font-medium"
               style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
           </div>
           <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            <span className="font-medium">Offline installer</span>: one <span className="font-mono">.zip</span> with the
-            agent bundled in — copy it to any number of PCs and run <span className="font-mono">Install.bat</span> as
-            administrator. The token inside works for every machine.
+            <span className="font-medium">Portable installer</span>: one <span className="font-mono">.zip</span> with the
+            agent bundled in and the <span className="font-medium">enrollment token already baked in</span>. Copy it to
+            any number of PCs, extract, and run <span className="font-mono">Install-AstraAgent.ps1</span> as administrator.
+            Works on locked-down machines (installs the .NET runtime, adds a DNS entry, and runs via the trusted dotnet host).
           </p>
         </form>
       )}
