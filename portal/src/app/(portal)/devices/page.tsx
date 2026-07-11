@@ -23,11 +23,11 @@ function downloadScript(installer: AgentInstaller) {
   URL.revokeObjectURL(url);
 }
 
-// Where the compiled installer lives — a GitHub Release asset built by CI.
+// Where the compiled installer lives — served from the backend API.
 // Override per-deployment with NEXT_PUBLIC_AGENT_DOWNLOAD_URL.
 const AGENT_EXE_URL =
   process.env.NEXT_PUBLIC_AGENT_DOWNLOAD_URL ??
-  "https://github.com/danchi32/project-astra/releases/latest/download/AstraAgentSetup.exe";
+  "https://astra-backend-production-9ee2.up.railway.app/api/v1/downloads/agent";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
