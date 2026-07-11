@@ -23,8 +23,10 @@ $repo = Split-Path -Parent $PSScriptRoot   # agent\
 $proj = Join-Path $repo "src\AstraAgent.Service"
 
 Write-Host "Publishing self-contained agent -> $Output" -ForegroundColor Cyan
-dotnet publish $proj -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $Output
+# Multi-file (NOT single-file): a normal launcher exe + DLLs. Single-file
+# self-extracting exes are a common antivirus false-positive trigger and must
+# unpack to a temp dir at first run; a regular folder avoids both problems.
+dotnet publish $proj -c Release -r win-x64 --self-contained true -o $Output
 
 if ($Zip) {
     $zipPath = "$Output.zip"
