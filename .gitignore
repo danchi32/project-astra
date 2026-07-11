@@ -51,3 +51,4 @@ portal/out/
 # Local demo artifacts
 backend/astra-demo.db
 demo-enrollment-token.txt
+project-astra/

@@ -12,13 +12,13 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # No defaults for secrets — must come from the environment.
-    database_url: str = ""
-    jwt_secret_key: str = ""
+    database_url: str
+    jwt_secret_key: str
 
     @field_validator("database_url", mode="before")
     @classmethod
     def _coerce_async_driver(cls, value: str) -> str:
-        """Managed Postgres providers (Render, Neon, Heroku) hand out
+        """Managed Postgres providers (Railway, Render, Neon, Heroku) hand out
         `postgres://` or `postgresql://` URLs; SQLAlchemy's async engine needs the
         asyncpg driver. Normalize so those URLs work unchanged."""
         if isinstance(value, str):
@@ -52,19 +52,31 @@ class Settings(BaseSettings):
     ai_cache_similarity_threshold: float = 0.85
 
 
+def _ensure_database_url() -> None:
+    """Railway's Postgres plugin exposes the connection string as DATABASE_URL.
+    We expect ASTRA_DATABASE_URL (env_prefix). Bridge the two so either works,
+    and fail with a clear, actionable message if neither is set."""
+    astra_url = os.getenv("ASTRA_DATABASE_URL", "").strip()
+    railway_url = os.getenv("DATABASE_URL", "").strip()
+
+    if not astra_url and railway_url:
+        os.environ["ASTRA_DATABASE_URL"] = railway_url
+        astra_url = railway_url
+
+    if not astra_url:
+        raise RuntimeError(
+            "No database URL found. Set ASTRA_DATABASE_URL (or DATABASE_URL) in the "
+            "Railway backend service Variables tab to your Postgres connection string, "
+            "e.g. postgresql://user:pass@host:port/dbname"
+        )
+
+    # Masked diagnostic so the deploy logs prove what was read, without leaking the password.
+    scheme, _, rest = astra_url.partition("://")
+    host_part = rest.split("@")[-1] if "@" in rest else rest
+    print(f"[config] database_url resolved: scheme={scheme}, host={host_part}, length={len(astra_url)}")
+
+
 @lru_cache
 def get_settings() -> Settings:
-    # Railway provides DATABASE_URL, but we expect ASTRA_DATABASE_URL with prefix
-    # Fallback to DATABASE_URL if ASTRA_DATABASE_URL is not set
-    astra_db_url = os.getenv("ASTRA_DATABASE_URL")
-    railway_db_url = os.getenv("DATABASE_URL")
-
-    if not astra_db_url and railway_db_url:
-        print(f"[INFO] Using Railway's DATABASE_URL: {railway_db_url[:50]}...")
-        os.environ["ASTRA_DATABASE_URL"] = railway_db_url
-
-    db_url = os.getenv("ASTRA_DATABASE_URL", "NOT_SET")
-    print(f"[DEBUG] ASTRA_DATABASE_URL: {db_url[:50] if db_url and db_url != 'NOT_SET' else 'EMPTY/NOT_SET'}...")
-
-    settings = Settings()
-    return settings
+    _ensure_database_url()
+    return Settings()

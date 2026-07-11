@@ -5,13 +5,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-WORKDIR /app/backend
+WORKDIR /app
 
 # Install dependencies first for better layer caching.
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ .
+COPY . .
 
 RUN chmod +x entrypoint.sh && \
     addgroup --system astra && adduser --system --ingroup astra astra && \
