@@ -1,0 +1,41 @@
+name: Build ASTRA Agent
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'agent/**'
+      - '.github/workflows/build-agent.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish self-contained agent
+        run: |
+          cd agent/install
+          .\Build-AstraAgent.ps1 -Zip
+        shell: powershell
+
+      - name: Upload dist as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: astra-agent-dist
+          path: agent/install/dist/
+          retention-days: 90
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: agent/install/dist.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
