@@ -54,10 +54,17 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    # Debug: Print what we're reading from environment
+    # Railway provides DATABASE_URL, but we expect ASTRA_DATABASE_URL with prefix
+    # Fallback to DATABASE_URL if ASTRA_DATABASE_URL is not set
+    astra_db_url = os.getenv("ASTRA_DATABASE_URL")
+    railway_db_url = os.getenv("DATABASE_URL")
+
+    if not astra_db_url and railway_db_url:
+        print(f"[INFO] Using Railway's DATABASE_URL: {railway_db_url[:50]}...")
+        os.environ["ASTRA_DATABASE_URL"] = railway_db_url
+
     db_url = os.getenv("ASTRA_DATABASE_URL", "NOT_SET")
-    print(f"[DEBUG] ASTRA_DATABASE_URL from env: {db_url[:50] if db_url != 'NOT_SET' else 'NOT_SET'}...")
+    print(f"[DEBUG] ASTRA_DATABASE_URL: {db_url[:50] if db_url and db_url != 'NOT_SET' else 'EMPTY/NOT_SET'}...")
 
     settings = Settings()
-    print(f"[DEBUG] Settings.database_url: {settings.database_url[:50] if settings.database_url else 'EMPTY'}...")
     return settings
