@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { getDevices } from "@/lib/api/dashboard";
 import { getMe } from "@/lib/api/auth";
-import { listEnrollmentTokens, revokeEnrollmentToken, generateAgentInstaller } from "@/lib/api/devices";
+import { listEnrollmentTokens, revokeEnrollmentToken, generateAgentInstaller, downloadOfflineInstaller } from "@/lib/api/devices";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import type { AgentInstaller } from "@/lib/api/types";
@@ -41,6 +41,7 @@ function InstallAgentPanel() {
   const [name, setName] = useState("");
   const [serverUrl, setServerUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [offlineBusy, setOfflineBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<AgentInstaller | null>(null);
 
@@ -54,6 +55,17 @@ function InstallAgentPanel() {
     } catch {
       setError("Couldn't generate the token. Check the details and try again.");
     } finally { setBusy(false); }
+  }
+
+  async function downloadOffline() {
+    if (!name.trim()) { setError("Enter a label first."); return; }
+    setOfflineBusy(true); setError("");
+    try {
+      await downloadOfflineInstaller(name.trim(), serverUrl.trim());
+      await queryClient.invalidateQueries({ queryKey: ["enrollment-tokens"] });
+    } catch {
+      setError("Couldn't build the offline installer. Try again.");
+    } finally { setOfflineBusy(false); }
   }
 
   function reset() {
@@ -101,16 +113,26 @@ function InstallAgentPanel() {
             </div>
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
-          <div className="flex gap-2">
-            <button type="submit" disabled={busy}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={busy || offlineBusy}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
               style={{ background: "var(--accent)" }}>
               <KeyRound size={15} /> {busy ? "Generating…" : "Generate enrollment token"}
+            </button>
+            <button type="button" onClick={downloadOffline} disabled={busy || offlineBusy}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+              <Download size={15} /> {offlineBusy ? "Preparing…" : "Offline installer (many PCs)"}
             </button>
             <button type="button" onClick={() => setOpen(false)}
               className="px-3 py-2 rounded-lg text-sm font-medium"
               style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
           </div>
+          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+            <span className="font-medium">Offline installer</span>: one <span className="font-mono">.zip</span> with the
+            agent bundled in — copy it to any number of PCs and run <span className="font-mono">Install.bat</span> as
+            administrator. The token inside works for every machine.
+          </p>
         </form>
       )}
 

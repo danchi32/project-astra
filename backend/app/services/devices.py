@@ -17,7 +17,7 @@ from app.schemas.devices import (
     EnrollRequest,
     HeartbeatRequest,
 )
-from app.services.agent_installer import build_install_script
+from app.services.agent_installer import build_install_script, build_offline_bundle_zip
 from app.services.audit import AuditService
 from app.services.exceptions import AuthenticationError, NotFoundError
 from app.services.settings import SettingsService
@@ -80,6 +80,22 @@ class DeviceService:
             script=script,
             expires_at=record.expires_at,
         )
+
+    async def generate_offline_bundle(
+        self, *, actor: User, data: AgentInstallerRequest
+    ) -> tuple[str, bytes]:
+        """Mint a reusable enrollment token and package a single offline installer
+        zip (agent binary + pre-keyed script + Install.bat) for mass deployment."""
+        server_url = (data.server_url or get_settings().public_api_url).rstrip("/")
+        record, raw = await self.create_enrollment_token(
+            actor=actor,
+            data=EnrollmentTokenCreate(name=data.name, expires_in_days=data.expires_in_days),
+        )
+        expires_label = as_utc(record.expires_at).strftime("%Y-%m-%d %H:%M UTC")
+        content = build_offline_bundle_zip(
+            server_url=server_url, enrollment_token=raw, expires_label=expires_label
+        )
+        return "AstraAgent-Offline.zip", content
 
     async def list_enrollment_tokens(self, *, actor: User) -> list[EnrollmentToken]:
         return await self.enrollment_tokens.list_by_org(actor.org_id)

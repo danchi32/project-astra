@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
@@ -61,6 +61,28 @@ async def generate_agent_installer(
     session: AsyncSession = Depends(get_db),
 ) -> AgentInstallerResponse:
     return await DeviceService(session).generate_agent_installer(actor=actor, data=body)
+
+
+@router.post(
+    "/offline-installer",
+    summary="Generate an offline mass-deployment installer bundle (.zip, admin only)",
+    responses={201: {"content": {"application/zip": {}}}},
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_offline_installer(
+    body: AgentInstallerRequest,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    filename, content = await DeviceService(session).generate_offline_bundle(
+        actor=actor, data=body
+    )
+    return Response(
+        content=content,
+        status_code=status.HTTP_201_CREATED,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get(
