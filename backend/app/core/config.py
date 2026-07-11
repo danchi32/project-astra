@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # No defaults for secrets — must come from the environment.
-    database_url: str
-    jwt_secret_key: str
+    database_url: str = ""
+    jwt_secret_key: str = ""
 
     @field_validator("database_url", mode="before")
     @classmethod

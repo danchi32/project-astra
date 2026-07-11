@@ -13,7 +13,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+db_url = get_settings().database_url
+if not db_url:
+    print("[Alembic] WARNING: database_url is empty, migrations will be skipped")
+else:
+    config.set_main_option("sqlalchemy.url", db_url)
+    print(f"[Alembic] Using database URL: {db_url[:50]}...")
 target_metadata = Base.metadata
 
 
