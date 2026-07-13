@@ -10,7 +10,7 @@ from app.repositories.conversations import ConversationRepository, MessageReposi
 from app.services.ai.cache import SemanticCache
 from app.services.ai.cognitive import CognitiveEngine
 from app.services.ai.intent import OFF_TOPIC_REPLY, is_off_topic, requires_live_action
-from app.services.ai.provider import LLMProvider
+from app.services.ai.provider import LLMProvider, StubProvider, get_provider
 from app.services.exceptions import NotFoundError
 
 
@@ -27,8 +27,9 @@ class ConversationService:
         self.session = session
         self.conversations = ConversationRepository(session)
         self.messages = MessageRepository(session)
-        # Provider is injectable so tests can pass a deterministic stub.
-        self.engine = CognitiveEngine(session, provider=provider)
+        # An injected provider (tests) is always used; otherwise the provider is
+        # chosen per-message in _select_provider so common issues stay free.
+        self._forced_provider = provider
         self.cache = SemanticCache(session)
 
     async def create(self, *, actor: User, title: str) -> Conversation:
@@ -143,8 +144,11 @@ class ConversationService:
             if cached is not None:
                 return Reply(text=cached, tool_trail=None, source="cache")
 
-        # 3. Cognitive engine (the only path that costs an LLM call).
-        result = await self.engine.run(
+        # 3. Cognitive engine. Route the provider: a listed/common issue is handled
+        #    for free by the built-in rules; only an unusual, unlisted problem is
+        #    worth an LLM (Claude) call.
+        provider = self._select_provider(content, device_hostname)
+        result = await CognitiveEngine(self.session, provider=provider).run(
             org_id=org_id, history=history, user_message=content,
             device_hostname=device_hostname, acting_device_id=acting_device_id,
         )
@@ -159,6 +163,17 @@ class ConversationService:
             await self.cache.store(org_id=org_id, query=content, answer=result.text)
 
         return Reply(text=result.text, tool_trail=result.tool_trail or None, source="engine")
+
+    def _select_provider(self, content: str, device_hostname: str | None) -> LLMProvider:
+        """Pick who answers. A listed/common issue (app restart, cleanup, device
+        diagnostic, greeting) is resolved for free by the built-in rules; only an
+        unusual, unlisted problem is routed to the LLM (Claude) — and only if a key
+        is configured, otherwise the built-in assistant's generic guidance is used."""
+        if self._forced_provider is not None:
+            return self._forced_provider
+        if StubProvider().can_handle(user_text=content, hostname=device_hostname):
+            return StubProvider()
+        return get_provider()
 
     async def _get_owned(self, actor: User, conversation_id: uuid.UUID) -> Conversation:
         conversation = await self.conversations.get(conversation_id)

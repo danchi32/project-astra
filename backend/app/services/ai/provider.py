@@ -238,6 +238,26 @@ class StubProvider:
             )
         )
 
+    def can_handle(self, *, user_text: str, hostname: str | None) -> bool:
+        """True when the message matches a listed/common issue the built-in rules
+        resolve on their own — an app restart, a cleanup, a device diagnostic, or a
+        greeting. Used to route: only when this is False (an unusual, unlisted
+        problem) is the LLM (Claude) worth spending. Mirrors the matching in
+        generate(); knowledge-base how-to questions are intentionally left to the
+        LLM when one is configured."""
+        text = user_text.lower()
+        if self._is_greeting(text):
+            return True
+        if self._match_explicit_cleanup(text) is not None:
+            return True
+        if self._match_app_fix(text) is not None:
+            return True
+        if any(kw in text for kw in self._DIAGNOSTIC_KEYWORDS):
+            return True
+        if hostname and any(w in text for w in self._PROBLEM_WORDS):
+            return True
+        return False
+
     def _is_greeting(self, text: str) -> bool:
         stripped = text.strip().strip("!.? ")
         if stripped in self._GREETINGS:
