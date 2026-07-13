@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 
 namespace AstraAgent.Tray.Remediation;
 
@@ -63,6 +64,29 @@ public sealed class RemediationExecutor
         if (process.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             process = process[..^4];
         return RestartApp(new[] { process }, process + ".exe");
+    }
+
+    /// <summary>Resolve an app's full path from the Windows "App Paths" registry (used by
+    /// ShellExecute), so a not-currently-running app like Excel launches reliably by name.
+    /// Falls back to the bare name if there's no registered path.</summary>
+    private static string ResolveLaunchTarget(string exeName)
+    {
+        foreach (var root in new[] { Registry.LocalMachine, Registry.CurrentUser })
+        {
+            try
+            {
+                using var key = root.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\" + exeName);
+                if (key?.GetValue(null) is string raw)
+                {
+                    var path = raw.Trim().Trim('"');
+                    if (path.Length > 0 && File.Exists(path))
+                        return path;
+                }
+            }
+            catch { /* registry unavailable — fall through to the bare name */ }
+        }
+        return exeName;
     }
 
     private static async Task<(bool, string)> RunAsync(string exe, string args, CancellationToken ct)
@@ -276,13 +300,13 @@ public sealed class RemediationExecutor
             }
         }
 
-        var startTarget = capturedPath ?? fallbackExe;
+        var startTarget = capturedPath ?? ResolveLaunchTarget(fallbackExe);
         try
         {
             Process.Start(new ProcessStartInfo(startTarget) { UseShellExecute = true });
             return (true, killed > 0
-                ? $"Closed {killed} instance(s) and relaunched the application."
-                : "Launched the application.");
+                ? $"Closed {killed} instance(s) and relaunched the application ({startTarget})."
+                : $"Launched the application ({startTarget}).");
         }
         catch (Exception ex)
         {
