@@ -10,7 +10,13 @@ from app.repositories.conversations import ConversationRepository, MessageReposi
 from app.services.ai.cache import SemanticCache
 from app.services.ai.cognitive import CognitiveEngine
 from app.services.ai.intent import OFF_TOPIC_REPLY, is_off_topic, requires_live_action
-from app.services.ai.provider import LLMProvider, StubProvider, get_provider
+from app.services.ai.learned import LearnedFixStore, learnable_action
+from app.services.ai.provider import (
+    LearnedActionProvider,
+    LLMProvider,
+    StubProvider,
+    get_provider,
+)
 from app.services.exceptions import NotFoundError
 
 
@@ -31,6 +37,7 @@ class ConversationService:
         # chosen per-message in _select_provider so common issues stay free.
         self._forced_provider = provider
         self.cache = SemanticCache(session)
+        self.learned = LearnedFixStore(session)
 
     async def create(self, *, actor: User, title: str) -> Conversation:
         conversation = await self.conversations.add(
@@ -144,16 +151,26 @@ class ConversationService:
             if cached is not None:
                 return Reply(text=cached, tool_trail=None, source="cache")
 
-        # 3. Cognitive engine. Route the provider: a listed/common issue is handled
-        #    for free by the built-in rules; only an unusual, unlisted problem is
-        #    worth an LLM (Claude) call.
-        provider = self._select_provider(content, device_hostname)
+        # 3. Route the provider: a listed/common issue is free (built-in rules); a
+        #    previously-learned fix is free (built-in path); only a genuinely new,
+        #    unlisted problem is worth an LLM (Claude) call.
+        provider, source = await self._route(org_id, content, device_hostname)
         result = await CognitiveEngine(self.session, provider=provider).run(
             org_id=org_id, history=history, user_message=content,
             device_hostname=device_hostname, acting_device_id=acting_device_id,
         )
 
-        # 4. Cache only device-independent, non-actionable, successful answers.
+        # 4. Learn: if a NON-built-in provider (the LLM) solved a new issue by
+        #    applying a fix, remember it so the same kind of issue is handled for
+        #    free next time. Built-in and already-learned paths teach nothing new.
+        if not isinstance(provider, (StubProvider, LearnedActionProvider)):
+            learned = learnable_action(result.tool_trail)
+            if learned is not None:
+                await self.learned.learn(
+                    org_id=org_id, query=content, action_id=learned[0], params=learned[1]
+                )
+
+        # 5. Cache only device-independent, non-actionable, successful answers.
         if (
             settings.ai_cache_enabled
             and not actionable
@@ -162,18 +179,25 @@ class ConversationService:
         ):
             await self.cache.store(org_id=org_id, query=content, answer=result.text)
 
-        return Reply(text=result.text, tool_trail=result.tool_trail or None, source="engine")
+        return Reply(text=result.text, tool_trail=result.tool_trail or None, source=source)
 
-    def _select_provider(self, content: str, device_hostname: str | None) -> LLMProvider:
-        """Pick who answers. A listed/common issue (app restart, cleanup, device
-        diagnostic, greeting) is resolved for free by the built-in rules; only an
-        unusual, unlisted problem is routed to the LLM (Claude) — and only if a key
-        is configured, otherwise the built-in assistant's generic guidance is used."""
+    async def _route(
+        self, org_id: uuid.UUID, content: str, device_hostname: str | None
+    ) -> tuple[LLMProvider, str]:
+        """Pick who answers, cheapest capable first:
+        1. An injected provider (tests) always wins.
+        2. A listed/common issue → free built-in rules.
+        3. A previously-learned fix for this kind of issue → free built-in path.
+        4. Otherwise → the LLM (Claude) if a key is set, else built-in guidance.
+        The returned source string is recorded for cost telemetry."""
         if self._forced_provider is not None:
-            return self._forced_provider
+            return self._forced_provider, "engine"
         if StubProvider().can_handle(user_text=content, hostname=device_hostname):
-            return StubProvider()
-        return get_provider()
+            return StubProvider(), "engine"
+        fix = await self.learned.lookup(org_id=org_id, query=content)
+        if fix is not None:
+            return LearnedActionProvider(fix.action_id, fix.params), "learned"
+        return get_provider(), "engine"
 
     async def _get_owned(self, actor: User, conversation_id: uuid.UUID) -> Conversation:
         conversation = await self.conversations.get(conversation_id)

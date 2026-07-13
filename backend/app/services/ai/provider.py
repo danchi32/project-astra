@@ -435,6 +435,32 @@ class StubProvider:
         )
 
 
+class LearnedActionProvider:
+    """Applies a fix the AI learned for a previously-unclassified issue — no LLM
+    call. Drives the same engine loop as the stub: propose the remembered action,
+    then summarize the outcome from the tool result."""
+
+    def __init__(self, action_id: str, params: dict[str, Any] | None) -> None:
+        self._action_id = action_id
+        self._params = params or {}
+
+    async def generate(
+        self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> LLMResponse:
+        results = StubProvider._extract_tool_results(messages[-1])
+        if results is not None:
+            return LLMResponse(text=StubProvider._summarize(results))
+        tool_input: dict[str, Any] = {
+            "action_id": self._action_id,
+            "reason": "Applying the known fix for this kind of issue.",
+        }
+        tool_input.update(self._params)
+        return LLMResponse(
+            text="I've handled this kind of issue before — applying the known fix now.",
+            tool_calls=[ToolCall(id="learned", name="propose_remediation", input=tool_input)],
+        )
+
+
 def get_provider() -> LLMProvider:
     settings = get_settings()
     if settings.anthropic_api_key:

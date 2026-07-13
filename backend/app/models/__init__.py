@@ -5,6 +5,7 @@ from app.models.conversation import Conversation, Message, MessageRole
 from app.models.device import Device
 from app.models.enrollment_token import EnrollmentToken
 from app.models.knowledge import KnowledgeArticle, KnowledgeSource
+from app.models.learned_action import LearnedAction
 from app.models.notification import Notification, NotificationCategory, NotificationSeverity
 from app.models.organization import Organization
 from app.models.organization_settings import OrganizationSettings
@@ -35,6 +36,7 @@ __all__ = [
     "EnrollmentToken",
     "KnowledgeArticle",
     "KnowledgeSource",
+    "LearnedAction",
     "Message",
     "MessageRole",
     "Notification",
