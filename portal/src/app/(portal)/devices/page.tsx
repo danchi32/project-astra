@@ -9,7 +9,7 @@ import { getMe } from "@/lib/api/auth";
 import { listEnrollmentTokens, revokeEnrollmentToken, generateAgentInstaller, downloadOfflineInstaller } from "@/lib/api/devices";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
-import type { AgentInstaller } from "@/lib/api/types";
+import type { AgentInstaller, Device } from "@/lib/api/types";
 
 function downloadScript(installer: AgentInstaller) {
   const blob = new Blob([installer.script], { type: "text/plain" });
@@ -17,6 +17,34 @@ function downloadScript(installer: AgentInstaller) {
   const a = document.createElement("a");
   a.href = url;
   a.download = installer.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Quote a CSV cell only when it contains a comma, quote or newline (RFC 4180).
+function csvCell(value: unknown): string {
+  const s = value === null || value === undefined ? "" : String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function exportDevicesCsv(devices: Device[]) {
+  const headers = [
+    "Hostname", "OS", "Manufacturer", "Model", "Serial", "CPU",
+    "RAM (MB)", "Storage (GB)", "Installed apps", "Logged-in user", "Status", "Last seen",
+  ];
+  const rows = devices.map((d) => [
+    d.hostname, d.os_version, d.manufacturer, d.model, d.serial_number, d.cpu_name,
+    d.total_ram_mb, d.total_storage_gb, d.installed_app_count, d.logged_in_user,
+    d.status, d.last_seen_at,
+  ]);
+  const csv = [headers, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `astra-devices-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -191,6 +219,12 @@ function InstallAgentPanel() {
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Generate another</button>
         </div>
       )}
+
+      {open && (
+        <div className="mt-5">
+          <EnrollmentTokens />
+        </div>
+      )}
     </div>
   );
 }
@@ -268,7 +302,19 @@ export default function DevicesPage() {
       </div>
 
       {isAdmin && <InstallAgentPanel />}
-      {isAdmin && <EnrollmentTokens />}
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          {devices ? `${devices.length} device${devices.length === 1 ? "" : "s"}` : ""}
+        </p>
+        <button
+          onClick={() => devices && exportDevicesCsv(devices)}
+          disabled={!devices || devices.length === 0}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+          <Download size={15} /> Export CSV
+        </button>
+      </div>
 
       <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
         <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
