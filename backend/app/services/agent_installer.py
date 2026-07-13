@@ -174,7 +174,7 @@ $vbs = "$trayDir\launch-tray.vbs"
 @"
 CreateObject("WScript.Shell").Run """$dotnet"" ""$trayDir\AstraAgent.Tray.dll""", 0, False
 "@ | Set-Content $vbs -Encoding ASCII
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AstraAssistant" -Value ("wscript.exe `"$vbs`"")
+Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AstraAssistant" -Value ("wscript.exe `"$vbs`"")
 Start-Process wscript.exe -ArgumentList "`"$vbs`""
 Write-Host "Tray chat installed and launched." -ForegroundColor Green
 
@@ -187,21 +187,21 @@ Write-Host "Done. This device should appear ONLINE in your ASTRA portal within a
 _PORTABLE_README = """ASTRA Agent - Portable Installer (pre-configured)
 =================================================
 
-Copy this whole folder to any Windows PC and run the installer as Administrator.
-The PC enrolls into your ASTRA portal, sends telemetry, and gets the tray chat.
-The enrollment token is already baked in - no need to paste anything.
+Copy this whole folder to any Windows PC. The PC enrolls into your ASTRA portal,
+sends telemetry, and gets the tray chat. The enrollment token is already baked in.
 
-INSTALL (run as Administrator)
-  1. Right-click Start -> "Terminal (Admin)".
-  2. cd into this folder.
-  3. Run:
-       powershell -ExecutionPolicy Bypass -File .\Install-AstraAgent.ps1
+INSTALL - the easy way
+  1. Extract this folder anywhere.
+  2. Double-click  Install.bat
+  3. Click "Yes" on the one permission prompt.
+  That's it. Nothing else to do - it sets everything up and keeps running,
+  and it comes back automatically after every restart, for every user.
 
 WHAT IT DOES
   - Installs the .NET 8 Desktop Runtime if missing (official Microsoft, signed).
   - Adds a hosts entry so the backend is reachable when corporate DNS can't resolve it.
-  - Installs the ASTRA service (auto-start) + tray chat (auto-start at login) via the
-    trusted dotnet host, so antivirus/ASR does not block them.
+  - Installs the ASTRA service (auto-start) + tray chat (auto-start at login for all
+    users) via the trusted dotnet host, so antivirus/ASR does not block them.
 
 VERIFY
   - The device shows ONLINE in the portal within a minute.
@@ -212,6 +212,31 @@ Token expires:  @@EXPIRES@@
 
 NOTE: this is a test/demo path. For a real fleet, code-sign the agent and have IT
 allow the backend hostname (DNS + firewall) instead of the hosts-file entry.
+"""
+
+
+# Double-clickable launcher: self-elevates (one UAC prompt) then runs the installer
+# silently. cmd.exe and powershell.exe are trusted, so ASR does not block this.
+_INSTALL_BAT = r"""@echo off
+REM ASTRA Agent installer - just double-click this file.
+title ASTRA Agent Installer
+
+:: Re-launch elevated if we're not already admin (this is the one permission prompt).
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
+cd /d "%~dp0"
+echo Installing the ASTRA agent, please wait...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-AstraAgent.ps1"
+set "rc=%errorlevel%"
+if not "%rc%"=="0" (
+    echo.
+    echo Installation failed ^(code %rc%^). Please contact your IT administrator.
+    pause
+)
 """
 
 
@@ -261,5 +286,6 @@ def build_offline_bundle_zip(
         for name in src.namelist():
             zf.writestr(name, src.read(name))
         zf.writestr("Install-AstraAgent.ps1", script)
+        zf.writestr("Install.bat", _INSTALL_BAT)
         zf.writestr("README.txt", readme)
     return buffer.getvalue()

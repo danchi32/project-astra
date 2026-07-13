@@ -76,8 +76,9 @@ $vbs = "$trayDir\launch-tray.vbs"
 CreateObject("WScript.Shell").Run """$dotnet"" ""$trayDir\AstraAgent.Tray.dll""", 0, False
 "@ | Set-Content $vbs -Encoding ASCII
 
-# Auto-start at login for the current user.
-$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+# Auto-start at login for EVERY user on this machine (HKLM), so the tray appears
+# after a restart without anyone running a command.
+$runKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run"
 Set-ItemProperty -Path $runKey -Name "AstraAssistant" -Value ("wscript.exe `"$vbs`"")
 
 # Launch it now too.

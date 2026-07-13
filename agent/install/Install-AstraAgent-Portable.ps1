@@ -114,7 +114,7 @@ $vbs = "$trayDir\launch-tray.vbs"
 @"
 CreateObject("WScript.Shell").Run """$dotnet"" ""$trayDir\AstraAgent.Tray.dll""", 0, False
 "@ | Set-Content $vbs -Encoding ASCII
-Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AstraAssistant" -Value ("wscript.exe `"$vbs`"")
+Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AstraAssistant" -Value ("wscript.exe `"$vbs`"")
 Start-Process wscript.exe -ArgumentList "`"$vbs`""
 Write-Host "Tray chat installed and launched." -ForegroundColor Green
 

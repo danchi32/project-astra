@@ -131,8 +131,9 @@ function InstallAgentPanel() {
           <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
             <span className="font-medium">Portable installer</span>: one <span className="font-mono">.zip</span> with the
             agent bundled in and the <span className="font-medium">enrollment token already baked in</span>. Copy it to
-            any number of PCs, extract, and run <span className="font-mono">Install-AstraAgent.ps1</span> as administrator.
-            Works on locked-down machines (installs the .NET runtime, adds a DNS entry, and runs via the trusted dotnet host).
+            any number of PCs, extract, and <span className="font-medium">double-click <span className="font-mono">Install.bat</span></span> —
+            one permission prompt and it runs continuously for every user, surviving restarts. Works on locked-down
+            machines (installs the .NET runtime, adds a DNS entry, runs via the trusted dotnet host).
           </p>
         </form>
       )}

@@ -31,7 +31,7 @@ VERIFY
 UNINSTALL  (elevated PowerShell)
   sc.exe stop AstraAgent
   sc.exe delete AstraAgent
-  Remove-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name AstraAssistant -ErrorAction SilentlyContinue
+  Remove-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name AstraAssistant -ErrorAction SilentlyContinue
   Remove-Item "C:\Program Files\Astra" -Recurse -Force
 
 NOTES
