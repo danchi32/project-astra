@@ -85,10 +85,30 @@ class StubProvider:
         "not open", "not opening", "not working", "not launching", "not starting",
         "won't start", "wont start", "broken", "keeps closing", "keeps crashing",
         "error", "issue", "problem", "slow", "lag", "stopped",
+        # More English phrasings.
+        "unresponsive", "not loading", "won't load", "wont load", "keeps freezing",
+        "keeps hanging", "black screen", "greyed out", "grayed out", "not opening up",
+        "failed to start", "can't open", "cant open", "cannot open", "isn't working",
+        "isnt working", "doesn't work", "doesnt work", "does not work", "acting up",
+        "glitching", "no response", "won't respond", "wont respond", "quit unexpectedly",
+        "closed itself", "keeps restarting", "won't close", "wont close", "not printing",
+        "keeps loading", "loading forever", "spinning", "white screen",
         # Hinglish / Hindi
         "nahi", "nhi", " nai", "band", "khul", "chal nahi", "kaam nahi", "kaam ni",
         "dikkat", "kharab", "atak", "ruk", "hang ho", "close ho", "khulta",
         "kaam nhi", "chal nhi", "ho raha", "ho rha", "kar raha",
+        "khul nahi", "khul nhi", "khulta nahi", "chal nahi raha", "chal nhi raha",
+        "kaam nahi kar raha", "kaam nahi karta", "atak gaya", "ruk gaya",
+        "band ho gaya", "band ho raha", "close ho gaya", "hang kar raha",
+        "reply nahi", "response nahi", "open nahi ho", "kharab ho gaya",
+        "slow ho gaya", "load nahi ho", "khul nahi raha",
+    )
+    # Connectivity complaints -> a safe automatic network fix (flush DNS or reset
+    # the adapter). Matched only alongside a clear problem/loading/connection word.
+    _NETWORK_TRIGGERS = (
+        "internet", "wifi", "wi-fi", "network", "dns", "website", "websites",
+        "web page", "webpage", "no connection", "can't connect", "cant connect",
+        "cannot connect", "no internet", "offline",
     )
     # Apps the assistant can restart. Value is (action_id, process_name). A None
     # process_name means there's a dedicated action; otherwise the generic
@@ -111,8 +131,20 @@ class StubProvider:
         "skype": ("restart_application", "Skype"),
         "notepad": ("restart_application", "notepad"),
         "firefox": ("restart_application", "firefox"),
+        "brave": ("restart_application", "brave"),
         "acrobat": ("restart_application", "Acrobat"),
+        "adobe acrobat": ("restart_application", "Acrobat"),
         "adobe reader": ("restart_application", "AcroRd32"),
+        "onedrive": ("restart_application", "onedrive"),
+        "one drive": ("restart_application", "onedrive"),
+        "whatsapp": ("restart_application", "WhatsApp"),
+        "spotify": ("restart_application", "Spotify"),
+        "discord": ("restart_application", "Discord"),
+        "vs code": ("restart_application", "Code"),
+        "vscode": ("restart_application", "Code"),
+        "visual studio code": ("restart_application", "Code"),
+        "ms access": ("restart_application", "MSACCESS"),
+        "microsoft access": ("restart_application", "MSACCESS"),
     }
     _KB_TRIGGERS = (
         "how do i", "how to", "how can i", "how do you", "steps to", "guide",
@@ -200,6 +232,19 @@ class StubProvider:
                 )],
             )
 
+        # A connectivity complaint → a safe automatic network fix (flush DNS or
+        # reset the adapter).
+        net_fix = self._match_network_fix(user_text)
+        if net_fix is not None:
+            action_id, said = net_fix
+            return LLMResponse(
+                text=said,
+                tool_calls=[ToolCall(
+                    id="stub-net-fix", name="propose_remediation",
+                    input={"action_id": action_id, "reason": "User reports a connectivity problem."},
+                )],
+            )
+
         if any(kw in user_text for kw in self._DIAGNOSTIC_KEYWORDS):
             # In a tray chat we know exactly whose device this is — inspect that one
             # device's telemetry rather than listing the whole organization.
@@ -252,6 +297,8 @@ class StubProvider:
             return True
         if self._match_app_fix(text) is not None:
             return True
+        if self._match_network_fix(text) is not None:
+            return True
         if any(kw in text for kw in self._DIAGNOSTIC_KEYWORDS):
             return True
         if hostname and any(w in text for w in self._PROBLEM_WORDS):
@@ -275,6 +322,26 @@ class StubProvider:
             if app in text:
                 return (app.title(), action_id, process_name)
         return None
+
+    def _match_network_fix(self, text: str) -> tuple[str, str] | None:
+        """A connectivity complaint → a safe automatic network fix. Returns
+        (action_id, what to say), or None if it isn't clearly a network problem."""
+        if not any(t in text for t in self._NETWORK_TRIGGERS):
+            return None
+        # Require an actual problem signal, so "what's my wifi name" isn't a fix.
+        if not (
+            any(p in text for p in self._PROBLEM_WORDS)
+            or "load" in text or "connect" in text or "down" in text
+        ):
+            return None
+        # A dropped/disconnected link → reset the adapter; otherwise treat it as
+        # names-not-resolving → flush DNS (the least-disruptive first fix).
+        if any(w in text for w in
+               ("wifi", "wi-fi", "adapter", "disconnect", "dropped", "no connection", "no internet")):
+            return ("restart_network_adapter",
+                    "Let me reset your network adapter to restore the connection — doing that now.")
+        return ("flush_dns",
+                "Let me flush the DNS cache so websites load properly — doing that now.")
 
     def _match_explicit_cleanup(self, text: str) -> tuple[str, str] | None:
         """Direct cleanup requests → (action_id, what to say). All safe/automatic and
