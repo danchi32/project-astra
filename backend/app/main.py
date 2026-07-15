@@ -21,10 +21,11 @@ from app.services.subscription import org_is_writable, read_only_reason
 settings = get_settings()
 
 # Write methods on these path prefixes are NOT gated by subscription status:
-# auth (login/register/profile), platform (operator), and agent (devices keep
-# reporting even when the org is read-only for its human users).
+# auth (login/register/profile), platform (operator), agent (devices keep
+# reporting even when the org is read-only for its human users), and billing
+# (a read-only org must still be able to reach Checkout to pay and reactivate).
 _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-_UNGATED_PREFIXES = ("/api/v1/auth", "/api/v1/platform", "/api/v1/agent")
+_UNGATED_PREFIXES = ("/api/v1/auth", "/api/v1/platform", "/api/v1/agent", "/api/v1/billing")
 
 app = FastAPI(
     title=settings.app_name,

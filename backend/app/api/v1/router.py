@@ -5,6 +5,7 @@ from app.api.v1 import (
     assets,
     audit,
     auth,
+    billing,
     conversations,
     devices,
     downloads,
@@ -34,3 +35,4 @@ api_router.include_router(notifications.router)
 api_router.include_router(settings.router)
 api_router.include_router(downloads.router)
 api_router.include_router(platform.router)
+api_router.include_router(billing.router)

@@ -1,0 +1,290 @@
+"""Stripe billing — per-seat subscriptions.
+
+Design:
+* Inert until configured. With no ``stripe_secret_key``/``stripe_price_id`` the
+  service reports ``enabled=False`` and every action is a safe no-op, so the
+  deployed app runs unchanged until the operator sets the keys.
+* Card data never touches this backend — the org admin is redirected to Stripe
+  Checkout (to subscribe) and the Stripe Billing Portal (to manage the card/plan).
+* Webhooks are the source of truth for subscription state: they flip the org's
+  ``subscription_status`` (which the read-only gate already enforces).
+* Per-seat: the Checkout line item quantity = the org's current seat count, and
+  we reconcile the quantity on the ``invoice.upcoming`` webhook (and on demand)
+  so each renewal bills the real number of seats.
+"""
+from datetime import datetime, timezone
+
+import stripe
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.models import Device, Organization, SubscriptionStatus, User
+from app.services.exceptions import ValidationError
+from app.services.subscription import org_is_writable, read_only_reason
+
+settings = get_settings()
+
+# Stripe subscription status -> our lifecycle status.
+_STATUS_MAP = {
+    "active": SubscriptionStatus.ACTIVE,
+    "trialing": SubscriptionStatus.ACTIVE,      # a Stripe-side trial still counts as good standing
+    "past_due": SubscriptionStatus.PAST_DUE,
+    "unpaid": SubscriptionStatus.PAST_DUE,
+    "incomplete": SubscriptionStatus.PAST_DUE,
+    "incomplete_expired": SubscriptionStatus.CANCELED,
+    "canceled": SubscriptionStatus.CANCELED,
+    "paused": SubscriptionStatus.SUSPENDED,
+}
+
+
+def _to_dt(ts: int | None) -> datetime | None:
+    return datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
+
+
+def _sub_period_end(sub: dict) -> int | None:
+    """`current_period_end` lives on the subscription in older API versions and on
+    the subscription item in newer ones (2025-03+). Check both."""
+    if sub.get("current_period_end"):
+        return sub["current_period_end"]
+    items = (sub.get("items") or {}).get("data") or []
+    if items and items[0].get("current_period_end"):
+        return items[0]["current_period_end"]
+    return None
+
+
+class BillingService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        if settings.stripe_secret_key:
+            stripe.api_key = settings.stripe_secret_key
+
+    # -- capability flags ------------------------------------------------------
+
+    @property
+    def enabled(self) -> bool:
+        """Stripe is wired up (a secret key is present)."""
+        return bool(settings.stripe_secret_key)
+
+    @property
+    def can_checkout(self) -> bool:
+        """Enough config to sell: a secret key AND a per-seat price."""
+        return bool(settings.stripe_secret_key and settings.stripe_price_id)
+
+    @property
+    def seat_type(self) -> str:
+        return settings.billing_seat if settings.billing_seat in ("device", "user") else "device"
+
+    # -- seats -----------------------------------------------------------------
+
+    async def seat_count(self, org_id) -> int:
+        """Billable seats = active devices (default) or active users for the org."""
+        model = User if self.seat_type == "user" else Device
+        n = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(model)
+                .where(model.org_id == org_id, model.is_active.is_(True))
+            )
+        ).scalar_one()
+        return int(n)
+
+    # -- status (for the portal billing page) ----------------------------------
+
+    async def status(self, org: Organization) -> dict:
+        writable = org_is_writable(org)
+        return {
+            "billing_enabled": self.enabled,
+            "plan": org.plan,
+            "subscription_status": org.subscription_status.value,
+            "writable": writable,
+            "read_only_reason": None if writable else read_only_reason(org),
+            "trial_ends_at": org.trial_ends_at,
+            "current_period_end": org.current_period_end,
+            "has_subscription": bool(org.stripe_subscription_id),
+            "seat_type": self.seat_type,
+            "seat_count": await self.seat_count(org.id),
+            "unit_price_configured": bool(settings.stripe_price_id),
+        }
+
+    # -- Stripe customer -------------------------------------------------------
+
+    async def _ensure_customer(self, org: Organization) -> str:
+        if org.stripe_customer_id:
+            return org.stripe_customer_id
+        customer = await run_in_threadpool(
+            stripe.Customer.create,
+            name=org.name,
+            metadata={"org_id": str(org.id)},
+        )
+        org.stripe_customer_id = customer["id"]
+        await self.session.commit()
+        return customer["id"]
+
+    # -- Checkout / Billing Portal ---------------------------------------------
+
+    async def create_checkout_url(self, org: Organization) -> str:
+        if not self.can_checkout:
+            raise ValidationError("Billing is not configured on the server.")
+        customer_id = await self._ensure_customer(org)
+        quantity = max(1, await self.seat_count(org.id))
+        base = settings.public_app_url.rstrip("/")
+        session = await run_in_threadpool(
+            lambda: stripe.checkout.Session.create(
+                mode="subscription",
+                customer=customer_id,
+                client_reference_id=str(org.id),
+                line_items=[{"price": settings.stripe_price_id, "quantity": quantity}],
+                subscription_data={"metadata": {"org_id": str(org.id)}},
+                allow_promotion_codes=True,
+                success_url=f"{base}/billing?checkout=success",
+                cancel_url=f"{base}/billing?checkout=cancelled",
+            )
+        )
+        return session["url"]
+
+    async def create_portal_url(self, org: Organization) -> str:
+        if not self.enabled:
+            raise ValidationError("Billing is not configured on the server.")
+        if not org.stripe_customer_id:
+            raise ValidationError("This organization has no billing account yet. Subscribe first.")
+        base = settings.public_app_url.rstrip("/")
+        session = await run_in_threadpool(
+            lambda: stripe.billing_portal.Session.create(
+                customer=org.stripe_customer_id,
+                return_url=f"{base}/billing",
+            )
+        )
+        return session["url"]
+
+    # -- Seat reconciliation ---------------------------------------------------
+
+    async def sync_seats(self, org: Organization) -> tuple[bool, int, str]:
+        """Push the org's current seat count to Stripe as the subscription quantity.
+        Stripe prorates the change. No-op if the org has no live subscription."""
+        count = await self.seat_count(org.id)
+        if not self.enabled or not org.stripe_subscription_id:
+            return False, count, "No active subscription to sync."
+        sub = await run_in_threadpool(stripe.Subscription.retrieve, org.stripe_subscription_id)
+        item = sub["items"]["data"][0]
+        if int(item.get("quantity", 0)) == count:
+            return True, count, "Seat count already up to date."
+        await run_in_threadpool(
+            lambda: stripe.SubscriptionItem.modify(
+                item["id"], quantity=max(1, count), proration_behavior="create_prorations"
+            )
+        )
+        return True, count, f"Updated subscription to {max(1, count)} seat(s)."
+
+    # -- Webhooks (source of truth) --------------------------------------------
+
+    async def handle_webhook(self, payload: bytes, signature: str | None) -> dict:
+        if not settings.stripe_webhook_secret:
+            raise ValidationError("Webhook secret not configured.")
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, signature or "", settings.stripe_webhook_secret
+            )
+        except (ValueError, stripe.SignatureVerificationError) as exc:
+            raise ValidationError(f"Invalid webhook signature: {exc}") from exc
+
+        etype = event["type"]
+        obj = event["data"]["object"]
+
+        if etype == "checkout.session.completed":
+            await self._on_checkout_completed(obj)
+        elif etype in ("customer.subscription.updated", "customer.subscription.deleted",
+                       "customer.subscription.created"):
+            await self._on_subscription_event(obj)
+        elif etype == "invoice.paid":
+            await self._on_invoice(obj, SubscriptionStatus.ACTIVE)
+        elif etype == "invoice.payment_failed":
+            await self._on_invoice(obj, SubscriptionStatus.PAST_DUE)
+        elif etype == "invoice.upcoming":
+            await self._on_invoice_upcoming(obj)
+
+        return {"received": True, "type": etype}
+
+    async def _org_by(self, *, customer_id=None, subscription_id=None) -> Organization | None:
+        stmt = select(Organization)
+        if subscription_id:
+            stmt = stmt.where(Organization.stripe_subscription_id == subscription_id)
+        elif customer_id:
+            stmt = stmt.where(Organization.stripe_customer_id == customer_id)
+        else:
+            return None
+        return (await self.session.execute(stmt)).scalars().first()
+
+    async def _on_checkout_completed(self, obj: dict) -> None:
+        org_id = obj.get("client_reference_id")
+        org = None
+        if org_id:
+            org = await self.session.get(Organization, _as_uuid(org_id))
+        if org is None:
+            org = await self._org_by(customer_id=obj.get("customer"))
+        if org is None:
+            return
+        org.stripe_customer_id = obj.get("customer") or org.stripe_customer_id
+        sub_id = obj.get("subscription")
+        if sub_id:
+            org.stripe_subscription_id = sub_id
+            sub = await run_in_threadpool(stripe.Subscription.retrieve, sub_id)
+            org.subscription_status = _STATUS_MAP.get(sub["status"], SubscriptionStatus.ACTIVE)
+            org.current_period_end = _to_dt(_sub_period_end(sub))
+        else:
+            org.subscription_status = SubscriptionStatus.ACTIVE
+        org.plan = "per-seat"
+        await self.session.commit()
+
+    async def _on_subscription_event(self, sub: dict) -> None:
+        org = await self._org_by(
+            subscription_id=sub.get("id"), customer_id=sub.get("customer")
+        )
+        if org is None:
+            return
+        org.stripe_subscription_id = sub.get("id") or org.stripe_subscription_id
+        org.subscription_status = _STATUS_MAP.get(sub.get("status"), org.subscription_status)
+        org.current_period_end = _to_dt(_sub_period_end(sub)) or org.current_period_end
+        if sub.get("status") in ("canceled", "incomplete_expired"):
+            org.plan = "trial"
+        await self.session.commit()
+
+    async def _on_invoice(self, invoice: dict, status: SubscriptionStatus) -> None:
+        org = await self._org_by(
+            subscription_id=invoice.get("subscription"), customer_id=invoice.get("customer")
+        )
+        if org is None:
+            return
+        org.subscription_status = status
+        period_end = _invoice_period_end(invoice)
+        if period_end:
+            org.current_period_end = _to_dt(period_end)
+        await self.session.commit()
+
+    async def _on_invoice_upcoming(self, invoice: dict) -> None:
+        org = await self._org_by(
+            subscription_id=invoice.get("subscription"), customer_id=invoice.get("customer")
+        )
+        if org is not None:
+            try:
+                await self.sync_seats(org)
+            except Exception:  # best-effort; never fail a webhook on reconcile
+                pass
+
+
+def _as_uuid(value):
+    import uuid
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+def _invoice_period_end(invoice: dict) -> int | None:
+    lines = (invoice.get("lines") or {}).get("data") or []
+    for line in lines:
+        period = line.get("period") or {}
+        if period.get("end"):
+            return period["end"]
+    return None

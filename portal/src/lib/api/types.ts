@@ -14,6 +14,20 @@ export interface User {
 export type SubscriptionStatus =
   | "trialing" | "active" | "past_due" | "suspended" | "canceled";
 
+export interface BillingStatus {
+  billing_enabled: boolean;
+  plan: string;
+  subscription_status: SubscriptionStatus;
+  writable: boolean;
+  read_only_reason: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  has_subscription: boolean;
+  seat_type: "device" | "user";
+  seat_count: number;
+  unit_price_configured: boolean;
+}
+
 export interface OrganizationAdmin {
   id: string;
   name: string;

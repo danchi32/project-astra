@@ -9,3 +9,4 @@ email-validator>=2.2
 bcrypt>=4.2
 PyJWT>=2.10
 anthropic>=0.40
+stripe>=11.0

@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     ai_cache_enabled: bool = True
     ai_cache_similarity_threshold: float = 0.85
 
+    # Billing (Stripe) — all optional. When the secret key + price id are unset,
+    # billing is INERT: the endpoints report "not configured" and nothing charges.
+    # Set these (test keys first) to switch billing on without any code change.
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_price_id: str | None = None          # a recurring, per-unit Price (per seat)
+    billing_seat: str = "device"                # what a seat is: "device" or "user"
+    # Portal base URL Stripe Checkout/Portal redirect back to after payment.
+    public_app_url: str = "http://localhost:3000"
+
 
 def _ensure_database_url() -> None:
     """Railway's Postgres plugin exposes the connection string as DATABASE_URL.
