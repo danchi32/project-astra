@@ -32,6 +32,7 @@ from app.schemas.platform import (
     ViewAsToken,
 )
 from app.services.audit import AuditService
+from app.services.email import EmailService
 from app.services.exceptions import ConflictError
 from app.services.subscription import TRIAL_DAYS
 from app.services.exceptions import NotFoundError
@@ -165,6 +166,13 @@ class PlatformService:
             detail={"name": org.name, "admin_email": email},
         )
         await self.session.commit()
+
+        try:  # welcome email is best-effort — never fail provisioning
+            await EmailService().send_welcome(
+                to=email, name=admin.full_name, org_name=org.name, trial_days=TRIAL_DAYS
+            )
+        except Exception:
+            pass
 
         read = OrganizationAdminRead.model_validate(org)
         read.user_count = 1

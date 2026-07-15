@@ -4,7 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models import User
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    RegisterStartResponse,
+    RegisterVerifyRequest,
+    TokenResponse,
+)
 from app.schemas.settings import ChangePasswordRequest, ProfileUpdate
 from app.schemas.users import UserRead
 from app.services.auth import AuthService
@@ -16,10 +23,35 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     "/register",
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new organization + first admin (requires an invite code)",
+    summary="Create a new organization + first admin (direct, no OTP)",
 )
 async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db)) -> TokenResponse:
     access, refresh = await AuthService(session).register(body)
+    return TokenResponse(access_token=access, refresh_token=refresh)
+
+
+@router.post(
+    "/register/start",
+    response_model=RegisterStartResponse,
+    summary="Begin signup — emails a verification code when email is configured",
+)
+async def register_start(
+    body: RegisterRequest, session: AsyncSession = Depends(get_db)
+) -> RegisterStartResponse:
+    otp_required, access, refresh = await AuthService(session).register_start(body)
+    return RegisterStartResponse(otp_required=otp_required, access_token=access, refresh_token=refresh)
+
+
+@router.post(
+    "/register/verify",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Confirm the emailed code and create the organization",
+)
+async def register_verify(
+    body: RegisterVerifyRequest, session: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    access, refresh = await AuthService(session).register_verify(body)
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 

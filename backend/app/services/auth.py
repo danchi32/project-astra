@@ -1,3 +1,4 @@
+import secrets
 from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,17 +13,21 @@ from app.core.security import (
     hash_refresh_token,
     verify_password,
 )
-from app.models import Organization, RefreshToken, User, UserRole
+from app.models import Organization, PendingRegistration, RefreshToken, User, UserRole
 from app.models.base import as_utc, utcnow
 from app.repositories.invite_codes import InviteCodeRepository
 from app.repositories.organizations import OrganizationRepository
+from app.repositories.pending_registrations import PendingRegistrationRepository
 from app.repositories.refresh_tokens import RefreshTokenRepository
 from app.repositories.users import UserRepository
-from app.schemas.auth import RegisterRequest
+from app.schemas.auth import RegisterRequest, RegisterVerifyRequest
 from app.services.audit import AuditService
+from app.services.email import EmailService
 from app.services.exceptions import AuthenticationError, ConflictError, ValidationError
 from app.services.settings import SettingsService
 from app.services.subscription import TRIAL_DAYS
+
+settings = get_settings()
 
 
 class AuthService:
@@ -33,12 +38,50 @@ class AuthService:
         self.audit = AuditService(session)
         self.orgs = OrganizationRepository(session)
         self.invites = InviteCodeRepository(session)
+        self.pending = PendingRegistrationRepository(session)
+        self.email = EmailService()
+
+    async def _provision_org(
+        self, *, organization_name: str, admin_name: str, email: str, hashed_password: str
+    ) -> tuple[Organization, User]:
+        """Create the org + its first admin (no commit). Shared by every signup path."""
+        org = await self.orgs.add(
+            Organization(
+                name=organization_name.strip(),
+                trial_ends_at=utcnow() + timedelta(days=TRIAL_DAYS),
+                agent_enrollment_key=generate_opaque_token(),
+            )
+        )
+        admin = await self.users.add(
+            User(
+                org_id=org.id,
+                email=email,
+                full_name=admin_name.strip(),
+                hashed_password=hashed_password,
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+        )
+        await self.audit.record(
+            org_id=org.id,
+            actor_id=admin.id,
+            action="organization.register",
+            target_type="organization",
+            target_id=str(org.id),
+            detail={"name": org.name, "admin_email": email},
+        )
+        return org, admin
+
+    async def _send_welcome(self, *, to: str, name: str, org_name: str) -> None:
+        try:
+            await self.email.send_welcome(to=to, name=name, org_name=org_name, trial_days=TRIAL_DAYS)
+        except Exception:  # welcome email must never fail the signup
+            pass
 
     async def register(self, data: RegisterRequest) -> tuple[str, str]:
         """Create a NEW organization and its first admin (open self-service signup).
-        The whole thing is one transaction: a partial org (no admin) can never exist.
-        An invite code is optional — if one is supplied it must be valid, and it is
-        consumed; without one, registration proceeds openly."""
+        One transaction: a partial org (no admin) can never exist. An invite code is
+        optional — if supplied it must be valid and is consumed."""
         invite = None
         if data.invite_code:
             invite = await self.invites.get_by_hash(hash_opaque_token(data.invite_code))
@@ -49,38 +92,76 @@ class AuthService:
         if await self.users.get_by_email(email) is not None:
             raise ConflictError("A user with that email already exists")
 
-        org = await self.orgs.add(
-            Organization(
-                name=data.organization_name.strip(),
-                trial_ends_at=utcnow() + timedelta(days=TRIAL_DAYS),
-                agent_enrollment_key=generate_opaque_token(),
-            )
-        )
-        admin = await self.users.add(
-            User(
-                org_id=org.id,
-                email=email,
-                full_name=data.admin_name.strip(),
-                hashed_password=hash_password(data.admin_password),
-                role=UserRole.ADMIN,
-                is_active=True,
-            )
+        org, admin = await self._provision_org(
+            organization_name=data.organization_name, admin_name=data.admin_name,
+            email=email, hashed_password=hash_password(data.admin_password),
         )
         if invite is not None:
             invite.used_at = utcnow()
             invite.used_by_org_id = org.id
 
-        await self.audit.record(
-            org_id=org.id,
-            actor_id=admin.id,
-            action="organization.register",
-            target_type="organization",
-            target_id=str(org.id),
-            detail={"name": org.name, "admin_email": email},
-        )
         access = create_access_token(user_id=admin.id, org_id=admin.org_id, role=admin.role.value)
         refresh = await self._issue_refresh_token(admin)
         await self.session.commit()
+        await self._send_welcome(to=email, name=admin.full_name, org_name=org.name)
+        return access, refresh
+
+    async def register_start(self, data: RegisterRequest) -> tuple[bool, str | None, str | None]:
+        """First step of signup. When email is configured, emails a 6-digit code and
+        stores the pending signup (no org yet) -> (True, None, None). When email is
+        off, creates the org immediately -> (False, access, refresh)."""
+        email = data.admin_email.lower()
+        if await self.users.get_by_email(email) is not None:
+            raise ConflictError("A user with that email already exists")
+
+        if not self.email.enabled:
+            access, refresh = await self.register(data)
+            return False, access, refresh
+
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        await self.pending.delete_by_email(email)
+        await self.pending.add(
+            PendingRegistration(
+                email=email,
+                otp_hash=hash_opaque_token(code),
+                organization_name=data.organization_name.strip(),
+                admin_name=data.admin_name.strip(),
+                hashed_password=hash_password(data.admin_password),
+                expires_at=utcnow() + timedelta(minutes=settings.otp_ttl_minutes),
+            )
+        )
+        await self.session.commit()
+        if not await self.email.send_otp(to=email, code=code):
+            raise ValidationError("Couldn't send the verification email. Please try again.")
+        return True, None, None
+
+    async def register_verify(self, data: RegisterVerifyRequest) -> tuple[str, str]:
+        """Second step: confirm the code, then create the org + admin and log in."""
+        email = data.admin_email.lower()
+        pending = await self.pending.get_by_email(email)
+        if pending is None or as_utc(pending.expires_at) <= utcnow():
+            raise ValidationError("Your code has expired. Please start again.")
+        if pending.attempts >= 5:
+            raise ValidationError("Too many incorrect attempts. Please start again.")
+        if hash_opaque_token(data.code.strip()) != pending.otp_hash:
+            pending.attempts += 1
+            await self.session.commit()
+            raise ValidationError("That code isn't right. Check the email and try again.")
+
+        if await self.users.get_by_email(email) is not None:
+            await self.pending.delete_by_email(email)
+            await self.session.commit()
+            raise ConflictError("A user with that email already exists")
+
+        org, admin = await self._provision_org(
+            organization_name=pending.organization_name, admin_name=pending.admin_name,
+            email=email, hashed_password=pending.hashed_password,
+        )
+        await self.pending.delete_by_email(email)
+        access = create_access_token(user_id=admin.id, org_id=admin.org_id, role=admin.role.value)
+        refresh = await self._issue_refresh_token(admin)
+        await self.session.commit()
+        await self._send_welcome(to=email, name=admin.full_name, org_name=org.name)
         return access, refresh
 
     async def login(self, email: str, password: str) -> tuple[str, str]:

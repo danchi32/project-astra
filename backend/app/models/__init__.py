@@ -10,6 +10,7 @@ from app.models.learned_action import LearnedAction
 from app.models.notification import Notification, NotificationCategory, NotificationSeverity
 from app.models.organization import Organization, SubscriptionStatus
 from app.models.organization_settings import OrganizationSettings
+from app.models.pending_registration import PendingRegistration
 from app.models.refresh_token import RefreshToken
 from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
 from app.models.semantic_cache import SemanticCacheEntry
@@ -46,6 +47,7 @@ __all__ = [
     "NotificationSeverity",
     "Organization",
     "OrganizationSettings",
+    "PendingRegistration",
     "SubscriptionStatus",
     "RefreshToken",
     "RemediationSource",

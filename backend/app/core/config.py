@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     # Per-seat price in cents, used only to display MRR on the operator dashboard.
     # Leave unset to hide dollar amounts (licenses/subscription counts still show).
     price_per_seat_cents: int | None = None
+
+    # Email (SMTP) — INERT until host + user + password are set. Works with
+    # Hostinger (smtp.hostinger.com:465 SSL, or :587 STARTTLS) or any SMTP host.
+    # When unset: no email is sent, and registration OTP is skipped (open signup).
+    smtp_host: str | None = None
+    smtp_port: int = 465                # 465 = implicit SSL; anything else = STARTTLS
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    email_from: str | None = None       # defaults to smtp_user when unset
+    otp_ttl_minutes: int = 10
     # Portal base URL Stripe Checkout/Portal redirect back to after payment.
     public_app_url: str = "http://localhost:3000"
 

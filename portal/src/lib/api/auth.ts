@@ -11,15 +11,34 @@ export async function login(email: string, password: string) {
   return data;
 }
 
-export async function register(input: {
+type SignupInput = {
   organization_name: string;
   admin_name: string;
   admin_email: string;
   admin_password: string;
-}) {
+};
+
+// Step 1 of signup. When email is configured the server emails a code and returns
+// { otp_required: true } (call registerVerify next). Otherwise the org is created
+// immediately and tokens are returned + stored.
+export async function registerStart(input: SignupInput) {
+  const { data } = await apiClient.post<{
+    otp_required: boolean;
+    access_token: string | null;
+    refresh_token: string | null;
+  }>("/auth/register/start", input);
+  if (!data.otp_required && data.access_token && data.refresh_token) {
+    localStorage.setItem("access_token", data.access_token);
+    localStorage.setItem("refresh_token", data.refresh_token);
+  }
+  return data;
+}
+
+// Step 2 of signup: confirm the emailed code, creating the org and logging in.
+export async function registerVerify(admin_email: string, code: string) {
   const { data } = await apiClient.post<{ access_token: string; refresh_token: string }>(
-    "/auth/register",
-    input
+    "/auth/register/verify",
+    { admin_email, code }
   );
   localStorage.setItem("access_token", data.access_token);
   localStorage.setItem("refresh_token", data.refresh_token);

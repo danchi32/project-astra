@@ -17,10 +17,25 @@ class RegisterRequest(BaseModel):
     admin_password: str = Field(min_length=12)
 
 
+class RegisterVerifyRequest(BaseModel):
+    """Second step of email-verified signup: confirm the 6-digit code."""
+    admin_email: EmailStr
+    code: str = Field(min_length=4, max_length=8)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class RegisterStartResponse(BaseModel):
+    """When email is configured, `otp_required` is True and a code was emailed —
+    the client then calls /register/verify. When email is off, the org is created
+    immediately and tokens are returned here."""
+    otp_required: bool
+    access_token: str | None = None
+    refresh_token: str | None = None
 
 
 class RefreshRequest(BaseModel):
