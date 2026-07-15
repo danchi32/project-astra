@@ -9,7 +9,8 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_view_as_token
+from app.core.config import get_settings
+from app.core.security import create_view_as_token, generate_opaque_token, hash_password
 from app.models import (
     Device,
     Organization,
@@ -17,17 +18,22 @@ from app.models import (
     RemediationStatus,
     SubscriptionStatus,
     User,
+    UserRole,
 )
 from app.models.base import as_utc, utcnow
 from app.repositories.organizations import OrganizationRepository
+from app.repositories.users import UserRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.schemas.platform import (
     OrganizationAdminRead,
+    OrganizationCreate,
     OrganizationUpdate,
     PlatformOverview,
     ViewAsToken,
 )
 from app.services.audit import AuditService
+from app.services.exceptions import ConflictError
+from app.services.subscription import TRIAL_DAYS
 from app.services.exceptions import NotFoundError
 
 
@@ -89,10 +95,34 @@ class PlatformService:
             )
         )).scalar_one()
 
+        signups_30d = (await self.session.execute(
+            select(func.count()).select_from(Organization).where(
+                Organization.created_at >= now - timedelta(days=30)
+            )
+        )).scalar_one()
+
+        # Revenue: only ACTIVE (paying) orgs contribute; apply each org's discount.
+        active_rows = (await self.session.execute(
+            select(Organization.license_count, Organization.discount_percent).where(
+                Organization.subscription_status == SubscriptionStatus.ACTIVE
+            )
+        )).all()
+        active_subscriptions = len(active_rows)
+        price = get_settings().price_per_seat_cents
+        mrr_cents = None
+        if price:
+            mrr_cents = sum(
+                round((lc or 0) * price * (100 - (disc or 0)) / 100)
+                for lc, disc in active_rows
+            )
+
         return PlatformOverview(
             total_organizations=total_orgs,
             orgs_by_status=orgs_by_status,
             trials_ending_7d=trials_ending,
+            signups_30d=signups_30d,
+            active_subscriptions=active_subscriptions,
+            mrr_cents=mrr_cents,
             total_users=total_users,
             total_devices=total_devices,
             online_devices=online,
@@ -100,6 +130,46 @@ class PlatformService:
             licenses_sold=int(licenses),
             remediation_pending=pending,
         )
+
+    async def create_organization(
+        self, *, actor: User, data: OrganizationCreate
+    ) -> OrganizationAdminRead:
+        """Operator provisions a new customer org + its first admin (14-day trial,
+        permanent enrollment key). No auto-login — the operator shares credentials."""
+        email = data.admin_email.lower()
+        if await UserRepository(self.session).get_by_email(email) is not None:
+            raise ConflictError("A user with that email already exists")
+
+        org = await self.orgs.add(
+            Organization(
+                name=data.organization_name.strip(),
+                trial_ends_at=utcnow() + timedelta(days=TRIAL_DAYS),
+                agent_enrollment_key=generate_opaque_token(),
+            )
+        )
+        admin = User(
+            org_id=org.id,
+            email=email,
+            full_name=data.admin_name.strip(),
+            hashed_password=hash_password(data.admin_password),
+            role=UserRole.ADMIN,
+            is_active=True,
+        )
+        self.session.add(admin)
+        await self.audit.record(
+            org_id=org.id,
+            actor_id=actor.id,
+            action="platform.organization.create",
+            target_type="organization",
+            target_id=str(org.id),
+            detail={"name": org.name, "admin_email": email},
+        )
+        await self.session.commit()
+
+        read = OrganizationAdminRead.model_validate(org)
+        read.user_count = 1
+        read.device_count = 0
+        return read
 
     async def create_view_as_token(self, *, actor: User, org_id: uuid.UUID) -> ViewAsToken:
         """Mint a short-lived READ-ONLY token letting the operator view one org's

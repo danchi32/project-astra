@@ -48,6 +48,9 @@ export interface PlatformOverview {
   total_organizations: number;
   orgs_by_status: Record<string, number>;
   trials_ending_7d: number;
+  signups_30d: number;
+  active_subscriptions: number;
+  mrr_cents: number | null;
   total_users: number;
   total_devices: number;
   online_devices: number;

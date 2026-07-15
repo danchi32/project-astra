@@ -1,12 +1,14 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, BookOpen, Zap, Eye } from "lucide-react";
+import { ShieldCheck, BookOpen, Zap, Eye, Plus, X } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   listOrganizations, updateOrganization, deleteOrganization,
   setOrgDiscount, clearOrgDiscount, getPlatformOverview, createViewToken,
+  createOrganizationAsAdmin,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
 import type { OrganizationAdmin, SubscriptionStatus } from "@/lib/api/types";
@@ -19,6 +21,12 @@ const STAT_LABELS: { key: string; label: string }[] = [
   { key: "licenses_sold", label: "Licenses sold" },
   { key: "trials_ending_7d", label: "Trials ending ≤7d" },
 ];
+
+function fmtMoney(cents: number): string {
+  return `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+const emptyOrgForm = { organization_name: "", admin_name: "", admin_email: "", admin_password: "" };
 
 const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
   trialing: { label: "Trial", color: "#3b82f6" },
@@ -49,11 +57,39 @@ export default function PlatformPage() {
     enabled: !!me?.is_platform_admin,
   });
 
+  const [showCreate, setShowCreate] = useState(false);
+  const [orgForm, setOrgForm] = useState(emptyOrgForm);
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+  const [createdNote, setCreatedNote] = useState("");
+
   async function viewAs(o: OrganizationAdmin) {
     const { access_token } = await createViewToken(o.id);
     queryClient.clear(); // drop this operator's own cached data before switching context
     enterViewAs(access_token, { id: o.id, name: o.name });
     router.push("/dashboard");
+  }
+
+  async function submitCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (orgForm.admin_password.length < 12) { setCreateErr("Initial password must be at least 12 characters."); return; }
+    setCreating(true); setCreateErr("");
+    try {
+      await createOrganizationAsAdmin({
+        organization_name: orgForm.organization_name.trim(),
+        admin_name: orgForm.admin_name.trim(),
+        admin_email: orgForm.admin_email.trim(),
+        admin_password: orgForm.admin_password,
+      });
+      setCreatedNote(`Created “${orgForm.organization_name.trim()}”. Share the login email and password with the customer.`);
+      setOrgForm(emptyOrgForm);
+      setShowCreate(false);
+      await queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
+      await queryClient.invalidateQueries({ queryKey: ["platform-overview"] });
+    } catch (err) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setCreateErr(msg || "Couldn't create the organization. That email may already be registered.");
+    } finally { setCreating(false); }
   }
 
   async function refresh() {
@@ -105,6 +141,11 @@ export default function PlatformPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => { setShowCreate(true); setCreateErr(""); setCreatedNote(""); }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
+            style={{ background: "var(--accent)" }}>
+            <Plus size={15} /> New organization
+          </button>
           <Link href="/platform/fixes"
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
             style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
@@ -118,6 +159,38 @@ export default function PlatformPage() {
         </div>
       </div>
 
+      {createdNote && (
+        <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid #10b981", color: "var(--text-primary)" }}>
+          {createdNote}
+        </div>
+      )}
+
+      {/* Business KPIs */}
+      {overview && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-xl p-4" style={{ background: "rgba(37,99,235,0.06)", border: "1px solid var(--accent)" }}>
+            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Monthly revenue (MRR)</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+              {overview.mrr_cents != null ? fmtMoney(overview.mrr_cents) : "—"}
+            </p>
+            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+              {overview.mrr_cents != null ? `${overview.active_subscriptions} active subscription${overview.active_subscriptions === 1 ? "" : "s"}` : "Set a per-seat price to compute"}
+            </p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Active subscriptions</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{overview.active_subscriptions}</p>
+            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>{overview.licenses_sold} licenses sold</p>
+          </div>
+          <div className="rounded-xl p-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>New sign-ups (30d)</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{overview.signups_30d}</p>
+            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>{overview.trials_ending_7d} trial{overview.trials_ending_7d === 1 ? "" : "s"} ending ≤7d</p>
+          </div>
+        </div>
+      )}
+
+      {/* Fleet / usage counts */}
       {overview && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {STAT_LABELS.map(({ key, label }) => (
@@ -128,6 +201,46 @@ export default function PlatformPage() {
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setShowCreate(false)}>
+          <form onSubmit={submitCreate} onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-xl p-6 space-y-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>New organization</h2>
+              <button type="button" onClick={() => setShowCreate(false)} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>
+            </div>
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              Creates the org + its first admin on a 14-day trial. Share the email and initial password with the customer.
+            </p>
+            {[
+              { k: "organization_name", label: "Organization name", type: "text", ph: "Acme Corp" },
+              { k: "admin_name", label: "Admin name", type: "text", ph: "Jane Admin" },
+              { k: "admin_email", label: "Admin email", type: "email", ph: "admin@acme.com" },
+              { k: "admin_password", label: "Initial password (min 12 chars)", type: "text", ph: "Share with the customer" },
+            ].map(({ k, label, type, ph }) => (
+              <div key={k}>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</label>
+                <input required type={type} placeholder={ph}
+                  value={orgForm[k as keyof typeof orgForm]}
+                  onChange={(e) => setOrgForm({ ...orgForm, [k]: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+              </div>
+            ))}
+            {createErr && <p className="text-sm text-red-500">{createErr}</p>}
+            <div className="flex gap-2">
+              <button type="submit" disabled={creating}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
+                {creating ? "Creating…" : "Create organization"}
+              </button>
+              <button type="button" onClick={() => setShowCreate(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
+            </div>
+          </form>
         </div>
       )}
 

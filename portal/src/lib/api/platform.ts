@@ -7,6 +7,14 @@ import type {
 export const getPlatformOverview = () =>
   apiClient.get<PlatformOverview>("/platform/overview").then((r) => r.data);
 
+// Operator provisions a new customer org + its first admin (initial password set here).
+export const createOrganizationAsAdmin = (data: {
+  organization_name: string;
+  admin_name: string;
+  admin_email: string;
+  admin_password: string;
+}) => apiClient.post<OrganizationAdmin>("/platform/organizations", data).then((r) => r.data);
+
 // Mint a read-only token to browse an org's full portal, then enter view-as mode.
 export const createViewToken = (id: string) =>
   apiClient

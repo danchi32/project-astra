@@ -1,7 +1,10 @@
 "use client";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { getMe } from "@/lib/api/auth";
 import {
   Monitor, AlertTriangle, RefreshCw, Package,
   Zap, Bell, History, ArrowRight, CheckCircle2, XCircle, Clock,
@@ -66,6 +69,13 @@ function MiniStat({ label, value, accent }: { label: string; value: string; acce
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  // Platform operators have a business-focused home, not this org dashboard.
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  useEffect(() => {
+    if (me?.is_platform_admin) router.replace("/platform");
+  }, [me, router]);
+
   const { data: summary, isLoading: summaryLoading, isError: summaryError } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: getDashboardSummary,
@@ -133,6 +143,9 @@ export default function DashboardPage() {
         .sort(([, a], [, b]) => b - a)
         .slice(0, 4)
     : [];
+
+  // Platform operators are redirected to /platform (effect above) — render nothing.
+  if (me?.is_platform_admin) return null;
 
   return (
     <div

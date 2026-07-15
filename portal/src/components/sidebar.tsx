@@ -24,6 +24,15 @@ const NAV = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
+// Platform operators get a dedicated, business-focused nav — none of the
+// single-org operational pages (a customer's devices are reached via View-as).
+const PLATFORM_NAV = [
+  { href: "/platform", icon: ShieldCheck, label: "Platform" },
+  { href: "/platform/knowledge", icon: BookOpen, label: "Global knowledge" },
+  { href: "/platform/fixes", icon: Zap, label: "Auto-fixes" },
+  { href: "/settings", icon: Settings, label: "Settings" },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -33,12 +42,14 @@ export function Sidebar() {
     refetchInterval: 30_000,
   });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  // Org admins get a Billing item; platform operators also get the cross-org console.
-  const nav = [
-    ...NAV,
-    ...(me?.role === "admin" ? [{ href: "/billing", icon: CreditCard, label: "Billing" }] : []),
-    ...(me?.is_platform_admin ? [{ href: "/platform", icon: ShieldCheck, label: "Platform" }] : []),
-  ];
+  // Platform operators get a business-focused nav; everyone else the org nav
+  // (+ Billing for org admins).
+  const nav = me?.is_platform_admin
+    ? PLATFORM_NAV
+    : [
+        ...NAV,
+        ...(me?.role === "admin" ? [{ href: "/billing", icon: CreditCard, label: "Billing" }] : []),
+      ];
 
   async function handleLogout() {
     await logout();
@@ -58,7 +69,9 @@ export function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 px-2 space-y-0.5">
         {nav.map(({ href, icon: Icon, label }) => {
-          const active = pathname.startsWith(href);
+          // Exact match for /platform (so its sub-pages don't also light it up);
+          // prefix match elsewhere so detail pages keep their parent highlighted.
+          const active = href === "/platform" ? pathname === "/platform" : pathname.startsWith(href);
           return (
             <Link
               key={href}

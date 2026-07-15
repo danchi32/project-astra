@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models import SubscriptionStatus
 
@@ -54,12 +54,23 @@ class PlatformOverview(BaseModel):
     total_organizations: int
     orgs_by_status: dict[str, int]
     trials_ending_7d: int
+    signups_30d: int
+    active_subscriptions: int
+    mrr_cents: int | None            # None when no per-seat price is configured
     total_users: int
     total_devices: int
     online_devices: int
     offline_devices: int
     licenses_sold: int
     remediation_pending: int
+
+
+class OrganizationCreate(BaseModel):
+    """Operator-driven org provisioning: create a new customer org + its first admin."""
+    organization_name: str = Field(min_length=1, max_length=200)
+    admin_name: str = Field(min_length=1, max_length=200)
+    admin_email: EmailStr
+    admin_password: str = Field(min_length=12)
 
 
 class ViewAsToken(BaseModel):

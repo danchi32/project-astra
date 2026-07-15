@@ -89,3 +89,57 @@ async def test_view_token_requires_platform_admin(client, session_factory):
     oid = await _org_id(session_factory, "Plain Co")
     r = await client.post(f"/api/v1/platform/organizations/{oid}/view-token", headers=h)
     assert r.status_code == 403
+
+
+async def test_overview_includes_business_metrics(client, session_factory):
+    reg = await _register(client, session_factory, "Biz Co", "biz@co.com")
+    await _promote(session_factory, "biz@co.com")
+    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    body = (await client.get("/api/v1/platform/overview", headers=h)).json()
+    assert "active_subscriptions" in body
+    assert body["signups_30d"] >= 1          # Biz Co was just created
+    assert body["mrr_cents"] is None         # no per-seat price configured in tests
+
+
+async def test_operator_creates_organization(client, session_factory):
+    reg = await _register(client, session_factory, "Ops Home", "opshome@co.com")
+    await _promote(session_factory, "opshome@co.com")
+    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    r = await client.post("/api/v1/platform/organizations", headers=h, json={
+        "organization_name": "Provisioned Co", "admin_name": "New Admin",
+        "admin_email": "newadmin@prov.com", "admin_password": "Password12345",
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["name"] == "Provisioned Co"
+    assert r.json()["subscription_status"] == "trialing"
+
+    # The new admin can log in with the operator-set initial password.
+    login = await client.post("/api/v1/auth/login", json={
+        "email": "newadmin@prov.com", "password": "Password12345"})
+    assert login.status_code == 200
+    me = await client.get("/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {login.json()['access_token']}"})
+    assert me.json()["role"] == "admin"
+
+    orgs = (await client.get("/api/v1/platform/organizations", headers=h)).json()
+    assert any(o["name"] == "Provisioned Co" for o in orgs)
+
+
+async def test_create_org_requires_platform_admin(client, session_factory):
+    reg = await _register(client, session_factory, "Plain2 Co", "p2@co.com")
+    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    r = await client.post("/api/v1/platform/organizations", headers=h, json={
+        "organization_name": "X", "admin_name": "X",
+        "admin_email": "x@x.com", "admin_password": "Password12345"})
+    assert r.status_code == 403
+
+
+async def test_create_org_rejects_duplicate_email(client, session_factory):
+    reg = await _register(client, session_factory, "Home3 Co", "home3@co.com")
+    await _promote(session_factory, "home3@co.com")
+    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    r = await client.post("/api/v1/platform/organizations", headers=h, json={
+        "organization_name": "Dup Co", "admin_name": "D",
+        "admin_email": "home3@co.com", "admin_password": "Password12345"})
+    assert r.status_code == 409

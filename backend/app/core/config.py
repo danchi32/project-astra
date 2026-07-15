@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str | None = None
     stripe_price_id: str | None = None          # a recurring, per-unit Price (per seat)
     billing_seat: str = "device"                # what a seat is: "device" or "user"
+    # Per-seat price in cents, used only to display MRR on the operator dashboard.
+    # Leave unset to hide dollar amounts (licenses/subscription counts still show).
+    price_per_seat_cents: int | None = None
     # Portal base URL Stripe Checkout/Portal redirect back to after payment.
     public_app_url: str = "http://localhost:3000"
 

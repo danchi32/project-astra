@@ -20,6 +20,7 @@ from app.schemas.platform import (
     GlobalFixCreate,
     GlobalFixRead,
     OrganizationAdminRead,
+    OrganizationCreate,
     OrganizationUpdate,
     PlatformOverview,
     RemediationActionOption,
@@ -77,6 +78,20 @@ async def create_view_token(
     session: AsyncSession = Depends(get_db),
 ) -> ViewAsToken:
     return await PlatformService(session).create_view_as_token(actor=actor, org_id=org_id)
+
+
+@router.post(
+    "/organizations",
+    response_model=OrganizationAdminRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Provision a new organization + its first admin (platform admin)",
+)
+async def create_organization(
+    body: OrganizationCreate,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> OrganizationAdminRead:
+    return await PlatformService(session).create_organization(actor=actor, data=body)
 
 
 @router.get(
