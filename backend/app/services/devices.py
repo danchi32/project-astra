@@ -10,13 +10,13 @@ from app.models import Device, EnrollmentToken, Organization, User
 from app.models.base import as_utc, utcnow
 from app.repositories.devices import DeviceRepository
 from app.repositories.enrollment_tokens import EnrollmentTokenRepository
+from app.repositories.organizations import OrganizationRepository
 from app.schemas.devices import (
-    AgentInstallerRequest,
-    AgentInstallerResponse,
     DeviceUpdate,
     EnrollmentTokenCreate,
     EnrollRequest,
     HeartbeatRequest,
+    InstallerRead,
 )
 from app.services.agent_installer import build_install_script, build_offline_bundle_zip
 from app.services.audit import AuditService
@@ -32,6 +32,7 @@ class DeviceService:
         self.session = session
         self.devices = DeviceRepository(session)
         self.enrollment_tokens = EnrollmentTokenRepository(session)
+        self.orgs = OrganizationRepository(session)
         self.audit = AuditService(session)
         self.settings = SettingsService(session)
 
@@ -64,37 +65,59 @@ class DeviceService:
         await self.session.commit()
         return record, raw
 
-    async def generate_agent_installer(
-        self, *, actor: User, data: AgentInstallerRequest
-    ) -> AgentInstallerResponse:
-        """Mint a fresh enrollment token and return a pre-configured install script."""
-        server_url = (data.server_url or get_settings().public_api_url).rstrip("/")
-        record, raw = await self.create_enrollment_token(
-            actor=actor,
-            data=EnrollmentTokenCreate(name=data.name, expires_in_days=data.expires_in_days),
-        )
-        script = build_install_script(server_url=server_url, enrollment_token=raw)
-        return AgentInstallerResponse(
-            token=raw,
+    # -- Installer (permanent per-org key; no tokens, no expiry) ---------------
+
+    async def _ensure_enrollment_key(self, org_id: uuid.UUID):
+        """Return the org's permanent enrollment key, provisioning one on first use
+        (covers orgs created before this feature)."""
+        org = await self.orgs.get(org_id)
+        if org is None:
+            raise NotFoundError("Organization not found")
+        if not org.agent_enrollment_key:
+            org.agent_enrollment_key = generate_opaque_token()
+            await self.session.commit()
+        return org
+
+    async def get_installer(self, *, actor: User) -> InstallerRead:
+        """The org's ready-to-run installer — the permanent enrollment key is already
+        baked in, so an admin just downloads and runs it. No token, no expiry."""
+        org = await self._ensure_enrollment_key(actor.org_id)
+        server_url = get_settings().public_api_url.rstrip("/")
+        script = build_install_script(server_url=server_url, enrollment_token=org.agent_enrollment_key)
+        return InstallerRead(
+            enrollment_key=org.agent_enrollment_key,
             server_url=server_url,
             filename="Install-AstraAgent.ps1",
             script=script,
-            expires_at=record.expires_at,
         )
 
-    async def generate_offline_bundle(
-        self, *, actor: User, data: AgentInstallerRequest
-    ) -> tuple[str, bytes]:
-        """Mint a reusable enrollment token and package a single offline installer
-        zip (agent binary + pre-keyed script + Install.bat) for mass deployment."""
-        server_url = (data.server_url or get_settings().public_api_url).rstrip("/")
-        record, raw = await self.create_enrollment_token(
-            actor=actor,
-            data=EnrollmentTokenCreate(name=data.name, expires_in_days=data.expires_in_days),
+    async def rotate_enrollment_key(self, *, actor: User) -> InstallerRead:
+        """Regenerate the org's enrollment key (break-glass if an installer leaks).
+        Old installers stop enrolling; the admin re-downloads the new one."""
+        org = await self.orgs.get(actor.org_id)
+        if org is None:
+            raise NotFoundError("Organization not found")
+        org.agent_enrollment_key = generate_opaque_token()
+        await self.audit.record(
+            org_id=actor.org_id,
+            actor_id=actor.id,
+            action="enrollment_key.rotate",
+            target_type="organization",
+            target_id=str(actor.org_id),
+            detail={},
         )
-        expires_label = as_utc(record.expires_at).strftime("%Y-%m-%d %H:%M UTC")
+        await self.session.commit()
+        return await self.get_installer(actor=actor)
+
+    async def generate_offline_bundle(self, *, actor: User) -> tuple[str, bytes]:
+        """Package a single offline installer zip (agent binary + pre-keyed script +
+        Install.bat) for mass deployment, using the org's permanent enrollment key."""
+        org = await self._ensure_enrollment_key(actor.org_id)
+        server_url = get_settings().public_api_url.rstrip("/")
         content = build_offline_bundle_zip(
-            server_url=server_url, enrollment_token=raw, expires_label=expires_label
+            server_url=server_url,
+            enrollment_token=org.agent_enrollment_key,
+            expires_label="never expires",
         )
         return "AstraAgent-Portable.zip", content
 
@@ -120,18 +143,25 @@ class DeviceService:
     # -- Agent-facing ----------------------------------------------------------
 
     async def enroll(self, data: EnrollRequest) -> tuple[Device, str]:
-        record = await self.enrollment_tokens.get_by_hash(
-            hash_opaque_token(data.enrollment_token)
-        )
-        if (
-            record is None
-            or record.revoked_at is not None
-            or as_utc(record.expires_at) <= utcnow()
-        ):
-            raise AuthenticationError("Invalid or expired enrollment token")
+        # Primary path: the permanent per-org enrollment key baked into the installer.
+        org = await self.orgs.get_by_enrollment_key(data.enrollment_token)
+        if org is not None:
+            org_id = org.id
+        else:
+            # Backward-compat: a legacy (expiring) enrollment token.
+            record = await self.enrollment_tokens.get_by_hash(
+                hash_opaque_token(data.enrollment_token)
+            )
+            if (
+                record is None
+                or record.revoked_at is not None
+                or as_utc(record.expires_at) <= utcnow()
+            ):
+                raise AuthenticationError("Invalid enrollment key")
+            org_id = record.org_id
 
         raw_device_token = generate_opaque_token()
-        device = await self.devices.get_by_machine_id(record.org_id, data.machine_id)
+        device = await self.devices.get_by_machine_id(org_id, data.machine_id)
 
         if device is not None and not device.is_active:
             # Decommissioned hardware must not silently rejoin; an admin must
@@ -140,10 +170,10 @@ class DeviceService:
 
         if device is None:
             # A new device consumes a license — hard-capped when the org is licensed.
-            await self._enforce_license_capacity(record.org_id)
+            await self._enforce_license_capacity(org_id)
             device = await self.devices.add(
                 Device(
-                    org_id=record.org_id,
+                    org_id=org_id,
                     hostname=data.hostname,
                     machine_id=data.machine_id,
                     os_version=data.os_version,
@@ -163,7 +193,7 @@ class DeviceService:
             action = "device.re_enroll"
 
         await self.audit.record(
-            org_id=record.org_id,
+            org_id=org_id,
             actor_id=None,
             action=action,
             target_type="device",

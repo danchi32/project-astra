@@ -33,6 +33,12 @@ class Organization(TimestampMixin, Base):
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Permanent per-org agent enrollment key, baked into that org's installer.
+    # No expiry; rotated only on demand by an admin. Null only until first provisioned.
+    agent_enrollment_key: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, unique=True, index=True
+    )
+
     # Stripe linkage (null until the org starts a paid subscription via Checkout).
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

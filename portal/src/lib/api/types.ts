@@ -296,12 +296,11 @@ export interface EnrollmentToken {
   created_at: string;
 }
 
-export interface AgentInstaller {
-  token: string;
+export interface Installer {
+  enrollment_key: string;
   server_url: string;
   filename: string;
   script: string;
-  expires_at: string;
 }
 
 export interface OrganizationSettings {

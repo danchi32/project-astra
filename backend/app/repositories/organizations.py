@@ -19,6 +19,12 @@ class OrganizationRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_enrollment_key(self, key: str) -> Organization | None:
+        result = await self.session.execute(
+            select(Organization).where(Organization.agent_enrollment_key == key)
+        )
+        return result.scalar_one_or_none()
+
     async def add(self, org: Organization) -> Organization:
         self.session.add(org)
         await self.session.flush()

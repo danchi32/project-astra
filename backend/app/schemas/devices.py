@@ -35,22 +35,13 @@ class EnrollmentTokenRead(BaseModel):
     created_at: datetime
 
 
-class AgentInstallerRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    # Public URL of this backend the agent will connect to. Omit to use the
-    # server-configured default (ASTRA_PUBLIC_API_URL).
-    server_url: str | None = Field(default=None, max_length=300)
-    expires_in_days: int | None = Field(default=None, ge=1, le=90)
-
-
-class AgentInstallerResponse(BaseModel):
-    # The one-time enrollment token, also baked into the script — surfaced so the
-    # admin can see/copy it before the download.
-    token: str
+class InstallerRead(BaseModel):
+    """The org's ready-to-run installer. The permanent enrollment key is already
+    baked into the script — the admin just downloads and runs it."""
+    enrollment_key: str
     server_url: str
     filename: str
     script: str
-    expires_at: datetime
 
 
 class EnrollRequest(BaseModel):

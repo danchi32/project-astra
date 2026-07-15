@@ -7,13 +7,12 @@ from app.api.deps import require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.devices import (
-    AgentInstallerRequest,
-    AgentInstallerResponse,
     DeviceRead,
     DeviceUpdate,
     EnrollmentTokenCreate,
     EnrollmentTokenCreated,
     EnrollmentTokenRead,
+    InstallerRead,
 )
 from app.schemas.telemetry import (
     DeviceEventLogRead,
@@ -31,12 +30,57 @@ staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 admin_required = require_roles(UserRole.ADMIN)
 
 
-# Enrollment-token routes are declared before /{device_id} so the literal path wins.
+# Literal installer/enrollment routes are declared before /{device_id} so they win.
+@router.get(
+    "/installer",
+    response_model=InstallerRead,
+    summary="The org's ready-to-run agent installer (admin only)",
+)
+async def get_installer(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> InstallerRead:
+    return await DeviceService(session).get_installer(actor=actor)
+
+
+@router.post(
+    "/enrollment-key/rotate",
+    response_model=InstallerRead,
+    summary="Rotate the org's enrollment key — invalidates old installers (admin only)",
+)
+async def rotate_enrollment_key(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> InstallerRead:
+    return await DeviceService(session).rotate_enrollment_key(actor=actor)
+
+
+@router.post(
+    "/offline-installer",
+    summary="Offline mass-deployment installer bundle (.zip, admin only)",
+    responses={201: {"content": {"application/zip": {}}}},
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_offline_installer(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    filename, content = await DeviceService(session).generate_offline_bundle(actor=actor)
+    return Response(
+        content=content,
+        status_code=status.HTTP_201_CREATED,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# Legacy enrollment-token endpoints (kept for backward compatibility with any
+# installers issued before the permanent-key model; not surfaced in the portal UI).
 @router.post(
     "/enrollment-tokens",
     response_model=EnrollmentTokenCreated,
     status_code=status.HTTP_201_CREATED,
-    summary="Create an enrollment token (admin only) — the token is shown only once",
+    summary="Create a legacy enrollment token (admin only) — token shown once",
 )
 async def create_enrollment_token(
     body: EnrollmentTokenCreate,
@@ -49,46 +93,10 @@ async def create_enrollment_token(
     )
 
 
-@router.post(
-    "/agent-installer",
-    response_model=AgentInstallerResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Generate a pre-configured Windows agent installer (admin only)",
-)
-async def generate_agent_installer(
-    body: AgentInstallerRequest,
-    actor: User = Depends(admin_required),
-    session: AsyncSession = Depends(get_db),
-) -> AgentInstallerResponse:
-    return await DeviceService(session).generate_agent_installer(actor=actor, data=body)
-
-
-@router.post(
-    "/offline-installer",
-    summary="Generate an offline mass-deployment installer bundle (.zip, admin only)",
-    responses={201: {"content": {"application/zip": {}}}},
-    status_code=status.HTTP_201_CREATED,
-)
-async def generate_offline_installer(
-    body: AgentInstallerRequest,
-    actor: User = Depends(admin_required),
-    session: AsyncSession = Depends(get_db),
-) -> Response:
-    filename, content = await DeviceService(session).generate_offline_bundle(
-        actor=actor, data=body
-    )
-    return Response(
-        content=content,
-        status_code=status.HTTP_201_CREATED,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
 @router.get(
     "/enrollment-tokens",
     response_model=list[EnrollmentTokenRead],
-    summary="List enrollment tokens (admin only)",
+    summary="List legacy enrollment tokens (admin only)",
 )
 async def list_enrollment_tokens(
     actor: User = Depends(admin_required),
@@ -100,7 +108,7 @@ async def list_enrollment_tokens(
 @router.delete(
     "/enrollment-tokens/{token_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Revoke an enrollment token (admin only)",
+    summary="Revoke a legacy enrollment token (admin only)",
 )
 async def revoke_enrollment_token(
     token_id: uuid.UUID,

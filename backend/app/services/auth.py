@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
+    generate_opaque_token,
     generate_refresh_token,
     hash_opaque_token,
     hash_password,
@@ -48,6 +49,7 @@ class AuthService:
             Organization(
                 name=data.organization_name.strip(),
                 trial_ends_at=utcnow() + timedelta(days=TRIAL_DAYS),
+                agent_enrollment_key=generate_opaque_token(),
             )
         )
         admin = await self.users.add(

@@ -2,16 +2,16 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Monitor, Download, Plus, Copy, Check, KeyRound, X,
+  Monitor, Download, Copy, Check, RefreshCw,
 } from "lucide-react";
 import { getDevices } from "@/lib/api/dashboard";
 import { getMe } from "@/lib/api/auth";
-import { listEnrollmentTokens, revokeEnrollmentToken, generateAgentInstaller, downloadOfflineInstaller } from "@/lib/api/devices";
+import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller } from "@/lib/api/devices";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
-import type { AgentInstaller, Device } from "@/lib/api/types";
+import type { Installer, Device } from "@/lib/api/types";
 
-function downloadScript(installer: AgentInstaller) {
+function downloadScript(installer: Installer) {
   const blob = new Blob([installer.script], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -66,38 +66,40 @@ function CopyButton({ text }: { text: string }) {
 function InstallAgentPanel() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [serverUrl, setServerUrl] = useState("");
-  const [busy, setBusy] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState(false);
+  const [rotating, setRotating] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<AgentInstaller | null>(null);
+  const [notice, setNotice] = useState("");
 
-  async function generate(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true); setError("");
-    try {
-      const installer = await generateAgentInstaller(name.trim(), serverUrl.trim());
-      setResult(installer);
-      await queryClient.invalidateQueries({ queryKey: ["enrollment-tokens"] });
-    } catch {
-      setError("Couldn't generate the token. Check the details and try again.");
-    } finally { setBusy(false); }
-  }
+  const { data: installer, isLoading } = useQuery({
+    queryKey: ["installer"],
+    queryFn: getInstaller,
+    enabled: open,
+  });
+
+  const runCmd = "powershell -ExecutionPolicy Bypass -File .\\Install-AstraAgent.ps1";
 
   async function downloadOffline() {
-    if (!name.trim()) { setError("Enter a label first."); return; }
     setOfflineBusy(true); setError("");
     try {
-      await downloadOfflineInstaller(name.trim(), serverUrl.trim());
-      await queryClient.invalidateQueries({ queryKey: ["enrollment-tokens"] });
+      await downloadOfflineInstaller();
     } catch {
-      setError("Couldn't build the offline installer. Try again.");
+      setError("Couldn't build the portable installer. Try again.");
     } finally { setOfflineBusy(false); }
   }
 
-  function reset() {
-    setResult(null); setName(""); setServerUrl(""); setError("");
+  async function rotate() {
+    if (!confirm(
+      "Rotate this organization's enrollment key?\n\nInstallers you've already distributed will stop enrolling new machines — you'll need to re-download. Already-enrolled devices keep working."
+    )) return;
+    setRotating(true); setError(""); setNotice("");
+    try {
+      const next = await rotateEnrollmentKey();
+      queryClient.setQueryData(["installer"], next);
+      setNotice("Key rotated. Re-download the installer for any new machines.");
+    } catch {
+      setError("Couldn't rotate the key. Try again.");
+    } finally { setRotating(false); }
   }
 
   return (
@@ -110,8 +112,8 @@ function InstallAgentPanel() {
           <div>
             <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Install the ASTRA agent</h2>
             <p className="text-xs mt-0.5 max-w-xl" style={{ color: "var(--text-secondary)" }}>
-              Download the Windows installer and enroll a machine with a one-time token.
-              Once installed, the device appears here automatically within a minute.
+              Download your organization&apos;s installer and run it on any Windows machine. Your enrollment
+              key is already built in — no tokens, nothing to type. Devices appear here within a minute.
             </p>
           </div>
         </div>
@@ -119,161 +121,82 @@ function InstallAgentPanel() {
           <button onClick={() => setOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white shrink-0"
             style={{ background: "var(--accent)" }}>
-            <Plus size={16} /> Install agent
+            <Download size={16} /> Get installer
           </button>
         )}
       </div>
 
-      {open && !result && (
-        <form onSubmit={generate} className="mt-4 space-y-3 max-w-xl">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Label</label>
-              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Sales laptops"
-                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-            </div>
-            <div>
-              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Server URL (optional)</label>
-              <input value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://astra.yourco.com"
-                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-            </div>
-          </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={busy || offlineBusy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-              style={{ background: "var(--accent)" }}>
-              <KeyRound size={15} /> {busy ? "Generating…" : "Generate enrollment token"}
-            </button>
-            <button type="button" onClick={downloadOffline} disabled={busy || offlineBusy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-              <Download size={15} /> {offlineBusy ? "Preparing…" : "Portable installer (many PCs)"}
-            </button>
-            <button type="button" onClick={() => setOpen(false)}
-              className="px-3 py-2 rounded-lg text-sm font-medium"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
-          </div>
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            <span className="font-medium">Portable installer</span>: one <span className="font-mono">.zip</span> with the
-            agent bundled in and the <span className="font-medium">enrollment token already baked in</span>. Copy it to
-            any number of PCs, extract, and <span className="font-medium">double-click <span className="font-mono">Install.bat</span></span> —
-            one permission prompt and it runs continuously for every user, surviving restarts. Works on locked-down
-            machines (installs the .NET runtime, adds a DNS entry, runs via the trusted dotnet host).
-          </p>
-        </form>
-      )}
-
-      {result && (
-        <div className="mt-4 space-y-3 max-w-xl">
-          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: "#10b981" }}>
-            <Check size={16} /> Installer ready — one file, runs on the target machine
-          </div>
-
-          {/* Step 1 — download the one self-contained installer script */}
-          <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-              1. On the target Windows machine, download the installer
-            </p>
-            <button onClick={() => downloadScript(result)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
-              style={{ background: "var(--accent)" }}>
-              <Download size={15} /> Download Install-AstraAgent.ps1
-            </button>
-            <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
-              The server URL and a one-time enrollment token are already baked in. The script
-              downloads the agent from your server and installs it — nothing else to configure.
-            </p>
-          </div>
-
-          {/* Step 2 — run it elevated */}
-          <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-            <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-              2. Right-click the file → <span className="font-semibold">Run with PowerShell</span> (approve the
-              admin prompt). Or run in an elevated PowerShell:
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>
-                powershell -ExecutionPolicy Bypass -File .\Install-AstraAgent.ps1
-              </code>
-              <CopyButton text={"powershell -ExecutionPolicy Bypass -File .\\Install-AstraAgent.ps1"} />
-            </div>
-            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              The device enrolls automatically and appears under Devices within a minute.
-            </p>
-          </div>
-
-          <details className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            <summary className="cursor-pointer">Need the raw enrollment token?</summary>
-            <div className="flex items-center gap-2 mt-2">
-              <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{result.token}</code>
-              <CopyButton text={result.token} />
-            </div>
-            <p className="mt-1">Shown once — copy it now if you need it.</p>
-          </details>
-
-          <button onClick={reset}
-            className="px-3 py-2 rounded-lg text-sm font-medium"
-            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Generate another</button>
-        </div>
-      )}
-
       {open && (
-        <div className="mt-5">
-          <EnrollmentTokens />
+        <div className="mt-4 space-y-3 max-w-xl">
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          {notice && <p className="text-sm" style={{ color: "#10b981" }}>{notice}</p>}
+          {isLoading && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Preparing your installer…</p>}
+
+          {installer && (
+            <>
+              {/* Step 1 — download */}
+              <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+                  1. On the target Windows machine, download the installer
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => downloadScript(installer)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
+                    style={{ background: "var(--accent)" }}>
+                    <Download size={15} /> Download Install-AstraAgent.ps1
+                  </button>
+                  <button onClick={downloadOffline} disabled={offlineBusy}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                    <Download size={15} /> {offlineBusy ? "Preparing…" : "Portable .zip (many PCs)"}
+                  </button>
+                </div>
+                <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
+                  Your server URL and enrollment key are already baked in. The <span className="font-medium">portable .zip</span> bundles
+                  the agent itself for locked-down machines — extract and double-click <span className="font-mono">Install.bat</span>.
+                </p>
+              </div>
+
+              {/* Step 2 — run */}
+              <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  2. Right-click → <span className="font-semibold">Run with PowerShell</span> (approve the prompt), or run:
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{runCmd}</code>
+                  <CopyButton text={runCmd} />
+                </div>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  The device enrolls automatically and appears under Devices within a minute.
+                </p>
+              </div>
+
+              {/* Enrollment key + rotate */}
+              <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Organization enrollment key (permanent)</p>
+                  <button onClick={rotate} disabled={rotating}
+                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg disabled:opacity-50"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "#f59e0b" }}>
+                    <RefreshCw size={12} /> {rotating ? "Rotating…" : "Rotate key"}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{installer.enrollment_key}</code>
+                  <CopyButton text={installer.enrollment_key} />
+                </div>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  Never expires. Rotate only if an installer leaks — old installers stop working; already-enrolled devices are unaffected.
+                </p>
+              </div>
+
+              <button onClick={() => setOpen(false)}
+                className="px-3 py-2 rounded-lg text-sm font-medium"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Done</button>
+            </>
+          )}
         </div>
       )}
-    </div>
-  );
-}
-
-function EnrollmentTokens() {
-  const queryClient = useQueryClient();
-  const { data: tokens, isLoading } = useQuery({ queryKey: ["enrollment-tokens"], queryFn: listEnrollmentTokens });
-
-  async function revoke(id: string) {
-    await revokeEnrollmentToken(id);
-    await queryClient.invalidateQueries({ queryKey: ["enrollment-tokens"] });
-  }
-
-  const active = (tokens ?? []).filter((t) => !t.revoked_at);
-  if (isLoading || active.length === 0) return null;
-
-  return (
-    <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-      <div className="px-5 py-3 flex items-center gap-2" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
-        <KeyRound size={14} style={{ color: "var(--text-secondary)" }} />
-        <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Active enrollment tokens</h2>
-      </div>
-      <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
-        <table className="w-full text-sm whitespace-nowrap">
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Label", "Created", "Expires", ""].map((h) => (
-                <th key={h} className="px-5 py-2.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {active.map((t) => (
-              <tr key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td className="px-5 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{t.name}</td>
-                <td className="px-5 py-2.5" style={{ color: "var(--text-secondary)" }}>{new Date(t.created_at).toLocaleDateString()}</td>
-                <td className="px-5 py-2.5" style={{ color: "var(--text-secondary)" }}>{new Date(t.expires_at).toLocaleDateString()}</td>
-                <td className="px-5 py-2.5 text-right">
-                  <button onClick={() => revoke(t.id)} title="Revoke"
-                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg hover:bg-red-500/10 hover:text-red-500"
-                    style={{ color: "var(--text-secondary)" }}>
-                    <X size={13} /> Revoke
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
