@@ -34,11 +34,15 @@ class LearnedFixStore:
         self.threshold = max(get_settings().ai_cache_similarity_threshold, 0.88)
 
     async def lookup(self, *, org_id: uuid.UUID, query: str) -> LearnedFix | None:
-        """Return a previously-learned fix for a sufficiently-similar prior issue."""
+        """Return a fix for a sufficiently-similar prior issue — from this org's own
+        learned fixes AND the operator's GLOBAL fixes (so a global fix auto-applies
+        for every org)."""
         query_vec = await self.embed.embed(query)
+        candidates = await self.repo.list_by_org(org_id)
+        candidates += await self.repo.list_global()
         best: LearnedAction | None = None
         best_sim = -1.0
-        for entry in await self.repo.list_by_org(org_id):
+        for entry in candidates:
             sim = cosine_similarity(query_vec, entry.embedding)
             if sim > best_sim:
                 best_sim, best = sim, entry
@@ -47,6 +51,35 @@ class LearnedFixStore:
             await self.session.flush()
             return LearnedFix(best.action_id, best.params)
         return None
+
+    # -- Global (operator-curated) auto-apply fixes -----------------------------
+
+    async def create_global(
+        self, *, problem: str, action_id: str, params: dict[str, Any] | None
+    ) -> LearnedAction:
+        """Curate a global fix: any org whose user reports a matching problem gets
+        `action_id` applied automatically, no LLM call."""
+        if action_id not in ACTIONS:
+            raise ValueError(f"Unknown remediation action '{action_id}'")
+        vector = await self.embed.embed(problem)
+        entry = await self.repo.add(
+            LearnedAction(
+                org_id=None, query_text=problem[:1000], embedding=vector,
+                action_id=action_id, params=params or None,
+            )
+        )
+        await self.session.commit()
+        return entry
+
+    async def list_global(self) -> list[LearnedAction]:
+        return await self.repo.list_global()
+
+    async def delete_global(self, *, fix_id: uuid.UUID) -> None:
+        entry = await self.repo.get(fix_id)
+        if entry is None or entry.org_id is not None:
+            raise LookupError("Global fix not found")
+        await self.session.delete(entry)
+        await self.session.commit()
 
     async def learn(
         self, *, org_id: uuid.UUID, query: str, action_id: str, params: dict[str, Any] | None

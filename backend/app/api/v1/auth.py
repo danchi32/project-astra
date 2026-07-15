@@ -4,12 +4,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models import User
-from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
 from app.schemas.settings import ChangePasswordRequest, ProfileUpdate
 from app.schemas.users import UserRead
 from app.services.auth import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new organization + first admin (requires an invite code)",
+)
+async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db)) -> TokenResponse:
+    access, refresh = await AuthService(session).register(body)
+    return TokenResponse(access_token=access, refresh_token=refresh)
 
 
 @router.post("/login", response_model=TokenResponse, summary="Log in with email and password")

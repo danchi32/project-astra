@@ -16,7 +16,18 @@ class LearnedActionRepository:
         )
         return list(result.scalars().all())
 
+    async def list_global(self) -> list[LearnedAction]:
+        """Operator-curated fixes (org_id IS NULL) that auto-apply for every org."""
+        result = await self.session.execute(
+            select(LearnedAction).where(LearnedAction.org_id.is_(None))
+            .order_by(LearnedAction.created_at.desc())
+        )
+        return list(result.scalars().all())
+
     async def add(self, entry: LearnedAction) -> LearnedAction:
         self.session.add(entry)
         await self.session.flush()
         return entry
+
+    async def get(self, fix_id: uuid.UUID) -> LearnedAction | None:
+        return await self.session.get(LearnedAction, fix_id)

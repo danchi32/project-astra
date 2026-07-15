@@ -21,6 +21,15 @@ class KnowledgeRepository:
         )
         return list(result.scalars().all())
 
+    async def list_global(self) -> list[KnowledgeArticle]:
+        """Operator-curated articles (org_id IS NULL) shared with every org."""
+        result = await self.session.execute(
+            select(KnowledgeArticle)
+            .where(KnowledgeArticle.org_id.is_(None))
+            .order_by(KnowledgeArticle.created_at.desc())
+        )
+        return list(result.scalars().all())
+
     async def add(self, article: KnowledgeArticle) -> KnowledgeArticle:
         self.session.add(article)
         await self.session.flush()

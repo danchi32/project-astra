@@ -19,7 +19,9 @@ class KnowledgeArticle(TimestampMixin, Base):
     __tablename__ = "knowledge_articles"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+    # NULL org_id = a GLOBAL article curated by the platform operator, searchable by
+    # EVERY organization's assistant (in addition to that org's own articles).
+    org_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     content: Mapped[str] = mapped_column(String(20000), nullable=False)
     embedding: Mapped[list[float]] = mapped_column(JSON, nullable=False)

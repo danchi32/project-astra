@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { login } from "@/lib/api/auth";
 
 export default function LoginPage() {
@@ -80,6 +81,11 @@ export default function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <p className="mt-5 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+          Have an invite code?{" "}
+          <Link href="/register" className="font-medium" style={{ color: "var(--accent)" }}>Create an organization</Link>
+        </p>
       </div>
     </div>
   );

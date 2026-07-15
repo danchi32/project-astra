@@ -4,10 +4,11 @@ from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.device import Device
 from app.models.enrollment_token import EnrollmentToken
+from app.models.invite_code import InviteCode
 from app.models.knowledge import KnowledgeArticle, KnowledgeSource
 from app.models.learned_action import LearnedAction
 from app.models.notification import Notification, NotificationCategory, NotificationSeverity
-from app.models.organization import Organization
+from app.models.organization import Organization, SubscriptionStatus
 from app.models.organization_settings import OrganizationSettings
 from app.models.refresh_token import RefreshToken
 from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
@@ -34,6 +35,7 @@ __all__ = [
     "DeviceService",
     "DeviceWindowsUpdate",
     "EnrollmentToken",
+    "InviteCode",
     "KnowledgeArticle",
     "KnowledgeSource",
     "LearnedAction",
@@ -44,6 +46,7 @@ __all__ = [
     "NotificationSeverity",
     "Organization",
     "OrganizationSettings",
+    "SubscriptionStatus",
     "RefreshToken",
     "RemediationSource",
     "RemediationStatus",

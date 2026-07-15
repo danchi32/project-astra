@@ -4,9 +4,9 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Package, Users, Activity,
-  BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield,
+  BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield, ShieldCheck,
 } from "lucide-react";
-import { logout } from "@/lib/api/auth";
+import { logout, getMe } from "@/lib/api/auth";
 import { getUnreadCount } from "@/lib/api/notifications";
 import { useRouter } from "next/navigation";
 
@@ -32,6 +32,11 @@ export function Sidebar() {
     queryFn: getUnreadCount,
     refetchInterval: 30_000,
   });
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  // Platform operators get one extra nav item for the cross-org console.
+  const nav = me?.is_platform_admin
+    ? [...NAV, { href: "/platform", icon: ShieldCheck, label: "Platform" }]
+    : NAV;
 
   async function handleLogout() {
     await logout();
@@ -50,7 +55,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-2 space-y-0.5">
-        {NAV.map(({ href, icon: Icon, label }) => {
+        {nav.map(({ href, icon: Icon, label }) => {
           const active = pathname.startsWith(href);
           return (
             <Link

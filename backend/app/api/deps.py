@@ -52,6 +52,17 @@ async def get_current_device(
     return device
 
 
+async def require_platform_admin(user: User = Depends(get_current_user)) -> User:
+    """The platform operator (super-admin) — the only identity allowed to manage
+    other organizations. Everything they do is audited."""
+    if not user.is_platform_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform administrator access required",
+        )
+    return user
+
+
 def require_roles(*roles: UserRole):
     async def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:

@@ -6,17 +6,22 @@ from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
+    hash_opaque_token,
     hash_password,
     hash_refresh_token,
     verify_password,
 )
-from app.models import RefreshToken, User
+from app.models import Organization, RefreshToken, User, UserRole
 from app.models.base import as_utc, utcnow
+from app.repositories.invite_codes import InviteCodeRepository
+from app.repositories.organizations import OrganizationRepository
 from app.repositories.refresh_tokens import RefreshTokenRepository
 from app.repositories.users import UserRepository
+from app.schemas.auth import RegisterRequest
 from app.services.audit import AuditService
-from app.services.exceptions import AuthenticationError, ValidationError
+from app.services.exceptions import AuthenticationError, ConflictError, ValidationError
 from app.services.settings import SettingsService
+from app.services.subscription import TRIAL_DAYS
 
 
 class AuthService:
@@ -25,6 +30,51 @@ class AuthService:
         self.users = UserRepository(session)
         self.tokens = RefreshTokenRepository(session)
         self.audit = AuditService(session)
+        self.orgs = OrganizationRepository(session)
+        self.invites = InviteCodeRepository(session)
+
+    async def register(self, data: RegisterRequest) -> tuple[str, str]:
+        """Create a NEW organization and its first admin from a valid invite code.
+        The whole thing is one transaction: a partial org (no admin) can never exist."""
+        invite = await self.invites.get_by_hash(hash_opaque_token(data.invite_code))
+        if invite is None or invite.used_at is not None or as_utc(invite.expires_at) <= utcnow():
+            raise AuthenticationError("Invalid or expired invite code")
+
+        email = data.admin_email.lower()
+        if await self.users.get_by_email(email) is not None:
+            raise ConflictError("A user with that email already exists")
+
+        org = await self.orgs.add(
+            Organization(
+                name=data.organization_name.strip(),
+                trial_ends_at=utcnow() + timedelta(days=TRIAL_DAYS),
+            )
+        )
+        admin = await self.users.add(
+            User(
+                org_id=org.id,
+                email=email,
+                full_name=data.admin_name.strip(),
+                hashed_password=hash_password(data.admin_password),
+                role=UserRole.ADMIN,
+                is_active=True,
+            )
+        )
+        invite.used_at = utcnow()
+        invite.used_by_org_id = org.id
+
+        await self.audit.record(
+            org_id=org.id,
+            actor_id=admin.id,
+            action="organization.register",
+            target_type="organization",
+            target_id=str(org.id),
+            detail={"name": org.name, "admin_email": email},
+        )
+        access = create_access_token(user_id=admin.id, org_id=admin.org_id, role=admin.role.value)
+        refresh = await self._issue_refresh_token(admin)
+        await self.session.commit()
+        return access, refresh
 
     async def login(self, email: str, password: str) -> tuple[str, str]:
         user = await self.users.get_by_email(email)

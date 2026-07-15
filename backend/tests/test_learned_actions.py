@@ -71,6 +71,33 @@ async def test_llm_fix_is_learned_then_reused_for_free(session_factory, admin_us
         assert all(t.action_id == "restart_service" for t in tasks)
 
 
+async def test_global_fix_auto_applies_for_any_org(session_factory, admin_user):
+    """A fix the operator curates globally is applied automatically for an org that
+    never learned it — no LLM call."""
+    from sqlalchemy import select
+    from app.models import RemediationTask
+    from app.services.ai.learned import LearnedFixStore
+
+    # An unlisted problem (built-in rules can't classify it) with a known fix.
+    problem = "the label printer only feeds blank stickers"
+
+    async with session_factory() as session:
+        await LearnedFixStore(session).create_global(
+            problem=problem, action_id="restart_service", params={"service_name": "Spooler"}
+        )
+
+    async with session_factory() as session:
+        device = await _make_device(session, admin_user.org_id, hostname="OPS-PC")
+        # No API key -> no LLM; the GLOBAL fix must catch this before any LLM path.
+        svc = ConversationService(session)
+        _, _, source = await svc.device_chat(device=device, content=problem, conversation_id=None)
+        assert source == "learned", f"global fix should have applied; got source={source}"
+        tasks = (await session.execute(select(RemediationTask))).scalars().all()
+        assert len(tasks) == 1
+        assert tasks[0].action_id == "restart_service"
+        assert tasks[0].params == {"service_name": "Spooler"}
+
+
 async def test_common_issue_never_becomes_a_learned_entry(session_factory, admin_user):
     # A listed/common issue ("excel not working") is handled by the built-in rules,
     # so nothing new is learned.

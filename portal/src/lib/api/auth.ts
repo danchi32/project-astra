@@ -11,6 +11,22 @@ export async function login(email: string, password: string) {
   return data;
 }
 
+export async function register(input: {
+  invite_code: string;
+  organization_name: string;
+  admin_name: string;
+  admin_email: string;
+  admin_password: string;
+}) {
+  const { data } = await apiClient.post<{ access_token: string; refresh_token: string }>(
+    "/auth/register",
+    input
+  );
+  localStorage.setItem("access_token", data.access_token);
+  localStorage.setItem("refresh_token", data.refresh_token);
+  return data;
+}
+
 export async function logout() {
   const refresh = localStorage.getItem("refresh_token");
   if (refresh) {

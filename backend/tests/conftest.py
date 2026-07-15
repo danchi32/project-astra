@@ -41,10 +41,18 @@ async def client(session_factory):
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    # The read-only gate middleware opens its own session via database.SessionLocal
+    # (outside the dependency graph) — point it at the test DB too.
+    import app.core.database as database
+
+    original_session_local = database.SessionLocal
+    database.SessionLocal = session_factory
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+    database.SessionLocal = original_session_local
 
 
 @pytest_asyncio.fixture

@@ -29,3 +29,6 @@ class User(TimestampMixin, Base):
         default=UserRole.USER,
     )
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
+    # Platform operator (super-admin): can manage ALL organizations. This is the one
+    # identity that intentionally crosses org boundaries — every such action is audited.
+    is_platform_admin: Mapped[bool] = mapped_column(nullable=False, default=False)

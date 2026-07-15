@@ -10,6 +10,7 @@ from app.api.v1 import (
     downloads,
     knowledge,
     notifications,
+    platform,
     remediation,
     reports,
     settings,
@@ -32,3 +33,4 @@ api_router.include_router(reports.router)
 api_router.include_router(notifications.router)
 api_router.include_router(settings.router)
 api_router.include_router(downloads.router)
+api_router.include_router(platform.router)

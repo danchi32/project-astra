@@ -10,12 +10,15 @@ class LearnedAction(TimestampMixin, Base):
     """A fix the AI applied for an issue the built-in rules couldn't classify,
     remembered by its query embedding so the SAME kind of issue is resolved next
     time by the built-in path — no further LLM call. This is how the assistant's
-    'common issue' coverage grows over time, per organization."""
+    'common issue' coverage grows over time.
+
+    org_id NULL = a GLOBAL fix the platform operator curated: it auto-applies for
+    EVERY organization, not just the one that first hit the issue."""
 
     __tablename__ = "learned_actions"
 
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
     query_text: Mapped[str] = mapped_column(String(1000), nullable=False)
     embedding: Mapped[list[float]] = mapped_column(JSON, nullable=False)
     # The remediation to apply (must be an action in the allowlist) and its params.

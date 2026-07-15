@@ -7,6 +7,38 @@ export interface User {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  is_platform_admin?: boolean;
+  created_at: string;
+}
+
+export type SubscriptionStatus =
+  | "trialing" | "active" | "past_due" | "suspended" | "canceled";
+
+export interface OrganizationAdmin {
+  id: string;
+  name: string;
+  plan: string;
+  subscription_status: SubscriptionStatus;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  created_at: string;
+  user_count: number;
+  device_count: number;
+}
+
+export interface RemediationActionOption {
+  id: string;
+  label: string;
+  tier: string;
+  params: string[];
+}
+
+export interface GlobalFix {
+  id: string;
+  problem: string;
+  action_id: string;
+  action_label: string;
+  params: Record<string, string> | null;
   created_at: string;
 }
 
