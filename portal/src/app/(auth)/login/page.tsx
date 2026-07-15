@@ -82,8 +82,12 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
-          Have an invite code?{" "}
+        <p className="mt-4 text-center text-sm">
+          <Link href="/forgot-password" className="font-medium" style={{ color: "var(--accent)" }}>Forgot password?</Link>
+        </p>
+
+        <p className="mt-3 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+          Don&apos;t have an account?{" "}
           <Link href="/register" className="font-medium" style={{ color: "var(--accent)" }}>Create an organization</Link>
         </p>
       </div>

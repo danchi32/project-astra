@@ -6,6 +6,8 @@ from app.core.database import get_db
 from app.models import User
 from app.schemas.auth import (
     LoginRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     RefreshRequest,
     RegisterRequest,
     RegisterStartResponse,
@@ -53,6 +55,28 @@ async def register_verify(
 ) -> TokenResponse:
     access, refresh = await AuthService(session).register_verify(body)
     return TokenResponse(access_token=access, refresh_token=refresh)
+
+
+@router.post(
+    "/password-reset/request",
+    summary="Email a password-reset link (always succeeds — no account enumeration)",
+)
+async def password_reset_request(
+    body: PasswordResetRequest, session: AsyncSession = Depends(get_db)
+) -> dict[str, str]:
+    await AuthService(session).request_password_reset(body.email)
+    return {"detail": "If that email has an account, a reset link is on its way."}
+
+
+@router.post(
+    "/password-reset/confirm",
+    summary="Set a new password using a reset link",
+)
+async def password_reset_confirm(
+    body: PasswordResetConfirm, session: AsyncSession = Depends(get_db)
+) -> dict[str, str]:
+    await AuthService(session).confirm_password_reset(body.token, body.new_password)
+    return {"detail": "Your password has been reset. You can now sign in."}
 
 
 @router.post("/login", response_model=TokenResponse, summary="Log in with email and password")

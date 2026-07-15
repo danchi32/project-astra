@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     email_from: str | None = None       # defaults to smtp_user when unset
     otp_ttl_minutes: int = 10
+    password_reset_ttl_minutes: int = 60
     # Portal base URL Stripe Checkout/Portal redirect back to after payment.
     public_app_url: str = "http://localhost:3000"
 

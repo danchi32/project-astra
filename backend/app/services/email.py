@@ -73,6 +73,34 @@ class EmailService:
             text=f"Your ASTRA verification code is {code}. It expires in {ttl} minutes.",
         )
 
+    async def send_password_reset(self, *, to: str, name: str, link: str) -> bool:
+        ttl = settings.password_reset_ttl_minutes
+        html = _shell(
+            "Reset your password",
+            f"""<p>Hi {name},</p>
+            <p>We received a request to reset your ASTRA password. Click below to choose a new one:</p>
+            <p style="margin:24px 0"><a href="{link}" style="display:inline-block;background:#2563eb;color:#fff;
+            text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Reset password</a></p>
+            <p style="color:#666">This link expires in {ttl} minutes. If you didn't request it, you can safely
+            ignore this email — your password won't change.</p>""",
+        )
+        return await self.send(
+            to=to, subject="Reset your ASTRA password", html=html,
+            text=f"Reset your ASTRA password: {link} (expires in {ttl} minutes). If you didn't request this, ignore this email.",
+        )
+
+    async def send_password_changed(self, *, to: str, name: str) -> bool:
+        html = _shell(
+            "Your password was changed",
+            f"""<p>Hi {name},</p>
+            <p>Your ASTRA password was just changed. If this was you, no action is needed.</p>
+            <p style="color:#666">If you didn't do this, contact your administrator immediately.</p>""",
+        )
+        return await self.send(
+            to=to, subject="Your ASTRA password was changed", html=html,
+            text="Your ASTRA password was just changed. If this wasn't you, contact your administrator immediately.",
+        )
+
     async def send_welcome(self, *, to: str, name: str, org_name: str, trial_days: int) -> bool:
         app_url = (settings.public_app_url or "").rstrip("/")
         button = (

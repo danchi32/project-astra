@@ -13,10 +13,18 @@ from app.core.security import (
     hash_refresh_token,
     verify_password,
 )
-from app.models import Organization, PendingRegistration, RefreshToken, User, UserRole
+from app.models import (
+    Organization,
+    PasswordResetToken,
+    PendingRegistration,
+    RefreshToken,
+    User,
+    UserRole,
+)
 from app.models.base import as_utc, utcnow
 from app.repositories.invite_codes import InviteCodeRepository
 from app.repositories.organizations import OrganizationRepository
+from app.repositories.password_reset_tokens import PasswordResetTokenRepository
 from app.repositories.pending_registrations import PendingRegistrationRepository
 from app.repositories.refresh_tokens import RefreshTokenRepository
 from app.repositories.users import UserRepository
@@ -39,6 +47,7 @@ class AuthService:
         self.orgs = OrganizationRepository(session)
         self.invites = InviteCodeRepository(session)
         self.pending = PendingRegistrationRepository(session)
+        self.reset_tokens = PasswordResetTokenRepository(session)
         self.email = EmailService()
 
     async def _provision_org(
@@ -249,6 +258,59 @@ class AuthService:
             target_id=str(user.id),
         )
         await self.session.commit()
+
+    async def request_password_reset(self, email: str) -> None:
+        """Email a reset link. Always silent (never reveals whether the account
+        exists), and a no-op when email isn't configured."""
+        user = await self.users.get_by_email(email.lower())
+        if user is None or not user.is_active or not self.email.enabled:
+            return
+
+        raw = generate_opaque_token()
+        await self.reset_tokens.delete_for_user(user.id)  # only the newest link is valid
+        await self.reset_tokens.add(
+            PasswordResetToken(
+                user_id=user.id,
+                token_hash=hash_opaque_token(raw),
+                expires_at=utcnow() + timedelta(minutes=settings.password_reset_ttl_minutes),
+            )
+        )
+        await self.session.commit()
+
+        link = f"{(settings.public_app_url or '').rstrip('/')}/reset-password?token={raw}"
+        try:
+            await self.email.send_password_reset(to=user.email, name=user.full_name, link=link)
+        except Exception:
+            pass
+
+    async def confirm_password_reset(self, token: str, new_password: str) -> None:
+        record = await self.reset_tokens.get_by_hash(hash_opaque_token(token))
+        if record is None or record.used_at is not None or as_utc(record.expires_at) <= utcnow():
+            raise ValidationError("This reset link is invalid or has expired. Request a new one.")
+
+        user = await self.users.get(record.user_id)
+        if user is None or not user.is_active:
+            raise ValidationError("This reset link is invalid or has expired. Request a new one.")
+
+        min_length = (await SettingsService(self.session).ensure(user.org_id)).min_password_length
+        if len(new_password) < min_length:
+            raise ValidationError(f"Password must be at least {min_length} characters")
+
+        user.hashed_password = hash_password(new_password)
+        record.used_at = utcnow()
+        await self.tokens.revoke_all_for_user(user.id)  # invalidate every existing session
+        await self.audit.record(
+            org_id=user.org_id,
+            actor_id=user.id,
+            action="password.reset",
+            target_type="user",
+            target_id=str(user.id),
+        )
+        await self.session.commit()
+        try:
+            await self.email.send_password_changed(to=user.email, name=user.full_name)
+        except Exception:
+            pass
 
     async def _issue_refresh_token(self, user: User) -> str:
         settings = get_settings()

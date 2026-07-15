@@ -45,6 +45,15 @@ export async function registerVerify(admin_email: string, code: string) {
   return data;
 }
 
+// Always resolves (the server never reveals whether the email has an account).
+export async function requestPasswordReset(email: string) {
+  await apiClient.post("/auth/password-reset/request", { email });
+}
+
+export async function confirmPasswordReset(token: string, new_password: string) {
+  await apiClient.post("/auth/password-reset/confirm", { token, new_password });
+}
+
 export async function logout() {
   const refresh = localStorage.getItem("refresh_token");
   if (refresh) {
