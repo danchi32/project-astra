@@ -6,7 +6,8 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
+  // In "view as organization" mode the scoped view-as token wins over the normal one.
+  const token = localStorage.getItem("view_as_token") || localStorage.getItem("access_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -17,6 +18,13 @@ apiClient.interceptors.response.use(
     const original = err.config;
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true;
+      // A view-as token can't be refreshed — its expiry ends the read-only session.
+      if (localStorage.getItem("view_as_token")) {
+        localStorage.removeItem("view_as_token");
+        localStorage.removeItem("view_as_org");
+        window.location.href = "/platform";
+        return Promise.reject(err);
+      }
       const refresh = localStorage.getItem("refresh_token");
       if (refresh) {
         try {

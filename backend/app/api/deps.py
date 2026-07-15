@@ -34,6 +34,22 @@ async def get_current_user(
     user = await UserRepository(session).get(user_id)
     if user is None or not user.is_active:
         raise _credentials_error
+
+    # "View as organization": a platform admin's read-only token scoped to one org.
+    # We detach the user and override org_id so every existing (org-scoped) endpoint
+    # transparently returns that org's data. Writes are blocked by the middleware.
+    view_as = payload.get("view_as")
+    if view_as is not None:
+        if not user.is_platform_admin:
+            raise _credentials_error
+        try:
+            target = uuid.UUID(view_as)
+        except (ValueError, TypeError):
+            raise _credentials_error
+        session.expunge(user)          # detached: the org_id override can never persist
+        user.org_id = target
+        user.role = UserRole.ADMIN     # full read access within the viewed org
+        user._view_as = True           # marker for anything that wants to know
     return user
 
 

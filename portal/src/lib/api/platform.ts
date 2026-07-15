@@ -1,8 +1,17 @@
 import { apiClient } from "./client";
 import type {
-  Asset, Device, GlobalFix, KnowledgeArticle, OrganizationAdmin,
+  Asset, Device, GlobalFix, KnowledgeArticle, OrganizationAdmin, PlatformOverview,
   RemediationActionOption, RemediationTask, SubscriptionStatus, User,
 } from "./types";
+
+export const getPlatformOverview = () =>
+  apiClient.get<PlatformOverview>("/platform/overview").then((r) => r.data);
+
+// Mint a read-only token to browse an org's full portal, then enter view-as mode.
+export const createViewToken = (id: string) =>
+  apiClient
+    .post<{ access_token: string; org_id: string; org_name: string }>(`/platform/organizations/${id}/view-token`)
+    .then((r) => r.data);
 
 export const listOrganizations = () =>
   apiClient.get<OrganizationAdmin[]>("/platform/organizations").then((r) => r.data);

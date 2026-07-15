@@ -35,6 +35,24 @@ def create_access_token(*, user_id: uuid.UUID, org_id: uuid.UUID, role: str) -> 
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_view_as_token(*, admin_user_id: uuid.UUID, org_id: uuid.UUID, minutes: int = 60) -> str:
+    """A short-lived, read-only token for a platform admin to view ONE org's data.
+    Carries `view_as` = target org; `sub` stays the real admin (so actions audit to
+    them). Writes are blocked centrally while this claim is present."""
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": str(admin_user_id),
+        "org": str(org_id),
+        "role": "admin",
+        "view_as": str(org_id),
+        "type": "access",
+        "iat": now,
+        "exp": now + timedelta(minutes=minutes),
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
 def decode_access_token(token: str) -> dict[str, Any]:
     """Raises jwt.InvalidTokenError on any invalid/expired/non-access token."""
     settings = get_settings()

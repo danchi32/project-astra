@@ -49,6 +49,26 @@ class GlobalFixRead(BaseModel):
     created_at: datetime
 
 
+class PlatformOverview(BaseModel):
+    """Aggregate stats across ALL organizations — the operator's landing dashboard."""
+    total_organizations: int
+    orgs_by_status: dict[str, int]
+    trials_ending_7d: int
+    total_users: int
+    total_devices: int
+    online_devices: int
+    offline_devices: int
+    licenses_sold: int
+    remediation_pending: int
+
+
+class ViewAsToken(BaseModel):
+    """A short-lived read-only access token scoped to one organization."""
+    access_token: str
+    org_id: uuid.UUID
+    org_name: str
+
+
 class DiscountRequest(BaseModel):
     """Operator sets a percentage discount on an org (bulk-license pricing)."""
     percent: int = Field(ge=1, le=100)

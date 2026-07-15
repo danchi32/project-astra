@@ -9,10 +9,24 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Device, Organization, User
+from app.core.security import create_view_as_token
+from app.models import (
+    Device,
+    Organization,
+    RemediationTask,
+    RemediationStatus,
+    SubscriptionStatus,
+    User,
+)
 from app.models.base import as_utc, utcnow
 from app.repositories.organizations import OrganizationRepository
-from app.schemas.platform import OrganizationAdminRead, OrganizationUpdate
+from app.schemas.devices import ONLINE_THRESHOLD
+from app.schemas.platform import (
+    OrganizationAdminRead,
+    OrganizationUpdate,
+    PlatformOverview,
+    ViewAsToken,
+)
 from app.services.audit import AuditService
 from app.services.exceptions import NotFoundError
 
@@ -38,6 +52,68 @@ class PlatformService:
             read.device_count = device_counts.get(org.id, 0)
             result.append(read)
         return result
+
+    async def overview(self) -> PlatformOverview:
+        """Aggregate stats across ALL organizations for the operator's landing view."""
+        now = utcnow()
+        total_orgs = (await self.session.execute(select(func.count()).select_from(Organization))).scalar_one()
+
+        status_rows = (await self.session.execute(
+            select(Organization.subscription_status, func.count()).group_by(Organization.subscription_status)
+        )).all()
+        orgs_by_status = {getattr(s, "value", s): n for s, n in status_rows}
+
+        trials_ending = (await self.session.execute(
+            select(func.count()).select_from(Organization).where(
+                Organization.subscription_status == SubscriptionStatus.TRIALING,
+                Organization.trial_ends_at.is_not(None),
+                Organization.trial_ends_at >= now,
+                Organization.trial_ends_at <= now + timedelta(days=7),
+            )
+        )).scalar_one()
+
+        total_users = (await self.session.execute(select(func.count()).select_from(User))).scalar_one()
+        total_devices = (await self.session.execute(select(func.count()).select_from(Device))).scalar_one()
+        online = (await self.session.execute(
+            select(func.count()).select_from(Device).where(
+                Device.last_seen_at.is_not(None),
+                Device.last_seen_at >= now - ONLINE_THRESHOLD,
+            )
+        )).scalar_one()
+        licenses = (await self.session.execute(
+            select(func.coalesce(func.sum(Organization.license_count), 0))
+        )).scalar_one()
+        pending = (await self.session.execute(
+            select(func.count()).select_from(RemediationTask).where(
+                RemediationTask.status == RemediationStatus.PENDING_APPROVAL
+            )
+        )).scalar_one()
+
+        return PlatformOverview(
+            total_organizations=total_orgs,
+            orgs_by_status=orgs_by_status,
+            trials_ending_7d=trials_ending,
+            total_users=total_users,
+            total_devices=total_devices,
+            online_devices=online,
+            offline_devices=total_devices - online,
+            licenses_sold=int(licenses),
+            remediation_pending=pending,
+        )
+
+    async def create_view_as_token(self, *, actor: User, org_id: uuid.UUID) -> ViewAsToken:
+        """Mint a short-lived READ-ONLY token letting the operator view one org's
+        full portal. Audited under the target org."""
+        org = await self.orgs.get(org_id)
+        if org is None:
+            raise NotFoundError("Organization not found")
+        token = create_view_as_token(admin_user_id=actor.id, org_id=org.id)
+        await self.audit.record(
+            org_id=org.id, actor_id=actor.id, action="platform.view_as",
+            target_type="organization", target_id=str(org.id), detail={"org_name": org.name},
+        )
+        await self.session.commit()
+        return ViewAsToken(access_token=token, org_id=org.id, org_name=org.name)
 
     async def get_organization(self, org_id: uuid.UUID) -> OrganizationAdminRead:
         org = await self.orgs.get(org_id)

@@ -21,7 +21,9 @@ from app.schemas.platform import (
     GlobalFixRead,
     OrganizationAdminRead,
     OrganizationUpdate,
+    PlatformOverview,
     RemediationActionOption,
+    ViewAsToken,
 )
 from app.schemas.remediation import RemediationTaskRead
 from app.schemas.users import UserRead
@@ -50,6 +52,31 @@ def _enrich_task(task, hostname_by_id: dict) -> RemediationTaskRead:
     action = ACTIONS.get(task.action_id)
     read.action_label = action.label if action else task.action_id
     return read
+
+
+@router.get(
+    "/overview",
+    response_model=PlatformOverview,
+    summary="Aggregate stats across all organizations (platform admin)",
+)
+async def platform_overview(
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> PlatformOverview:
+    return await PlatformService(session).overview()
+
+
+@router.post(
+    "/organizations/{org_id}/view-token",
+    response_model=ViewAsToken,
+    summary="Mint a read-only token to view an org's full portal (platform admin)",
+)
+async def create_view_token(
+    org_id: uuid.UUID,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> ViewAsToken:
+    return await PlatformService(session).create_view_as_token(actor=actor, org_id=org_id)
 
 
 @router.get(

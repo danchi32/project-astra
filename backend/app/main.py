@@ -46,22 +46,32 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.middleware("http")
 async def enforce_org_writable(request: Request, call_next):
-    """Block mutating requests when the caller's organization is read-only
+    """Block mutating requests when (a) the caller is a platform admin in read-only
+    "view as organization" mode, or (b) the caller's organization is read-only
     (trial ended, past due, suspended, canceled). Reads always pass; the operator,
-    auth, and agent paths are exempt. The org id comes from the JWT's `org` claim."""
+    auth, and agent paths are exempt from (b). The org id comes from the JWT `org`."""
     if request.method not in _WRITE_METHODS or not request.url.path.startswith("/api/v1/"):
-        return await call_next(request)
-    if request.url.path.startswith(_UNGATED_PREFIXES):
         return await call_next(request)
 
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
         return await call_next(request)  # let the endpoint's own auth return 401
     try:
-        org_id = uuid.UUID(decode_access_token(auth[7:])["org"])
+        payload = decode_access_token(auth[7:])
+        org_id = uuid.UUID(payload["org"])
     except (jwt.InvalidTokenError, KeyError, ValueError):
         return await call_next(request)
 
+    # (a) "View as" tokens are strictly read-only, on every path.
+    if payload.get("view_as"):
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": "Read-only: you are viewing this organization as a platform admin."},
+        )
+
+    # (b) Subscription gate — exempt operator/auth/agent/billing paths.
+    if request.url.path.startswith(_UNGATED_PREFIXES):
+        return await call_next(request)
     async with database.SessionLocal() as session:
         org = await session.get(Organization, org_id)
     if org is not None and not org_is_writable(org):

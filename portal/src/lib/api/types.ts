@@ -44,6 +44,18 @@ export interface OrganizationAdmin {
   device_count: number;
 }
 
+export interface PlatformOverview {
+  total_organizations: number;
+  orgs_by_status: Record<string, number>;
+  trials_ending_7d: number;
+  total_users: number;
+  total_devices: number;
+  online_devices: number;
+  offline_devices: number;
+  licenses_sold: number;
+  remediation_pending: number;
+}
+
 export interface RemediationActionOption {
   id: string;
   label: string;

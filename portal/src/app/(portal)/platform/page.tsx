@@ -1,10 +1,24 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, BookOpen, Zap } from "lucide-react";
+import { ShieldCheck, BookOpen, Zap, Eye } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
-import { listOrganizations, updateOrganization, deleteOrganization, setOrgDiscount, clearOrgDiscount } from "@/lib/api/platform";
+import {
+  listOrganizations, updateOrganization, deleteOrganization,
+  setOrgDiscount, clearOrgDiscount, getPlatformOverview, createViewToken,
+} from "@/lib/api/platform";
+import { enterViewAs } from "@/lib/viewAs";
 import type { OrganizationAdmin, SubscriptionStatus } from "@/lib/api/types";
+
+const STAT_LABELS: { key: string; label: string }[] = [
+  { key: "total_organizations", label: "Organizations" },
+  { key: "total_devices", label: "Devices" },
+  { key: "online_devices", label: "Online now" },
+  { key: "total_users", label: "Users" },
+  { key: "licenses_sold", label: "Licenses sold" },
+  { key: "trials_ending_7d", label: "Trials ending ≤7d" },
+];
 
 const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
   trialing: { label: "Trial", color: "#3b82f6" },
@@ -22,12 +36,25 @@ function trialInfo(o: OrganizationAdmin): string {
 
 export default function PlatformPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: orgs, isLoading } = useQuery({
     queryKey: ["platform-orgs"],
     queryFn: listOrganizations,
     enabled: !!me?.is_platform_admin,
   });
+  const { data: overview } = useQuery({
+    queryKey: ["platform-overview"],
+    queryFn: getPlatformOverview,
+    enabled: !!me?.is_platform_admin,
+  });
+
+  async function viewAs(o: OrganizationAdmin) {
+    const { access_token } = await createViewToken(o.id);
+    queryClient.clear(); // drop this operator's own cached data before switching context
+    enterViewAs(access_token, { id: o.id, name: o.name });
+    router.push("/dashboard");
+  }
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
@@ -91,6 +118,19 @@ export default function PlatformPage() {
         </div>
       </div>
 
+      {overview && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {STAT_LABELS.map(({ key, label }) => (
+            <div key={key} className="rounded-xl p-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+              <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{label}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                {(overview as unknown as Record<string, number>)[key] ?? 0}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
         <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
           <table className="w-full text-sm whitespace-nowrap">
@@ -129,6 +169,10 @@ export default function PlatformPage() {
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{new Date(o.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
+                      <button onClick={() => viewAs(o)} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
+                        style={{ background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }}>
+                        <Eye size={12} /> View
+                      </button>
                       <button onClick={() => extendTrial(o.id, 14)} className="text-xs px-2 py-1 rounded-lg"
                         style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>+14d trial</button>
                       <button onClick={() => setStatus(o.id, "active")} className="text-xs px-2 py-1 rounded-lg"

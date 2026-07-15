@@ -1,12 +1,14 @@
 "use client";
 import { use } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets,
+  getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken,
 } from "@/lib/api/platform";
+import { enterViewAs } from "@/lib/viewAs";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import type { SubscriptionStatus } from "@/lib/api/types";
@@ -17,6 +19,8 @@ const STATUS_LABEL: Record<SubscriptionStatus, string> = {
 
 export default function OrgDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const enabled = !!me?.is_platform_admin;
   const { data: org } = useQuery({ queryKey: ["platform-org", id], queryFn: () => getOrganization(id), enabled });
@@ -24,6 +28,14 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   const { data: devices } = useQuery({ queryKey: ["platform-org-devices", id], queryFn: () => getOrgDevices(id), enabled });
   const { data: assets } = useQuery({ queryKey: ["platform-org-assets", id], queryFn: () => getOrgAssets(id), enabled });
   const { data: remediation } = useQuery({ queryKey: ["platform-org-remediation", id], queryFn: () => getOrgRemediation(id), enabled });
+
+  async function viewAs() {
+    if (!org) return;
+    const { access_token } = await createViewToken(id);
+    queryClient.clear();
+    enterViewAs(access_token, { id, name: org.name });
+    router.push("/dashboard");
+  }
 
   if (me && !me.is_platform_admin) {
     return <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Platform administrator access required.</p>;
@@ -37,7 +49,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
         <ArrowLeft size={15} /> All organizations
       </Link>
 
-      <div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
         <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{org?.name ?? "…"}</h1>
         {org && (
           <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
@@ -49,6 +62,12 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             {org.current_period_end && <> · Renews {new Date(org.current_period_end).toLocaleDateString()}</>}
           </p>
         )}
+        </div>
+        <button onClick={viewAs} disabled={!org}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-50"
+          style={{ background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }}>
+          <Eye size={15} /> View full portal
+        </button>
       </div>
 
       {/* Users */}
