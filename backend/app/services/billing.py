@@ -1,16 +1,18 @@
-"""Stripe billing — per-seat subscriptions.
+"""Stripe billing — licensed per-seat subscriptions.
+
+Model: an org buys a fixed number of **licenses**. Billing is on the purchased
+license count (predictable), and device enrollment is hard-capped at it (enforced
+in DeviceService, a pure DB check — no Stripe needed to block enrollment).
 
 Design:
 * Inert until configured. With no ``stripe_secret_key``/``stripe_price_id`` the
-  service reports ``enabled=False`` and every action is a safe no-op, so the
-  deployed app runs unchanged until the operator sets the keys.
-* Card data never touches this backend — the org admin is redirected to Stripe
-  Checkout (to subscribe) and the Stripe Billing Portal (to manage the card/plan).
-* Webhooks are the source of truth for subscription state: they flip the org's
-  ``subscription_status`` (which the read-only gate already enforces).
-* Per-seat: the Checkout line item quantity = the org's current seat count, and
-  we reconcile the quantity on the ``invoice.upcoming`` webhook (and on demand)
-  so each renewal bills the real number of seats.
+  service reports ``enabled=False`` and every action is a safe no-op.
+* Card data never touches this backend — the admin subscribes via Stripe Checkout
+  and manages the card/plan via the Stripe Billing Portal.
+* Webhooks are the source of truth for subscription state and the license count
+  (kept equal to the Stripe subscription quantity).
+* Discounts are operator-only: the super-admin sets a percent, realised as a Stripe
+  coupon attached to the subscription and applied to future checkouts.
 """
 from datetime import datetime, timezone
 
@@ -26,10 +28,9 @@ from app.services.subscription import org_is_writable, read_only_reason
 
 settings = get_settings()
 
-# Stripe subscription status -> our lifecycle status.
 _STATUS_MAP = {
     "active": SubscriptionStatus.ACTIVE,
-    "trialing": SubscriptionStatus.ACTIVE,      # a Stripe-side trial still counts as good standing
+    "trialing": SubscriptionStatus.ACTIVE,
     "past_due": SubscriptionStatus.PAST_DUE,
     "unpaid": SubscriptionStatus.PAST_DUE,
     "incomplete": SubscriptionStatus.PAST_DUE,
@@ -44,13 +45,20 @@ def _to_dt(ts: int | None) -> datetime | None:
 
 
 def _sub_period_end(sub: dict) -> int | None:
-    """`current_period_end` lives on the subscription in older API versions and on
-    the subscription item in newer ones (2025-03+). Check both."""
+    """`current_period_end` is on the subscription in older API versions and on the
+    subscription item in newer ones (2025-03+). Check both."""
     if sub.get("current_period_end"):
         return sub["current_period_end"]
     items = (sub.get("items") or {}).get("data") or []
     if items and items[0].get("current_period_end"):
         return items[0]["current_period_end"]
+    return None
+
+
+def _sub_quantity(sub: dict) -> int | None:
+    items = (sub.get("items") or {}).get("data") or []
+    if items and items[0].get("quantity") is not None:
+        return int(items[0]["quantity"])
     return None
 
 
@@ -64,12 +72,10 @@ class BillingService:
 
     @property
     def enabled(self) -> bool:
-        """Stripe is wired up (a secret key is present)."""
         return bool(settings.stripe_secret_key)
 
     @property
     def can_checkout(self) -> bool:
-        """Enough config to sell: a secret key AND a per-seat price."""
         return bool(settings.stripe_secret_key and settings.stripe_price_id)
 
     @property
@@ -78,8 +84,8 @@ class BillingService:
 
     # -- seats -----------------------------------------------------------------
 
-    async def seat_count(self, org_id) -> int:
-        """Billable seats = active devices (default) or active users for the org."""
+    async def used_seats(self, org_id) -> int:
+        """Seats in use = active devices (default) or active users for the org."""
         model = User if self.seat_type == "user" else Device
         n = (
             await self.session.execute(
@@ -90,7 +96,7 @@ class BillingService:
         ).scalar_one()
         return int(n)
 
-    # -- status (for the portal billing page) ----------------------------------
+    # -- status ----------------------------------------------------------------
 
     async def status(self, org: Organization) -> dict:
         writable = org_is_writable(org)
@@ -104,44 +110,65 @@ class BillingService:
             "current_period_end": org.current_period_end,
             "has_subscription": bool(org.stripe_subscription_id),
             "seat_type": self.seat_type,
-            "seat_count": await self.seat_count(org.id),
+            "licenses": org.license_count,
+            "seats_used": await self.used_seats(org.id),
+            "discount_percent": org.discount_percent,
             "unit_price_configured": bool(settings.stripe_price_id),
         }
 
-    # -- Stripe customer -------------------------------------------------------
+    # -- Stripe customer / coupon ----------------------------------------------
 
     async def _ensure_customer(self, org: Organization) -> str:
         if org.stripe_customer_id:
             return org.stripe_customer_id
         customer = await run_in_threadpool(
-            stripe.Customer.create,
-            name=org.name,
-            metadata={"org_id": str(org.id)},
+            stripe.Customer.create, name=org.name, metadata={"org_id": str(org.id)}
         )
         org.stripe_customer_id = customer["id"]
         await self.session.commit()
         return customer["id"]
 
-    # -- Checkout / Billing Portal ---------------------------------------------
-
-    async def create_checkout_url(self, org: Organization) -> str:
-        if not self.can_checkout:
-            raise ValidationError("Billing is not configured on the server.")
-        customer_id = await self._ensure_customer(org)
-        quantity = max(1, await self.seat_count(org.id))
-        base = settings.public_app_url.rstrip("/")
-        session = await run_in_threadpool(
-            lambda: stripe.checkout.Session.create(
-                mode="subscription",
-                customer=customer_id,
-                client_reference_id=str(org.id),
-                line_items=[{"price": settings.stripe_price_id, "quantity": quantity}],
-                subscription_data={"metadata": {"org_id": str(org.id)}},
-                allow_promotion_codes=True,
-                success_url=f"{base}/billing?checkout=success",
-                cancel_url=f"{base}/billing?checkout=cancelled",
+    async def _ensure_coupon(self, org: Organization) -> str | None:
+        """A reusable Stripe coupon reflecting the org's operator discount."""
+        if not org.discount_percent:
+            return None
+        if org.stripe_coupon_id:
+            return org.stripe_coupon_id
+        coupon = await run_in_threadpool(
+            lambda: stripe.Coupon.create(
+                percent_off=float(org.discount_percent),
+                duration="forever",
+                name=f"{org.discount_percent}% off",
             )
         )
+        org.stripe_coupon_id = coupon["id"]
+        await self.session.commit()
+        return coupon["id"]
+
+    # -- Checkout / Billing Portal ---------------------------------------------
+
+    async def create_checkout_url(self, org: Organization, quantity: int) -> str:
+        if not self.can_checkout:
+            raise ValidationError("Billing is not configured on the server.")
+        used = await self.used_seats(org.id)
+        quantity = max(1, quantity, used)  # can't buy fewer licenses than already in use
+        customer_id = await self._ensure_customer(org)
+        coupon_id = await self._ensure_coupon(org)
+        base = settings.public_app_url.rstrip("/")
+        params = dict(
+            mode="subscription",
+            customer=customer_id,
+            client_reference_id=str(org.id),
+            line_items=[{"price": settings.stripe_price_id, "quantity": quantity}],
+            subscription_data={"metadata": {"org_id": str(org.id)}},
+            allow_promotion_codes=True,
+            success_url=f"{base}/billing?checkout=success",
+            cancel_url=f"{base}/billing?checkout=cancelled",
+        )
+        if coupon_id:
+            params["discounts"] = [{"coupon": coupon_id}]
+            params.pop("allow_promotion_codes")  # Stripe forbids both together
+        session = await run_in_threadpool(lambda: stripe.checkout.Session.create(**params))
         return session["url"]
 
     async def create_portal_url(self, org: Organization) -> str:
@@ -152,30 +179,63 @@ class BillingService:
         base = settings.public_app_url.rstrip("/")
         session = await run_in_threadpool(
             lambda: stripe.billing_portal.Session.create(
-                customer=org.stripe_customer_id,
-                return_url=f"{base}/billing",
+                customer=org.stripe_customer_id, return_url=f"{base}/billing"
             )
         )
         return session["url"]
 
-    # -- Seat reconciliation ---------------------------------------------------
+    # -- License management (org admin) ----------------------------------------
 
-    async def sync_seats(self, org: Organization) -> tuple[bool, int, str]:
-        """Push the org's current seat count to Stripe as the subscription quantity.
-        Stripe prorates the change. No-op if the org has no live subscription."""
-        count = await self.seat_count(org.id)
+    async def set_licenses(self, org: Organization, count: int) -> tuple[int, int, str]:
+        """Change the number of purchased licenses on an existing subscription.
+        Stripe prorates. Cannot drop below the number of seats already in use."""
+        used = await self.used_seats(org.id)
+        if count < used:
+            raise ValidationError(
+                f"You have {used} active {self.seat_type}(s) in use — remove some before "
+                f"reducing to {count} licenses."
+            )
         if not self.enabled or not org.stripe_subscription_id:
-            return False, count, "No active subscription to sync."
+            raise ValidationError("No active subscription. Subscribe first to buy licenses.")
         sub = await run_in_threadpool(stripe.Subscription.retrieve, org.stripe_subscription_id)
         item = sub["items"]["data"][0]
-        if int(item.get("quantity", 0)) == count:
-            return True, count, "Seat count already up to date."
         await run_in_threadpool(
             lambda: stripe.SubscriptionItem.modify(
-                item["id"], quantity=max(1, count), proration_behavior="create_prorations"
+                item["id"], quantity=count, proration_behavior="create_prorations"
             )
         )
-        return True, count, f"Updated subscription to {max(1, count)} seat(s)."
+        org.license_count = count
+        await self.session.commit()
+        return count, used, f"Updated to {count} license(s)."
+
+    # -- Discounts (super-admin only) ------------------------------------------
+
+    async def apply_discount(self, org: Organization, percent: int) -> None:
+        if not (1 <= percent <= 100):
+            raise ValidationError("Discount must be between 1 and 100 percent.")
+        org.discount_percent = percent
+        org.stripe_coupon_id = None  # force a fresh coupon at the new rate
+        if self.enabled:
+            coupon_id = await self._ensure_coupon(org)
+            if org.stripe_subscription_id and coupon_id:
+                await run_in_threadpool(
+                    lambda: stripe.Subscription.modify(
+                        org.stripe_subscription_id, discounts=[{"coupon": coupon_id}]
+                    )
+                )
+        await self.session.commit()
+
+    async def remove_discount(self, org: Organization) -> None:
+        org.discount_percent = None
+        org.stripe_coupon_id = None
+        if self.enabled and org.stripe_subscription_id:
+            try:
+                await run_in_threadpool(
+                    lambda: stripe.Subscription.modify(org.stripe_subscription_id, discounts=[])
+                )
+            except Exception:
+                pass  # best-effort; the DB state is authoritative for the portal
+        await self.session.commit()
 
     # -- Webhooks (source of truth) --------------------------------------------
 
@@ -201,8 +261,6 @@ class BillingService:
             await self._on_invoice(obj, SubscriptionStatus.ACTIVE)
         elif etype == "invoice.payment_failed":
             await self._on_invoice(obj, SubscriptionStatus.PAST_DUE)
-        elif etype == "invoice.upcoming":
-            await self._on_invoice_upcoming(obj)
 
         return {"received": True, "type": etype}
 
@@ -217,10 +275,9 @@ class BillingService:
         return (await self.session.execute(stmt)).scalars().first()
 
     async def _on_checkout_completed(self, obj: dict) -> None:
-        org_id = obj.get("client_reference_id")
         org = None
-        if org_id:
-            org = await self.session.get(Organization, _as_uuid(org_id))
+        if obj.get("client_reference_id"):
+            org = await self.session.get(Organization, _as_uuid(obj["client_reference_id"]))
         if org is None:
             org = await self._org_by(customer_id=obj.get("customer"))
         if org is None:
@@ -232,22 +289,27 @@ class BillingService:
             sub = await run_in_threadpool(stripe.Subscription.retrieve, sub_id)
             org.subscription_status = _STATUS_MAP.get(sub["status"], SubscriptionStatus.ACTIVE)
             org.current_period_end = _to_dt(_sub_period_end(sub))
+            qty = _sub_quantity(sub)
+            if qty is not None:
+                org.license_count = qty
         else:
             org.subscription_status = SubscriptionStatus.ACTIVE
         org.plan = "per-seat"
         await self.session.commit()
 
     async def _on_subscription_event(self, sub: dict) -> None:
-        org = await self._org_by(
-            subscription_id=sub.get("id"), customer_id=sub.get("customer")
-        )
+        org = await self._org_by(subscription_id=sub.get("id"), customer_id=sub.get("customer"))
         if org is None:
             return
         org.stripe_subscription_id = sub.get("id") or org.stripe_subscription_id
         org.subscription_status = _STATUS_MAP.get(sub.get("status"), org.subscription_status)
         org.current_period_end = _to_dt(_sub_period_end(sub)) or org.current_period_end
+        qty = _sub_quantity(sub)
+        if qty is not None and sub.get("status") not in ("canceled", "incomplete_expired"):
+            org.license_count = qty
         if sub.get("status") in ("canceled", "incomplete_expired"):
             org.plan = "trial"
+            org.license_count = 0  # cancelled → uncapped again (back on trial rules)
         await self.session.commit()
 
     async def _on_invoice(self, invoice: dict, status: SubscriptionStatus) -> None:
@@ -261,16 +323,6 @@ class BillingService:
         if period_end:
             org.current_period_end = _to_dt(period_end)
         await self.session.commit()
-
-    async def _on_invoice_upcoming(self, invoice: dict) -> None:
-        org = await self._org_by(
-            subscription_id=invoice.get("subscription"), customer_id=invoice.get("customer")
-        )
-        if org is not None:
-            try:
-                await self.sync_seats(org)
-            except Exception:  # best-effort; never fail a webhook on reconcile
-                pass
 
 
 def _as_uuid(value):

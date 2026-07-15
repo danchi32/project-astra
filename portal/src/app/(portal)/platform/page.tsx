@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, BookOpen, Zap } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
-import { listOrganizations, updateOrganization, deleteOrganization } from "@/lib/api/platform";
+import { listOrganizations, updateOrganization, deleteOrganization, setOrgDiscount, clearOrgDiscount } from "@/lib/api/platform";
 import type { OrganizationAdmin, SubscriptionStatus } from "@/lib/api/types";
 
 const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
@@ -45,6 +45,19 @@ export default function PlatformPage() {
     await deleteOrganization(id);
     await refresh();
   }
+  async function editDiscount(o: OrganizationAdmin) {
+    const input = prompt(`Discount % for "${o.name}" (1–100). Leave blank to remove.`, o.discount_percent ? String(o.discount_percent) : "");
+    if (input === null) return;
+    const trimmed = input.trim();
+    if (trimmed === "") {
+      if (o.discount_percent) await clearOrgDiscount(o.id);
+    } else {
+      const pct = Number(trimmed);
+      if (!Number.isInteger(pct) || pct < 1 || pct > 100) { alert("Enter a whole number 1–100."); return; }
+      await setOrgDiscount(o.id, pct);
+    }
+    await refresh();
+  }
 
   if (me && !me.is_platform_admin) {
     return <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Platform administrator access required.</p>;
@@ -83,16 +96,16 @@ export default function PlatformPage() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Organization", "Plan", "Status", "Trial", "Users", "Devices", "Created", "Actions"].map((h) => (
+                {["Organization", "Plan", "Status", "Trial", "Licenses", "Discount", "Users", "Devices", "Created", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
                     style={{ color: "var(--text-secondary)" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={8} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>}
+              {isLoading && <tr><td colSpan={10} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>}
               {!isLoading && !orgs?.length && (
-                <tr><td colSpan={8} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>No organizations yet.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>No organizations yet.</td></tr>
               )}
               {orgs?.map((o) => (
                 <tr key={o.id} style={{ borderBottom: "1px solid var(--border)" }}>
@@ -107,6 +120,10 @@ export default function PlatformPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{trialInfo(o)}</td>
+                  <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.license_count || "—"}</td>
+                  <td className="px-4 py-3 tabular-nums" style={{ color: o.discount_percent ? "#10b981" : "var(--text-secondary)" }}>
+                    {o.discount_percent ? `${o.discount_percent}%` : "—"}
+                  </td>
                   <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.user_count}</td>
                   <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.device_count}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{new Date(o.created_at).toLocaleDateString()}</td>
@@ -116,6 +133,8 @@ export default function PlatformPage() {
                         style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>+14d trial</button>
                       <button onClick={() => setStatus(o.id, "active")} className="text-xs px-2 py-1 rounded-lg"
                         style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#10b981" }}>Activate</button>
+                      <button onClick={() => editDiscount(o)} className="text-xs px-2 py-1 rounded-lg"
+                        style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>Discount</button>
                       {o.subscription_status === "suspended" ? (
                         <button onClick={() => setStatus(o.id, "active")} className="text-xs px-2 py-1 rounded-lg"
                           style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Unsuspend</button>

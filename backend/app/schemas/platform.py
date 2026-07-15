@@ -17,6 +17,8 @@ class OrganizationAdminRead(BaseModel):
     trial_ends_at: datetime | None
     current_period_end: datetime | None
     created_at: datetime
+    license_count: int = 0
+    discount_percent: int | None = None
     user_count: int = 0
     device_count: int = 0
 
@@ -45,6 +47,11 @@ class GlobalFixRead(BaseModel):
     action_label: str
     params: dict | None
     created_at: datetime
+
+
+class DiscountRequest(BaseModel):
+    """Operator sets a percentage discount on an org (bulk-license pricing)."""
+    percent: int = Field(ge=1, le=100)
 
 
 class OrganizationUpdate(BaseModel):

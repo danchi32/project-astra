@@ -1,11 +1,12 @@
 import uuid
 from datetime import timedelta
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import generate_opaque_token, hash_opaque_token
-from app.models import Device, EnrollmentToken, User
+from app.models import Device, EnrollmentToken, Organization, User
 from app.models.base import as_utc, utcnow
 from app.repositories.devices import DeviceRepository
 from app.repositories.enrollment_tokens import EnrollmentTokenRepository
@@ -19,7 +20,7 @@ from app.schemas.devices import (
 )
 from app.services.agent_installer import build_install_script, build_offline_bundle_zip
 from app.services.audit import AuditService
-from app.services.exceptions import AuthenticationError, NotFoundError
+from app.services.exceptions import AuthenticationError, NotFoundError, ValidationError
 from app.services.settings import SettingsService
 
 
@@ -138,6 +139,8 @@ class DeviceService:
             raise AuthenticationError("Device is decommissioned")
 
         if device is None:
+            # A new device consumes a license — hard-capped when the org is licensed.
+            await self._enforce_license_capacity(record.org_id)
             device = await self.devices.add(
                 Device(
                     org_id=record.org_id,
@@ -192,6 +195,9 @@ class DeviceService:
     ) -> Device:
         device = await self.get_device(actor=actor, device_id=device_id)
         if data.is_active is not None and data.is_active != device.is_active:
+            if data.is_active:
+                # Reactivating a decommissioned device consumes a license too.
+                await self._enforce_license_capacity(actor.org_id)
             device.is_active = data.is_active
             await self.audit.record(
                 org_id=actor.org_id,
@@ -217,3 +223,22 @@ class DeviceService:
             detail={"hostname": hostname},
         )
         await self.session.commit()
+
+    async def _enforce_license_capacity(self, org_id: uuid.UUID) -> None:
+        """Block activating a device beyond the org's purchased licenses. Orgs with
+        no licenses (license_count == 0 — trials / not subscribed) are uncapped."""
+        org = await self.session.get(Organization, org_id)
+        if org is None or org.license_count <= 0:
+            return
+        active = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(Device)
+                .where(Device.org_id == org_id, Device.is_active.is_(True))
+            )
+        ).scalar_one()
+        if active >= org.license_count:
+            raise ValidationError(
+                f"No available licenses ({active} of {org.license_count} in use). "
+                "Ask your administrator to add licenses in ASTRA → Billing."
+            )

@@ -24,7 +24,9 @@ export interface BillingStatus {
   current_period_end: string | null;
   has_subscription: boolean;
   seat_type: "device" | "user";
-  seat_count: number;
+  licenses: number;
+  seats_used: number;
+  discount_percent: number | null;
   unit_price_configured: boolean;
 }
 
@@ -36,6 +38,8 @@ export interface OrganizationAdmin {
   trial_ends_at: string | null;
   current_period_end: string | null;
   created_at: string;
+  license_count: number;
+  discount_percent: number | null;
   user_count: number;
   device_count: number;
 }

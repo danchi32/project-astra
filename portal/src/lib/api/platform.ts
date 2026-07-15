@@ -62,3 +62,10 @@ export const updateOrganization = (
 
 export const deleteOrganization = (id: string) =>
   apiClient.delete(`/platform/organizations/${id}`).then((r) => r.data);
+
+// Operator-set bulk discount (percentage) applied to an org's subscription.
+export const setOrgDiscount = (id: string, percent: number) =>
+  apiClient.post<OrganizationAdmin>(`/platform/organizations/${id}/discount`, { percent }).then((r) => r.data);
+
+export const clearOrgDiscount = (id: string) =>
+  apiClient.delete<OrganizationAdmin>(`/platform/organizations/${id}/discount`).then((r) => r.data);

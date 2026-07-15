@@ -16,6 +16,7 @@ from app.schemas.asset import AssetRead
 from app.schemas.devices import DeviceRead
 from app.schemas.knowledge import KnowledgeArticleCreate, KnowledgeArticleRead
 from app.schemas.platform import (
+    DiscountRequest,
     GlobalFixCreate,
     GlobalFixRead,
     OrganizationAdminRead,
@@ -255,6 +256,33 @@ async def update_organization(
     session: AsyncSession = Depends(get_db),
 ) -> OrganizationAdminRead:
     return await PlatformService(session).update_organization(actor=actor, org_id=org_id, data=body)
+
+
+@router.post(
+    "/organizations/{org_id}/discount",
+    response_model=OrganizationAdminRead,
+    summary="Apply a percentage discount to an org (bulk pricing, platform admin)",
+)
+async def set_org_discount(
+    org_id: uuid.UUID,
+    body: DiscountRequest,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> OrganizationAdminRead:
+    return await PlatformService(session).set_discount(actor=actor, org_id=org_id, percent=body.percent)
+
+
+@router.delete(
+    "/organizations/{org_id}/discount",
+    response_model=OrganizationAdminRead,
+    summary="Remove an org's discount (platform admin)",
+)
+async def clear_org_discount(
+    org_id: uuid.UUID,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> OrganizationAdminRead:
+    return await PlatformService(session).clear_discount(actor=actor, org_id=org_id)
 
 
 @router.delete(

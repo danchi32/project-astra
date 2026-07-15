@@ -88,6 +88,40 @@ class PlatformService:
         read.device_count = await self._count(Device, org.id)
         return read
 
+    async def set_discount(
+        self, *, actor: User, org_id: uuid.UUID, percent: int
+    ) -> OrganizationAdminRead:
+        org = await self.orgs.get(org_id)
+        if org is None:
+            raise NotFoundError("Organization not found")
+        from app.services.billing import BillingService  # local import avoids a cycle
+        await BillingService(self.session).apply_discount(org, percent)
+        await self.audit.record(
+            org_id=org.id, actor_id=actor.id, action="platform.organization.discount",
+            target_type="organization", target_id=str(org.id), detail={"percent": percent},
+        )
+        await self.session.commit()
+        return await self._read(org)
+
+    async def clear_discount(self, *, actor: User, org_id: uuid.UUID) -> OrganizationAdminRead:
+        org = await self.orgs.get(org_id)
+        if org is None:
+            raise NotFoundError("Organization not found")
+        from app.services.billing import BillingService
+        await BillingService(self.session).remove_discount(org)
+        await self.audit.record(
+            org_id=org.id, actor_id=actor.id, action="platform.organization.discount_removed",
+            target_type="organization", target_id=str(org.id), detail={},
+        )
+        await self.session.commit()
+        return await self._read(org)
+
+    async def _read(self, org: Organization) -> OrganizationAdminRead:
+        read = OrganizationAdminRead.model_validate(org)
+        read.user_count = await self._count(User, org.id)
+        read.device_count = await self._count(Device, org.id)
+        return read
+
     async def delete_organization(self, *, actor: User, org_id: uuid.UUID) -> None:
         org = await self.orgs.get(org_id)
         if org is None:

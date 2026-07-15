@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, String
+from sqlalchemy import DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -36,3 +36,13 @@ class Organization(TimestampMixin, Base):
     # Stripe linkage (null until the org starts a paid subscription via Checkout).
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    # Licensed seats: how many the org has purchased. 0 = unlicensed (trial / not
+    # subscribed) and therefore uncapped. When > 0, device enrollment is hard-capped
+    # at this number. Kept in sync with the Stripe subscription quantity.
+    license_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    # Operator-applied discount (super-admin only). Percent off, realised as a Stripe
+    # coupon attached to the subscription + future checkouts.
+    discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stripe_coupon_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

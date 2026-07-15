@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CreditCard, Users, Monitor, RefreshCw, ExternalLink, AlertTriangle } from "lucide-react";
+import { CreditCard, Users, Monitor, ExternalLink, AlertTriangle, Tag } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
-import { getBillingStatus, startCheckout, openBillingPortal, syncSeats } from "@/lib/api/billing";
-import type { SubscriptionStatus } from "@/lib/api/types";
+import { getBillingStatus, startCheckout, openBillingPortal, setLicenses } from "@/lib/api/billing";
+import type { BillingStatus, SubscriptionStatus } from "@/lib/api/types";
 
 const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
   trialing: { label: "Trial", color: "#3b82f6" },
@@ -26,11 +26,15 @@ export default function BillingPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [qty, setQty] = useState<number>(1);
 
   const isAdmin = me?.role === "admin";
 
-  // Surface the Stripe Checkout return (?checkout=success|cancelled) and refresh,
-  // since the webhook that flips the subscription may land a moment later.
+  // Keep the license quantity input sensible: at least the seats already in use.
+  useEffect(() => {
+    if (status) setQty(Math.max(1, status.licenses || status.seats_used || 1));
+  }, [status]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("checkout");
@@ -57,19 +61,21 @@ export default function BillingPage() {
     }
   }
 
-  async function doSync() {
-    setBusy("sync"); setError("");
+  async function updateLicenses() {
+    setBusy("licenses"); setError("");
     try {
-      const r = await syncSeats();
+      const r = await setLicenses(qty);
       setNotice(r.detail);
       await queryClient.invalidateQueries({ queryKey: ["billing-status"] });
-    } catch {
-      setError("Couldn't sync seats.");
+    } catch (e) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(msg || "Couldn't update licenses.");
     } finally { setBusy(null); }
   }
 
   const SeatIcon = status?.seat_type === "user" ? Users : Monitor;
   const card = { background: "var(--surface)", border: "1px solid var(--border)" } as const;
+  const minQty = Math.max(1, status?.seats_used ?? 1);
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -80,7 +86,7 @@ export default function BillingPage() {
         <div>
           <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Billing</h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            Your subscription, seats and payment method
+            Licenses, subscription and payment method
           </p>
         </div>
       </div>
@@ -91,7 +97,6 @@ export default function BillingPage() {
         </div>
       )}
       {error && <p className="text-sm text-red-500">{error}</p>}
-
       {isLoading && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading…</p>}
 
       {status && !status.writable && (
@@ -108,23 +113,35 @@ export default function BillingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="rounded-xl p-4" style={card}>
             <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Status</p>
-            <div className="mt-2">
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium px-2 py-0.5 rounded-full"
                 style={{ color: STATUS_STYLE[status.subscription_status].color, background: `${STATUS_STYLE[status.subscription_status].color}1a` }}>
                 {STATUS_STYLE[status.subscription_status].label}
               </span>
+              {status.discount_percent ? (
+                <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full"
+                  style={{ color: "#10b981", background: "rgba(16,185,129,0.1)" }}>
+                  <Tag size={11} /> {status.discount_percent}% off
+                </span>
+              ) : null}
             </div>
             <p className="text-xs mt-2 capitalize" style={{ color: "var(--text-secondary)" }}>Plan: {status.plan}</p>
           </div>
 
           <div className="rounded-xl p-4" style={card}>
-            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Billable seats</p>
+            <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Licenses used</p>
             <div className="mt-2 flex items-center gap-2">
               <SeatIcon size={18} style={{ color: "var(--accent)" }} />
-              <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{status.seat_count}</span>
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>{status.seat_type}s</span>
+              <span className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+                {status.seats_used}
+              </span>
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                / {status.licenses || "∞"} {status.seat_type}s
+              </span>
             </div>
-            <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>Charged per {status.seat_type}, updated at renewal</p>
+            <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
+              {status.licenses > 0 ? "Enrollment is capped at your license count" : "No cap while on trial"}
+            </p>
           </div>
 
           <div className="rounded-xl p-4" style={card}>
@@ -146,25 +163,47 @@ export default function BillingPage() {
       )}
 
       {status && status.billing_enabled && isAdmin && (
-        <div className="flex flex-wrap gap-2">
+        <div className="rounded-xl p-4 space-y-3" style={card}>
           {!status.has_subscription ? (
-            <button onClick={() => redirect(startCheckout, "checkout")} disabled={busy !== null || !status.unit_price_configured}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-              style={{ background: "var(--accent)" }}>
-              <CreditCard size={15} /> {busy === "checkout" ? "Redirecting…" : "Subscribe"}
-            </button>
+            <>
+              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Subscribe</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-sm" style={{ color: "var(--text-secondary)" }}>Licenses</label>
+                <input type="number" min={minQty} value={qty}
+                  onChange={(e) => setQty(Math.max(minQty, Number(e.target.value) || minQty))}
+                  className="w-24 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                <button onClick={() => redirect(() => startCheckout(qty), "checkout")}
+                  disabled={busy !== null || !status.unit_price_configured}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                  style={{ background: "var(--accent)" }}>
+                  <CreditCard size={15} /> {busy === "checkout" ? "Redirecting…" : `Subscribe for ${qty} ${status.seat_type}${qty === 1 ? "" : "s"}`}
+                </button>
+              </div>
+            </>
           ) : (
             <>
-              <button onClick={() => redirect(openBillingPortal, "portal")} disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-                <ExternalLink size={15} /> {busy === "portal" ? "Opening…" : "Manage billing"}
-              </button>
-              <button onClick={doSync} disabled={busy !== null}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-                <RefreshCw size={15} /> {busy === "sync" ? "Syncing…" : "Sync seats"}
-              </button>
+              <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Manage subscription</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <label className="text-sm" style={{ color: "var(--text-secondary)" }}>Licenses</label>
+                <input type="number" min={minQty} value={qty}
+                  onChange={(e) => setQty(Math.max(minQty, Number(e.target.value) || minQty))}
+                  className="w-24 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                <button onClick={updateLicenses} disabled={busy !== null || qty === status.licenses}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                  style={{ background: "var(--accent)" }}>
+                  {busy === "licenses" ? "Updating…" : "Update licenses"}
+                </button>
+                <button onClick={() => redirect(openBillingPortal, "portal")} disabled={busy !== null}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                  <ExternalLink size={15} /> {busy === "portal" ? "Opening…" : "Manage billing"}
+                </button>
+              </div>
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                Minimum {minQty} (seats currently in use). Changes are prorated by Stripe.
+              </p>
             </>
           )}
         </div>
