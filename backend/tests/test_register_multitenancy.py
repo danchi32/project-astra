@@ -39,8 +39,23 @@ async def test_register_creates_org_and_admin(client, session_factory):
     assert me.json()["email"] == "admin@orga.com"
 
 
+async def test_open_registration_without_invite(client):
+    """New customers can self-serve sign up with no invite code."""
+    resp = await client.post("/api/v1/auth/register", json={
+        "organization_name": "Walk-in Co",
+        "admin_name": "Walk In",
+        "admin_email": "founder@walkin.com",
+        "admin_password": _PW,
+    })
+    assert resp.status_code == 201, resp.text
+    token = resp.json()["access_token"]
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["role"] == "admin"
+
+
 async def test_bad_and_used_codes_are_rejected(client, session_factory):
-    # Unknown code.
+    # A supplied invite code, if present, must still be valid — an unknown one fails.
     r = await _register(client, "not-a-real-code", "Nope", "x@nope.com")
     assert r.status_code == 401
 

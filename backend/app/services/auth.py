@@ -35,11 +35,15 @@ class AuthService:
         self.invites = InviteCodeRepository(session)
 
     async def register(self, data: RegisterRequest) -> tuple[str, str]:
-        """Create a NEW organization and its first admin from a valid invite code.
-        The whole thing is one transaction: a partial org (no admin) can never exist."""
-        invite = await self.invites.get_by_hash(hash_opaque_token(data.invite_code))
-        if invite is None or invite.used_at is not None or as_utc(invite.expires_at) <= utcnow():
-            raise AuthenticationError("Invalid or expired invite code")
+        """Create a NEW organization and its first admin (open self-service signup).
+        The whole thing is one transaction: a partial org (no admin) can never exist.
+        An invite code is optional — if one is supplied it must be valid, and it is
+        consumed; without one, registration proceeds openly."""
+        invite = None
+        if data.invite_code:
+            invite = await self.invites.get_by_hash(hash_opaque_token(data.invite_code))
+            if invite is None or invite.used_at is not None or as_utc(invite.expires_at) <= utcnow():
+                raise AuthenticationError("Invalid or expired invite code")
 
         email = data.admin_email.lower()
         if await self.users.get_by_email(email) is not None:
@@ -62,8 +66,9 @@ class AuthService:
                 is_active=True,
             )
         )
-        invite.used_at = utcnow()
-        invite.used_by_org_id = org.id
+        if invite is not None:
+            invite.used_at = utcnow()
+            invite.used_by_org_id = org.id
 
         await self.audit.record(
             org_id=org.id,

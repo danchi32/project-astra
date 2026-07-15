@@ -7,7 +7,6 @@ import { register } from "@/lib/api/auth";
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({
-    invite_code: "",
     organization_name: "",
     admin_name: "",
     admin_email: "",
@@ -32,7 +31,7 @@ export default function RegisterPage() {
       await register(form);
       router.push("/dashboard");
     } catch {
-      setError("Couldn't create the organization. Check your invite code (it may be invalid, expired, or used) and that the email isn't already registered.");
+      setError("Couldn't create the organization. That email may already be registered — try signing in instead.");
     } finally {
       setLoading(false);
     }
@@ -57,11 +56,6 @@ export default function RegisterPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Invite code</label>
-            <input required value={form.invite_code} onChange={set("invite_code")}
-              className={inputCls} style={inputStyle} placeholder="Provided by ASTRA" />
-          </div>
           <div>
             <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Organization name</label>
             <input required value={form.organization_name} onChange={set("organization_name")}

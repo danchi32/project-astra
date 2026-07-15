@@ -12,7 +12,6 @@ export async function login(email: string, password: string) {
 }
 
 export async function register(input: {
-  invite_code: string;
   organization_name: string;
   admin_name: string;
   admin_email: string;
