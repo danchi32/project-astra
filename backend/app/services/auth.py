@@ -141,8 +141,17 @@ class AuthService:
             )
         )
         await self.session.commit()
-        if not await self.email.send_otp(to=email, code=code):
-            raise ValidationError("Couldn't send the verification email. Please try again.")
+        try:
+            sent = await self.email.send_otp(to=email, code=code)
+        except Exception:
+            sent = False
+        if not sent:
+            # Don't leave a dangling pending signup the user can't complete.
+            await self.pending.delete_by_email(email)
+            await self.session.commit()
+            raise ValidationError(
+                "We couldn't send the verification email right now. Please try again shortly."
+            )
         return True, None, None
 
     async def register_verify(self, data: RegisterVerifyRequest) -> tuple[str, str]:

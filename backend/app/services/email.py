@@ -46,17 +46,32 @@ class EmailService:
         return True
 
     def _deliver(self, msg: EmailMessage) -> None:  # blocking; runs in a threadpool
+        with self._smtp() as server:
+            server.send_message(msg)
+
+    def _smtp(self):
+        """Open an authenticated SMTP session (implicit SSL on 465, else STARTTLS)."""
         host, port = settings.smtp_host, settings.smtp_port
         context = ssl.create_default_context()
         if port == 465:
-            with smtplib.SMTP_SSL(host, port, context=context, timeout=20) as server:
-                server.login(settings.smtp_user, settings.smtp_password)
-                server.send_message(msg)
+            server = smtplib.SMTP_SSL(host, port, context=context, timeout=20)
         else:
-            with smtplib.SMTP(host, port, timeout=20) as server:
-                server.starttls(context=context)
-                server.login(settings.smtp_user, settings.smtp_password)
-                server.send_message(msg)
+            server = smtplib.SMTP(host, port, timeout=20)
+            server.starttls(context=context)
+        server.login(settings.smtp_user, settings.smtp_password)
+        return server
+
+    def verify_connection(self) -> tuple[bool, str]:
+        """Connect + authenticate (no send) and report the real error if it fails.
+        Used by the /health/email-check diagnostic. Never raises."""
+        if not self.enabled:
+            return False, "email not configured"
+        try:
+            with self._smtp() as server:
+                server.noop()
+            return True, "connected and authenticated OK"
+        except Exception as exc:  # surface the real SMTP error (not secret)
+            return False, f"{type(exc).__name__}: {exc}"
 
     # -- templated messages ----------------------------------------------------
 

@@ -160,3 +160,15 @@ async def health() -> dict[str, object]:
         # Is the raw variable present in THIS process's environment at all?
         "in_os_environ": {k: (k in os.environ) for k in keys},
     }
+
+
+@app.get("/health/email-check", include_in_schema=False)
+async def email_check() -> dict[str, object]:
+    """Diagnostic: connect + authenticate to SMTP (no email sent) and report the
+    real error. Reveals host/port/auth problems without leaking the password."""
+    from fastapi.concurrency import run_in_threadpool
+
+    from app.services.email import EmailService
+
+    ok, detail = await run_in_threadpool(EmailService().verify_connection)
+    return {"smtp_ok": ok, "detail": detail, "host": settings.smtp_host, "port": settings.smtp_port}
