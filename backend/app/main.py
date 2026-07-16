@@ -137,86 +137,11 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
 
 @app.get("/health", tags=["system"], summary="Liveness probe")
 async def health() -> dict[str, object]:
-    # Secret-free diagnostics (booleans / presence only — never any values).
-    import os
-
     from app.services.email import EmailService
 
-    keys = [
-        "ASTRA_RESEND_API_KEY",
-        "ASTRA_SMTP_HOST", "ASTRA_SMTP_USER", "ASTRA_SMTP_PASSWORD",
-        "ASTRA_EMAIL_FROM", "ASTRA_PUBLIC_APP_URL",
-        "ASTRA_JWT_SECRET_KEY",  # control: known-working user-set var
-    ]
-    transport = "resend" if settings.resend_api_key else ("smtp" if (settings.smtp_host and settings.smtp_user and settings.smtp_password) else "none")
+    # Minimal, non-sensitive liveness signal.
     return {
         "status": "ok",
         "service": settings.app_name,
         "email_enabled": EmailService().enabled,
-        "active_transport": transport,
-        "settings_read": {
-            "resend_api_key": bool(settings.resend_api_key),
-            "smtp_host": bool(settings.smtp_host),
-            "public_app_url": settings.public_app_url,
-            "email_from_configured": settings.email_from,          # raw ASTRA_EMAIL_FROM
-            "effective_from": EmailService().from_addr,            # what actually sends
-        },
-        # Is the raw variable present in THIS process's environment at all?
-        "in_os_environ": {k: (k in os.environ) for k in keys},
     }
-
-
-@app.get("/health/email-check", include_in_schema=False)
-async def email_check() -> dict[str, object]:
-    """Diagnostic: raw TCP reachability (IPv4 vs IPv6) + SMTP auth. No email sent,
-    no secrets. Distinguishes an IPv6-route problem from a blocked-SMTP problem."""
-    import socket
-
-    from fastapi.concurrency import run_in_threadpool
-
-    from app.services.email import EmailService
-
-    host, port = settings.smtp_host, settings.smtp_port
-
-    def tcp(family: int) -> str:
-        try:
-            infos = socket.getaddrinfo(host, port, family, socket.SOCK_STREAM)
-            if not infos:
-                return "no address"
-            af, st, proto, _c, sa = infos[0]
-            s = socket.socket(af, st, proto)
-            s.settimeout(10)
-            s.connect(sa)
-            s.close()
-            return "ok"
-        except Exception as exc:
-            return f"{type(exc).__name__}: {exc}"
-
-    def tcp_to(h: str, p: int) -> str:
-        try:
-            infos = socket.getaddrinfo(h, p, socket.AF_INET, socket.SOCK_STREAM)
-            af, st, proto, _c, sa = infos[0]
-            s = socket.socket(af, st, proto)
-            s.settimeout(8)
-            s.connect(sa)
-            s.close()
-            return "ok"
-        except Exception as exc:
-            return f"{type(exc).__name__}"
-
-    def probe() -> dict:
-        ok, detail = EmailService().verify_connection()
-        return {
-            "configured_host": host,
-            "configured_port": port,
-            "smtp_auth_ok": ok,
-            "smtp_detail": detail,
-            "reachability_ipv4": {
-                f"{host}:465": tcp_to(host, 465),
-                f"{host}:587": tcp_to(host, 587),
-                f"{host}:25": tcp_to(host, 25),
-                "api.resend.com:443 (egress control)": tcp_to("api.resend.com", 443),
-            },
-        }
-
-    return await run_in_threadpool(probe)
