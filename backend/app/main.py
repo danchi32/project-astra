@@ -188,15 +188,31 @@ async def email_check() -> dict[str, object]:
         except Exception as exc:
             return f"{type(exc).__name__}: {exc}"
 
+    def tcp_to(h: str, p: int) -> str:
+        try:
+            infos = socket.getaddrinfo(h, p, socket.AF_INET, socket.SOCK_STREAM)
+            af, st, proto, _c, sa = infos[0]
+            s = socket.socket(af, st, proto)
+            s.settimeout(8)
+            s.connect(sa)
+            s.close()
+            return "ok"
+        except Exception as exc:
+            return f"{type(exc).__name__}"
+
     def probe() -> dict:
         ok, detail = EmailService().verify_connection()
         return {
-            "tcp_ipv4": tcp(socket.AF_INET),
-            "tcp_ipv6": tcp(socket.AF_INET6),
+            "configured_host": host,
+            "configured_port": port,
             "smtp_auth_ok": ok,
             "smtp_detail": detail,
+            "reachability_ipv4": {
+                f"{host}:465": tcp_to(host, 465),
+                f"{host}:587": tcp_to(host, 587),
+                f"{host}:25": tcp_to(host, 25),
+                "api.resend.com:443 (egress control)": tcp_to("api.resend.com", 443),
+            },
         }
 
-    result = await run_in_threadpool(probe)
-    result.update({"host": host, "port": port})
-    return result
+    return await run_in_threadpool(probe)
