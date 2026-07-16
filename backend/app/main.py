@@ -143,18 +143,20 @@ async def health() -> dict[str, object]:
     from app.services.email import EmailService
 
     keys = [
+        "ASTRA_RESEND_API_KEY",
         "ASTRA_SMTP_HOST", "ASTRA_SMTP_USER", "ASTRA_SMTP_PASSWORD",
-        "ASTRA_SMTP_PORT", "ASTRA_EMAIL_FROM", "ASTRA_PUBLIC_APP_URL",
+        "ASTRA_EMAIL_FROM", "ASTRA_PUBLIC_APP_URL",
         "ASTRA_JWT_SECRET_KEY",  # control: known-working user-set var
     ]
+    transport = "resend" if settings.resend_api_key else ("smtp" if (settings.smtp_host and settings.smtp_user and settings.smtp_password) else "none")
     return {
         "status": "ok",
         "service": settings.app_name,
         "email_enabled": EmailService().enabled,
+        "active_transport": transport,
         "settings_read": {
+            "resend_api_key": bool(settings.resend_api_key),
             "smtp_host": bool(settings.smtp_host),
-            "smtp_user": bool(settings.smtp_user),
-            "smtp_password": bool(settings.smtp_password),
             "public_app_url": settings.public_app_url,
         },
         # Is the raw variable present in THIS process's environment at all?
