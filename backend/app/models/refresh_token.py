@@ -17,3 +17,6 @@ class RefreshToken(TimestampMixin, Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A login starts a token "family"; each rotation inherits it. Replaying a
+    # already-rotated (revoked) token revokes the whole family — reuse detection.
+    family_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)

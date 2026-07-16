@@ -28,3 +28,10 @@ class RefreshTokenRepository:
             .where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
             .values(revoked_at=utcnow())
         )
+
+    async def revoke_family(self, family_id: uuid.UUID) -> None:
+        await self.session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.family_id == family_id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=utcnow())
+        )

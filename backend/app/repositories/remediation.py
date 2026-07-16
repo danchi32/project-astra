@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RemediationStatus, RemediationTask
@@ -26,6 +27,14 @@ class RemediationRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def count_recent_for_org(self, org_id: uuid.UUID, since: datetime) -> int:
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(RemediationTask)
+            .where(RemediationTask.org_id == org_id, RemediationTask.created_at >= since)
+        )
+        return int(result.scalar_one())
 
     async def list_approved_for_device(self, device_id: uuid.UUID) -> list[RemediationTask]:
         result = await self.session.execute(

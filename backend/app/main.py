@@ -1,9 +1,10 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.api.v1.router import api_router
 from app.core import database
@@ -44,6 +45,18 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 
+@app.get("/.well-known/security.txt", include_in_schema=False)
+async def security_txt() -> PlainTextResponse:
+    expires = (datetime.now(timezone.utc) + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    body = (
+        f"Contact: {settings.security_contact}\n"
+        f"Expires: {expires}\n"
+        "Preferred-Languages: en\n"
+        f"Canonical: {settings.public_api_url}/.well-known/security.txt\n"
+    )
+    return PlainTextResponse(body, media_type="text/plain")
+
+
 @app.middleware("http")
 async def enforce_org_writable(request: Request, call_next):
     """Block mutating requests when (a) the caller is a platform admin in read-only
@@ -80,6 +93,22 @@ async def enforce_org_writable(request: Request, call_next):
             content={"detail": read_only_reason(org)},
         )
     return await call_next(request)
+
+
+# Defined last so it is the OUTERMOST middleware — every response (including the
+# gate's own 402/403 short-circuits) gets the hardening headers.
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Baseline hardening headers. HSTS is meaningful over HTTPS (Railway/Vercel
+    terminate TLS); the rest are safe defaults for an API + its browser clients."""
+    response = await call_next(request)
+    response.headers.setdefault(
+        "Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload"
+    )
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
 
 
 @app.exception_handler(AuthenticationError)

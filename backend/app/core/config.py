@@ -72,6 +72,16 @@ class Settings(BaseSettings):
     email_from: str | None = None       # defaults to smtp_user when unset
     otp_ttl_minutes: int = 10
     password_reset_ttl_minutes: int = 60
+
+    # Remediation blast-radius controls (per organization, rolling window). Above the
+    # auto-approve burst, even 'automatic' actions require a human approval; above the
+    # hard burst, new remediations are refused outright (fleet circuit breaker).
+    remediation_burst_window_seconds: int = 300
+    remediation_auto_approve_burst: int = 25
+    remediation_hard_burst: int = 200
+
+    # Security contact published at /.well-known/security.txt (RFC 9116).
+    security_contact: str = "mailto:security@example.com"
     # Portal base URL Stripe Checkout/Portal redirect back to after payment.
     public_app_url: str = "http://localhost:3000"
 

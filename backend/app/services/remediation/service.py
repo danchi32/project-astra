@@ -1,8 +1,10 @@
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import (
     Device,
     NotificationCategory,
@@ -15,6 +17,8 @@ from app.models import (
 )
 from app.models.base import utcnow
 from app.repositories.devices import DeviceRepository
+
+settings = get_settings()
 from app.repositories.remediation import RemediationRepository
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ServiceError
@@ -67,14 +71,27 @@ class RemediationService:
             raise RemediationError(f"Unknown remediation action '{action_id}'.")
         params = self._validate_params(action_id, params)
 
+        # Blast-radius / fleet circuit breaker: count recent remediations for the org.
+        window_start = utcnow() - timedelta(seconds=settings.remediation_burst_window_seconds)
+        recent = await self.repo.count_recent_for_org(org_id, window_start)
+        if recent >= settings.remediation_hard_burst:
+            raise RemediationError(
+                "Fleet safety limit reached: too many remediations were requested in a short "
+                "window. New actions are paused — please review activity and try again shortly."
+            )
+        breaker_tripped = recent >= settings.remediation_auto_approve_burst
+
         # Tier drives the initial status: automatic is pre-approved; everything else
         # waits for a human. This is enforced here in the service, never by the client.
-        # The org-level automation kill-switch can force even automatic actions to wait.
+        # The org-level automation kill-switch — and the circuit breaker above — can
+        # force even automatic actions to wait for a human.
         org_settings = await self.settings.ensure(org_id)
-        if action.tier is RemediationTier.AUTOMATIC and org_settings.auto_approve_automatic:
-            status = RemediationStatus.APPROVED
-        else:
-            status = RemediationStatus.PENDING_APPROVAL
+        auto_ok = (
+            action.tier is RemediationTier.AUTOMATIC
+            and org_settings.auto_approve_automatic
+            and not breaker_tripped
+        )
+        status = RemediationStatus.APPROVED if auto_ok else RemediationStatus.PENDING_APPROVAL
 
         task = await self.repo.add(
             RemediationTask(

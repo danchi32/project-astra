@@ -60,6 +60,60 @@ async def test_approval_required_action_starts_pending(client, admin_headers):
     assert resp.json()["tier"] == "approval_required"
 
 
+async def test_admin_only_action_cannot_run_via_automatic_path(client, admin_headers):
+    """SECURITY INVARIANT — must fail loudly if ever broken: an admin_only action can
+    NEVER dispatch to an agent without explicit admin approval, even though the org's
+    automatic-approval switch is ON (it's on by default — see the automatic test)."""
+    enroll = await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+    device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
+
+    resp = await client.post(
+        "/api/v1/remediations", headers=admin_headers,
+        json={"device_id": device_id, "action_id": "reset_windows_update_components", "reason": "x"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["tier"] == "admin_only"
+    assert resp.json()["status"] == "pending_approval", \
+        "CRITICAL: an admin_only action was auto-approved through the automatic path"
+
+    # The agent must not be able to claim it — only APPROVED tasks ever dispatch.
+    claim = await client.get("/api/v1/agent/tasks", headers=device_headers)
+    dispatched = [t["action_id"] for t in claim.json()]
+    assert "reset_windows_update_components" not in dispatched, \
+        "CRITICAL: an admin_only action reached an agent without approval"
+
+
+async def test_fleet_circuit_breaker_and_hard_cap(client, admin_headers, monkeypatch):
+    """Blast-radius limit: past a burst threshold, even automatic actions require a
+    human; past the hard threshold, new remediations are refused outright."""
+    import app.services.remediation.service as rem
+    monkeypatch.setattr(rem.settings, "remediation_auto_approve_burst", 2)
+    monkeypatch.setattr(rem.settings, "remediation_hard_burst", 4)
+
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+
+    async def make():
+        return await client.post(
+            "/api/v1/remediations", headers=admin_headers,
+            json={"device_id": device_id, "action_id": "flush_dns", "reason": "x"},
+        )
+
+    statuses = []
+    for _ in range(4):
+        r = await make()
+        assert r.status_code == 201, r.text
+        statuses.append(r.json()["status"])
+    # First two auto-approve; the breaker then forces human approval.
+    assert statuses == ["approved", "approved", "pending_approval", "pending_approval"]
+
+    # Beyond the hard burst, new remediations are refused.
+    blocked = await make()
+    assert blocked.status_code == 400
+    assert "safety limit" in blocked.text.lower()
+
+
 async def test_technician_can_approve_approval_required_but_not_admin_only(
     client, admin_headers, session_factory, org
 ):

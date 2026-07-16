@@ -1,4 +1,5 @@
 import secrets
+import uuid
 from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -194,17 +195,35 @@ class AuthService:
 
     async def refresh(self, refresh_token: str) -> tuple[str, str]:
         record = await self.tokens.get_by_hash(hash_refresh_token(refresh_token))
-        if record is None or record.revoked_at is not None or as_utc(record.expires_at) <= utcnow():
+        if record is None or as_utc(record.expires_at) <= utcnow():
             raise AuthenticationError("Invalid or expired refresh token")
 
         user = await self.users.get(record.user_id)
+
+        # Reuse detection: a token already rotated/revoked but presented again is a
+        # replay (the token was stolen). Revoke the ENTIRE family so neither the
+        # attacker's nor the victim's chain survives — both must log in again.
+        if record.revoked_at is not None:
+            if record.family_id is not None:
+                await self.tokens.revoke_family(record.family_id)
+            if user is not None:
+                await self.audit.record(
+                    org_id=user.org_id,
+                    actor_id=user.id,
+                    action="auth.refresh_reuse_detected",
+                    target_type="user",
+                    target_id=str(user.id),
+                )
+            await self.session.commit()
+            raise AuthenticationError("Invalid or expired refresh token")
+
         if user is None or not user.is_active:
             raise AuthenticationError("Invalid or expired refresh token")
 
-        # Rotation: a refresh token is single-use.
+        # Rotation: a refresh token is single-use; the new one stays in the same family.
         record.revoked_at = utcnow()
         access = create_access_token(user_id=user.id, org_id=user.org_id, role=user.role.value)
-        new_refresh = await self._issue_refresh_token(user)
+        new_refresh = await self._issue_refresh_token(user, family_id=record.family_id)
         await self.session.commit()
         return access, new_refresh
 
@@ -312,14 +331,14 @@ class AuthService:
         except Exception:
             pass
 
-    async def _issue_refresh_token(self, user: User) -> str:
-        settings = get_settings()
+    async def _issue_refresh_token(self, user: User, family_id: uuid.UUID | None = None) -> str:
         raw = generate_refresh_token()
         await self.tokens.add(
             RefreshToken(
                 user_id=user.id,
                 token_hash=hash_refresh_token(raw),
                 expires_at=utcnow() + timedelta(days=settings.refresh_token_expire_days),
+                family_id=family_id or uuid.uuid4(),
             )
         )
         return raw
