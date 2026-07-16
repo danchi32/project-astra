@@ -136,5 +136,16 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
 
 
 @app.get("/health", tags=["system"], summary="Liveness probe")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "service": settings.app_name}
+async def health() -> dict[str, object]:
+    # Secret-free integration flags for ops diagnostics (no values, just booleans).
+    from app.services.email import EmailService
+
+    return {
+        "status": "ok",
+        "service": settings.app_name,
+        "email_enabled": EmailService().enabled,
+        "smtp_host_set": bool(settings.smtp_host),
+        "smtp_user_set": bool(settings.smtp_user),
+        "smtp_password_set": bool(settings.smtp_password),
+        "public_app_url": settings.public_app_url,
+    }
