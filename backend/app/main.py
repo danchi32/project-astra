@@ -164,11 +164,39 @@ async def health() -> dict[str, object]:
 
 @app.get("/health/email-check", include_in_schema=False)
 async def email_check() -> dict[str, object]:
-    """Diagnostic: connect + authenticate to SMTP (no email sent) and report the
-    real error. Reveals host/port/auth problems without leaking the password."""
+    """Diagnostic: raw TCP reachability (IPv4 vs IPv6) + SMTP auth. No email sent,
+    no secrets. Distinguishes an IPv6-route problem from a blocked-SMTP problem."""
+    import socket
+
     from fastapi.concurrency import run_in_threadpool
 
     from app.services.email import EmailService
 
-    ok, detail = await run_in_threadpool(EmailService().verify_connection)
-    return {"smtp_ok": ok, "detail": detail, "host": settings.smtp_host, "port": settings.smtp_port}
+    host, port = settings.smtp_host, settings.smtp_port
+
+    def tcp(family: int) -> str:
+        try:
+            infos = socket.getaddrinfo(host, port, family, socket.SOCK_STREAM)
+            if not infos:
+                return "no address"
+            af, st, proto, _c, sa = infos[0]
+            s = socket.socket(af, st, proto)
+            s.settimeout(10)
+            s.connect(sa)
+            s.close()
+            return "ok"
+        except Exception as exc:
+            return f"{type(exc).__name__}: {exc}"
+
+    def probe() -> dict:
+        ok, detail = EmailService().verify_connection()
+        return {
+            "tcp_ipv4": tcp(socket.AF_INET),
+            "tcp_ipv6": tcp(socket.AF_INET6),
+            "smtp_auth_ok": ok,
+            "smtp_detail": detail,
+        }
+
+    result = await run_in_threadpool(probe)
+    result.update({"host": host, "port": port})
+    return result
