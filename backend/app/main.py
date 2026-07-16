@@ -158,6 +158,8 @@ async def health() -> dict[str, object]:
             "resend_api_key": bool(settings.resend_api_key),
             "smtp_host": bool(settings.smtp_host),
             "public_app_url": settings.public_app_url,
+            "email_from_configured": settings.email_from,          # raw ASTRA_EMAIL_FROM
+            "effective_from": EmailService().from_addr,            # what actually sends
         },
         # Is the raw variable present in THIS process's environment at all?
         "in_os_environ": {k: (k in os.environ) for k in keys},
