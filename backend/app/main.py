@@ -137,15 +137,26 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
 
 @app.get("/health", tags=["system"], summary="Liveness probe")
 async def health() -> dict[str, object]:
-    # Secret-free integration flags for ops diagnostics (no values, just booleans).
+    # Secret-free diagnostics (booleans / presence only — never any values).
+    import os
+
     from app.services.email import EmailService
 
+    keys = [
+        "ASTRA_SMTP_HOST", "ASTRA_SMTP_USER", "ASTRA_SMTP_PASSWORD",
+        "ASTRA_SMTP_PORT", "ASTRA_EMAIL_FROM", "ASTRA_PUBLIC_APP_URL",
+        "ASTRA_JWT_SECRET_KEY",  # control: known-working user-set var
+    ]
     return {
         "status": "ok",
         "service": settings.app_name,
         "email_enabled": EmailService().enabled,
-        "smtp_host_set": bool(settings.smtp_host),
-        "smtp_user_set": bool(settings.smtp_user),
-        "smtp_password_set": bool(settings.smtp_password),
-        "public_app_url": settings.public_app_url,
+        "settings_read": {
+            "smtp_host": bool(settings.smtp_host),
+            "smtp_user": bool(settings.smtp_user),
+            "smtp_password": bool(settings.smtp_password),
+            "public_app_url": settings.public_app_url,
+        },
+        # Is the raw variable present in THIS process's environment at all?
+        "in_os_environ": {k: (k in os.environ) for k in keys},
     }
