@@ -58,16 +58,16 @@ export function Sidebar() {
 
   return (
     <aside
-      className="flex flex-col w-56 min-h-screen py-4 shrink-0"
+      className="flex flex-col w-56 h-screen py-4 shrink-0"
       style={{ background: "var(--surface)", borderRight: "1px solid var(--border)" }}
     >
       {/* Logo */}
-      <div className="px-5 pb-6 flex items-center gap-2 text-lg font-bold" style={{ color: "var(--accent)" }}>
+      <div className="px-5 pb-6 shrink-0 flex items-center gap-2 text-lg font-bold" style={{ color: "var(--accent)" }}>
         <span className="text-2xl">⬡</span> ASTRA
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
         {nav.map(({ href, icon: Icon, label }) => {
           // Exact match for /platform (so its sub-pages don't also light it up);
           // prefix match elsewhere so detail pages keep their parent highlighted.
@@ -98,7 +98,7 @@ export function Sidebar() {
       </nav>
 
       {/* Logout */}
-      <div className="px-2 mt-4">
+      <div className="px-2 mt-4 shrink-0">
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-red-500/10 hover:text-red-500"
