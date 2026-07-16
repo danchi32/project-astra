@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # Email (SMTP) — INERT until host + user + password are set. Works with
     # Hostinger (smtp.hostinger.com:465 SSL, or :587 STARTTLS) or any SMTP host.
     # When unset: no email is sent, and registration OTP is skipped (open signup).
+    # Preferred transport on platforms that block SMTP (e.g. Railway): Resend's
+    # HTTPS API. When set, it's used instead of SMTP. Verify your domain in Resend.
+    resend_api_key: str | None = None
+
     smtp_host: str | None = None
     smtp_port: int = 465                # 465 = implicit SSL; anything else = STARTTLS
     smtp_user: str | None = None

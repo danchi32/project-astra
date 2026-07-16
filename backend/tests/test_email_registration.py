@@ -38,6 +38,21 @@ async def test_email_service_inert_by_default(client):
     assert await svc.send(to="x@y.com", subject="s", html="<p>h</p>") is False
 
 
+async def test_resend_transport_preferred_when_key_set(monkeypatch):
+    monkeypatch.setattr(email_mod.settings, "resend_api_key", "re_test")
+    calls: list = []
+
+    async def fake_resend(self, *, to, subject, html, text):
+        calls.append((to, subject))
+        return True
+
+    monkeypatch.setattr(email_mod.EmailService, "_send_resend", fake_resend)
+    svc = email_mod.EmailService()
+    assert svc.enabled is True  # a Resend key alone enables email (no SMTP needed)
+    assert await svc.send(to="x@y.com", subject="hi", html="<p>h</p>") is True
+    assert calls == [("x@y.com", "hi")]
+
+
 async def test_register_start_direct_when_email_disabled(client, session_factory):
     r = await _start(client, email="direct@co.com")
     assert r.status_code == 200, r.text

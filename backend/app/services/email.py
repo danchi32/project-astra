@@ -1,22 +1,26 @@
-"""Transactional email over SMTP.
+"""Transactional email.
 
-INERT until configured: with no SMTP host/user/password set, `enabled` is False
-and every send is a safe no-op that returns False — so registration and the rest
-of the app work unchanged before (and without) email being set up.
+INERT until configured: with no transport set, `enabled` is False and every send
+is a safe no-op — so the app works unchanged before email is set up.
 
-Works with Hostinger SMTP (smtp.hostinger.com:465 SSL, or :587 STARTTLS) or any
-SMTP provider — only the env vars change.
+Two transports, in priority order:
+1. Resend HTTPS API (ASTRA_RESEND_API_KEY) — required on hosts that block SMTP
+   (e.g. Railway blocks all outbound SMTP ports).
+2. SMTP (ASTRA_SMTP_*) — for local dev or hosts that allow SMTP (e.g. Hostinger).
 """
 import re
 import smtplib
 import ssl
 from email.message import EmailMessage
 
+import httpx
 from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 
 settings = get_settings()
+
+_RESEND_ENDPOINT = "https://api.resend.com/emails"
 
 
 def _text_from_html(html: str) -> str:
@@ -24,25 +28,44 @@ def _text_from_html(html: str) -> str:
 
 
 class EmailService:
-    @property
-    def enabled(self) -> bool:
+    def _smtp_configured(self) -> bool:
         return bool(settings.smtp_host and settings.smtp_user and settings.smtp_password)
 
     @property
+    def enabled(self) -> bool:
+        return bool(settings.resend_api_key) or self._smtp_configured()
+
+    @property
     def from_addr(self) -> str:
-        return settings.email_from or settings.smtp_user or "noreply@astra.local"
+        return settings.email_from or settings.smtp_user or "onboarding@resend.dev"
 
     async def send(self, *, to: str, subject: str, html: str, text: str | None = None) -> bool:
-        """Send one message. Returns False (no-op) when email isn't configured."""
-        if not self.enabled:
-            return False
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = self.from_addr
-        msg["To"] = to
-        msg.set_content(text or _text_from_html(html))
-        msg.add_alternative(html, subtype="html")
-        await run_in_threadpool(self._deliver, msg)
+        """Send one message. Returns False (no-op) when email isn't configured.
+        Prefers the Resend HTTPS API; falls back to SMTP."""
+        if settings.resend_api_key:
+            return await self._send_resend(to=to, subject=subject, html=html, text=text)
+        if self._smtp_configured():
+            msg = EmailMessage()
+            msg["Subject"] = subject
+            msg["From"] = self.from_addr
+            msg["To"] = to
+            msg.set_content(text or _text_from_html(html))
+            msg.add_alternative(html, subtype="html")
+            await run_in_threadpool(self._deliver, msg)
+            return True
+        return False
+
+    async def _send_resend(self, *, to: str, subject: str, html: str, text: str | None) -> bool:
+        payload: dict = {"from": self.from_addr, "to": [to], "subject": subject, "html": html}
+        if text:
+            payload["text"] = text
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                _RESEND_ENDPOINT,
+                headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                json=payload,
+            )
+        resp.raise_for_status()
         return True
 
     def _deliver(self, msg: EmailMessage) -> None:  # blocking; runs in a threadpool
@@ -62,14 +85,26 @@ class EmailService:
         return server
 
     def verify_connection(self) -> tuple[bool, str]:
-        """Connect + authenticate (no send) and report the real error if it fails.
+        """Validate the active transport (no email sent) and report the real error.
         Used by the /health/email-check diagnostic. Never raises."""
-        if not self.enabled:
+        if settings.resend_api_key:
+            try:
+                with httpx.Client(timeout=15) as client:
+                    r = client.get(
+                        "https://api.resend.com/domains",
+                        headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                    )
+                if r.status_code == 200:
+                    return True, "Resend API key valid"
+                return False, f"Resend API returned {r.status_code}: {r.text[:200]}"
+            except Exception as exc:
+                return False, f"{type(exc).__name__}: {exc}"
+        if not self._smtp_configured():
             return False, "email not configured"
         try:
             with self._smtp() as server:
                 server.noop()
-            return True, "connected and authenticated OK"
+            return True, "connected and authenticated OK (SMTP)"
         except Exception as exc:  # surface the real SMTP error (not secret)
             return False, f"{type(exc).__name__}: {exc}"
 
