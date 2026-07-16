@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models import Conversation, Device, Message, MessageRole, User
 from app.repositories.conversations import ConversationRepository, MessageRepository
+from app.repositories.organizations import OrganizationRepository
 from app.services.ai.cache import SemanticCache
 from app.services.ai.cognitive import CognitiveEngine
 from app.services.ai.intent import OFF_TOPIC_REPLY, is_off_topic, requires_live_action
@@ -18,6 +19,14 @@ from app.services.ai.provider import (
     get_provider,
 )
 from app.services.exceptions import NotFoundError
+from app.services.subscription import org_is_writable
+
+# Shown in the tray when the org can't use chat (suspended, past due, canceled, or
+# an expired trial). No LLM call and no remediation — chat simply doesn't function.
+_SUBSCRIPTION_INACTIVE_REPLY = (
+    "ASTRA support chat is unavailable because your organization's subscription is "
+    "inactive. Please contact your IT administrator to restore access."
+)
 
 
 @dataclass
@@ -33,6 +42,7 @@ class ConversationService:
         self.session = session
         self.conversations = ConversationRepository(session)
         self.messages = MessageRepository(session)
+        self.orgs = OrganizationRepository(session)
         # An injected provider (tests) is always used; otherwise the provider is
         # chosen per-message in _select_provider so common issues stay free.
         self._forced_provider = provider
@@ -93,6 +103,24 @@ class ConversationService:
                     title=f"{device.hostname} support",
                 )
             )
+
+        # Gate on subscription: chat works only for a writable org (active plan or a
+        # live trial). Suspended / past-due / canceled / expired-trial orgs get a
+        # canned reply — no LLM call, no remediation.
+        org = await self.orgs.get(device.org_id)
+        if org is not None and not org_is_writable(org):
+            await self.messages.add(
+                Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
+            )
+            assistant_message = await self.messages.add(
+                Message(
+                    conversation_id=conversation.id,
+                    role=MessageRole.ASSISTANT,
+                    content=_SUBSCRIPTION_INACTIVE_REPLY,
+                )
+            )
+            await self.session.commit()
+            return conversation, assistant_message, "subscription_inactive"
 
         history = self._build_history(await self.messages.list_by_conversation(conversation.id))
         await self.messages.add(

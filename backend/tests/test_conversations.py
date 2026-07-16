@@ -152,6 +152,42 @@ async def test_device_tray_chat(client, admin_headers):
     assert second.json()["conversation_id"] == body["conversation_id"]
 
 
+async def test_tray_chat_blocked_when_org_suspended(client, admin_headers, session_factory):
+    from sqlalchemy import select
+
+    from app.models import Organization, SubscriptionStatus
+
+    tok = await client.post(
+        "/api/v1/devices/enrollment-tokens", json={"name": "tray"}, headers=admin_headers
+    )
+    enroll = await client.post("/api/v1/agent/enroll", json={
+        "enrollment_token": tok.json()["token"], "hostname": "SUSP-PC",
+        "machine_id": "susp-machine", "os_version": "Windows 11", "agent_version": "0.1.0",
+    })
+    device_headers = {"Authorization": f"Bearer {enroll.json()['device_token']}"}
+
+    # Works while the org is on a live trial (writable).
+    ok = await client.post("/api/v1/agent/chat", json={"content": "hello"}, headers=device_headers)
+    assert ok.status_code == 200
+    assert ok.json()["source"] != "subscription_inactive"
+
+    # Suspend the organization.
+    async with session_factory() as s:
+        org = (await s.execute(select(Organization).where(Organization.name == "Acme Corp"))).scalar_one()
+        org.subscription_status = SubscriptionStatus.SUSPENDED
+        await s.commit()
+
+    # The tray now refuses — canned reply, no tools/LLM.
+    blocked = await client.post(
+        "/api/v1/agent/chat", json={"content": "my pc is very slow"}, headers=device_headers
+    )
+    assert blocked.status_code == 200
+    body = blocked.json()
+    assert body["source"] == "subscription_inactive"
+    assert "unavailable" in body["reply"].lower()
+    assert not body["tool_trail"]
+
+
 async def test_device_chat_requires_device_token(client, admin_headers):
     # A portal user's JWT is not a device token — the agent chat endpoint rejects it.
     resp = await client.post(
