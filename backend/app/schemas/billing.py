@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 
 class BillingStatus(BaseModel):
     """What the portal shows on the billing page for the caller's own org."""
-    billing_enabled: bool          # is Stripe configured on the server at all?
+    billing_enabled: bool          # is any payment rail configured on the server?
+    providers: list[str] = []      # rails that can sell now: "razorpay" (India) / "paddle"
+    billing_provider: str | None = None   # the rail this org pays on, once chosen
     plan: str
     subscription_status: str
     writable: bool                 # can the org make changes right now?
@@ -23,6 +25,9 @@ class BillingStatus(BaseModel):
 
 class CheckoutRequest(BaseModel):
     quantity: int = Field(default=1, ge=1, description="Number of licenses to buy")
+    provider: str | None = Field(
+        default=None, description="Payment rail: 'razorpay' (India) or 'paddle' (international)"
+    )
 
 
 class LicenseUpdate(BaseModel):

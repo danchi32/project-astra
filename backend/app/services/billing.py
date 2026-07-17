@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models import Device, Organization, SubscriptionStatus, User
 from app.services.exceptions import ValidationError
+from app.services.payments import SubscriptionEvent, available_providers, get_provider
 from app.services.subscription import org_is_writable, read_only_reason
 
 settings = get_settings()
@@ -100,21 +101,96 @@ class BillingService:
 
     async def status(self, org: Organization) -> dict:
         writable = org_is_writable(org)
+        rails = available_providers()
         return {
-            "billing_enabled": self.enabled,
+            "billing_enabled": self.enabled or bool(rails),
+            "providers": rails,
+            "billing_provider": org.billing_provider,
             "plan": org.plan,
             "subscription_status": org.subscription_status.value,
             "writable": writable,
             "read_only_reason": None if writable else read_only_reason(org),
             "trial_ends_at": org.trial_ends_at,
             "current_period_end": org.current_period_end,
-            "has_subscription": bool(org.stripe_subscription_id),
+            "has_subscription": bool(org.provider_subscription_id or org.stripe_subscription_id),
             "seat_type": self.seat_type,
             "licenses": org.license_count,
             "seats_used": await self.used_seats(org.id),
             "discount_percent": org.discount_percent,
             "unit_price_configured": bool(settings.stripe_price_id),
         }
+
+    # -- Payment rails (Razorpay = India, Paddle = international) ---------------
+
+    async def create_rail_checkout(
+        self, org: Organization, quantity: int, provider_name: str
+    ) -> str:
+        """Send the admin to the chosen rail to authorize payment."""
+        provider = get_provider(provider_name)
+        if provider is None or not provider.can_checkout:
+            raise ValidationError(
+                "That payment method isn't available. Contact ASTRA support."
+            )
+        used = await self.used_seats(org.id)
+        quantity = max(1, quantity, used)  # never sell fewer licenses than are in use
+        url = await provider.create_checkout(org=org, quantity=quantity)
+        await self.session.commit()  # the provider stamped billing_provider/subscription id
+        return url
+
+    async def rail_portal_url(self, org: Organization) -> str | None:
+        """Hosted management page, when the rail has one (Paddle does)."""
+        provider = get_provider(org.billing_provider)
+        if provider is None:
+            return None
+        portal = getattr(provider, "portal_url", None)
+        return await portal(org) if portal else provider.manage_url(org)
+
+    async def cancel_subscription(self, org: Organization) -> None:
+        provider = get_provider(org.billing_provider)
+        if provider is None:
+            raise ValidationError("This organization has no subscription to cancel.")
+        await provider.cancel(org=org)
+
+    async def apply_event(self, event: SubscriptionEvent) -> dict:
+        """Apply a rail's normalized webhook to the org. Webhooks are the source of
+        truth for subscription_status (which drives the read-only gate) and licenses."""
+        if event.ignored:
+            return {"received": True, "applied": False}
+
+        org = await self._org_for_event(event)
+        if org is None:
+            return {"received": True, "applied": False}
+
+        if event.subscription_id:
+            org.provider_subscription_id = event.subscription_id
+        if event.customer_id:
+            org.provider_customer_id = event.customer_id
+        if event.status is not None:
+            org.subscription_status = event.status
+            org.plan = "per-seat" if event.status is SubscriptionStatus.ACTIVE else org.plan
+        if event.quantity is not None:
+            org.license_count = event.quantity
+        if event.period_end is not None:
+            org.current_period_end = event.period_end
+        await self.session.commit()
+        return {"received": True, "applied": True}
+
+    async def _org_for_event(self, event: SubscriptionEvent) -> Organization | None:
+        if event.org_id:
+            org = await self.session.get(Organization, event.org_id)
+            if org is not None:
+                return org
+        for column, value in (
+            (Organization.provider_subscription_id, event.subscription_id),
+            (Organization.provider_customer_id, event.customer_id),
+        ):
+            if value:
+                org = (
+                    await self.session.execute(select(Organization).where(column == value))
+                ).scalars().first()
+                if org is not None:
+                    return org
+        return None
 
     # -- Stripe customer / coupon ----------------------------------------------
 

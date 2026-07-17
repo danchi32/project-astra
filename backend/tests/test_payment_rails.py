@@ -154,3 +154,67 @@ def test_paddle_ignores_non_subscription_events(monkeypatch):
     body = json.dumps({"event_type": "transaction.created", "data": {}}).encode()
     ev = PaddleProvider().parse_webhook(payload=body, headers=_paddle_headers(body, "s"))
     assert ev.ignored is True
+
+
+# -- endpoint integration (the URL you give Paddle/Razorpay) -------------------
+
+async def _register_org(client, session_factory, name, email):
+    from sqlalchemy import select
+
+    from app.models import Organization
+    from app.services.invites import InviteService
+
+    async with session_factory() as s:
+        _, code = await InviteService(s).create(note="t", expires_in_days=30)
+    r = await client.post("/api/v1/auth/register", json={
+        "invite_code": code, "organization_name": name, "admin_name": "A",
+        "admin_email": email, "admin_password": "Password12345",
+    })
+    assert r.status_code == 201, r.text
+    async with session_factory() as s:
+        return (await s.execute(select(Organization).where(Organization.name == name))).scalar_one()
+
+
+async def test_paddle_webhook_endpoint_activates_org_and_sets_licenses(
+    client, session_factory, monkeypatch
+):
+    monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
+    org = await _register_org(client, session_factory, "Paddle Co", "p@paddle.com")
+
+    body = json.dumps({
+        "event_type": "subscription.activated",
+        "data": {
+            "id": "sub_LIVE", "status": "active", "customer_id": "ctm_9",
+            "items": [{"quantity": 12}],
+            "custom_data": {"org_id": str(org.id)},
+            "current_billing_period": {"ends_at": "2026-09-01T10:00:00.000Z"},
+        },
+    }).encode()
+
+    r = await client.post(
+        "/api/v1/billing/webhook/paddle", content=body, headers=_paddle_headers(body, "whsec_pdl")
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["applied"] is True
+
+    from sqlalchemy import select
+
+    from app.models import Organization
+    async with session_factory() as s:
+        fresh = (await s.execute(select(Organization).where(Organization.id == org.id))).scalar_one()
+    assert fresh.subscription_status is SubscriptionStatus.ACTIVE
+    assert fresh.license_count == 12                  # licenses come from the rail
+    assert fresh.provider_subscription_id == "sub_LIVE"
+    assert fresh.provider_customer_id == "ctm_9"
+    assert fresh.current_period_end is not None
+
+
+async def test_paddle_webhook_endpoint_rejects_forged_signature(client, session_factory, monkeypatch):
+    monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
+    body = _paddle_body()
+    r = await client.post(
+        "/api/v1/billing/webhook/paddle",
+        content=body,
+        headers={"paddle-signature": "ts=1700000000;h1=deadbeef"},
+    )
+    assert r.status_code == 400  # forged webhook can never mark an org paid

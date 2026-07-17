@@ -20,7 +20,8 @@ from app.schemas.billing import (
     PortalSession,
 )
 from app.services.billing import BillingService
-from app.services.exceptions import NotFoundError
+from app.services.exceptions import NotFoundError, ValidationError
+from app.services.payments import PaddleProvider, RazorpayProvider
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -41,24 +42,50 @@ async def billing_status(
     return BillingStatus(**await BillingService(session).status(org))
 
 
-@router.post("/checkout", response_model=CheckoutSession, summary="Subscribe (Stripe Checkout)")
+@router.post("/checkout", response_model=CheckoutSession, summary="Subscribe (choose a payment rail)")
 async def create_checkout(
     body: CheckoutRequest,
     user: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> CheckoutSession:
+    """`provider` picks the rail: 'razorpay' (India — UPI/cards/netbanking) or
+    'paddle' (international — Merchant of Record). Falls back to Stripe when no
+    rail is named, for backward compatibility."""
     org = await _load_org(user, session)
-    url = await BillingService(session).create_checkout_url(org, body.quantity)
+    service = BillingService(session)
+    if body.provider:
+        url = await service.create_rail_checkout(org, body.quantity, body.provider)
+    else:
+        url = await service.create_checkout_url(org, body.quantity)
     return CheckoutSession(url=url)
 
 
-@router.post("/portal", response_model=PortalSession, summary="Open the Stripe Billing Portal")
+@router.post("/portal", response_model=PortalSession, summary="Open the hosted billing portal")
 async def create_portal(
     user: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> PortalSession:
     org = await _load_org(user, session)
-    return PortalSession(url=await BillingService(session).create_portal_url(org))
+    service = BillingService(session)
+    if org.billing_provider:  # Paddle has a hosted portal; Razorpay doesn't.
+        url = await service.rail_portal_url(org)
+        if not url:
+            raise ValidationError(
+                "Your payment provider has no self-serve portal. Use 'Cancel subscription', "
+                "or contact ASTRA support to change your payment details."
+            )
+        return PortalSession(url=url)
+    return PortalSession(url=await service.create_portal_url(org))
+
+
+@router.post("/cancel", status_code=status.HTTP_204_NO_CONTENT, summary="Cancel the subscription")
+async def cancel_subscription(
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Cancels at the end of the paid period — access continues until then."""
+    org = await _load_org(user, session)
+    await BillingService(session).cancel_subscription(org)
 
 
 @router.post("/licenses", response_model=LicenseResult, summary="Add or remove licenses")
@@ -80,3 +107,29 @@ async def stripe_webhook(
     payload = await request.body()
     signature = request.headers.get("stripe-signature")
     return await BillingService(session).handle_webhook(payload, signature)
+
+
+# Rail webhooks — no auth: each is authenticated by its own HMAC signature, which
+# is the boundary that stops anyone from marking an org as paid.
+@router.post(
+    "/webhook/paddle",
+    status_code=status.HTTP_200_OK,
+    summary="Paddle webhook (no auth; HMAC-signed)",
+)
+async def paddle_webhook(request: Request, session: AsyncSession = Depends(get_db)) -> dict:
+    payload = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    event = PaddleProvider().parse_webhook(payload=payload, headers=headers)
+    return await BillingService(session).apply_event(event)
+
+
+@router.post(
+    "/webhook/razorpay",
+    status_code=status.HTTP_200_OK,
+    summary="Razorpay webhook (no auth; HMAC-signed)",
+)
+async def razorpay_webhook(request: Request, session: AsyncSession = Depends(get_db)) -> dict:
+    payload = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    event = RazorpayProvider().parse_webhook(payload=payload, headers=headers)
+    return await BillingService(session).apply_event(event)
