@@ -76,6 +76,15 @@ public class UpdateVerifierTests
     }
 
     [Fact]
+    public void EmbeddedKey_IsPinned_SoAutoUpdateIsArmed()
+    {
+        // Once a real public key is pinned into update-signing-public.pem, the embedded loader
+        // must produce a verifier (auto-update armed). If this fails, the placeholder is still
+        // in place or the pasted key is malformed.
+        Assert.NotNull(UpdateVerifier.FromEmbeddedKey());
+    }
+
+    [Fact]
     public void UndersizedKey_IsRefused()
     {
         using var weak = RSA.Create(1024);

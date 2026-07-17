@@ -8,7 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>AstraAgent.Tray</RootNamespace>
     <AssemblyName>AstraAgent.Tray</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <!-- The referenced Service project also ships an appsettings.json; both land at
          the same publish path. The tray's own copy is what matters, so allow the
          duplicate instead of failing the publish (NETSDK1152). -->

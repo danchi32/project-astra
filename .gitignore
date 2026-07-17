@@ -5,6 +5,9 @@
 *.pfx
 *.pem
 *.key
+# ...except the agent update-signing PUBLIC key, which is safe to commit and MUST ship
+# baked into the agent binary. (The matching private key lives only in a CI secret.)
+!agent/src/AstraAgent.Service/Update/update-signing-public.pem
 
 # Python
 __pycache__/
