@@ -1,13 +1,25 @@
 import { apiClient } from "./client";
 import type { User } from "./types";
 
+// A non-sensitive "there is a session" hint so middleware can bounce signed-out
+// visitors server-side (no flash). The Bearer token remains the real credential.
+export function setSession(access: string, refresh: string) {
+  localStorage.setItem("access_token", access);
+  localStorage.setItem("refresh_token", refresh);
+  document.cookie = `astra_auth=1; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`;
+}
+
+export function clearSession() {
+  localStorage.clear();
+  document.cookie = "astra_auth=; path=/; max-age=0; samesite=lax";
+}
+
 export async function login(email: string, password: string) {
   const { data } = await apiClient.post<{ access_token: string; refresh_token: string }>(
     "/auth/login",
     { email, password }
   );
-  localStorage.setItem("access_token", data.access_token);
-  localStorage.setItem("refresh_token", data.refresh_token);
+  setSession(data.access_token, data.refresh_token);
   return data;
 }
 
@@ -28,8 +40,7 @@ export async function registerStart(input: SignupInput) {
     refresh_token: string | null;
   }>("/auth/register/start", input);
   if (!data.otp_required && data.access_token && data.refresh_token) {
-    localStorage.setItem("access_token", data.access_token);
-    localStorage.setItem("refresh_token", data.refresh_token);
+    setSession(data.access_token, data.refresh_token);
   }
   return data;
 }
@@ -40,8 +51,7 @@ export async function registerVerify(admin_email: string, code: string) {
     "/auth/register/verify",
     { admin_email, code }
   );
-  localStorage.setItem("access_token", data.access_token);
-  localStorage.setItem("refresh_token", data.refresh_token);
+  setSession(data.access_token, data.refresh_token);
   return data;
 }
 
@@ -59,7 +69,7 @@ export async function logout() {
   if (refresh) {
     try { await apiClient.post("/auth/logout", { refresh_token: refresh }); } catch {}
   }
-  localStorage.clear();
+  clearSession();
 }
 
 export async function getMe(): Promise<User> {

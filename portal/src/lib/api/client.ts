@@ -5,6 +5,14 @@ export const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Drop the session (storage + the middleware's presence cookie) and bounce to login,
+// so a dead session can't keep passing the edge auth gate.
+function endSession() {
+  localStorage.clear();
+  document.cookie = "astra_auth=; path=/; max-age=0; samesite=lax";
+  window.location.href = "/login";
+}
+
 apiClient.interceptors.request.use((config) => {
   // In "view as organization" mode the scoped view-as token wins over the normal one.
   const token = localStorage.getItem("view_as_token") || localStorage.getItem("access_token");
@@ -34,11 +42,10 @@ apiClient.interceptors.response.use(
           original.headers.Authorization = `Bearer ${data.access_token}`;
           return apiClient(original);
         } catch {
-          localStorage.clear();
-          window.location.href = "/login";
+          endSession();
         }
       } else {
-        window.location.href = "/login";
+        endSession();
       }
     }
     return Promise.reject(err);
