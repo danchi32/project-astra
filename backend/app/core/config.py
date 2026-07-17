@@ -93,6 +93,15 @@ class Settings(BaseSettings):
     paddle_webhook_secret: str | None = None
     paddle_sandbox: bool = True                  # use Paddle's sandbox API host
 
+    # PayPal: international customers (cross-border only — PayPal cannot process
+    # domestic Indian payments). Unlike Paddle it is NOT a merchant of record, so
+    # tax compliance stays with us.
+    paypal_client_id: str | None = None
+    paypal_client_secret: str | None = None
+    paypal_plan_id: str | None = None            # a per-seat recurring billing plan
+    paypal_webhook_id: str | None = None         # needed to verify webhook signatures
+    paypal_sandbox: bool = True                  # use PayPal's sandbox API host
+
     # Preferred transport on platforms that block SMTP (e.g. Railway): Resend's
     # HTTPS API. When set, it's used instead of SMTP. Verify your domain in Resend.
     resend_api_key: str | None = None

@@ -61,6 +61,12 @@ class PaymentProvider(Protocol):
         Razorpay doesn't — we expose an in-app cancel instead)."""
         ...
 
-    def parse_webhook(self, *, payload: bytes, headers: dict[str, str]) -> SubscriptionEvent:
-        """Verify the signature and normalize. Raise ValidationError if invalid."""
+    async def parse_webhook(self, *, payload: bytes, headers: dict[str, str]) -> SubscriptionEvent:
+        """Verify authenticity and normalize. Raise ValidationError if invalid.
+
+        Async because verification isn't always local: Razorpay/Paddle check an HMAC
+        in-process, but PayPal requires a round-trip to its verify-webhook-signature
+        API. This is the security boundary — a forged webhook must never mark an org
+        as paid, so every implementation MUST verify before returning an event.
+        """
         ...

@@ -21,7 +21,7 @@ from app.schemas.billing import (
 )
 from app.services.billing import BillingService
 from app.services.exceptions import NotFoundError, ValidationError
-from app.services.payments import PaddleProvider, RazorpayProvider
+from app.services.payments import PaddleProvider, PayPalProvider, RazorpayProvider
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -119,7 +119,19 @@ async def stripe_webhook(
 async def paddle_webhook(request: Request, session: AsyncSession = Depends(get_db)) -> dict:
     payload = await request.body()
     headers = {k.lower(): v for k, v in request.headers.items()}
-    event = PaddleProvider().parse_webhook(payload=payload, headers=headers)
+    event = await PaddleProvider().parse_webhook(payload=payload, headers=headers)
+    return await BillingService(session).apply_event(event)
+
+
+@router.post(
+    "/webhook/paypal",
+    status_code=status.HTTP_200_OK,
+    summary="PayPal webhook (no auth; verified with PayPal)",
+)
+async def paypal_webhook(request: Request, session: AsyncSession = Depends(get_db)) -> dict:
+    payload = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+    event = await PayPalProvider().parse_webhook(payload=payload, headers=headers)
     return await BillingService(session).apply_event(event)
 
 
@@ -131,5 +143,5 @@ async def paddle_webhook(request: Request, session: AsyncSession = Depends(get_d
 async def razorpay_webhook(request: Request, session: AsyncSession = Depends(get_db)) -> dict:
     payload = await request.body()
     headers = {k.lower(): v for k, v in request.headers.items()}
-    event = RazorpayProvider().parse_webhook(payload=payload, headers=headers)
+    event = await RazorpayProvider().parse_webhook(payload=payload, headers=headers)
     return await BillingService(session).apply_event(event)

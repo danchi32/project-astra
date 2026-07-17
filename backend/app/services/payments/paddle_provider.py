@@ -131,7 +131,7 @@ class PaddleProvider:
 
     # -- webhooks --------------------------------------------------------------
 
-    def parse_webhook(self, *, payload: bytes, headers: dict[str, str]) -> SubscriptionEvent:
+    async def parse_webhook(self, *, payload: bytes, headers: dict[str, str]) -> SubscriptionEvent:
         secret = settings.paddle_webhook_secret
         if not secret:
             raise ValidationError("Paddle webhook secret not configured.")

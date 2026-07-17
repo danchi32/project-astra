@@ -112,7 +112,7 @@ class RazorpayProvider:
 
     # -- webhooks --------------------------------------------------------------
 
-    def parse_webhook(self, *, payload: bytes, headers: dict[str, str]) -> SubscriptionEvent:
+    async def parse_webhook(self, *, payload: bytes, headers: dict[str, str]) -> SubscriptionEvent:
         secret = settings.razorpay_webhook_secret
         if not secret:
             raise ValidationError("Razorpay webhook secret not configured.")

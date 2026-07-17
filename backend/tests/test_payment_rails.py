@@ -11,25 +11,32 @@ import uuid
 import pytest
 
 import app.services.payments.paddle_provider as paddle_mod
+import app.services.payments.paypal_provider as paypal_mod
 import app.services.payments.razorpay_provider as razorpay_mod
 from app.models import SubscriptionStatus
 from app.services.exceptions import ValidationError
-from app.services.payments import PaddleProvider, RazorpayProvider, available_providers, get_provider
+from app.services.payments import (
+    PaddleProvider,
+    PayPalProvider,
+    RazorpayProvider,
+    available_providers,
+    get_provider,
+)
 
 _ORG = uuid.uuid4()
 
 
-def test_both_rails_inert_by_default():
-    assert RazorpayProvider().enabled is False
-    assert RazorpayProvider().can_checkout is False
-    assert PaddleProvider().enabled is False
-    assert PaddleProvider().can_checkout is False
+def test_all_rails_inert_by_default():
+    for provider in (RazorpayProvider(), PaddleProvider(), PayPalProvider()):
+        assert provider.enabled is False, provider.name
+        assert provider.can_checkout is False, provider.name
     assert available_providers() == []          # nothing configured -> nothing sells
 
 
 def test_get_provider_resolves_by_name():
     assert get_provider("razorpay").name == "razorpay"
     assert get_provider("paddle").name == "paddle"
+    assert get_provider("paypal").name == "paypal"
     assert get_provider("stripe") is None
     assert get_provider(None) is None
 
@@ -51,10 +58,10 @@ def _razorpay_sig(body: bytes, secret: str) -> str:
     return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
-def test_razorpay_webhook_valid_signature(monkeypatch):
+async def test_razorpay_webhook_valid_signature(monkeypatch):
     monkeypatch.setattr(razorpay_mod.settings, "razorpay_webhook_secret", "whsec_rzp")
     body = _razorpay_body()
-    ev = RazorpayProvider().parse_webhook(
+    ev = await RazorpayProvider().parse_webhook(
         payload=body, headers={"x-razorpay-signature": _razorpay_sig(body, "whsec_rzp")}
     )
     assert ev.ignored is False
@@ -65,10 +72,10 @@ def test_razorpay_webhook_valid_signature(monkeypatch):
     assert ev.period_end is not None
 
 
-def test_razorpay_webhook_rejects_forged_signature(monkeypatch):
+async def test_razorpay_webhook_rejects_forged_signature(monkeypatch):
     monkeypatch.setattr(razorpay_mod.settings, "razorpay_webhook_secret", "whsec_rzp")
     with pytest.raises(ValidationError):
-        RazorpayProvider().parse_webhook(
+        await RazorpayProvider().parse_webhook(
             payload=_razorpay_body(), headers={"x-razorpay-signature": "deadbeef"}
         )
 
@@ -79,10 +86,10 @@ def test_razorpay_webhook_rejects_forged_signature(monkeypatch):
     ("pending", SubscriptionStatus.PAST_DUE),
     ("cancelled", SubscriptionStatus.CANCELED),
 ])
-def test_razorpay_status_mapping(monkeypatch, rzp_status, expected):
+async def test_razorpay_status_mapping(monkeypatch, rzp_status, expected):
     monkeypatch.setattr(razorpay_mod.settings, "razorpay_webhook_secret", "s")
     body = _razorpay_body(status=rzp_status)
-    ev = RazorpayProvider().parse_webhook(
+    ev = await RazorpayProvider().parse_webhook(
         payload=body, headers={"x-razorpay-signature": _razorpay_sig(body, "s")}
     )
     assert ev.status is expected
@@ -107,10 +114,10 @@ def _paddle_headers(body: bytes, secret: str, ts: str = "1700000000") -> dict:
     return {"paddle-signature": f"ts={ts};h1={h1}"}
 
 
-def test_paddle_webhook_valid_signature(monkeypatch):
+async def test_paddle_webhook_valid_signature(monkeypatch):
     monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
     body = _paddle_body()
-    ev = PaddleProvider().parse_webhook(payload=body, headers=_paddle_headers(body, "whsec_pdl"))
+    ev = await PaddleProvider().parse_webhook(payload=body, headers=_paddle_headers(body, "whsec_pdl"))
     assert ev.ignored is False
     assert ev.org_id == _ORG
     assert ev.subscription_id == "sub_PDL1"
@@ -120,19 +127,19 @@ def test_paddle_webhook_valid_signature(monkeypatch):
     assert ev.period_end is not None and ev.period_end.year == 2026
 
 
-def test_paddle_webhook_rejects_forged_signature(monkeypatch):
+async def test_paddle_webhook_rejects_forged_signature(monkeypatch):
     monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
     body = _paddle_body()
     with pytest.raises(ValidationError):
-        PaddleProvider().parse_webhook(
+        await PaddleProvider().parse_webhook(
             payload=body, headers={"paddle-signature": "ts=1700000000;h1=deadbeef"}
         )
 
 
-def test_paddle_webhook_rejects_malformed_signature_header(monkeypatch):
+async def test_paddle_webhook_rejects_malformed_signature_header(monkeypatch):
     monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
     with pytest.raises(ValidationError):
-        PaddleProvider().parse_webhook(payload=_paddle_body(), headers={"paddle-signature": "junk"})
+        await PaddleProvider().parse_webhook(payload=_paddle_body(), headers={"paddle-signature": "junk"})
 
 
 @pytest.mark.parametrize("pdl_status,expected", [
@@ -142,21 +149,93 @@ def test_paddle_webhook_rejects_malformed_signature_header(monkeypatch):
     ("paused", SubscriptionStatus.SUSPENDED),
     ("canceled", SubscriptionStatus.CANCELED),
 ])
-def test_paddle_status_mapping(monkeypatch, pdl_status, expected):
+async def test_paddle_status_mapping(monkeypatch, pdl_status, expected):
     monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "s")
     body = _paddle_body(status=pdl_status)
-    ev = PaddleProvider().parse_webhook(payload=body, headers=_paddle_headers(body, "s"))
+    ev = await PaddleProvider().parse_webhook(payload=body, headers=_paddle_headers(body, "s"))
     assert ev.status is expected
 
 
-def test_paddle_ignores_non_subscription_events(monkeypatch):
+async def test_paddle_ignores_non_subscription_events(monkeypatch):
     monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "s")
     body = json.dumps({"event_type": "transaction.created", "data": {}}).encode()
-    ev = PaddleProvider().parse_webhook(payload=body, headers=_paddle_headers(body, "s"))
+    ev = await PaddleProvider().parse_webhook(payload=body, headers=_paddle_headers(body, "s"))
     assert ev.ignored is True
 
 
-# -- endpoint integration (the URL you give Paddle/Razorpay) -------------------
+# -- PayPal -------------------------------------------------------------------
+# PayPal has no HMAC: authenticity is confirmed by calling PayPal's
+# verify-webhook-signature API, so we stub that round-trip.
+
+_PAYPAL_HEADERS = {
+    "paypal-transmission-id": "tid",
+    "paypal-transmission-time": "2026-07-17T10:00:00Z",
+    "paypal-cert-url": "https://api.paypal.com/cert.pem",
+    "paypal-auth-algo": "SHA256withRSA",
+    "paypal-transmission-sig": "sig",
+}
+
+
+def _paypal_body(status="ACTIVE", quantity="7", event="BILLING.SUBSCRIPTION.ACTIVATED") -> bytes:
+    return json.dumps({
+        "event_type": event,
+        "resource": {
+            "id": "I-PPL1", "status": status, "quantity": quantity,
+            "custom_id": str(_ORG),
+            "subscriber": {"payer_id": "PAYER9"},
+            "billing_info": {"next_billing_time": "2026-09-01T10:00:00Z"},
+        },
+    }).encode()
+
+
+def _stub_paypal_verify(monkeypatch, result="SUCCESS"):
+    monkeypatch.setattr(paypal_mod.settings, "paypal_webhook_id", "WH-1")
+
+    async def fake_request(self, method, path, body=None):
+        assert path.endswith("/verify-webhook-signature")
+        return {"verification_status": result}
+
+    monkeypatch.setattr(paypal_mod.PayPalProvider, "_request", fake_request)
+
+
+async def test_paypal_webhook_verified(monkeypatch):
+    _stub_paypal_verify(monkeypatch)
+    ev = await PayPalProvider().parse_webhook(payload=_paypal_body(), headers=_PAYPAL_HEADERS)
+    assert ev.ignored is False
+    assert ev.org_id == _ORG
+    assert ev.subscription_id == "I-PPL1"
+    assert ev.customer_id == "PAYER9"
+    assert ev.status is SubscriptionStatus.ACTIVE
+    assert ev.quantity == 7
+    assert ev.period_end is not None
+
+
+async def test_paypal_webhook_rejected_when_paypal_says_unverified(monkeypatch):
+    _stub_paypal_verify(monkeypatch, result="FAILURE")
+    with pytest.raises(ValidationError):
+        await PayPalProvider().parse_webhook(payload=_paypal_body(), headers=_PAYPAL_HEADERS)
+
+
+async def test_paypal_webhook_requires_signature_headers(monkeypatch):
+    _stub_paypal_verify(monkeypatch)
+    with pytest.raises(ValidationError):
+        await PayPalProvider().parse_webhook(payload=_paypal_body(), headers={})
+
+
+@pytest.mark.parametrize("event,expected", [
+    ("BILLING.SUBSCRIPTION.PAYMENT.FAILED", SubscriptionStatus.PAST_DUE),
+    ("BILLING.SUBSCRIPTION.SUSPENDED", SubscriptionStatus.SUSPENDED),
+    ("BILLING.SUBSCRIPTION.CANCELLED", SubscriptionStatus.CANCELED),
+])
+async def test_paypal_event_status_mapping(monkeypatch, event, expected):
+    _stub_paypal_verify(monkeypatch)
+    # Resource carries no usable status -> the event type decides.
+    body = _paypal_body(status="UNKNOWN", event=event)
+    ev = await PayPalProvider().parse_webhook(payload=body, headers=_PAYPAL_HEADERS)
+    assert ev.status is expected
+
+
+# -- endpoint integration (the URL you give Paddle/Razorpay/PayPal) ------------
 
 async def _register_org(client, session_factory, name, email):
     from sqlalchemy import select
@@ -207,6 +286,40 @@ async def test_paddle_webhook_endpoint_activates_org_and_sets_licenses(
     assert fresh.provider_subscription_id == "sub_LIVE"
     assert fresh.provider_customer_id == "ctm_9"
     assert fresh.current_period_end is not None
+
+
+async def test_paypal_webhook_endpoint_activates_org(client, session_factory, monkeypatch):
+    _stub_paypal_verify(monkeypatch)
+    org = await _register_org(client, session_factory, "PayPal Co", "p@paypal.com")
+
+    body = json.dumps({
+        "event_type": "BILLING.SUBSCRIPTION.ACTIVATED",
+        "resource": {
+            "id": "I-LIVE", "status": "ACTIVE", "quantity": "4",
+            "custom_id": str(org.id),
+            "subscriber": {"payer_id": "PAYER1"},
+            "billing_info": {"next_billing_time": "2026-09-01T10:00:00Z"},
+        },
+    }).encode()
+
+    r = await client.post("/api/v1/billing/webhook/paypal", content=body, headers=_PAYPAL_HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json()["applied"] is True
+
+    from sqlalchemy import select
+
+    from app.models import Organization
+    async with session_factory() as s:
+        fresh = (await s.execute(select(Organization).where(Organization.id == org.id))).scalar_one()
+    assert fresh.subscription_status is SubscriptionStatus.ACTIVE
+    assert fresh.license_count == 4
+    assert fresh.provider_subscription_id == "I-LIVE"
+
+
+async def test_paypal_webhook_endpoint_rejects_unverified(client, session_factory, monkeypatch):
+    _stub_paypal_verify(monkeypatch, result="FAILURE")
+    r = await client.post("/api/v1/billing/webhook/paypal", content=_paypal_body(), headers=_PAYPAL_HEADERS)
+    assert r.status_code == 400  # PayPal said "not from us" -> never mark an org paid
 
 
 async def test_paddle_webhook_endpoint_rejects_forged_signature(client, session_factory, monkeypatch):
