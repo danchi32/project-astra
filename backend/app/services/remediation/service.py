@@ -37,6 +37,31 @@ class RemediationError(ServiceError):
     pass
 
 
+import re  # noqa: E402
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Mailbox folder name: letters/digits/space and a few safe punctuation marks only —
+# no path separators or control chars, so the parameter can't be abused.
+_FOLDER_RE = re.compile(r"^[\w \-&().]{1,64}$", re.UNICODE)
+
+
+def _validate_email(value: Any) -> str:
+    email = (value or "").strip()
+    if not _EMAIL_RE.match(email):
+        raise RemediationError(f"'{value}' is not a valid sender email address.")
+    return email
+
+
+def _validate_folder_name(value: Any) -> str:
+    name = (value or "").strip()
+    if not _FOLDER_RE.match(name):
+        raise RemediationError(
+            "Folder name may only contain letters, numbers, spaces and - & ( ) . "
+            "and be 1-64 characters."
+        )
+    return name
+
+
 # Which roles may approve a task of a given tier. AUTOMATIC never reaches approval.
 _APPROVER_ROLES: dict[RemediationTier, set[UserRole]] = {
     RemediationTier.APPROVAL_REQUIRED: {UserRole.ADMIN, UserRole.TECHNICIAN},
@@ -150,6 +175,10 @@ class RemediationService:
                 raise RemediationError(
                     f"Application '{name}' is not on the allowlist of restartable applications."
                 )
+        if "from_address" in action.params:
+            params["from_address"] = _validate_email(params.get("from_address"))
+        if "folder_name" in action.params:
+            params["folder_name"] = _validate_folder_name(params.get("folder_name"))
         return params
 
     # -- Approval workflow (portal staff) --------------------------------------

@@ -60,6 +60,51 @@ async def test_approval_required_action_starts_pending(client, admin_headers):
     assert resp.json()["tier"] == "approval_required"
 
 
+async def test_create_outlook_rule_is_an_automatic_action_with_params(client, admin_headers):
+    """The AI-driven 'create a rule from X, move to folder Y' path: a real action
+    (auto-applied), with the sender + folder carried as params to the agent."""
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+    resp = await client.post(
+        "/api/v1/remediations", headers=admin_headers,
+        json={
+            "device_id": device_id, "action_id": "create_outlook_rule",
+            "reason": "User asked to file this sender into a folder",
+            "params": {"from_address": "chishtydanish@gmail.com", "folder_name": "Danish"},
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["action_id"] == "create_outlook_rule"
+    assert body["tier"] == "automatic"
+    assert body["status"] == "approved"  # action, not a queued suggestion
+
+    # The sender + folder are stored on the task, so the agent receives them to build the rule.
+    tasks = (await client.get("/api/v1/remediations", headers=admin_headers)).json()
+    rule_task = next(t for t in tasks if t["action_id"] == "create_outlook_rule")
+    assert rule_task["params"] == {"from_address": "chishtydanish@gmail.com", "folder_name": "Danish"}
+
+
+async def test_create_outlook_rule_rejects_bad_email(client, admin_headers):
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+    r = await client.post("/api/v1/remediations", headers=admin_headers, json={
+        "device_id": device_id, "action_id": "create_outlook_rule", "reason": "x",
+        "params": {"from_address": "not-an-email", "folder_name": "Danish"}})
+    assert r.status_code == 400
+    assert "email" in r.text.lower()
+
+
+async def test_create_outlook_rule_rejects_unsafe_folder(client, admin_headers):
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+    r = await client.post("/api/v1/remediations", headers=admin_headers, json={
+        "device_id": device_id, "action_id": "create_outlook_rule", "reason": "x",
+        "params": {"from_address": "a@b.com", "folder_name": "bad/../path"}})
+    assert r.status_code == 400
+    assert "folder" in r.text.lower()
+
+
 async def test_admin_only_action_cannot_run_via_automatic_path(client, admin_headers):
     """SECURITY INVARIANT — must fail loudly if ever broken: an admin_only action can
     NEVER dispatch to an agent without explicit admin approval, even though the org's

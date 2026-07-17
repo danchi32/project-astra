@@ -89,6 +89,16 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "description": "Only for restart_application: the app's process name "
                     "(e.g. WINWORD, EXCEL, slack). Must be an allowlisted user application.",
                 },
+                "from_address": {
+                    "type": "string",
+                    "description": "Only for create_outlook_rule: the sender email address the "
+                    "rule matches on (e.g. chishtydanish@gmail.com).",
+                },
+                "folder_name": {
+                    "type": "string",
+                    "description": "Only for create_outlook_rule: the Outlook folder to move the "
+                    "matching mail into (created if it doesn't exist), e.g. Danish.",
+                },
                 "reason": {
                     "type": "string",
                     "description": "A short, plain-language reason for this fix.",
@@ -217,6 +227,10 @@ async def _propose_remediation(
         params["service_name"] = tool_input["service_name"]
     if tool_input.get("process_name"):
         params["process_name"] = tool_input["process_name"]
+    if tool_input.get("from_address"):
+        params["from_address"] = tool_input["from_address"]
+    if tool_input.get("folder_name"):
+        params["folder_name"] = tool_input["folder_name"]
 
     try:
         task = await RemediationService(session).create_task(

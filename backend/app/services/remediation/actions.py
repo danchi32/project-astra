@@ -76,6 +76,11 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     RemediationAction("restart_service", "Restart a Windows service", RemediationTier.AUTOMATIC,
                       "Restarts an allowlisted Windows service (e.g. Print Spooler, Windows Search).",
                       params=("service_name",)),
+    RemediationAction("create_outlook_rule", "Create an Outlook inbox rule", RemediationTier.AUTOMATIC,
+                      "Creates a rule in the user's DESKTOP Outlook that moves incoming mail from a "
+                      "given sender address into a folder (creating the folder if it doesn't exist). "
+                      "Reversible — the user can delete the rule in Outlook.",
+                      params=("from_address", "folder_name")),
 
     # ── Approval required: impactful but routine, needs IT sign-off ──────────
     RemediationAction("office_repair", "Repair Microsoft Office", RemediationTier.APPROVAL_REQUIRED,

@@ -19,6 +19,7 @@ public sealed class RemediationExecutor
             "restart_explorer", "restart_outlook", "restart_teams", "restart_zoom",
             "restart_chrome", "restart_edge", "restart_application",
             "flush_dns", "clear_temp", "clear_browser_cache",
+            "create_outlook_rule",
         };
 
     public async Task<(bool Success, string Output)> ExecuteAsync(
@@ -40,6 +41,7 @@ public sealed class RemediationExecutor
                 "restart_chrome" => RestartApp(new[] { "chrome" }, "chrome.exe"),
                 "restart_edge" => RestartApp(new[] { "msedge" }, "msedge.exe"),
                 "restart_application" => RestartApplication(parameters),
+                "create_outlook_rule" => CreateOutlookRule(parameters),
                 _ => (false,
                     $"Action '{actionId}' is not supported by the desktop agent "
                     + "(it may require the elevated service, which is a later phase)."),
@@ -315,6 +317,75 @@ public sealed class RemediationExecutor
                 killed > 0
                     ? $"Closed the application, but couldn't relaunch it automatically ({ex.Message}). Please reopen it."
                     : $"The application wasn't running and couldn't be launched ({ex.Message}).");
+        }
+    }
+
+    /// <summary>Creates a rule in the user's DESKTOP Outlook that moves incoming mail from a
+    /// given sender into a folder (created under the Inbox if missing). Late-bound COM, so no
+    /// Office interop assembly is required. Runs in the user session where the tray app lives,
+    /// which is where an Outlook profile is available. The backend has already validated the
+    /// address + folder name.</summary>
+    private static (bool, string) CreateOutlookRule(
+        System.Collections.Generic.IReadOnlyDictionary<string, string>? parameters)
+    {
+        var from = parameters is not null && parameters.TryGetValue("from_address", out var f) ? f?.Trim() : null;
+        var folderName = parameters is not null && parameters.TryGetValue("folder_name", out var fn) ? fn?.Trim() : null;
+        if (string.IsNullOrWhiteSpace(from))
+            return (false, "No sender address was provided for the rule.");
+        if (string.IsNullOrWhiteSpace(folderName))
+            return (false, "No target folder was provided for the rule.");
+
+        var progId = Type.GetTypeFromProgID("Outlook.Application");
+        if (progId is null)
+            return (false, "Microsoft Outlook (desktop) doesn't appear to be installed on this machine.");
+
+        object? outlook = null;
+        try
+        {
+            outlook = Activator.CreateInstance(progId);
+            dynamic app = outlook!;
+            dynamic session = app.Session;                 // MAPI namespace
+            dynamic inbox = session.GetDefaultFolder(6);   // olFolderInbox
+
+            // Find (case-insensitive) or create the destination folder under the Inbox.
+            dynamic? target = null;
+            dynamic folders = inbox.Folders;
+            for (int i = 1; i <= (int)folders.Count; i++)
+            {
+                dynamic folder = folders[i];
+                if (string.Equals((string)folder.Name, folderName, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = folder;
+                    break;
+                }
+            }
+            target ??= folders.Add(folderName);
+
+            // from <address>  ->  move to <folder>
+            dynamic rules = session.DefaultStore.GetRules();
+            string ruleName = $"ASTRA: {from} -> {folderName}";
+            dynamic rule = rules.Create(ruleName, 0);      // olRuleReceive
+
+            dynamic senderCond = rule.Conditions.SenderAddress;
+            senderCond.Enabled = true;
+            senderCond.Address = new object[] { from };    // Outlook expects a variant array
+
+            dynamic moveAction = rule.Actions.MoveToFolder;
+            moveAction.Enabled = true;
+            moveAction.Folder = target;
+
+            rules.Save(false);                             // don't pop the rules-in-error dialog
+            return (true, $"Created the Outlook rule '{ruleName}'. Mail from {from} will now move to '{folderName}'.");
+        }
+        catch (Exception ex)
+        {
+            return (false, "Couldn't create the Outlook rule: " + ex.Message
+                + " (Outlook desktop must be installed with a configured mail profile.)");
+        }
+        finally
+        {
+            if (outlook is not null && System.Runtime.InteropServices.Marshal.IsComObject(outlook))
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(outlook);
         }
     }
 }
