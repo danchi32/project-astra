@@ -19,8 +19,8 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
     private static readonly string[] PreservedFiles = { "appsettings.json" };
 
     private readonly string _installDir = AppContext.BaseDirectory.TrimEnd('\\');
-    private readonly string _workRoot = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Astra", "update");
+    // Admin-only working area (see UpdatePaths) — never a world-writable ProgramData path.
+    private readonly string _workRoot = UpdatePaths.WorkRoot;
 
     /// <summary>Fetch + verify + stage the release, then hand off to the apply script and ask the
     /// host to stop so the files unlock. Returns false (and changes nothing) on any failure.</summary>
@@ -31,7 +31,9 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
         var zipPath = Path.Combine(_workRoot, $"AstraAgent-{manifest.Version}.zip");
         try
         {
-            Directory.CreateDirectory(_workRoot);
+            // Lock the working area down before we write anything executable into it. If it
+            // can't be secured, abort — better no update than a SYSTEM-writable staging dir.
+            UpdatePaths.EnsureHardened();
 
             if (!await DownloadAsync(manifest.Url, zipPath, ct))
                 return false;

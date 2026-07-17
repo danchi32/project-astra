@@ -74,5 +74,14 @@ def test_service_is_inert_without_both_urls():
     assert agent_update_module.AgentUpdateService(both).configured is True
 
 
+def test_service_requires_https_channel_urls():
+    # A non-https channel is an unencrypted fetch of a security-critical artifact — refuse it.
+    insecure = _bare_settings(
+        agent_update_manifest_url="http://x/m.json",
+        agent_update_signature_url="http://x/m.sig",
+    )
+    assert agent_update_module.AgentUpdateService(insecure).configured is False
+
+
 async def test_current_returns_none_when_unconfigured():
     assert await agent_update_module.AgentUpdateService(_bare_settings()).current() is None

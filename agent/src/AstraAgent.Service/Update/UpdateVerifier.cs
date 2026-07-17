@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AstraAgent.Service.Update;
 
@@ -22,6 +23,12 @@ public sealed class UpdateVerifier
 {
     private const string EmbeddedKeyResource =
         "AstraAgent.Service.Update.update-signing-public.pem";
+
+    // Strict shapes for the fields that flow into file paths and the apply script. Even though
+    // these are signature-gated, validating them is cheap defense-in-depth against a version
+    // like "..\..\evil" or a quote-breakout ever reaching Path.Combine / the .cmd.
+    private static readonly Regex VersionRe = new(@"^\d+\.\d+\.\d+$", RegexOptions.Compiled);
+    private static readonly Regex Sha256Re = new(@"^[0-9a-fA-F]{64}$", RegexOptions.Compiled);
 
     private readonly RSA _publicKey;
 
@@ -96,10 +103,7 @@ public sealed class UpdateVerifier
         try
         {
             var manifest = JsonSerializer.Deserialize<UpdateManifest>(manifestJson);
-            if (manifest is null
-                || string.IsNullOrWhiteSpace(manifest.Version)
-                || string.IsNullOrWhiteSpace(manifest.Url)
-                || string.IsNullOrWhiteSpace(manifest.Sha256))
+            if (manifest is null || !IsWellFormed(manifest))
                 return null;
             return manifest;
         }
@@ -107,6 +111,21 @@ public sealed class UpdateVerifier
         {
             return null;
         }
+    }
+
+    /// <summary>Reject a manifest whose fields aren't strictly shaped, so nothing unexpected can
+    /// reach a file path or the generated apply script even behind a valid signature.</summary>
+    private static bool IsWellFormed(UpdateManifest m)
+    {
+        if (!VersionRe.IsMatch(m.Version ?? ""))
+            return false;
+        if (!Sha256Re.IsMatch(m.Sha256 ?? ""))
+            return false;
+        if (!Uri.TryCreate(m.Url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            return false;
+        if (m.MinVersion is not null && !VersionRe.IsMatch(m.MinVersion))
+            return false;
+        return true;
     }
 
     /// <summary>Confirm a downloaded file's SHA-256 matches the (already signature-verified)

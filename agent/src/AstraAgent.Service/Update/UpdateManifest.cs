@@ -9,7 +9,10 @@ public sealed record UpdateManifest(
     [property: JsonPropertyName("version")] string Version,
     [property: JsonPropertyName("url")] string Url,
     [property: JsonPropertyName("sha256")] string Sha256,
-    [property: JsonPropertyName("notes")] string? Notes = null);
+    [property: JsonPropertyName("notes")] string? Notes = null,
+    // Optional signed hard floor: agents refuse to run any version below this and remember the
+    // highest floor they've ever seen, so a released fix can revoke known-bad earlier versions.
+    [property: JsonPropertyName("min_version")] string? MinVersion = null);
 
 /// <summary>What the backend returns from GET /api/v1/agent/update. `Manifest` is the raw JSON
 /// string that was signed (verified verbatim — never re-serialized), `Signature` its base64

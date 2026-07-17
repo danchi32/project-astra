@@ -24,8 +24,11 @@ public class UpdateVerifierTests
         return Convert.ToBase64String(sig);
     }
 
+    private const string Sha64 =
+        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
     private const string SampleManifest =
-        "{\"version\":\"0.2.0\",\"url\":\"https://example.com/a.zip\",\"sha256\":\"ABCD\"}";
+        "{\"version\":\"0.2.0\",\"url\":\"https://example.com/a.zip\",\"sha256\":\"" + Sha64 + "\"}";
 
     [Fact]
     public void ValidlySignedManifest_Verifies()
@@ -79,6 +82,19 @@ public class UpdateVerifierTests
         Assert.Null(UpdateVerifier.FromPublicKeyPem(weak.ExportSubjectPublicKeyInfoPem()));
     }
 
+    [Theory]
+    // Even with a VALID signature, a malformed field must be refused (defense in depth).
+    [InlineData("{\"version\":\"..\\\\evil\",\"url\":\"https://x/a.zip\",\"sha256\":\"" + Sha64 + "\"}")]
+    [InlineData("{\"version\":\"0.2\",\"url\":\"https://x/a.zip\",\"sha256\":\"" + Sha64 + "\"}")]
+    [InlineData("{\"version\":\"0.2.0\",\"url\":\"https://x/a.zip\",\"sha256\":\"tooshort\"}")]
+    [InlineData("{\"version\":\"0.2.0\",\"url\":\"http://x/a.zip\",\"sha256\":\"" + Sha64 + "\"}")]
+    [InlineData("{\"version\":\"0.2.0\",\"url\":\"file:///etc/passwd\",\"sha256\":\"" + Sha64 + "\"}")]
+    public void MalformedButSignedManifest_IsRejected(string json)
+    {
+        var (verifier, signer) = NewPair();
+        Assert.Null(verifier.Verify(json, Sign(signer, json)));
+    }
+
     [Fact]
     public void FileMatchesHash_DetectsTamper()
     {
@@ -95,6 +111,36 @@ public class UpdateVerifierTests
         finally
         {
             File.Delete(path);
+        }
+    }
+}
+
+public class UpdateFloorStoreTests
+{
+    [Fact]
+    public void Raise_IsMonotonic_AndPersists()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"floor-{Guid.NewGuid():N}.txt");
+        try
+        {
+            var store = new UpdateFloorStore(path);
+            Assert.Equal("0.0.0", store.Current());
+
+            store.Raise("0.3.0");
+            Assert.Equal("0.3.0", store.Current());
+
+            store.Raise("0.2.0");                 // older — must not lower the floor
+            Assert.Equal("0.3.0", store.Current());
+
+            store.Raise("0.4.0");
+            Assert.Equal("0.4.0", store.Current());
+
+            // A fresh store over the same file sees the persisted floor (survives restart).
+            Assert.Equal("0.4.0", new UpdateFloorStore(path).Current());
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
         }
     }
 }

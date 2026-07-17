@@ -17,6 +17,7 @@ public sealed class UpdateWorker(
     ILogger<UpdateWorker> logger) : BackgroundService
 {
     private readonly UpdateVerifier? _verifier = UpdateVerifier.FromEmbeddedKey();
+    private readonly UpdateFloorStore _floor = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -74,8 +75,26 @@ public sealed class UpdateWorker(
             return false;
         }
 
-        if (!SemVer.IsNewer(manifest.Version, AgentVersion.Current))
-            return false;   // already current (or older) — nothing to do
+        // Anti-replay floor: the highest version we've ever seen signed, the version we're
+        // running, and any signed min_version all raise a monotonic floor. Refuse anything at or
+        // below it so a replayed older-but-signed manifest can't roll the agent back.
+        _floor.Raise(manifest.Version);
+        if (!string.IsNullOrEmpty(manifest.MinVersion))
+            _floor.Raise(manifest.MinVersion!);
+
+        var floor = _floor.Current();
+        if (SemVer.Compare(AgentVersion.Current, floor) > 0)
+            floor = AgentVersion.Current;
+
+        if (!SemVer.IsNewer(manifest.Version, floor))
+        {
+            // Newer than we run but not above the floor ⇒ a superseded/replayed manifest.
+            if (SemVer.IsNewer(manifest.Version, AgentVersion.Current))
+                logger.LogWarning(
+                    "Refusing update {New}: below the version floor {Floor} (possible rollback/replay).",
+                    manifest.Version, floor);
+            return false;
+        }
 
         logger.LogInformation(
             "Newer agent {New} available (running {Cur}); applying.",

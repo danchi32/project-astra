@@ -129,6 +129,9 @@ class Settings(BaseSettings):
     agent_update_manifest_url: str | None = None    # raw signed manifest JSON
     agent_update_signature_url: str | None = None    # base64 RSA-SHA256 signature of that JSON
     agent_update_cache_seconds: int = 300
+    # Cap how long a cached manifest may be served after the upstream goes unreachable, so a
+    # transient outage can't cause an indefinitely stale (rollback-adjacent) manifest to persist.
+    agent_update_max_stale_seconds: int = 86400
 
     # Security contact published at /.well-known/security.txt (RFC 9116).
     security_contact: str = "mailto:security@example.com"

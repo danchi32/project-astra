@@ -25,6 +25,16 @@ An auto-update channel is a remote-code path to every managed PC. The design kee
 - **The download is hash-checked** against the signed manifest before it's ever executed.
 - **Fail-safe:** with the placeholder public key still in the build, the agent verifies no key
   and simply never updates. The feature turns on only once you pin a real key.
+- **Anti-replay floor:** the agent remembers the highest version it has ever seen in a signed
+  manifest (and honours an optional signed `min_version`), and refuses anything at or below that
+  floor — so a replayed older-but-signed manifest can't roll it back. (Residual: an agent that
+  has *never* reached an honest backend since a newer release can still be pointed at an older
+  signed release; closing that fully needs a time-based freshness field — a planned follow-up.)
+- **Hardened working area:** staging and the apply script live under the admin-only install root
+  with an explicit SYSTEM/Administrators-only DACL — never world-writable `ProgramData` — so a
+  local unprivileged user can't tamper with files the LocalSystem service then executes.
+- **Strict manifest shape:** version/sha256/url are format-validated (`X.Y.Z`, 64-hex, `https://`)
+  even behind a valid signature, so nothing unexpected can reach a file path or the apply script.
 
 ## One-time setup
 
