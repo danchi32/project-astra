@@ -139,9 +139,10 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
 async def health() -> dict[str, object]:
     from app.services.email import EmailService
 
-    # Minimal, non-sensitive liveness signal.
+    # Minimal, non-sensitive liveness signal (booleans only — no secrets/values).
     return {
         "status": "ok",
         "service": settings.app_name,
         "email_enabled": EmailService().enabled,
+        "ai_enabled": bool(settings.anthropic_api_key),  # False -> AI runs on the stub
     }
