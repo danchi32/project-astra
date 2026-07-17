@@ -36,7 +36,22 @@ class Settings(BaseSettings):
 
     # Public base URL of this backend as reached by Windows agents. Baked into the
     # generated agent installer as the default ServerUrl; the portal can override it.
+    # Production: set ASTRA_PUBLIC_API_URL to the custom domain, e.g.
+    #   https://api.astra.technomateai.com
+    # Prefer a domain you own over the platform hostname (*.up.railway.app):
+    # filtering resolvers commonly block cloud-hosting subdomains outright, which is
+    # what forces the agent's hosts-file workaround below.
     public_api_url: str = "http://localhost:8000"
+
+    # Optional IP that the portable agent installer pins public_api_url's hostname to
+    # in the endpoint's hosts file, for networks whose DNS cannot resolve it.
+    #
+    # EMPTY BY DEFAULT, and it should stay empty when public_api_url is a custom
+    # domain you control. A hosts pin OVERRIDES working DNS, so a stale one
+    # blackholes the agent permanently once the IP changes (platform edge IPs
+    # rotate). Only set ASTRA_AGENT_BACKEND_IP as a temporary workaround, and
+    # clear it once DNS resolves.
+    agent_backend_ip: str = ""
 
     # AI engine — when the API key is unset, a deterministic stub provider is used
     # (local demo + tests run without a key or network).
@@ -65,6 +80,19 @@ class Settings(BaseSettings):
     # Email (SMTP) — INERT until host + user + password are set. Works with
     # Hostinger (smtp.hostinger.com:465 SSL, or :587 STARTTLS) or any SMTP host.
     # When unset: no email is sent, and registration OTP is skipped (open signup).
+    # -- Payment rails (each INERT until its keys are set) ---------------------
+    # Razorpay: Indian customers (UPI / cards / netbanking / e-mandate, INR).
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    razorpay_plan_id: str | None = None          # a per-seat recurring plan (INR)
+    razorpay_webhook_secret: str | None = None
+
+    # Paddle: international customers (Merchant of Record — handles global VAT).
+    paddle_api_key: str | None = None
+    paddle_price_id: str | None = None           # a per-seat recurring price
+    paddle_webhook_secret: str | None = None
+    paddle_sandbox: bool = True                  # use Paddle's sandbox API host
+
     # Preferred transport on platforms that block SMTP (e.g. Railway): Resend's
     # HTTPS API. When set, it's used instead of SMTP. Verify your domain in Resend.
     resend_api_key: str | None = None

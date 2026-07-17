@@ -43,6 +43,14 @@ class Organization(TimestampMixin, Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
+    # Which payment rail this org pays on: "razorpay" (India: UPI/cards/netbanking)
+    # or "paddle" (international: Merchant of Record, handles global VAT). Set when
+    # the org first checks out; null while on trial. Ids are provider-agnostic so a
+    # new rail can be added without another migration.
+    billing_provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    provider_customer_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    provider_subscription_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+
     # Licensed seats: how many the org has purchased. 0 = unlicensed (trial / not
     # subscribed) and therefore uncapped. When > 0, device enrollment is hard-capped
     # at this number. Kept in sync with the Stripe subscription quantity.
