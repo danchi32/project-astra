@@ -9,19 +9,7 @@ import { getMe } from "@/lib/api/auth";
 import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller } from "@/lib/api/devices";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
-import type { Installer, Device } from "@/lib/api/types";
-
-function downloadScript(installer: Installer) {
-  const blob = new Blob([installer.script], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = installer.filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+import type { Device } from "@/lib/api/types";
 
 // Quote a CSV cell only when it contains a comma, quote or newline (RFC 4180).
 function csvCell(value: unknown): string {
@@ -140,20 +128,15 @@ function InstallAgentPanel() {
                   1. On the target Windows machine, download the installer
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => downloadScript(installer)}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
-                    style={{ background: "var(--accent)" }}>
-                    <Download size={15} /> Download Install-AstraAgent.ps1
-                  </button>
                   <button onClick={downloadOffline} disabled={offlineBusy}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-                    <Download size={15} /> {offlineBusy ? "Preparing…" : "Portable .zip (many PCs)"}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                    style={{ background: "var(--accent)" }}>
+                    <Download size={15} /> {offlineBusy ? "Preparing…" : "Download installer (.zip)"}
                   </button>
                 </div>
                 <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
-                  Your server URL and enrollment key are already baked in. The <span className="font-medium">portable .zip</span> bundles
-                  the agent itself for locked-down machines — extract and double-click <span className="font-mono">Install.bat</span>.
+                  Your server URL and enrollment key are already baked in — nothing to type. Extract the
+                  .zip and double-click <span className="font-mono">Install.bat</span> (or run the command below).
                 </p>
               </div>
 
