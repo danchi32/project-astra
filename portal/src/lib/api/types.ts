@@ -14,8 +14,12 @@ export interface User {
 export type SubscriptionStatus =
   | "trialing" | "active" | "past_due" | "suspended" | "canceled";
 
+export type BillingProvider = "razorpay" | "paddle" | "paypal";
+
 export interface BillingStatus {
   billing_enabled: boolean;
+  providers: BillingProvider[];          // rails configured & able to sell now
+  billing_provider: BillingProvider | null; // the rail this org pays on, once chosen
   plan: string;
   subscription_status: SubscriptionStatus;
   writable: boolean;
