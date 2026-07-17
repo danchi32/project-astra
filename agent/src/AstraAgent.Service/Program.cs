@@ -40,7 +40,10 @@ builder.Services.AddSingleton<IServicesCollector, ServicesCollector>();
 builder.Services.AddSingleton<IWindowsUpdateCollector, WindowsUpdateCollector>();
 builder.Services.AddSingleton<IHardwareCollector, HardwareCollector>();
 
+builder.Services.AddSingleton<AstraAgent.Service.Update.UpdateInstaller>();
+
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
+builder.Services.AddHostedService<UpdateWorker>();
 
 builder.Build().Run();

@@ -12,6 +12,10 @@ public sealed class AgentOptions
     public string? EnrollmentToken { get; set; }
 
     public int HeartbeatIntervalSeconds { get; set; } = 60;
+
+    /// <summary>How often to check the backend for a newer signed agent release. Auto-update
+    /// stays off entirely unless a real signing public key is pinned into the build.</summary>
+    public int UpdateCheckIntervalMinutes { get; set; } = 60;
 }
 
 public static class AgentVersion

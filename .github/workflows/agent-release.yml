@@ -1,0 +1,115 @@
+name: Release ASTRA Agent (signed auto-update)
+
+# Cut a signed agent release that installed agents auto-apply. Tag the commit
+# `agent-vX.Y.Z` (matching AgentVersion.Current) and push the tag, or run manually.
+#
+#   git tag agent-v0.2.0 && git push origin agent-v0.2.0
+#
+# Signing happens HERE, in CI, using the AGENT_UPDATE_SIGNING_KEY secret (the private
+# half of your update key). The backend never holds this key — it only relays the
+# signed manifest — so a backend compromise cannot forge a fleet update.
+
+on:
+  push:
+    tags: [ 'agent-v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.2.0 (must equal AgentVersion.Current)'
+        required: true
+
+permissions:
+  contents: write   # needed to create the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#agent-v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing agent version: $VERSION"
+
+      - name: Verify the binary's self-version matches the release
+        run: |
+          SRC_VER=$(grep -oP 'Current\s*=\s*"\K[^"]+' agent/src/AstraAgent.Service/AgentOptions.cs)
+          echo "AgentVersion.Current = $SRC_VER ; releasing ${{ steps.ver.outputs.version }}"
+          if [ "$SRC_VER" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::AgentVersion.Current ($SRC_VER) != release ${{ steps.ver.outputs.version }}."
+            echo "::error::Bump AgentVersion.Current (and the csproj <Version>) to match, then re-tag."
+            exit 1
+          fi
+
+      - name: Ensure a signing key is configured
+        env:
+          KEY: ${{ secrets.AGENT_UPDATE_SIGNING_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Secret AGENT_UPDATE_SIGNING_KEY is not set. Generate a keypair, add"
+            echo "::error::the private key as this secret, and pin the public key into the agent."
+            exit 1
+          fi
+
+      # Framework-dependent build: matches how the installer runs the agent
+      # (dotnet.exe hosting AstraAgent.Service.dll), so the update drops straight in.
+      - name: Publish agent (framework-dependent, win-x64)
+        run: |
+          dotnet publish agent/src/AstraAgent.Service/AstraAgent.Service.csproj \
+            -c Release -r win-x64 --self-contained false \
+            -p:Version=${{ steps.ver.outputs.version }} \
+            -o publish
+
+      - name: Package AstraAgent.zip
+        run: |
+          cd publish
+          zip -r ../AstraAgent.zip . >/dev/null
+          cd ..
+          ls -la AstraAgent.zip
+
+      - name: Build the signed manifest
+        env:
+          SIGNING_KEY: ${{ secrets.AGENT_UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          SHA=$(sha256sum AstraAgent.zip | awk '{print $1}')
+          URL="https://github.com/${{ github.repository }}/releases/latest/download/AstraAgent.zip"
+
+          # Compact, single-line manifest. These EXACT bytes are what gets signed and what the
+          # agent verifies — the backend relays them verbatim, never re-serializing.
+          printf '{"version":"%s","url":"%s","sha256":"%s","notes":"ASTRA agent %s"}' \
+            "$VERSION" "$URL" "$SHA" "$VERSION" > manifest.json
+          echo "Manifest: $(cat manifest.json)"
+
+          # Sign with the CI-held private key; publish the signature base64-encoded (text),
+          # which is the form the agent's verifier expects.
+          printf '%s' "$SIGNING_KEY" > signing-key.pem
+          openssl dgst -sha256 -sign signing-key.pem -out manifest.sig.bin manifest.json
+          base64 -w0 manifest.sig.bin > manifest.json.sig
+          rm -f signing-key.pem manifest.sig.bin
+          echo "Signature (base64): $(cat manifest.json.sig)"
+
+      - name: Create GitHub Release with signed assets
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: agent-v${{ steps.ver.outputs.version }}
+          name: ASTRA Agent ${{ steps.ver.outputs.version }}
+          files: |
+            AstraAgent.zip
+            manifest.json
+            manifest.json.sig
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using AstraAgent.Service.Update;
 
 namespace AstraAgent.Service.Api;
 
@@ -16,6 +17,10 @@ public interface IAstraApiClient
     Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct);
     Task<HeartbeatStatus> HeartbeatAsync(string deviceToken, HeartbeatRequest request, CancellationToken ct);
     Task<bool> PushTelemetryAsync(string deviceToken, TelemetryPush payload, CancellationToken ct);
+
+    /// <summary>Ask the backend for the current signed update manifest. Returns null on any
+    /// transport error; an envelope with Available=false means no channel is configured.</summary>
+    Task<UpdateEnvelope?> GetUpdateAsync(string deviceToken, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -42,6 +47,23 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         if (!response.IsSuccessStatusCode)
             logger.LogWarning("Telemetry push failed with status {Status}", response.StatusCode);
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<UpdateEnvelope?> GetUpdateAsync(string deviceToken, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, "/api/v1/agent/update");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            if (!response.IsSuccessStatusCode)
+                return null;
+            return await response.Content.ReadFromJsonAsync<UpdateEnvelope>(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return null;   // offline / timeout — try again next cycle
+        }
     }
 
     public async Task<HeartbeatStatus> HeartbeatAsync(

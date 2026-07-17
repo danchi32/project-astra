@@ -12,13 +12,16 @@ from app.schemas.conversations import (
     AgentConversationHistory,
     AgentHistoryMessage,
 )
+from app.core.config import get_settings
 from app.schemas.devices import (
+    AgentUpdateEnvelope,
     EnrollRequest,
     EnrollResponse,
     HeartbeatRequest,
     HeartbeatResponse,
 )
 from app.schemas.remediation import AgentRemediationResult, AgentRemediationTask
+from app.services.agent_update import AgentUpdateService
 from app.services.conversations import ConversationService
 from app.services.devices import DeviceService
 from app.services.remediation.service import RemediationService
@@ -40,6 +43,23 @@ async def heartbeat(
 ) -> HeartbeatResponse:
     await DeviceService(session).heartbeat(device=device, data=body)
     return HeartbeatResponse()
+
+
+@router.get(
+    "/update",
+    response_model=AgentUpdateEnvelope,
+    summary="Get the current signed agent-update manifest (device-authenticated)",
+)
+async def get_update(
+    device: Device = Depends(get_current_device),
+) -> AgentUpdateEnvelope:
+    # The backend only relays an already-signed manifest; the agent verifies it against a
+    # pinned key, so this endpoint is not itself a trust boundary for update integrity.
+    current = await AgentUpdateService(get_settings()).current()
+    if current is None:
+        return AgentUpdateEnvelope(available=False)
+    manifest, signature = current
+    return AgentUpdateEnvelope(available=True, manifest=manifest, signature=signature)
 
 
 @router.post(

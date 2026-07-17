@@ -67,6 +67,15 @@ class HeartbeatResponse(BaseModel):
     status: str = "ok"
 
 
+class AgentUpdateEnvelope(BaseModel):
+    """The signed release manifest relayed to an agent. `manifest` is the exact JSON string
+    that was signed (verified verbatim by the agent), `signature` its base64 RSA-SHA256
+    signature. `available` is false when no update channel is configured."""
+    available: bool = False
+    manifest: str | None = None
+    signature: str | None = None
+
+
 class DeviceUpdate(BaseModel):
     is_active: bool | None = None
 

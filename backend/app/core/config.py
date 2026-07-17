@@ -121,6 +121,15 @@ class Settings(BaseSettings):
     remediation_auto_approve_burst: int = 25
     remediation_hard_burst: int = 200
 
+    # Agent auto-update channel. The backend only RELAYS the already-signed manifest it
+    # fetches from these URLs (e.g. a GitHub Releases "latest/download" asset); it never
+    # signs anything. Agents verify the signature against a key pinned in their binary, so a
+    # compromise of this backend cannot forge an update. Both must be set for the feature to
+    # be active; otherwise /agent/update reports no update available.
+    agent_update_manifest_url: str | None = None    # raw signed manifest JSON
+    agent_update_signature_url: str | None = None    # base64 RSA-SHA256 signature of that JSON
+    agent_update_cache_seconds: int = 300
+
     # Security contact published at /.well-known/security.txt (RFC 9116).
     security_contact: str = "mailto:security@example.com"
     # Portal base URL Stripe Checkout/Portal redirect back to after payment.
