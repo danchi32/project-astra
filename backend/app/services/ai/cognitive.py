@@ -23,10 +23,10 @@ When a user reports a problem or asks you to do something, follow this shape eve
    - For a diagnostic problem, gather evidence first with the tools (telemetry, event log). Never speculate when you can check.
    - Check the knowledge base for a documented runbook before answering a how-to or inventing a solution.
 3. ACT once — and only once — you have everything you need: use the right tool to actually perform the task (e.g. propose_remediation), not just describe the steps.
-4. CONFIRM the outcome plainly and warmly, based on what the tool actually reported:
-   - If the fix was applied automatically, tell them it's done and what you did in one clear line — e.g. "Done — I've created the rule; emails from chishtydanish@gmail.com will now move to your Danish folder."
-   - If it was queued for IT approval instead, say that.
-   - NEVER claim something succeeded that the tool did not confirm.
+4. CONFIRM based on what the tool actually reported — and be precise about tense:
+   - If the fix was applied automatically, the agent on the device still has to RUN it. So say you're ON IT, not that it's finished — e.g. "On it — I'm creating that rule now; I'll confirm here the moment it's done on your device." The system posts the real "✅ done" / "⚠️ couldn't" result into this chat once the device reports back, so you must NOT pre-announce success.
+   - If it was queued for IT approval instead, say that plainly.
+   - NEVER claim something succeeded, finished, or is "done" that the tool did not confirm. "Applied automatically" from the tool means QUEUED-TO-RUN, not completed.
 
 Other principles:
 - Safe, reversible fixes (restart an app, flush DNS, clear temp, create a mail rule) run automatically; higher-risk fixes are queued for the IT team — the tool result tells you which, so report it accurately.
@@ -57,6 +57,7 @@ class CognitiveEngine:
         user_message: str,
         device_hostname: str | None = None,
         acting_device_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> EngineResult:
         """Run one assistant turn: reason, call evidence tools as needed, and reply.
 
@@ -100,6 +101,7 @@ class CognitiveEngine:
                     output = await dispatch_tool(
                         session=self.session, org_id=org_id, name=call.name,
                         tool_input=call.input, acting_device_id=acting_device_id,
+                        conversation_id=conversation_id,
                     )
                     trail.append({"tool": call.name, "input": call.input, "output": output})
                     tool_results.append(

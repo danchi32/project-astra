@@ -117,10 +117,12 @@ async def dispatch_tool(
     name: str,
     tool_input: dict[str, Any],
     acting_device_id: uuid.UUID | None = None,
+    conversation_id: uuid.UUID | None = None,
 ) -> str:
     """Execute a tool call within the org's scope and return a JSON string result.
 
     `acting_device_id` is the device whose tray the chat came from; remediation acts on it.
+    `conversation_id` is the chat this call came from, so the execution result can be posted back.
     """
     devices = DeviceRepository(session)
     telemetry = TelemetryRepository(session)
@@ -128,7 +130,7 @@ async def dispatch_tool(
     if name == "propose_remediation":
         return await _propose_remediation(
             session=session, org_id=org_id, acting_device_id=acting_device_id,
-            tool_input=tool_input or {}
+            conversation_id=conversation_id, tool_input=tool_input or {}
         )
 
     if name == "search_knowledge_base":
@@ -209,6 +211,7 @@ async def _propose_remediation(
     session: AsyncSession,
     org_id: uuid.UUID,
     acting_device_id: uuid.UUID | None,
+    conversation_id: uuid.UUID | None,
     tool_input: dict[str, Any],
 ) -> str:
     if acting_device_id is None:
@@ -240,6 +243,7 @@ async def _propose_remediation(
             params=params or None,
             reason=reason,
             source=RemediationSource.ASSISTANT,
+            conversation_id=conversation_id,
             actor_user_id=None,
         )
     except RemediationError as exc:

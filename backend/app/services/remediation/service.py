@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models import (
     Device,
+    Message,
+    MessageRole,
     NotificationCategory,
     NotificationSeverity,
     RemediationSource,
@@ -90,6 +92,7 @@ class RemediationService:
         reason: str,
         source: RemediationSource,
         actor_user_id: uuid.UUID | None,
+        conversation_id: uuid.UUID | None = None,
     ) -> RemediationTask:
         action = get_action(action_id)
         if action is None:
@@ -129,6 +132,7 @@ class RemediationService:
                 reason=reason,
                 source=source,
                 requested_by_user_id=actor_user_id,
+                conversation_id=conversation_id,
             )
         )
         await self.audit.record(
@@ -260,9 +264,9 @@ class RemediationService:
             target_id=str(task.id),
             detail={"action": task.action_id, "success": success},
         )
+        action = get_action(task.action_id)
+        label = action.label if action else task.action_id
         if not success:
-            action = get_action(task.action_id)
-            label = action.label if action else task.action_id
             await self.notifications.notify(
                 org_id=device.org_id,
                 category=NotificationCategory.REMEDIATION,
@@ -270,6 +274,22 @@ class RemediationService:
                 title="Remediation failed",
                 message=f"{label} failed on {device.hostname}.",
                 link="/self-healing",
+            )
+
+        # If this fix was started from a device chat, post the real outcome back into
+        # that conversation so the user sees "✅ done" / "⚠️ couldn't" after it runs.
+        if task.conversation_id is not None:
+            snippet = (output or "").strip()
+            if success:
+                text = f"✅ Done — {label.lower()} completed on your device."
+            else:
+                text = f"⚠️ I couldn't complete {label.lower()}: {snippet[:400] or 'the fix failed on your device.'}"
+            self.session.add(
+                Message(
+                    conversation_id=task.conversation_id,
+                    role=MessageRole.ASSISTANT,
+                    content=text,
+                )
             )
         await self.session.commit()
         return task

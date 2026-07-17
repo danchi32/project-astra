@@ -129,6 +129,7 @@ class ConversationService:
         reply = await self._reply(
             org_id=device.org_id, history=history, content=content,
             device_hostname=device.hostname, acting_device_id=device.id,
+            conversation_id=conversation.id,
         )
         assistant_message = await self.messages.add(
             Message(
@@ -162,6 +163,7 @@ class ConversationService:
         content: str,
         device_hostname: str | None = None,
         acting_device_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> Reply:
         settings = get_settings()
 
@@ -186,6 +188,7 @@ class ConversationService:
         result = await CognitiveEngine(self.session, provider=provider).run(
             org_id=org_id, history=history, user_message=content,
             device_hostname=device_hostname, acting_device_id=acting_device_id,
+            conversation_id=conversation_id,
         )
 
         # 4. Learn: if a NON-built-in provider (the LLM) solved a new issue by

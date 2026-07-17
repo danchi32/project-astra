@@ -52,5 +52,9 @@ class RemediationTask(TimestampMixin, Base):
     requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
 
+    # When the AI proposed this from a device chat, the conversation to post the
+    # execution result back into ("✅ done" / "⚠️ couldn't complete").
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
+
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

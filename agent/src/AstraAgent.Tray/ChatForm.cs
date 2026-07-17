@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,6 +15,12 @@ public sealed class ChatForm : Form
     private readonly TextBox _input;
     private readonly Button _send;
     private bool _historyLoaded;
+
+    // How many server-side messages we've already rendered. After the AI queues a fix,
+    // the backend appends the real "✅ done" / "⚠️ couldn't" line once the agent runs it;
+    // we poll and render any messages beyond this high-water mark.
+    private int _serverMsgCount;
+    private CancellationTokenSource? _pollCts;
 
     private static readonly Color BgColor = Color.FromArgb(248, 250, 252);
     private static readonly Color AccentColor = Color.FromArgb(37, 99, 235);
@@ -115,6 +122,7 @@ public sealed class ChatForm : Form
             _messages.Controls.Clear();   // drop the placeholder greeting
             foreach (var (role, content) in history)
                 AddBubble(content, fromUser: role == "user");
+            _serverMsgCount = history.Count;
         }
         catch { /* leave the greeting in place if history can't be loaded */ }
     }
@@ -149,6 +157,10 @@ public sealed class ChatForm : Form
         {
             var reply = await _client.SendAsync(text, CancellationToken.None);
             pending.Text = reply;
+            // The turn stored two server messages (this user turn + the AI reply). Anything
+            // beyond that is the execution result the backend posts once the agent runs.
+            _serverMsgCount += 2;
+            StartResultPolling();
         }
         catch (Exception ex)
         {
@@ -159,6 +171,59 @@ public sealed class ChatForm : Form
             _send.Enabled = true;
             _input.Focus();
             _messages.ScrollControlIntoView(pending);
+        }
+    }
+
+    /// <summary>After a turn, briefly poll for messages the backend appends when the agent
+    /// finishes running a queued fix, and render them as they arrive.</summary>
+    private void StartResultPolling()
+    {
+        _pollCts?.Cancel();
+        _pollCts = new CancellationTokenSource();
+        var ct = _pollCts.Token;
+        _ = PollForResultAsync(ct);
+    }
+
+    private async Task PollForResultAsync(CancellationToken ct)
+    {
+        // Poll every 3s for ~2 minutes — long enough for the agent's next remediation poll
+        // and execution, short enough not to run forever.
+        for (var i = 0; i < 40 && !ct.IsCancellationRequested; i++)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), ct);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+
+            IReadOnlyList<(string Role, string Content)> history;
+            try
+            {
+                history = await _client.LoadHistoryAsync(ct);
+            }
+            catch
+            {
+                continue;   // transient — try again next tick
+            }
+
+            if (ct.IsCancellationRequested || history.Count <= _serverMsgCount)
+                continue;
+
+            var terminal = false;
+            for (var j = _serverMsgCount; j < history.Count; j++)
+            {
+                var (role, content) = history[j];
+                AddBubble(content, fromUser: role == "user");
+                if (content.StartsWith("✅") || content.StartsWith("⚠️"))
+                    terminal = true;
+            }
+            _serverMsgCount = history.Count;
+
+            if (terminal)
+                return;   // the fix reported its outcome — stop polling
         }
     }
 
