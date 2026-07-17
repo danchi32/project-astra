@@ -73,19 +73,24 @@ jobs:
             exit 1
           fi
 
-      # Framework-dependent build: matches how the installer runs the agent
-      # (dotnet.exe hosting AstraAgent.Service.dll), so the update drops straight in.
-      - name: Publish agent (framework-dependent, win-x64)
+      # Framework-dependent builds: match how the installer runs the agent (dotnet.exe hosting
+      # the DLLs), so updates drop straight in. The package carries the service under agent\ and
+      # the tray under tray\ — the service updater consumes agent\, the tray self-updater tray\.
+      - name: Publish service + tray (framework-dependent, win-x64)
         run: |
           dotnet publish agent/src/AstraAgent.Service/AstraAgent.Service.csproj \
             -c Release -r win-x64 --self-contained false \
             -p:Version=${{ steps.ver.outputs.version }} \
-            -o publish
+            -o publish/agent
+          dotnet publish agent/src/AstraAgent.Tray/AstraAgent.Tray.csproj \
+            -c Release -r win-x64 --self-contained false \
+            -p:Version=${{ steps.ver.outputs.version }} \
+            -o publish/tray
 
       - name: Package AstraAgent.zip
         run: |
           cd publish
-          zip -r ../AstraAgent.zip . >/dev/null
+          zip -r ../AstraAgent.zip agent tray >/dev/null
           cd ..
           ls -la AstraAgent.zip
 

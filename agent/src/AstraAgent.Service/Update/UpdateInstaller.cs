@@ -52,15 +52,16 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
             ZipFile.ExtractToDirectory(zipPath, staging);
             TryDelete(zipPath);
 
-            // Sanity: the package must actually contain the service binary.
-            if (!File.Exists(Path.Combine(staging, "AstraAgent.Service.exe"))
-                && !File.Exists(Path.Combine(staging, "AstraAgent.Service.dll")))
+            // The combined release package carries the service under agent\ (the tray, under
+            // tray\, self-updates from its own live copy). Sanity-check the service binary.
+            var servicePayload = Path.Combine(staging, "agent");
+            if (!File.Exists(Path.Combine(servicePayload, "AstraAgent.Service.dll")))
             {
                 logger.LogWarning("Update {Version} rejected: package missing agent binary", manifest.Version);
                 return false;
             }
 
-            LaunchApplyScript(staging);
+            LaunchApplyScript(servicePayload);
             logger.LogInformation(
                 "Update {Version} staged; restarting to apply.", manifest.Version);
 
@@ -99,13 +100,15 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
         }
     }
 
-    private void LaunchApplyScript(string staging)
+    private void LaunchApplyScript(string servicePayload)
     {
         // The service is hosted by dotnet.exe, so the PID we wait on is that host — we must
         // match on the PID NUMBER, not an image name (the image is "dotnet.exe", not "Astra…").
         var pid = Environment.ProcessId;
         var scriptPath = Path.Combine(_workRoot, "apply-update.cmd");
         var excludes = string.Join(" ", PreservedFiles.Select(f => $"\"{f}\""));
+        // Clean up the whole extracted version dir (…\staging\<ver>, the parent of agent\).
+        var stagingRoot = Path.GetDirectoryName(servicePayload.TrimEnd('\\')) ?? servicePayload;
 
         // The script polls (via CSV output that reliably contains the PID field) until our host
         // process exits and unlocks the files, mirrors the new files in while preserving local
@@ -120,7 +123,7 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
                 timeout /t 1 /nobreak >nul
                 goto wait
             )
-            robocopy "{staging}" "{_installDir}" /E /R:3 /W:2 /XF {excludes} >nul
+            robocopy "{servicePayload}" "{_installDir}" /E /R:3 /W:2 /XF {excludes} >nul
             set /a tries=0
             :startsvc
             sc start {ServiceName} >nul 2>&1
@@ -128,7 +131,7 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
             set /a tries+=1
             if !tries! lss 5 ( timeout /t 2 /nobreak >nul & goto startsvc )
             :started
-            rmdir /S /Q "{staging}" >nul 2>&1
+            rmdir /S /Q "{stagingRoot}" >nul 2>&1
             del "%~f0" >nul 2>&1
             """;
         File.WriteAllText(scriptPath, script);

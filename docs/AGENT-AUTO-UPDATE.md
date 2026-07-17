@@ -89,10 +89,29 @@ service; the script waits for the host process to exit, mirrors the new files in
 the local `appsettings.json` with your server URL + enrollment), restarts the service, and
 cleans up.
 
-## Scope / follow-up
+## The tray self-updates too
 
-- **This covers the always-on Windows service.** The tray chat app runs in the user's session
-  and can't be safely swapped from a session-0 service mid-use, so it is **not** auto-updated
-  yet — redistribute it with the installer when it changes. A dedicated tray self-updater is
-  the planned next step.
-- The update-check interval is configurable via `Astra:UpdateCheckIntervalMinutes` (min 5).
+The release package carries **both** components: the service under `agent\` and the tray chat
+app under `tray\`. They update independently, each against the same pinned key:
+
+- **Service** (LocalSystem): applied by the mechanism above from `agent\`.
+- **Tray** (the logged-in user): the tray can't write its own files in Program Files without
+  admin rights, so on first launch it **hands off to a per-user live copy** under
+  `%LocalAppData%\Astra\Tray` and runs from there. From that user-writable copy it downloads,
+  verifies, and swaps its own files **in-session** and relaunches itself — no elevation, no
+  session-0 tricks. The Program Files copy stays as an immutable seed; a newer seed (from a
+  manual reinstall) re-seeds the live copy, but a stale seed never clobbers a self-updated one.
+
+Because the tray becomes per-user, each Windows user who signs in gets and updates their own
+live copy. The uninstaller already handles this: it kills tray processes by path and removes
+every user profile's `AppData\Local\Astra`, so the per-user live copies are cleaned up too.
+
+## Notes
+
+- The update-check interval is configurable via `Astra:UpdateCheckIntervalMinutes` (min 5) for
+  the service; the tray checks hourly.
+- **Validate on one real device before enabling the channel fleet-wide.** The signing/verify and
+  version/reseed logic are unit-tested, but the file-swap + restart on a live service and the
+  tray's session hand-off should be smoke-tested end-to-end once. The feature stays inert until
+  you pin a key and set the backend URLs, so there's no fleet risk until you deliberately turn
+  it on.

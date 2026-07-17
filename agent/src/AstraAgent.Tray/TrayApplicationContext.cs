@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using AstraAgent.Service.Security;
 using AstraAgent.Tray.Remediation;
+using AstraAgent.Tray.Update;
 using Microsoft.Extensions.Configuration;
 
 namespace AstraAgent.Tray;
@@ -13,6 +14,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon _icon;
     private readonly TrayChatClient _client;
     private readonly RemediationRunner _runner;
+    private readonly TrayUpdater _updater;
     private ChatForm? _chatForm;
 
     public TrayApplicationContext()
@@ -30,6 +32,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         // Execute approved remediation tasks in the background while the assistant runs.
         _runner = new RemediationRunner(serverUrl, tokenStore);
         _runner.Start();
+
+        // Keep the tray up to date in the background (no-op unless it's running from its live
+        // copy and a signing key is pinned).
+        _updater = new TrayUpdater(serverUrl, tokenStore);
+        _updater.Start();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open ASTRA Assistant", null, (_, _) => ShowChat());
@@ -73,6 +80,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (disposing)
         {
+            _updater.Dispose();
             _runner.Dispose();
             _icon.Visible = false;
             _icon.Dispose();
