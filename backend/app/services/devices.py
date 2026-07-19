@@ -113,11 +113,14 @@ class DeviceService:
         """Package a single offline installer zip (agent binary + pre-keyed script +
         Install.bat) for mass deployment, using the org's permanent enrollment key."""
         org = await self._ensure_enrollment_key(actor.org_id)
-        server_url = get_settings().public_api_url.rstrip("/")
+        settings = get_settings()
+        server_url = settings.public_api_url.rstrip("/")
         content = build_offline_bundle_zip(
             server_url=server_url,
             enrollment_token=org.agent_enrollment_key,
             expires_label="never expires",
+            # Normally empty: with a resolvable custom domain no hosts pin is needed.
+            backend_ip=settings.agent_backend_ip.strip(),
         )
         return "AstraAgent-Portable.zip", content
 

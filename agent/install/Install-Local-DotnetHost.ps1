@@ -21,7 +21,7 @@
     powershell -ExecutionPolicy Bypass -File .\Install-Local-DotnetHost.ps1
 #>
 param(
-    [string]$ServerUrl  = "https://astra-backend-production-9ee2.up.railway.app",
+    [string]$ServerUrl  = "https://api.astra.technomateai.com",
     [string]$ServiceSrc = "$PSScriptRoot\dist-fd",
     [string]$TraySrc    = "$PSScriptRoot\dist-tray"
 )

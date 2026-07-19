@@ -18,19 +18,21 @@
     A token from the portal (Devices -> Install agent -> Generate). Required.
 
 .PARAMETER ServerUrl
-    Backend URL. Defaults to your Railway backend.
+    Backend URL. Defaults to the ASTRA production API on its custom domain.
 
 .PARAMETER BackendIp
-    IP to pin the backend hostname to in the hosts file (for networks whose DNS
-    can't resolve it). Pass "" to skip if the machine's DNS already works.
+    Optional IP to pin $ServerUrl's hostname to in the hosts file, for networks
+    whose DNS cannot resolve it. EMPTY BY DEFAULT and it should stay that way:
+    a hosts pin overrides DNS, so a stale one blackholes the agent permanently
+    once the backend IP changes. Use only as a temporary workaround.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\Install-AstraAgent-Portable.ps1 -EnrollmentToken abc123
 #>
 param(
     [Parameter(Mandatory = $true)][string]$EnrollmentToken,
-    [string]$ServerUrl = "https://astra-backend-production-9ee2.up.railway.app",
-    [string]$BackendIp = "69.46.46.120",
+    [string]$ServerUrl = "https://api.astra.technomateai.com",
+    [string]$BackendIp = "",
     [string]$ServiceSrc = "$PSScriptRoot\dist-fd",
     [string]$TraySrc    = "$PSScriptRoot\dist-tray"
 )
@@ -70,28 +72,91 @@ if (-not $haveDesktop8) {
 }
 Write-Host "dotnet host: $dotnet" -ForegroundColor Green
 
-# ---------- 2. Make the backend reachable (corporate DNS often can't resolve it) ----------
-if ($BackendIp) {
-    $resolves = $false
-    try { $resolves = [bool](Resolve-DnsName $fqdn -ErrorAction Stop) } catch { $resolves = $false }
-    if (-not $resolves) {
-        Write-Host "System DNS can't resolve $fqdn — adding hosts entry -> $BackendIp" -ForegroundColor Yellow
-        $hostsFile = "$env:windir\System32\drivers\etc\hosts"
-        (Get-Content $hostsFile) -notmatch ([regex]::Escape($fqdn)) | Set-Content $hostsFile
-        Add-Content $hostsFile "$BackendIp $fqdn"
-        ipconfig /flushdns | Out-Null
-    }
-    if (-not (Test-NetConnection $fqdn -Port 443 -InformationLevel Quiet)) {
-        Write-Host "WARNING: still can't reach $fqdn on 443. The firewall may be blocking it." -ForegroundColor Red
+# ---------- 2. Confirm the backend is reachable ----------
+# Only touch the hosts file if it genuinely is not. A hosts pin OVERRIDES working
+# DNS, so writing one we do not need is harmful: when the backend IP later changes,
+# the stale pin blackholes this agent and outlives the cause.
+function Test-BackendReachable {
+    try {
+        Invoke-WebRequest -Uri "$ServerUrl/health" -UseBasicParsing -TimeoutSec 10 | Out-Null
+        return $true
+    } catch {
+        # Any HTTP response (401/404/500) still proves the host was reached.
+        return [bool]$_.Exception.Response
     }
 }
 
-# ---------- 3. Install the Service (heartbeat + telemetry + self-heal) ----------
-if (Get-Service $svcName -ErrorAction SilentlyContinue) {
-    Stop-Service $svcName -Force -ErrorAction SilentlyContinue
-    sc.exe delete $svcName | Out-Null
-    Start-Sleep -Seconds 2
+if (Test-BackendReachable) {
+    Write-Host "Backend is reachable - no hosts change needed." -ForegroundColor Green
+} elseif ($BackendIp) {
+    Write-Host "Backend not reachable via DNS - pinning $fqdn -> $BackendIp" -ForegroundColor Yellow
+    $hostsFile = "$env:windir\System32\drivers\etc\hosts"
+    $written = $false
+    foreach ($attempt in 1..3) {
+        try {
+            # One atomic write. Writing twice (Set-Content then Add-Content) races
+            # its own file handle against Defender's on-close scan of hosts.
+            $lines = @(Get-Content -LiteralPath $hostsFile -ErrorAction Stop)
+            $kept  = @($lines | Where-Object { $_ -notmatch [regex]::Escape($fqdn) })
+            $kept += "$BackendIp $fqdn"
+            Set-Content -LiteralPath $hostsFile -Value $kept -Encoding ASCII -Force -ErrorAction Stop
+            $written = $true
+            break
+        } catch {
+            Start-Sleep -Seconds 2
+        }
+    }
+    if ($written) {
+        ipconfig /flushdns | Out-Null
+        Write-Host "Hosts entry added." -ForegroundColor Green
+    } else {
+        # An optimization, never a requirement - do NOT fail the install over it.
+        Write-Host "WARNING: could not write the hosts file (locked - usually antivirus)." -ForegroundColor Yellow
+        Write-Host "         Continuing. Ask IT to allow $fqdn through DNS + firewall." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "WARNING: $ServerUrl is not reachable from this PC. Installing anyway;" -ForegroundColor Yellow
+    Write-Host "         the agent retries until it becomes reachable. Ask IT to allow" -ForegroundColor Yellow
+    Write-Host "         $fqdn through DNS and the firewall (443)." -ForegroundColor Yellow
 }
+
+# ---------- 3. Install the Service (heartbeat + telemetry + self-heal) ----------
+# Tear the old install down properly. `sc delete` unregisters the service but does
+# NOT kill its process — and this service is hosted by dotnet.exe, which keeps
+# AstraAgent.Service.dll locked. Without waiting for the process to actually die,
+# the Copy-Item below fails with "being used by another process".
+if (Get-Service $svcName -ErrorAction SilentlyContinue) {
+    Write-Host "Removing the existing $svcName service..."
+    Stop-Service $svcName -Force -ErrorAction SilentlyContinue
+
+    $deadline = 20
+    while ($deadline-- -gt 0) {
+        $s = Get-Service $svcName -ErrorAction SilentlyContinue
+        if (-not $s -or $s.Status -eq 'Stopped') { break }
+        Start-Sleep -Seconds 1
+    }
+    $old = Get-CimInstance Win32_Service -Filter "Name='$svcName'" -ErrorAction SilentlyContinue
+    if ($old -and $old.ProcessId -and $old.ProcessId -ne 0) {
+        Stop-Process -Id $old.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+
+    sc.exe delete $svcName | Out-Null
+    $deadline = 15
+    while ($deadline-- -gt 0) {
+        if (-not (Get-Service $svcName -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Seconds 1
+    }
+    if (Get-Service $svcName -ErrorAction SilentlyContinue) {
+        throw "The $svcName service is still registered (marked for deletion). Close services.msc and Task Manager, then re-run. A reboot always clears it."
+    }
+}
+
+# Kill any orphaned host still holding the agent/tray DLLs.
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match 'AstraAgent\.(Service|Tray)|launch-tray\.vbs' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 1
+
 New-Item -ItemType Directory -Force -Path $svcDir | Out-Null
 Copy-Item "$ServiceSrc\*" $svcDir -Recurse -Force
 if (-not (Test-Path "$svcDir\AstraAgent.Service.dll")) { throw "AstraAgent.Service.dll missing in $ServiceSrc" }
