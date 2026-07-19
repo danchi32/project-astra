@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { getDevices } from "@/lib/api/dashboard";
 import { getMe } from "@/lib/api/auth";
-import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller } from "@/lib/api/devices";
+import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller, downloadUninstaller } from "@/lib/api/devices";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import type { Device } from "@/lib/api/types";
@@ -55,6 +55,7 @@ function InstallAgentPanel() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState(false);
+  const [uninstallBusy, setUninstallBusy] = useState(false);
   const [rotating, setRotating] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -74,6 +75,15 @@ function InstallAgentPanel() {
     } catch {
       setError("Couldn't build the portable installer. Try again.");
     } finally { setOfflineBusy(false); }
+  }
+
+  async function downloadUninstall() {
+    setUninstallBusy(true); setError("");
+    try {
+      await downloadUninstaller();
+    } catch {
+      setError("Couldn't download the uninstaller. Try again.");
+    } finally { setUninstallBusy(false); }
   }
 
   async function rotate() {
@@ -171,6 +181,23 @@ function InstallAgentPanel() {
                 <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
                   Never expires. Rotate only if an installer leaks — old installers stop working; already-enrolled devices are unaffected.
                 </p>
+              </div>
+
+              {/* Uninstaller — separate download, not part of the installer bundle */}
+              <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Remove the agent from a machine</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                      Extract and double-click <span className="font-mono">Uninstall-AstraAgent.bat</span> (self-elevates).
+                    </p>
+                  </div>
+                  <button onClick={downloadUninstall} disabled={uninstallBusy}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-50"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                    <Download size={15} /> {uninstallBusy ? "Preparing…" : "Uninstaller"}
+                  </button>
+                </div>
               </div>
 
               <button onClick={() => setOpen(false)}

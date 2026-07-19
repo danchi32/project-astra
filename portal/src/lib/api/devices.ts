@@ -14,12 +14,22 @@ export const rotateEnrollmentKey = () =>
 // binaries + a pre-keyed installer, for locked-down machines. Triggers a download.
 export const downloadOfflineInstaller = async () => {
   const res = await apiClient.post("/devices/offline-installer", undefined, { responseType: "blob" });
-  const url = URL.createObjectURL(res.data as Blob);
+  triggerDownload(res.data as Blob, "AstraAgent-Portable.zip");
+};
+
+// Org-agnostic uninstaller (Uninstall-AstraAgent.bat + .ps1), offered as a separate download.
+export const downloadUninstaller = async () => {
+  const res = await apiClient.get("/downloads/uninstaller", { responseType: "blob" });
+  triggerDownload(res.data as Blob, "AstraAgent-Uninstaller.zip");
+};
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "AstraAgent-Portable.zip";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-};
+}

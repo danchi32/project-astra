@@ -24,10 +24,14 @@ _DOWNLOADS = Path(__file__).resolve().parents[2] / "downloads"
 AGENT_ZIP = _DOWNLOADS / "agent.zip"
 # Framework-dependent Service + Tray builds for the portable bundle.
 PORTABLE_ZIP = _DOWNLOADS / "agent-portable.zip"
+# Org-agnostic uninstaller (Uninstall-AstraAgent.bat + .ps1), offered as a separate download.
+UNINSTALLER_ZIP = _DOWNLOADS / "agent-uninstaller.zip"
 
-# Default IP the portable installer pins the backend hostname to, for corporate
-# networks whose DNS can't resolve it. Overridable per download.
-DEFAULT_BACKEND_IP = "69.46.46.120"
+# Optional IP the portable installer pins the backend hostname to, for networks whose
+# DNS can't resolve it. Empty = no pin, which is correct whenever the backend is on a
+# custom domain that resolves publicly. Configure via ASTRA_AGENT_BACKEND_IP only as a
+# temporary workaround: a hosts pin overrides DNS, so a stale one blackholes the agent.
+DEFAULT_BACKEND_IP = ""
 
 
 # ── Online installer: downloads the agent from the backend at install time ──────
@@ -137,23 +141,88 @@ if (-not $haveDesktop8) {
     if (-not (Test-Path $dotnet)) { throw ".NET runtime install did not complete." }
 }
 
-if ($BackendIp) {
-    $resolves = $false
-    try { $resolves = [bool](Resolve-DnsName $fqdn -ErrorAction Stop) } catch { $resolves = $false }
-    if (-not $resolves) {
-        Write-Host "Adding hosts entry $fqdn -> $BackendIp" -ForegroundColor Yellow
-        $hostsFile = "$env:windir\System32\drivers\etc\hosts"
-        (Get-Content $hostsFile) -notmatch ([regex]::Escape($fqdn)) | Set-Content $hostsFile
-        Add-Content $hostsFile "$BackendIp $fqdn"
-        ipconfig /flushdns | Out-Null
+# Only touch the hosts file if the backend is genuinely unreachable. A hosts pin
+# OVERRIDES working DNS, so writing one we do not need is actively harmful: if the
+# backend's IP later changes, the stale pin blackholes this agent permanently.
+function Test-BackendReachable {
+    try {
+        Invoke-WebRequest -Uri "$ServerUrl/health" -UseBasicParsing -TimeoutSec 10 | Out-Null
+        return $true
+    } catch {
+        # Any HTTP response (401/404/500) still proves the host was reached.
+        return [bool]$_.Exception.Response
     }
 }
 
-if (Get-Service $svcName -ErrorAction SilentlyContinue) {
-    Stop-Service $svcName -Force -ErrorAction SilentlyContinue
-    sc.exe delete $svcName | Out-Null
-    Start-Sleep -Seconds 2
+if (Test-BackendReachable) {
+    Write-Host "Backend is reachable - no hosts change needed." -ForegroundColor Green
+} elseif ($BackendIp) {
+    Write-Host "Backend not reachable via DNS - pinning $fqdn -> $BackendIp" -ForegroundColor Yellow
+    $hostsFile = "$env:windir\System32\drivers\etc\hosts"
+    $written = $false
+    foreach ($attempt in 1..3) {
+        try {
+            # One atomic write. The old code did Set-Content then Add-Content,
+            # which races its own just-released file handle.
+            $lines = @(Get-Content -LiteralPath $hostsFile -ErrorAction Stop)
+            $kept  = @($lines | Where-Object { $_ -notmatch [regex]::Escape($fqdn) })
+            $kept += "$BackendIp $fqdn"
+            Set-Content -LiteralPath $hostsFile -Value $kept -Encoding ASCII -Force -ErrorAction Stop
+            $written = $true
+            break
+        } catch {
+            Start-Sleep -Seconds 2
+        }
+    }
+    if ($written) {
+        ipconfig /flushdns | Out-Null
+        Write-Host "Hosts entry added." -ForegroundColor Green
+    } else {
+        # Antivirus routinely locks/tamper-protects the hosts file. This is an
+        # optimization, never a requirement - do NOT fail the install over it.
+        Write-Host "WARNING: could not write the hosts file (locked - usually antivirus)." -ForegroundColor Yellow
+        Write-Host "         Continuing anyway. If the agent cannot reach the backend," -ForegroundColor Yellow
+        Write-Host "         ask IT to allow $fqdn through DNS and the firewall." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "WARNING: backend not reachable and no IP to pin. Installing anyway;" -ForegroundColor Yellow
+    Write-Host "         the agent retries until $fqdn becomes reachable." -ForegroundColor Yellow
 }
+
+# Tear down any previous install properly. `sc delete` unregisters the service but
+# does NOT kill its process - and this service is hosted by dotnet.exe, which keeps
+# AstraAgent.Service.dll locked. Without waiting for the process to actually exit,
+# the Copy-Item below fails with "being used by another process".
+if (Get-Service $svcName -ErrorAction SilentlyContinue) {
+    Write-Host "Removing the existing $svcName service..."
+    Stop-Service $svcName -Force -ErrorAction SilentlyContinue
+    $deadline = 20
+    while ($deadline-- -gt 0) {
+        $s = Get-Service $svcName -ErrorAction SilentlyContinue
+        if (-not $s -or $s.Status -eq 'Stopped') { break }
+        Start-Sleep -Seconds 1
+    }
+    $old = Get-CimInstance Win32_Service -Filter "Name='$svcName'" -ErrorAction SilentlyContinue
+    if ($old -and $old.ProcessId -and $old.ProcessId -ne 0) {
+        Stop-Process -Id $old.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    sc.exe delete $svcName | Out-Null
+    $deadline = 15
+    while ($deadline-- -gt 0) {
+        if (-not (Get-Service $svcName -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Seconds 1
+    }
+    if (Get-Service $svcName -ErrorAction SilentlyContinue) {
+        throw "The $svcName service is still registered (marked for deletion). Close services.msc and Task Manager, then re-run. A reboot always clears it."
+    }
+}
+
+# Kill any orphaned host still holding the agent/tray DLLs.
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match 'AstraAgent\.(Service|Tray)|launch-tray\.vbs' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 1
+
 New-Item -ItemType Directory -Force -Path $svcDir | Out-Null
 Copy-Item "$ServiceSrc\*" $svcDir -Recurse -Force
 if (-not (Test-Path "$svcDir\AstraAgent.Service.dll")) { throw "AstraAgent.Service.dll missing in $ServiceSrc" }
@@ -199,9 +268,13 @@ INSTALL - the easy way
 
 WHAT IT DOES
   - Installs the .NET 8 Desktop Runtime if missing (official Microsoft, signed).
-  - Adds a hosts entry so the backend is reachable when corporate DNS can't resolve it.
   - Installs the ASTRA service (auto-start) + tray chat (auto-start at login for all
     users) via the trusted dotnet host, so antivirus/ASR does not block them.
+
+REQUIREMENTS
+  The PC must be able to reach @@SERVER_URL@@ over HTTPS (port 443). The installer
+  checks this first and tells you if it cannot. If your network blocks it, ask IT to
+  allow the hostname through DNS and the firewall - that is the supported fix.
 
 VERIFY
   - The device shows ONLINE in the portal within a minute.
@@ -210,8 +283,8 @@ VERIFY
 Server:  @@SERVER_URL@@
 Token expires:  @@EXPIRES@@
 
-NOTE: this is a test/demo path. For a real fleet, code-sign the agent and have IT
-allow the backend hostname (DNS + firewall) instead of the hosts-file entry.
+NOTE: for a production fleet, code-sign the agent binaries and deploy via your
+management tool (Intune/SCCM/GPO) rather than copying this folder by hand.
 """
 
 
