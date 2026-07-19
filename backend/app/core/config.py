@@ -77,6 +77,28 @@ class Settings(BaseSettings):
     # Leave unset to hide dollar amounts (licenses/subscription counts still show).
     price_per_seat_cents: int | None = None
 
+    @field_validator("price_per_seat_cents", mode="before")
+    @classmethod
+    def _coerce_price_cents(cls, value):
+        """Tolerate a mistyped price variable (e.g. '$8', '8.00', '') — a display-only
+        setting must NEVER crash the whole backend on boot. It's a whole number of cents;
+        anything else disables pricing (dashboard shows '—') with a warning, rather than
+        aborting startup. Use e.g. 800 for $8.00/seat."""
+        if value is None or isinstance(value, int):
+            return value
+        s = str(value).strip()
+        if s == "":
+            return None
+        if s.lstrip("+-").isdigit():
+            return int(s)
+        import sys
+        print(
+            f"[config] WARNING: ASTRA_PRICE_PER_SEAT_CENTS={value!r} is not a whole number "
+            f"of cents — pricing left unset. Use an integer, e.g. 800 for $8.00/seat.",
+            file=sys.stderr,
+        )
+        return None
+
     # Email (SMTP) — INERT until host + user + password are set. Works with
     # Hostinger (smtp.hostinger.com:465 SSL, or :587 STARTTLS) or any SMTP host.
     # When unset: no email is sent, and registration OTP is skipped (open signup).
