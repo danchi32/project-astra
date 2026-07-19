@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import AssetCategory, AssetStatus
+from app.models import AcknowledgementStatus, AssetCategory, AssetStatus
 
 
 class AssetBase(BaseModel):
@@ -51,6 +51,8 @@ class AssetRead(AssetBase):
 
     id: uuid.UUID
     org_id: uuid.UUID
+    acknowledgement_status: AcknowledgementStatus = AcknowledgementStatus.NOT_REQUIRED
+    acknowledged_at: datetime | None = None
     # Enriched for display (not stored on the row).
     assigned_to_name: str | None = None
     device_hostname: str | None = None

@@ -1,19 +1,99 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.models import User, UserRole
+from app.models import EmailSettings, User, UserRole
+from app.schemas.email_settings import (
+    EmailDnsRecord,
+    EmailSettingsConfigure,
+    EmailSettingsRead,
+)
+from app.models import EmailVerificationStatus
 from app.schemas.settings import (
     OrganizationSettingsRead,
     OrganizationSettingsUpdate,
     PermissionMatrix,
 )
+from app.services.email_domains import EmailProviderError, provider_configured
+from app.services.email_integration import EmailIntegrationService
 from app.services.settings import SettingsService
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 admin_required = require_roles(UserRole.ADMIN)
+
+
+def _email_read(row: EmailSettings | None) -> EmailSettingsRead:
+    ready = provider_configured()
+    if row is None:
+        return EmailSettingsRead(
+            configured=False, provider_ready=ready,
+            status=EmailVerificationStatus.UNCONFIGURED,
+        )
+    return EmailSettingsRead(
+        configured=bool(row.from_address),
+        provider_ready=ready,
+        status=row.status,
+        from_name=row.from_name,
+        from_address=row.from_address,
+        domain=row.domain,
+        dns_records=[EmailDnsRecord(**r) for r in (row.dns_records or [])],
+        last_error=row.last_error,
+        verified_at=row.verified_at,
+    )
+
+
+@router.get(
+    "/email",
+    response_model=EmailSettingsRead,
+    summary="Get the org's outbound-email (sending domain) settings (admin)",
+)
+async def get_email_settings(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> EmailSettingsRead:
+    row = await EmailIntegrationService(session).read(org_id=actor.org_id)
+    return _email_read(row)
+
+
+@router.post(
+    "/email",
+    response_model=EmailSettingsRead,
+    summary="Set the sending address and register the domain (admin)",
+)
+async def configure_email_settings(
+    body: EmailSettingsConfigure,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> EmailSettingsRead:
+    try:
+        row = await EmailIntegrationService(session).configure(
+            actor=actor, from_name=body.from_name, from_address=str(body.from_address)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except EmailProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return _email_read(row)
+
+
+@router.post(
+    "/email/verify",
+    response_model=EmailSettingsRead,
+    summary="Re-check the DNS records and update verification status (admin)",
+)
+async def verify_email_settings(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> EmailSettingsRead:
+    try:
+        row = await EmailIntegrationService(session).verify(actor=actor)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except EmailProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return _email_read(row)
 
 
 @router.get(

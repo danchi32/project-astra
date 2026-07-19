@@ -39,15 +39,40 @@ class EmailService:
     def from_addr(self) -> str:
         return settings.email_from or settings.smtp_user or "onboarding@resend.dev"
 
-    async def send(self, *, to: str, subject: str, html: str, text: str | None = None) -> bool:
+    def _from_header(self, from_name: str | None, from_email: str | None) -> str:
+        """The RFC 5322 From header. When an org has a verified sender we send AS them;
+        otherwise we fall back to ASTRA's default address (optionally with a display
+        name like 'Acme IT (via ASTRA)')."""
+        address = from_email or self.from_addr
+        name = from_name
+        if name:
+            # Strip characters that could break the header; keep it simple and safe.
+            name = name.replace('"', "").replace("\n", " ").replace("\r", " ").strip()
+            return f'{name} <{address}>'
+        return address
+
+    async def send(
+        self,
+        *,
+        to: str,
+        subject: str,
+        html: str,
+        text: str | None = None,
+        from_name: str | None = None,
+        from_email: str | None = None,
+    ) -> bool:
         """Send one message. Returns False (no-op) when email isn't configured.
-        Prefers the Resend HTTPS API; falls back to SMTP."""
+        Prefers the Resend HTTPS API; falls back to SMTP. `from_email`/`from_name`
+        override the sender (used to send as a customer org's verified address)."""
+        from_header = self._from_header(from_name, from_email)
         if settings.resend_api_key:
-            return await self._send_resend(to=to, subject=subject, html=html, text=text)
+            return await self._send_resend(
+                to=to, subject=subject, html=html, text=text, from_header=from_header
+            )
         if self._smtp_configured():
             msg = EmailMessage()
             msg["Subject"] = subject
-            msg["From"] = self.from_addr
+            msg["From"] = from_header
             msg["To"] = to
             msg.set_content(text or _text_from_html(html))
             msg.add_alternative(html, subtype="html")
@@ -55,8 +80,10 @@ class EmailService:
             return True
         return False
 
-    async def _send_resend(self, *, to: str, subject: str, html: str, text: str | None) -> bool:
-        payload: dict = {"from": self.from_addr, "to": [to], "subject": subject, "html": html}
+    async def _send_resend(
+        self, *, to: str, subject: str, html: str, text: str | None, from_header: str
+    ) -> bool:
+        payload: dict = {"from": from_header, "to": [to], "subject": subject, "html": html}
         if text:
             payload["text"] = text
         async with httpx.AsyncClient(timeout=20) as client:
@@ -149,6 +176,29 @@ class EmailService:
         return await self.send(
             to=to, subject="Your ASTRA password was changed", html=html,
             text="Your ASTRA password was just changed. If this wasn't you, contact your administrator immediately.",
+        )
+
+    async def send_asset_assignment(
+        self, *, to: str, name: str, asset_name: str, org_name: str, ack_link: str,
+        from_name: str | None = None, from_email: str | None = None,
+    ) -> bool:
+        """Ask an employee to confirm receipt of an asset just assigned to them. Sent AS
+        the organization when they've verified a sending domain."""
+        html = _shell(
+            "Please confirm you received this asset",
+            f"""<p>Hi {name},</p>
+            <p><strong>{org_name}</strong> has assigned the following asset to you:</p>
+            <p style="font-size:16px;font-weight:600;margin:16px 0;color:#111">{asset_name}</p>
+            <p>Please confirm you've received it by clicking the button below:</p>
+            <p style="margin:24px 0"><a href="{ack_link}" style="display:inline-block;background:#2563eb;
+            color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Acknowledge receipt</a></p>
+            <p style="color:#666">If you didn't expect this, contact your IT team.</p>""",
+        )
+        return await self.send(
+            to=to, subject=f"Please confirm receipt of {asset_name}", html=html,
+            text=f"Hi {name}, {org_name} assigned '{asset_name}' to you. "
+                 f"Confirm receipt: {ack_link}",
+            from_name=from_name, from_email=from_email,
         )
 
     async def send_welcome(self, *, to: str, name: str, org_name: str, trial_days: int) -> bool:

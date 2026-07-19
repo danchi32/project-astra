@@ -42,7 +42,7 @@ async def test_resend_transport_preferred_when_key_set(monkeypatch):
     monkeypatch.setattr(email_mod.settings, "resend_api_key", "re_test")
     calls: list = []
 
-    async def fake_resend(self, *, to, subject, html, text):
+    async def fake_resend(self, *, to, subject, html, text, from_header):
         calls.append((to, subject))
         return True
 

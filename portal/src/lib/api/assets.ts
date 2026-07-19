@@ -14,3 +14,7 @@ export const updateAsset = (id: string, data: Partial<AssetInput>) =>
 
 export const deleteAsset = (id: string) =>
   apiClient.delete(`/assets/${id}`).then((r) => r.data);
+
+// Re-send the receipt-confirmation email to the current assignee.
+export const resendAcknowledgement = (id: string) =>
+  apiClient.post<Asset>(`/assets/${id}/resend-acknowledgement`).then((r) => r.data);

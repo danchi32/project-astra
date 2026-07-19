@@ -3,14 +3,17 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Settings as SettingsIcon, User as UserIcon, Palette, Building2, ShieldCheck,
-  Check, Minus, Monitor, Sun, Moon,
+  Check, Minus, Monitor, Sun, Moon, Mail, Copy, RefreshCw,
 } from "lucide-react";
 import { getMe, updateProfile, changePassword } from "@/lib/api/auth";
-import { getOrgSettings, updateOrgSettings, getPermissionMatrix } from "@/lib/api/settings";
+import {
+  getOrgSettings, updateOrgSettings, getPermissionMatrix,
+  getEmailSettings, configureEmailSettings, verifyEmailSettings,
+} from "@/lib/api/settings";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
-import type { OrganizationSettingsInput, UserRole } from "@/lib/api/types";
+import type { EmailVerificationStatus, OrganizationSettingsInput, UserRole } from "@/lib/api/types";
 
-type Tab = "profile" | "preferences" | "organization" | "permissions";
+type Tab = "profile" | "preferences" | "organization" | "email" | "permissions";
 
 const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
   admin: { color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
@@ -347,6 +350,135 @@ function PermissionsTab() {
 
 /* ── Page ────────────────────────────────────────────────────────────────── */
 
+/* ── Email (per-org verified sending domain) ─────────────────────────────── */
+
+const EMAIL_STATUS: Record<EmailVerificationStatus, { label: string; color: string }> = {
+  unconfigured: { label: "Not set up", color: "#64748b" },
+  pending: { label: "Pending DNS", color: "#f59e0b" },
+  verified: { label: "Verified", color: "#10b981" },
+  failed: { label: "Verification failed", color: "#ef4444" },
+};
+
+function DnsValue({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-start gap-2">
+      <code className="flex-1 text-xs font-mono break-all px-2 py-1.5 rounded" style={{ background: "var(--bg)", color: "var(--text-primary)" }}>{value}</code>
+      <button type="button" title="Copy"
+        onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+        className="p-1.5 rounded-lg shrink-0" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+        {copied ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+      </button>
+    </div>
+  );
+}
+
+function EmailTab() {
+  const queryClient = useQueryClient();
+  const { data: settings, isLoading } = useQuery({ queryKey: ["email-settings"], queryFn: getEmailSettings });
+  const [fromName, setFromName] = useState("");
+  const [fromAddress, setFromAddress] = useState("");
+  const [busy, setBusy] = useState<"save" | "verify" | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (settings) {
+      setFromName(settings.from_name ?? "");
+      setFromAddress(settings.from_address ?? "");
+    }
+  }, [settings]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("save"); setError("");
+    try {
+      const next = await configureEmailSettings({ from_name: fromName.trim(), from_address: fromAddress.trim() });
+      queryClient.setQueryData(["email-settings"], next);
+    } catch (err) {
+      setError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Couldn't save. Check the address and try again.");
+    } finally { setBusy(null); }
+  }
+  async function verify() {
+    setBusy("verify"); setError("");
+    try {
+      const next = await verifyEmailSettings();
+      queryClient.setQueryData(["email-settings"], next);
+      if (next.status !== "verified") setError("DNS records not found yet. They can take up to a few hours to propagate — try again shortly.");
+    } catch (err) {
+      setError((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Verification failed. Try again.");
+    } finally { setBusy(null); }
+  }
+
+  if (isLoading) return <Panel title="Email"><p className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading…</p></Panel>;
+
+  const status = settings?.status ?? "unconfigured";
+  const badge = EMAIL_STATUS[status];
+
+  return (
+    <div className="space-y-6">
+      <Panel title="Send email as your organization"
+        description="Asset acknowledgements and other notifications will be sent from your own address once your domain is verified.">
+        {!settings?.provider_ready && (
+          <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid #f59e0b", color: "var(--text-primary)" }}>
+            The email provider isn’t configured on this deployment yet, so verification won’t complete. Contact your ASTRA operator.
+          </div>
+        )}
+        <form onSubmit={save} className="space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ color: badge.color, background: `${badge.color}1a` }}>{badge.label}</span>
+            {settings?.verified_at && <span className="text-xs" style={{ color: "var(--text-secondary)" }}>since {new Date(settings.verified_at).toLocaleDateString()}</span>}
+          </div>
+          <Field label="Display name">
+            <input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Acme IT"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+          </Field>
+          <Field label="Send from address">
+            <input type="email" value={fromAddress} onChange={(e) => setFromAddress(e.target.value)} placeholder="it-support@yourcompany.com"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+          </Field>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <button type="submit" disabled={busy !== null || !fromAddress.trim() || !fromName.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
+            {busy === "save" ? "Saving…" : settings?.configured ? "Update address" : "Save & get DNS records"}
+          </button>
+        </form>
+      </Panel>
+
+      {settings?.dns_records && settings.dns_records.length > 0 && status !== "verified" && (
+        <Panel title="Add these DNS records"
+          description="Add these at your DNS host (Cloudflare, GoDaddy, Google Workspace, etc.). They only add outbound authorization — your existing email is unaffected. Then click Verify.">
+          <div className="space-y-4">
+            {settings.dns_records.map((r, i) => (
+              <div key={i} className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  <span className="font-semibold px-1.5 py-0.5 rounded" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{r.type}</span>
+                  {r.purpose && <span>{r.purpose}</span>}
+                  {r.priority != null && <span>priority {r.priority}</span>}
+                  <span>TTL {r.ttl}</span>
+                </div>
+                <Field label="Name / Host"><DnsValue value={r.name} /></Field>
+                <Field label="Value"><DnsValue value={r.value} /></Field>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={verify} disabled={busy !== null}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
+            <RefreshCw size={14} className={busy === "verify" ? "animate-spin" : ""} /> {busy === "verify" ? "Checking…" : "Verify DNS"}
+          </button>
+        </Panel>
+      )}
+
+      {status === "verified" && (
+        <Panel title="You're all set">
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            Emails now send from <strong style={{ color: "var(--text-primary)" }}>{settings?.from_address}</strong>. Assign an asset to a user and they’ll get a receipt-confirmation email from you.
+          </p>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isAdmin = me?.role === "admin";
@@ -356,6 +488,7 @@ export default function SettingsPage() {
     { key: "profile", label: "Profile", icon: UserIcon, show: true },
     { key: "preferences", label: "Preferences", icon: Palette, show: true },
     { key: "organization", label: "Organization", icon: Building2, show: !!isAdmin },
+    { key: "email", label: "Email", icon: Mail, show: !!isAdmin },
     { key: "permissions", label: "Permissions", icon: ShieldCheck, show: true },
   ];
 
@@ -388,6 +521,7 @@ export default function SettingsPage() {
       {tab === "profile" && <ProfileTab />}
       {tab === "preferences" && <PreferencesTab />}
       {tab === "organization" && isAdmin && <OrganizationTab />}
+      {tab === "email" && isAdmin && <EmailTab />}
       {tab === "permissions" && <PermissionsTab />}
     </div>
   );

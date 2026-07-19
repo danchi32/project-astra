@@ -66,6 +66,32 @@ export interface PlatformOverview {
   remediation_pending: number;
 }
 
+// ── Per-org email sending (DNS-verified) ───────────────────────────────────
+
+export type EmailVerificationStatus = "unconfigured" | "pending" | "verified" | "failed";
+
+export interface EmailDnsRecord {
+  type: string;      // TXT / MX / CNAME
+  name: string;
+  value: string;
+  ttl: string;
+  priority: number | null;
+  purpose: string;   // DKIM / SPF
+  status: string;
+}
+
+export interface EmailSettings {
+  configured: boolean;
+  provider_ready: boolean;
+  status: EmailVerificationStatus;
+  from_name: string | null;
+  from_address: string | null;
+  domain: string | null;
+  dns_records: EmailDnsRecord[];
+  last_error: string | null;
+  verified_at: string | null;
+}
+
 // ── Operator console (platform admin) ──────────────────────────────────────
 
 export interface PlatformBillingRow {
@@ -223,6 +249,8 @@ export type AssetCategory =
 
 export type AssetStatus = "in_use" | "in_storage" | "in_repair" | "retired" | "lost";
 
+export type AcknowledgementStatus = "not_required" | "pending" | "acknowledged";
+
 export interface Asset {
   id: string;
   org_id: string;
@@ -242,6 +270,8 @@ export interface Asset {
   warranty_expiry: string | null;
   purchase_cost: number | null;
   notes: string | null;
+  acknowledgement_status: AcknowledgementStatus;
+  acknowledged_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -255,7 +285,8 @@ export interface AssetSummary {
 }
 
 export type AssetInput = Partial<Omit<Asset,
-  "id" | "org_id" | "assigned_to_name" | "device_hostname" | "created_at" | "updated_at">> & {
+  "id" | "org_id" | "assigned_to_name" | "device_hostname" | "created_at" | "updated_at"
+  | "acknowledgement_status" | "acknowledged_at">> & {
   name: string;
 };
 

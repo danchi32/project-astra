@@ -1,9 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Package, Plus, Trash2, Pencil, X } from "lucide-react";
+import { Package, Plus, Trash2, Pencil, X, MailCheck, Mail, Clock } from "lucide-react";
 import {
-  listAssets, getAssetSummary, createAsset, updateAsset, deleteAsset,
+  listAssets, getAssetSummary, createAsset, updateAsset, deleteAsset, resendAcknowledgement,
 } from "@/lib/api/assets";
 import { listUsers } from "@/lib/api/users";
 import { getDevices } from "@/lib/api/dashboard";
@@ -100,6 +100,16 @@ export default function AssetsPage() {
     await refresh();
   }
 
+  async function resend(id: string) {
+    try {
+      await resendAcknowledgement(id);
+      await refresh();
+      alert("Acknowledgement email re-sent to the assignee.");
+    } catch {
+      alert("Couldn't re-send. The asset may not be assigned, or email isn't set up yet.");
+    }
+  }
+
   const inputStyle = {
     background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)",
   } as const;
@@ -166,7 +176,21 @@ export default function AssetsPage() {
                       {STATUS_STYLE[a.status].label}
                     </span>
                   </td>
-                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.assigned_to_name ?? "—"}</td>
+                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
+                    {a.assigned_to_name ?? "—"}
+                    {a.assigned_to_name && a.acknowledgement_status === "acknowledged" && (
+                      <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs" style={{ color: "#10b981" }}
+                        title={a.acknowledged_at ? `Acknowledged ${new Date(a.acknowledged_at).toLocaleString()}` : "Acknowledged"}>
+                        <MailCheck size={12} /> Acknowledged
+                      </span>
+                    )}
+                    {a.assigned_to_name && a.acknowledgement_status === "pending" && (
+                      <span className="ml-1.5 inline-flex items-center gap-0.5 text-xs" style={{ color: "#f59e0b" }}
+                        title="Waiting for the assignee to confirm receipt">
+                        <Clock size={12} /> Awaiting receipt
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.device_hostname ?? "—"}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.serial_number ?? "—"}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.purchase_cost != null ? money(a.purchase_cost) : "—"}</td>
@@ -174,6 +198,12 @@ export default function AssetsPage() {
                   <td className="px-4 py-3 text-right">
                     {isStaff && (
                       <div className="flex gap-1 justify-end">
+                        {a.acknowledgement_status === "pending" && a.assigned_to_user_id && (
+                          <button onClick={() => resend(a.id)} title="Re-send acknowledgement email"
+                            className="p-1 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" style={{ color: "var(--text-secondary)" }}>
+                            <Mail size={14} />
+                          </button>
+                        )}
                         <button onClick={() => openEdit(a)} title="Edit"
                           className="p-1 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" style={{ color: "var(--text-secondary)" }}>
                           <Pencil size={14} />

@@ -30,6 +30,12 @@ class AssetStatus(str, enum.Enum):
     LOST = "lost"
 
 
+class AcknowledgementStatus(str, enum.Enum):
+    NOT_REQUIRED = "not_required"  # never assigned, or assignment cleared
+    PENDING = "pending"            # assigned; acknowledgement email sent, awaiting receipt
+    ACKNOWLEDGED = "acknowledged"  # the assignee confirmed receipt
+
+
 def _enum_col(enum_cls, default):
     return mapped_column(
         Enum(
@@ -74,6 +80,16 @@ class Asset(TimestampMixin, Base):
     purchase_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+    # Assignment acknowledgement: when an asset is assigned to a user we email them a
+    # receipt-confirmation link; clicking it flips this to acknowledged.
+    acknowledgement_status: Mapped[AcknowledgementStatus] = _enum_col(
+        AcknowledgementStatus, AcknowledgementStatus.NOT_REQUIRED
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ack_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False

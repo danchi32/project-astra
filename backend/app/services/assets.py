@@ -1,15 +1,24 @@
+import logging
 import uuid
 from datetime import date, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Asset, User
+from app.core.config import get_settings
+from app.core.security import generate_opaque_token
+from app.models import AcknowledgementStatus, Asset, Organization, User
+from app.models.base import utcnow
 from app.repositories.assets import AssetRepository
 from app.repositories.devices import DeviceRepository
 from app.repositories.users import UserRepository
 from app.schemas.asset import AssetCreate, AssetRead, AssetSummary, AssetUpdate
 from app.services.audit import AuditService
-from app.services.exceptions import NotFoundError
+from app.services.email import EmailService
+from app.services.email_integration import EmailIntegrationService
+from app.services.exceptions import ConflictError, NotFoundError
+
+logger = logging.getLogger("astra.assets")
 
 # Warranties expiring within this window count as "expiring soon" in the summary.
 _WARRANTY_SOON_DAYS = 60
@@ -63,6 +72,11 @@ class AssetService:
 
     async def create(self, *, actor: User, data: AssetCreate) -> AssetRead:
         asset = Asset(org_id=actor.org_id, **data.model_dump())
+        newly_assigned = False
+        if asset.assigned_to_user_id is not None:
+            asset.ack_token = generate_opaque_token()
+            asset.acknowledgement_status = AcknowledgementStatus.PENDING
+            newly_assigned = True
         asset = await self.repo.add(asset)
         await self.audit.record(
             org_id=actor.org_id,
@@ -73,6 +87,8 @@ class AssetService:
             detail={"name": asset.name, "category": asset.category.value},
         )
         await self.session.commit()
+        if newly_assigned:
+            await self._send_ack_email(asset)  # best-effort, after commit
         user_names, device_hosts = await self._lookup_maps(actor.org_id)
         return self._to_read(asset, user_names, device_hosts)
 
@@ -80,9 +96,24 @@ class AssetService:
         self, *, actor: User, asset_id: uuid.UUID, data: AssetUpdate
     ) -> AssetRead:
         asset = await self._get_owned(actor.org_id, asset_id)
+        previous_assignee = asset.assigned_to_user_id
         changes = data.model_dump(exclude_unset=True)
         for field, value in changes.items():
             setattr(asset, field, value)
+
+        # Detect a (re)assignment so we can ask the new holder to acknowledge receipt.
+        newly_assigned = False
+        if "assigned_to_user_id" in changes:
+            if asset.assigned_to_user_id is None:
+                asset.acknowledgement_status = AcknowledgementStatus.NOT_REQUIRED
+                asset.ack_token = None
+                asset.acknowledged_at = None
+            elif asset.assigned_to_user_id != previous_assignee:
+                asset.ack_token = generate_opaque_token()
+                asset.acknowledgement_status = AcknowledgementStatus.PENDING
+                asset.acknowledged_at = None
+                newly_assigned = True
+
         await self.audit.record(
             org_id=actor.org_id,
             actor_id=actor.id,
@@ -92,8 +123,81 @@ class AssetService:
             detail={"fields": sorted(changes.keys())},
         )
         await self.session.commit()
+
+        if newly_assigned:
+            await self._send_ack_email(asset)  # best-effort, after commit
+
         user_names, device_hosts = await self._lookup_maps(actor.org_id)
         return self._to_read(asset, user_names, device_hosts)
+
+    async def resend_acknowledgement(self, *, actor: User, asset_id: uuid.UUID) -> AssetRead:
+        """Re-send the receipt-confirmation email for a currently-assigned asset."""
+        asset = await self._get_owned(actor.org_id, asset_id)
+        if asset.assigned_to_user_id is None:
+            raise ConflictError("This asset isn't assigned to anyone.")
+        if not asset.ack_token:
+            asset.ack_token = generate_opaque_token()
+        if asset.acknowledgement_status is not AcknowledgementStatus.ACKNOWLEDGED:
+            asset.acknowledgement_status = AcknowledgementStatus.PENDING
+        await self.audit.record(
+            org_id=actor.org_id, actor_id=actor.id, action="asset.ack_resend",
+            target_type="asset", target_id=str(asset.id),
+        )
+        await self.session.commit()
+        await self._send_ack_email(asset)
+        user_names, device_hosts = await self._lookup_maps(actor.org_id)
+        return self._to_read(asset, user_names, device_hosts)
+
+    async def acknowledge_by_token(self, *, token: str) -> Asset | None:
+        """Mark an asset acknowledged from its emailed link. Returns the asset (idempotent)
+        or None when the token is unknown. Public — no auth, the opaque token is the proof."""
+        if not token:
+            return None
+        asset = (await self.session.execute(
+            select(Asset).where(Asset.ack_token == token)
+        )).scalar_one_or_none()
+        if asset is None:
+            return None
+        if asset.acknowledgement_status is not AcknowledgementStatus.ACKNOWLEDGED:
+            asset.acknowledgement_status = AcknowledgementStatus.ACKNOWLEDGED
+            asset.acknowledged_at = utcnow()
+            await self.audit.record(
+                org_id=asset.org_id, actor_id=asset.assigned_to_user_id,
+                action="asset.acknowledged", target_type="asset", target_id=str(asset.id),
+            )
+            await self.session.commit()
+        return asset
+
+    async def _send_ack_email(self, asset: Asset) -> None:
+        """Email the assignee a receipt-confirmation link, sent AS the org when they've
+        verified a sending domain. Never raises — an email hiccup must not fail the assignment."""
+        try:
+            email_service = EmailService()
+            if not email_service.enabled or not asset.assigned_to_user_id or not asset.ack_token:
+                return
+            user = await self.users.get(asset.assigned_to_user_id)
+            if user is None or not user.email:
+                return
+            org = (await self.session.execute(
+                select(Organization).where(Organization.id == asset.org_id)
+            )).scalar_one_or_none()
+            org_name = org.name if org else "Your organization"
+
+            sender = await EmailIntegrationService.resolve_sender(self.session, asset.org_id)
+            if sender is not None:
+                from_name, from_email = (sender.from_name or org_name), sender.from_address
+            else:
+                # Not yet verified → send from ASTRA's default, clearly on the org's behalf.
+                from_name, from_email = f"{org_name} (via ASTRA)", None
+
+            base = get_settings().public_api_url.rstrip("/")
+            link = f"{base}/api/v1/assets/acknowledge?token={asset.ack_token}"
+            await email_service.send_asset_assignment(
+                to=user.email, name=user.full_name, asset_name=asset.name,
+                org_name=org_name, ack_link=link, from_name=from_name, from_email=from_email,
+            )
+        except Exception:
+            logger.exception("Asset acknowledgement email failed for asset %s", asset.id)
 
     async def delete(self, *, actor: User, asset_id: uuid.UUID) -> None:
         asset = await self._get_owned(actor.org_id, asset_id)
