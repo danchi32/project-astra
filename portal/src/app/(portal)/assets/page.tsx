@@ -8,6 +8,7 @@ import {
 import { listUsers } from "@/lib/api/users";
 import { getDevices } from "@/lib/api/dashboard";
 import { getMe } from "@/lib/api/auth";
+import { SearchableSelect } from "@/components/searchable-select";
 import type { Asset, AssetCategory, AssetStatus, AssetInput } from "@/lib/api/types";
 
 const CATEGORIES: AssetCategory[] = [
@@ -108,6 +109,25 @@ export default function AssetsPage() {
     } catch {
       alert("Couldn't re-send. The asset may not be assigned, or email isn't set up yet.");
     }
+  }
+
+  // Linking a device auto-fills the make/model/serial (and the name, if blank) from its telemetry.
+  function selectDevice(id: string) {
+    const d = devices?.find((x) => x.id === id);
+    setForm((f) => ({
+      ...f,
+      device_id: id || undefined,
+      ...(d
+        ? {
+            manufacturer: d.manufacturer ?? f.manufacturer,
+            model: d.model ?? f.model,
+            serial_number: d.serial_number ?? f.serial_number,
+            name: f.name && f.name.trim()
+              ? f.name
+              : [d.manufacturer, d.model].filter(Boolean).join(" ") || d.hostname,
+          }
+        : {}),
+    }));
   }
 
   const inputStyle = {
@@ -269,20 +289,45 @@ export default function AssetsPage() {
 
             <div>
               <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Assigned to</label>
-              <select value={form.assigned_to_user_id ?? ""} onChange={(e) => setForm({ ...form, assigned_to_user_id: e.target.value || undefined })}
-                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
-                <option value="">— Unassigned —</option>
-                {users?.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.assigned_to_user_id ?? ""}
+                onChange={(v) => setForm({ ...form, assigned_to_user_id: v || undefined })}
+                placeholder="— Unassigned —"
+                searchPlaceholder="Search by name or email…"
+                options={[
+                  { value: "", label: "— Unassigned —" },
+                  ...(users ?? []).map((u) => ({
+                    value: u.id, label: u.full_name, sublabel: u.email, keywords: u.email,
+                  })),
+                ]}
+              />
             </div>
 
             <div>
               <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Linked device</label>
-              <select value={form.device_id ?? ""} onChange={(e) => setForm({ ...form, device_id: e.target.value || undefined })}
-                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
-                <option value="">— None —</option>
-                {devices?.map((d) => <option key={d.id} value={d.id}>{d.hostname}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.device_id ?? ""}
+                onChange={selectDevice}
+                placeholder="— None —"
+                searchPlaceholder="Search by hostname or serial number…"
+                options={[
+                  { value: "", label: "— None —" },
+                  ...(devices ?? []).map((d) => ({
+                    value: d.id,
+                    label: d.hostname,
+                    sublabel: [
+                      [d.manufacturer, d.model].filter(Boolean).join(" "),
+                      d.serial_number ? `SN ${d.serial_number}` : null,
+                      d.logged_in_user ? `user ${d.logged_in_user}` : null,
+                    ].filter(Boolean).join(" · "),
+                    keywords: [d.serial_number, d.manufacturer, d.model, d.logged_in_user, d.os_version]
+                      .filter(Boolean).join(" "),
+                  })),
+                ]}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                Linking a device auto-fills its make, model and serial number.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
