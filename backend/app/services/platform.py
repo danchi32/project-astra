@@ -55,8 +55,23 @@ class PlatformService:
         self.orgs = OrganizationRepository(session)
         self.audit = AuditService(session)
 
+    async def _platform_org_ids(self) -> set[uuid.UUID]:
+        """Organizations that contain a platform admin are the operator's OWN internal
+        workspace — not paying customers. They're excluded from every customer-facing
+        list and revenue/growth rollup so the operator's own org never shows up as a
+        customer or distorts the numbers."""
+        return set((await self.session.execute(
+            select(User.org_id).where(User.is_platform_admin.is_(True)).distinct()
+        )).scalars().all())
+
     async def list_organizations(self) -> list[OrganizationAdminRead]:
-        orgs = (await self.session.execute(select(Organization).order_by(Organization.created_at))).scalars().all()
+        platform_ids = await self._platform_org_ids()
+        orgs = [
+            o for o in (await self.session.execute(
+                select(Organization).order_by(Organization.created_at)
+            )).scalars().all()
+            if o.id not in platform_ids
+        ]
         user_counts = dict(
             (await self.session.execute(select(User.org_id, func.count()).group_by(User.org_id))).all()
         )
@@ -72,12 +87,23 @@ class PlatformService:
         return result
 
     async def overview(self) -> PlatformOverview:
-        """Aggregate stats across ALL organizations for the operator's landing view."""
+        """Aggregate stats across all CUSTOMER organizations for the operator's landing
+        view (the operator's own internal org is excluded)."""
         now = utcnow()
-        total_orgs = (await self.session.execute(select(func.count()).select_from(Organization))).scalar_one()
+        platform_ids = await self._platform_org_ids()
+        # `.where(*[])` is a no-op, so these degrade cleanly when there are no internal orgs.
+        org_excl = [Organization.id.notin_(platform_ids)] if platform_ids else []
+        dev_excl = [Device.org_id.notin_(platform_ids)] if platform_ids else []
+        user_excl = [User.org_id.notin_(platform_ids)] if platform_ids else []
+        rem_excl = [RemediationTask.org_id.notin_(platform_ids)] if platform_ids else []
+
+        total_orgs = (await self.session.execute(
+            select(func.count()).select_from(Organization).where(*org_excl)
+        )).scalar_one()
 
         status_rows = (await self.session.execute(
-            select(Organization.subscription_status, func.count()).group_by(Organization.subscription_status)
+            select(Organization.subscription_status, func.count())
+            .where(*org_excl).group_by(Organization.subscription_status)
         )).all()
         orgs_by_status = {getattr(s, "value", s): n for s, n in status_rows}
 
@@ -87,36 +113,45 @@ class PlatformService:
                 Organization.trial_ends_at.is_not(None),
                 Organization.trial_ends_at >= now,
                 Organization.trial_ends_at <= now + timedelta(days=7),
+                *org_excl,
             )
         )).scalar_one()
 
-        total_users = (await self.session.execute(select(func.count()).select_from(User))).scalar_one()
-        total_devices = (await self.session.execute(select(func.count()).select_from(Device))).scalar_one()
+        total_users = (await self.session.execute(
+            select(func.count()).select_from(User).where(*user_excl)
+        )).scalar_one()
+        total_devices = (await self.session.execute(
+            select(func.count()).select_from(Device).where(*dev_excl)
+        )).scalar_one()
         online = (await self.session.execute(
             select(func.count()).select_from(Device).where(
                 Device.last_seen_at.is_not(None),
                 Device.last_seen_at >= now - ONLINE_THRESHOLD,
+                *dev_excl,
             )
         )).scalar_one()
         licenses = (await self.session.execute(
-            select(func.coalesce(func.sum(Organization.license_count), 0))
+            select(func.coalesce(func.sum(Organization.license_count), 0)).where(*org_excl)
         )).scalar_one()
         pending = (await self.session.execute(
             select(func.count()).select_from(RemediationTask).where(
-                RemediationTask.status == RemediationStatus.PENDING_APPROVAL
+                RemediationTask.status == RemediationStatus.PENDING_APPROVAL,
+                *rem_excl,
             )
         )).scalar_one()
 
         signups_30d = (await self.session.execute(
             select(func.count()).select_from(Organization).where(
-                Organization.created_at >= now - timedelta(days=30)
+                Organization.created_at >= now - timedelta(days=30),
+                *org_excl,
             )
         )).scalar_one()
 
         # Revenue: only ACTIVE (paying) orgs contribute; apply each org's discount.
         active_rows = (await self.session.execute(
             select(Organization.license_count, Organization.discount_percent).where(
-                Organization.subscription_status == SubscriptionStatus.ACTIVE
+                Organization.subscription_status == SubscriptionStatus.ACTIVE,
+                *org_excl,
             )
         )).all()
         active_subscriptions = len(active_rows)
@@ -146,9 +181,13 @@ class PlatformService:
     async def billing(self) -> PlatformBilling:
         """Platform-wide revenue rollup: per-org economics + MRR/ARR + provider mix."""
         price = get_settings().price_per_seat_cents
-        orgs = (
-            await self.session.execute(select(Organization).order_by(Organization.created_at))
-        ).scalars().all()
+        platform_ids = await self._platform_org_ids()
+        orgs = [
+            o for o in (await self.session.execute(
+                select(Organization).order_by(Organization.created_at)
+            )).scalars().all()
+            if o.id not in platform_ids
+        ]
 
         rows: list[PlatformBillingRow] = []
         by_status: dict[str, int] = {}
@@ -208,9 +247,16 @@ class PlatformService:
 
         now = utcnow()
         cutoff_30d = now - timedelta(days=30)
+        platform_ids = await self._platform_org_ids()
+        org_excl = [Organization.id.notin_(platform_ids)] if platform_ids else []
+        dev_excl = [Device.org_id.notin_(platform_ids)] if platform_ids else []
+        rem_excl = [RemediationTask.org_id.notin_(platform_ids)] if platform_ids else []
+        conv_excl = [Conversation.org_id.notin_(platform_ids)] if platform_ids else []
 
         # Growth: bucket org signups by calendar month (12 months incl. current).
-        created = (await self.session.execute(select(Organization.created_at))).scalars().all()
+        created = (await self.session.execute(
+            select(Organization.created_at).where(*org_excl)
+        )).scalars().all()
         months: list[str] = []
         y, m = now.year, now.month
         for _ in range(12):
@@ -229,7 +275,7 @@ class PlatformService:
         # Self-healing outcomes over the last 30 days.
         async def _count_rem(*where) -> int:
             return (await self.session.execute(
-                select(func.count()).select_from(RemediationTask).where(*where)
+                select(func.count()).select_from(RemediationTask).where(*where, *rem_excl)
             )).scalar_one()
 
         succeeded = await _count_rem(
@@ -247,7 +293,7 @@ class PlatformService:
 
         action_rows = (await self.session.execute(
             select(RemediationTask.action_id, func.count())
-            .where(RemediationTask.created_at >= cutoff_30d)
+            .where(RemediationTask.created_at >= cutoff_30d, *rem_excl)
             .group_by(RemediationTask.action_id)
             .order_by(func.count().desc())
             .limit(10)
@@ -269,7 +315,7 @@ class PlatformService:
                 func.sum(
                     case((Device.last_seen_at >= online_cutoff, 1), else_=0)
                 ),
-            ).group_by(Device.org_id)
+            ).where(*dev_excl).group_by(Device.org_id)
         )).all()
         org_names = dict((await self.session.execute(
             select(Organization.id, Organization.name)
@@ -289,11 +335,17 @@ class PlatformService:
 
         conversations_30d = (await self.session.execute(
             select(func.count()).select_from(Conversation).where(
-                Conversation.created_at >= cutoff_30d
+                Conversation.created_at >= cutoff_30d, *conv_excl
             )
         )).scalar_one()
+        # Messages carry no org_id, so scope them through their conversation.
+        msg_conv_filter = [Message.conversation_id.in_(
+            select(Conversation.id).where(Conversation.org_id.notin_(platform_ids))
+        )] if platform_ids else []
         messages_30d = (await self.session.execute(
-            select(func.count()).select_from(Message).where(Message.created_at >= cutoff_30d)
+            select(func.count()).select_from(Message).where(
+                Message.created_at >= cutoff_30d, *msg_conv_filter
+            )
         )).scalar_one()
 
         return PlatformReports(

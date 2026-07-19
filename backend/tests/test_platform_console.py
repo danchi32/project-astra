@@ -14,12 +14,16 @@ async def _issue_invite(session_factory) -> str:
     return raw
 
 
+async def _register_org(client, session_factory, org, email):
+    return await client.post("/api/v1/auth/register", json={
+        "invite_code": await _issue_invite(session_factory), "organization_name": org,
+        "admin_name": "Admin", "admin_email": email, "admin_password": _PW,
+    })
+
+
 async def _operator(client, session_factory, org="Console Co", email="op@console.com"):
     """Register an org, promote its admin to platform admin, return auth headers."""
-    reg = await client.post("/api/v1/auth/register", json={
-        "invite_code": await _issue_invite(session_factory), "organization_name": org,
-        "admin_name": "Op", "admin_email": email, "admin_password": _PW,
-    })
+    reg = await _register_org(client, session_factory, org, email)
     async with session_factory() as s:
         u = (await s.execute(select(User).where(User.email == email))).scalar_one()
         u.is_platform_admin = True
@@ -27,27 +31,34 @@ async def _operator(client, session_factory, org="Console Co", email="op@console
     return {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
 
-async def test_billing_rollup(client, session_factory):
+async def test_billing_rollup_excludes_operator_own_org(client, session_factory):
     headers = await _operator(client, session_factory)
+    await _register_org(client, session_factory, "Cust Co", "a@cust.com")
+
     response = await client.get("/api/v1/platform/billing", headers=headers)
     assert response.status_code == 200, response.text
     body = response.json()
-    # One trialing org, no per-seat price configured in tests → revenue is None.
+    # A trialing customer, no per-seat price configured in tests → revenue is None.
     assert body["trialing"] >= 1
     assert body["active_subscriptions"] == 0
     assert body["mrr_cents"] is None and body["arr_cents"] is None
-    row = next(r for r in body["rows"] if r["name"] == "Console Co")
+    names = {r["name"] for r in body["rows"]}
+    assert "Cust Co" in names
+    assert "Console Co" not in names  # the operator's own workspace is not a customer
+    row = next(r for r in body["rows"] if r["name"] == "Cust Co")
     assert row["subscription_status"] == "trialing"
     assert row["license_count"] == 0
 
 
 async def test_reports_rollup(client, session_factory):
     headers = await _operator(client, session_factory, org="Rep Co", email="op@rep.com")
+    await _register_org(client, session_factory, "Rep Cust Co", "a@repcust.com")
+
     response = await client.get("/api/v1/platform/reports", headers=headers)
     assert response.status_code == 200, response.text
     body = response.json()
     assert len(body["signups_by_month"]) == 12
-    # This month's signup (the org we just made) is counted in the last bucket.
+    # This month's customer signup is counted in the last bucket (operator org excluded).
     assert body["signups_by_month"][-1]["count"] >= 1
     assert body["remediation_total_30d"] == 0
     assert body["remediation_success_rate"] is None
@@ -56,9 +67,10 @@ async def test_reports_rollup(client, session_factory):
 
 async def test_audit_feed_records_operator_actions(client, session_factory):
     headers = await _operator(client, session_factory, org="Aud Co", email="op@aud.com")
-    # Do an audited platform action: mint a view-as token for our own org.
+    await _register_org(client, session_factory, "Aud Cust", "a@audcust.com")
+    # Do an audited platform action: mint a view-as token for a customer org.
     orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()
-    org_id = next(o["id"] for o in orgs if o["name"] == "Aud Co")
+    org_id = next(o["id"] for o in orgs if o["name"] == "Aud Cust")
     assert (await client.post(
         f"/api/v1/platform/organizations/{org_id}/view-token", headers=headers
     )).status_code == 200
@@ -67,7 +79,7 @@ async def test_audit_feed_records_operator_actions(client, session_factory):
     assert response.status_code == 200, response.text
     feed = response.json()
     entry = next(e for e in feed if e["action"] == "platform.view_as")
-    assert entry["org_name"] == "Aud Co"
+    assert entry["org_name"] == "Aud Cust"
     assert entry["actor_email"] == "op@aud.com"
 
 
@@ -83,11 +95,12 @@ async def test_console_endpoints_require_platform_admin(client, session_factory)
 
 async def test_me_reports_view_as_mode(client, session_factory):
     headers = await _operator(client, session_factory, org="Me Co", email="op@me.com")
+    await _register_org(client, session_factory, "Me Cust", "a@mecust.com")
     me = (await client.get("/api/v1/auth/me", headers=headers)).json()
     assert me["view_as"] is False
 
     orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()
-    org_id = next(o["id"] for o in orgs if o["name"] == "Me Co")
+    org_id = next(o["id"] for o in orgs if o["name"] == "Me Cust")
     token = (await client.post(
         f"/api/v1/platform/organizations/{org_id}/view-token", headers=headers
     )).json()["access_token"]

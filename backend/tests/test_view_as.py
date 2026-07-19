@@ -35,14 +35,16 @@ async def _enroll(client, headers, hostname, machine_id):
 
 
 async def test_platform_overview_aggregates_all_orgs(client, session_factory):
-    reg = await _register(client, session_factory, "Ov A", "a@ov.com")
+    reg = await _register(client, session_factory, "Ov Op", "op@ov.com")
+    await _register(client, session_factory, "Ov A", "a@ov.com")
     await _register(client, session_factory, "Ov B", "b@ov.com")
-    await _promote(session_factory, "a@ov.com")
+    await _promote(session_factory, "op@ov.com")
     h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
     r = await client.get("/api/v1/platform/overview", headers=h)
     assert r.status_code == 200, r.text
     body = r.json()
+    # Two CUSTOMER orgs are counted; the operator's own org (Ov Op) is excluded.
     assert body["total_organizations"] >= 2
     assert body["orgs_by_status"].get("trialing", 0) >= 2
     assert "total_devices" in body and "online_devices" in body
@@ -92,12 +94,13 @@ async def test_view_token_requires_platform_admin(client, session_factory):
 
 
 async def test_overview_includes_business_metrics(client, session_factory):
-    reg = await _register(client, session_factory, "Biz Co", "biz@co.com")
+    reg = await _register(client, session_factory, "Biz Op", "biz@co.com")
+    await _register(client, session_factory, "Biz Cust", "bizcust@co.com")
     await _promote(session_factory, "biz@co.com")
     h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
     body = (await client.get("/api/v1/platform/overview", headers=h)).json()
     assert "active_subscriptions" in body
-    assert body["signups_30d"] >= 1          # Biz Co was just created
+    assert body["signups_30d"] >= 1          # the customer org was just created
     assert body["mrr_cents"] is None         # no per-seat price configured in tests
 
 

@@ -47,13 +47,18 @@ async def test_platform_console_requires_super_admin(client, session_factory):
     # A normal org admin is NOT a platform admin.
     assert (await client.get("/api/v1/platform/organizations", headers=headers)).status_code == 403
 
+    # A separate customer org that the operator should see.
+    await _register(client, await _issue_invite(session_factory), "Customer Co", "c@cust.com")
+
     await _promote(session_factory, "ops@ops.com")
     listing = await client.get("/api/v1/platform/organizations", headers=headers)
     assert listing.status_code == 200
     names = {o["name"] for o in listing.json()}
-    assert "Ops Co" in names
-    ops = next(o for o in listing.json() if o["name"] == "Ops Co")
-    assert ops["user_count"] >= 1  # its admin
+    # Customers are listed; the operator's OWN org (it holds a platform admin) is not.
+    assert "Customer Co" in names
+    assert "Ops Co" not in names
+    cust = next(o for o in listing.json() if o["name"] == "Customer Co")
+    assert cust["user_count"] >= 1
 
 
 async def test_trial_expiry_makes_org_read_only(client, session_factory):
