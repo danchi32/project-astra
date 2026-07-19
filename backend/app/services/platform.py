@@ -6,13 +6,16 @@ mutation is audited under the target org.
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import create_view_as_token, generate_opaque_token, hash_password
 from app.models import (
+    AuditLog,
+    Conversation,
     Device,
+    Message,
     Organization,
     RemediationTask,
     RemediationStatus,
@@ -25,10 +28,18 @@ from app.repositories.organizations import OrganizationRepository
 from app.repositories.users import UserRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.schemas.platform import (
+    ActionStat,
+    MonthCount,
     OrganizationAdminRead,
     OrganizationCreate,
     OrganizationUpdate,
+    OrgDeviceStat,
+    PlatformAuditRead,
+    PlatformBilling,
+    PlatformBillingRow,
     PlatformOverview,
+    PlatformReports,
+    ProviderStat,
     ViewAsToken,
 )
 from app.services.audit import AuditService
@@ -131,6 +142,201 @@ class PlatformService:
             licenses_sold=int(licenses),
             remediation_pending=pending,
         )
+
+    async def billing(self) -> PlatformBilling:
+        """Platform-wide revenue rollup: per-org economics + MRR/ARR + provider mix."""
+        price = get_settings().price_per_seat_cents
+        orgs = (
+            await self.session.execute(select(Organization).order_by(Organization.created_at))
+        ).scalars().all()
+
+        rows: list[PlatformBillingRow] = []
+        by_status: dict[str, int] = {}
+        by_provider: dict[str, dict[str, int]] = {}
+        total_mrr = 0
+        for org in orgs:
+            status_val = org.subscription_status.value
+            by_status[status_val] = by_status.get(status_val, 0) + 1
+
+            seat = None
+            mrr = None
+            if price is not None:
+                seat = round(price * (100 - (org.discount_percent or 0)) / 100)
+                mrr = seat * (org.license_count or 0) if (
+                    org.subscription_status == SubscriptionStatus.ACTIVE
+                ) else 0
+                total_mrr += mrr
+            if org.subscription_status == SubscriptionStatus.ACTIVE:
+                provider = org.billing_provider or "manual"
+                stat = by_provider.setdefault(provider, {"subscriptions": 0, "mrr_cents": 0})
+                stat["subscriptions"] += 1
+                stat["mrr_cents"] += mrr or 0
+
+            rows.append(PlatformBillingRow(
+                id=org.id, name=org.name, plan=org.plan,
+                subscription_status=org.subscription_status,
+                billing_provider=org.billing_provider,
+                license_count=org.license_count or 0,
+                discount_percent=org.discount_percent,
+                seat_price_cents=seat, mrr_cents=mrr,
+                current_period_end=org.current_period_end,
+                trial_ends_at=org.trial_ends_at, created_at=org.created_at,
+            ))
+
+        return PlatformBilling(
+            price_per_seat_cents=price,
+            mrr_cents=total_mrr if price is not None else None,
+            arr_cents=total_mrr * 12 if price is not None else None,
+            active_subscriptions=by_status.get("active", 0),
+            trialing=by_status.get("trialing", 0),
+            past_due=by_status.get("past_due", 0),
+            suspended=by_status.get("suspended", 0),
+            canceled=by_status.get("canceled", 0),
+            by_provider={
+                p: ProviderStat(
+                    subscriptions=s["subscriptions"],
+                    mrr_cents=s["mrr_cents"] if price is not None else None,
+                )
+                for p, s in by_provider.items()
+            },
+            rows=rows,
+        )
+
+    async def reports(self) -> PlatformReports:
+        """Cross-org analytics: growth, self-healing outcomes, fleet, AI volume."""
+        from app.services.remediation.actions import ACTIONS  # local: avoid import cycles
+
+        now = utcnow()
+        cutoff_30d = now - timedelta(days=30)
+
+        # Growth: bucket org signups by calendar month (12 months incl. current).
+        created = (await self.session.execute(select(Organization.created_at))).scalars().all()
+        months: list[str] = []
+        y, m = now.year, now.month
+        for _ in range(12):
+            months.append(f"{y:04d}-{m:02d}")
+            m -= 1
+            if m == 0:
+                y, m = y - 1, 12
+        months.reverse()
+        counts = {mo: 0 for mo in months}
+        for ts in created:
+            key = f"{ts.year:04d}-{ts.month:02d}"
+            if key in counts:
+                counts[key] += 1
+        signups = [MonthCount(month=mo, count=counts[mo]) for mo in months]
+
+        # Self-healing outcomes over the last 30 days.
+        async def _count_rem(*where) -> int:
+            return (await self.session.execute(
+                select(func.count()).select_from(RemediationTask).where(*where)
+            )).scalar_one()
+
+        succeeded = await _count_rem(
+            RemediationTask.created_at >= cutoff_30d,
+            RemediationTask.status == RemediationStatus.SUCCEEDED,
+        )
+        failed = await _count_rem(
+            RemediationTask.created_at >= cutoff_30d,
+            RemediationTask.status == RemediationStatus.FAILED,
+        )
+        total_30d = await _count_rem(RemediationTask.created_at >= cutoff_30d)
+        pending = await _count_rem(RemediationTask.status == RemediationStatus.PENDING_APPROVAL)
+        completed = succeeded + failed
+        success_rate = round(succeeded * 100 / completed, 1) if completed else None
+
+        action_rows = (await self.session.execute(
+            select(RemediationTask.action_id, func.count())
+            .where(RemediationTask.created_at >= cutoff_30d)
+            .group_by(RemediationTask.action_id)
+            .order_by(func.count().desc())
+            .limit(10)
+        )).all()
+        top_actions = [
+            ActionStat(
+                action_id=a, count=n,
+                label=ACTIONS[a].label if a in ACTIONS else a,
+            )
+            for a, n in action_rows
+        ]
+
+        # Fleet: devices per org, with online counts.
+        online_cutoff = now - ONLINE_THRESHOLD
+        device_rows = (await self.session.execute(
+            select(
+                Device.org_id,
+                func.count(),
+                func.sum(
+                    case((Device.last_seen_at >= online_cutoff, 1), else_=0)
+                ),
+            ).group_by(Device.org_id)
+        )).all()
+        org_names = dict((await self.session.execute(
+            select(Organization.id, Organization.name)
+        )).all())
+        devices_by_org = sorted(
+            (
+                OrgDeviceStat(
+                    org_id=org_id, org_name=org_names.get(org_id, "?"),
+                    devices=n, online=int(online or 0),
+                )
+                for org_id, n, online in device_rows
+            ),
+            key=lambda s: -s.devices,
+        )
+        total_devices = sum(s.devices for s in devices_by_org)
+        online_devices = sum(s.online for s in devices_by_org)
+
+        conversations_30d = (await self.session.execute(
+            select(func.count()).select_from(Conversation).where(
+                Conversation.created_at >= cutoff_30d
+            )
+        )).scalar_one()
+        messages_30d = (await self.session.execute(
+            select(func.count()).select_from(Message).where(Message.created_at >= cutoff_30d)
+        )).scalar_one()
+
+        return PlatformReports(
+            signups_by_month=signups,
+            remediation_total_30d=total_30d,
+            remediation_succeeded_30d=succeeded,
+            remediation_failed_30d=failed,
+            remediation_pending=pending,
+            remediation_success_rate=success_rate,
+            top_actions_30d=top_actions,
+            total_devices=total_devices,
+            online_devices=online_devices,
+            devices_by_org=devices_by_org,
+            conversations_30d=conversations_30d,
+            messages_30d=messages_30d,
+        )
+
+    async def audit_feed(self, *, limit: int = 100) -> list[PlatformAuditRead]:
+        """What the operator did, across every org — the platform.* audit trail."""
+        entries = (await self.session.execute(
+            select(AuditLog)
+            .where(AuditLog.action.like("platform.%"))
+            .order_by(AuditLog.created_at.desc())
+            .limit(limit)
+        )).scalars().all()
+        org_names = dict((await self.session.execute(
+            select(Organization.id, Organization.name)
+        )).all())
+        actor_ids = {e.actor_id for e in entries if e.actor_id}
+        actor_emails: dict = {}
+        if actor_ids:
+            actor_emails = dict((await self.session.execute(
+                select(User.id, User.email).where(User.id.in_(actor_ids))
+            )).all())
+        return [
+            PlatformAuditRead(
+                id=e.id, created_at=e.created_at, action=e.action,
+                org_id=e.org_id, org_name=org_names.get(e.org_id),
+                actor_email=actor_emails.get(e.actor_id),
+                target_type=e.target_type, target_id=e.target_id, detail=e.detail,
+            )
+            for e in entries
+        ]
 
     async def create_organization(
         self, *, actor: User, data: OrganizationCreate

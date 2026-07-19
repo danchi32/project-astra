@@ -1,11 +1,24 @@
 import { apiClient } from "./client";
 import type {
-  Asset, Device, GlobalFix, KnowledgeArticle, OrganizationAdmin, PlatformOverview,
+  Asset, Device, GlobalFix, KnowledgeArticle, OrganizationAdmin, PlatformAuditEntry,
+  PlatformBilling, PlatformOverview, PlatformReports,
   RemediationActionOption, RemediationTask, SubscriptionStatus, User,
 } from "./types";
 
 export const getPlatformOverview = () =>
   apiClient.get<PlatformOverview>("/platform/overview").then((r) => r.data);
+
+// Platform-wide revenue rollup — MRR/ARR, provider mix, per-org economics.
+export const getPlatformBilling = () =>
+  apiClient.get<PlatformBilling>("/platform/billing").then((r) => r.data);
+
+// Cross-org analytics — growth, self-healing outcomes, fleet, AI volume.
+export const getPlatformReports = () =>
+  apiClient.get<PlatformReports>("/platform/reports").then((r) => r.data);
+
+// The operator's own action trail across all orgs.
+export const getPlatformAudit = (limit = 100) =>
+  apiClient.get<PlatformAuditEntry[]>(`/platform/audit?limit=${limit}`).then((r) => r.data);
 
 // Operator provisions a new customer org + its first admin (initial password set here).
 export const createOrganizationAsAdmin = (data: {

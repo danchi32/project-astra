@@ -19,6 +19,7 @@ class OrganizationAdminRead(BaseModel):
     created_at: datetime
     license_count: int = 0
     discount_percent: int | None = None
+    billing_provider: str | None = None
     user_count: int = 0
     device_count: int = 0
 
@@ -63,6 +64,88 @@ class PlatformOverview(BaseModel):
     offline_devices: int
     licenses_sold: int
     remediation_pending: int
+
+
+class PlatformBillingRow(BaseModel):
+    """One organization's subscription economics, as the operator sees them."""
+    id: uuid.UUID
+    name: str
+    plan: str
+    subscription_status: SubscriptionStatus
+    billing_provider: str | None
+    license_count: int
+    discount_percent: int | None
+    seat_price_cents: int | None      # effective per-seat price after discount
+    mrr_cents: int | None             # this org's monthly contribution (0 unless active)
+    current_period_end: datetime | None
+    trial_ends_at: datetime | None
+    created_at: datetime
+
+
+class ProviderStat(BaseModel):
+    subscriptions: int
+    mrr_cents: int | None
+
+
+class PlatformBilling(BaseModel):
+    """Platform-wide revenue rollup. mrr/arr are None until a per-seat price is set."""
+    price_per_seat_cents: int | None
+    mrr_cents: int | None
+    arr_cents: int | None
+    active_subscriptions: int
+    trialing: int
+    past_due: int
+    suspended: int
+    canceled: int
+    by_provider: dict[str, ProviderStat]
+    rows: list[PlatformBillingRow]
+
+
+class MonthCount(BaseModel):
+    month: str                        # "2026-07"
+    count: int
+
+
+class ActionStat(BaseModel):
+    action_id: str
+    label: str
+    count: int
+
+
+class OrgDeviceStat(BaseModel):
+    org_id: uuid.UUID
+    org_name: str
+    devices: int
+    online: int
+
+
+class PlatformReports(BaseModel):
+    """Cross-org analytics for the operator's Reports page."""
+    signups_by_month: list[MonthCount]          # last 12 months, oldest first
+    remediation_total_30d: int
+    remediation_succeeded_30d: int
+    remediation_failed_30d: int
+    remediation_pending: int
+    remediation_success_rate: float | None      # % of completed (succeeded+failed)
+    top_actions_30d: list[ActionStat]
+    total_devices: int
+    online_devices: int
+    devices_by_org: list[OrgDeviceStat]         # largest fleets first
+    conversations_30d: int
+    messages_30d: int
+
+
+class PlatformAuditRead(BaseModel):
+    """A platform-operator action, resolved with org and actor names."""
+    id: uuid.UUID
+    created_at: datetime
+    action: str
+    org_id: uuid.UUID
+    org_name: str | None
+    actor_email: str | None
+    target_type: str
+    target_id: str | None
+    detail: dict | None
 
 
 class OrganizationCreate(BaseModel):

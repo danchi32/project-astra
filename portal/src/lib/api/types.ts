@@ -8,6 +8,8 @@ export interface User {
   role: UserRole;
   is_active: boolean;
   is_platform_admin?: boolean;
+  // True while this session is a platform admin's read-only "view as organization".
+  view_as?: boolean;
   created_at: string;
 }
 
@@ -44,6 +46,7 @@ export interface OrganizationAdmin {
   created_at: string;
   license_count: number;
   discount_percent: number | null;
+  billing_provider: string | null;
   user_count: number;
   device_count: number;
 }
@@ -61,6 +64,63 @@ export interface PlatformOverview {
   offline_devices: number;
   licenses_sold: number;
   remediation_pending: number;
+}
+
+// ── Operator console (platform admin) ──────────────────────────────────────
+
+export interface PlatformBillingRow {
+  id: string;
+  name: string;
+  plan: string;
+  subscription_status: SubscriptionStatus;
+  billing_provider: string | null;
+  license_count: number;
+  discount_percent: number | null;
+  seat_price_cents: number | null;
+  mrr_cents: number | null;
+  current_period_end: string | null;
+  trial_ends_at: string | null;
+  created_at: string;
+}
+
+export interface PlatformBilling {
+  price_per_seat_cents: number | null;
+  mrr_cents: number | null;
+  arr_cents: number | null;
+  active_subscriptions: number;
+  trialing: number;
+  past_due: number;
+  suspended: number;
+  canceled: number;
+  by_provider: Record<string, { subscriptions: number; mrr_cents: number | null }>;
+  rows: PlatformBillingRow[];
+}
+
+export interface PlatformReports {
+  signups_by_month: { month: string; count: number }[];
+  remediation_total_30d: number;
+  remediation_succeeded_30d: number;
+  remediation_failed_30d: number;
+  remediation_pending: number;
+  remediation_success_rate: number | null;
+  top_actions_30d: { action_id: string; label: string; count: number }[];
+  total_devices: number;
+  online_devices: number;
+  devices_by_org: { org_id: string; org_name: string; devices: number; online: number }[];
+  conversations_30d: number;
+  messages_30d: number;
+}
+
+export interface PlatformAuditEntry {
+  id: string;
+  created_at: string;
+  action: string;
+  org_id: string;
+  org_name: string | null;
+  actor_email: string | null;
+  target_type: string;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
 }
 
 export interface RemediationActionOption {

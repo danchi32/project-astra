@@ -1,14 +1,17 @@
 "use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Package, Users, Activity,
-  BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield, ShieldCheck, CreditCard,
+  BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield, ShieldCheck,
+  CreditCard, Building2, ScrollText,
 } from "lucide-react";
 import { logout, getMe } from "@/lib/api/auth";
 import { getUnreadCount } from "@/lib/api/notifications";
 import { useRouter } from "next/navigation";
+import { getViewAs } from "@/lib/viewAs";
 
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -24,10 +27,14 @@ const NAV = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
-// Platform operators get a dedicated, business-focused nav — none of the
-// single-org operational pages (a customer's devices are reached via View-as).
+// The operator console — business-focused sections spanning ALL organizations.
+// A customer's own operational pages are reached via View-as.
 const PLATFORM_NAV = [
-  { href: "/platform", icon: ShieldCheck, label: "Platform" },
+  { href: "/platform", icon: ShieldCheck, label: "Overview" },
+  { href: "/platform/organizations", icon: Building2, label: "Organizations" },
+  { href: "/platform/billing", icon: CreditCard, label: "Billing" },
+  { href: "/platform/reports", icon: BarChart3, label: "Reports" },
+  { href: "/platform/audit", icon: ScrollText, label: "Audit trail" },
   { href: "/platform/knowledge", icon: BookOpen, label: "Global knowledge" },
   { href: "/platform/fixes", icon: Zap, label: "Auto-fixes" },
   { href: "/settings", icon: Settings, label: "Settings" },
@@ -42,14 +49,33 @@ export function Sidebar() {
     refetchInterval: 30_000,
   });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  // Platform operators get a business-focused nav; everyone else the org nav
-  // (+ Billing for org admins).
-  const nav = me?.is_platform_admin
-    ? PLATFORM_NAV
-    : [
-        ...NAV,
-        ...(me?.role === "admin" ? [{ href: "/billing", icon: CreditCard, label: "Billing" }] : []),
-      ];
+
+  // "View as organization": while active, the operator browses the VIEWED org, so
+  // they need the org nav — not the platform nav. Track it live (same-tab event +
+  // cross-tab storage), and trust the server's view_as flag as well.
+  const [viewAsActive, setViewAsActive] = useState(false);
+  useEffect(() => {
+    const sync = () => setViewAsActive(getViewAs() !== null);
+    sync();
+    window.addEventListener("viewas-change", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("viewas-change", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+  const inViewAs = viewAsActive || !!me?.view_as;
+
+  // In view-as: the org nav (read-only browsing, incl. Billing — the role is admin).
+  // Platform operator: the operator console nav. Everyone else: their org's nav.
+  const nav = inViewAs
+    ? [...NAV, { href: "/billing", icon: CreditCard, label: "Billing" }]
+    : me?.is_platform_admin
+      ? PLATFORM_NAV
+      : [
+          ...NAV,
+          ...(me?.role === "admin" ? [{ href: "/billing", icon: CreditCard, label: "Billing" }] : []),
+        ];
 
   async function handleLogout() {
     await logout();

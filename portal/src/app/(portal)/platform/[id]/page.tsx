@@ -45,7 +45,7 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
 
   return (
     <div className="space-y-6">
-      <Link href="/platform" className="inline-flex items-center gap-1.5 text-sm" style={{ color: "var(--text-secondary)" }}>
+      <Link href="/platform/organizations" className="inline-flex items-center gap-1.5 text-sm" style={{ color: "var(--text-secondary)" }}>
         <ArrowLeft size={15} /> All organizations
       </Link>
 
@@ -69,6 +69,33 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           <Eye size={15} /> View full portal
         </button>
       </div>
+
+      {/* Subscription & billing */}
+      {org && (
+        <div className="rounded-xl p-5" style={card}>
+          <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Subscription &amp; billing</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-sm">
+            {[
+              { label: "Plan", value: org.plan, cap: true },
+              { label: "Status", value: STATUS_LABEL[org.subscription_status] },
+              { label: "Payment provider", value: org.billing_provider ?? "—", cap: true },
+              { label: "Licenses", value: org.license_count || "—" },
+              { label: "Discount", value: org.discount_percent ? `${org.discount_percent}%` : "—" },
+              {
+                label: org.subscription_status === "trialing" ? "Trial ends" : "Renews",
+                value: org.subscription_status === "trialing"
+                  ? (org.trial_ends_at ? new Date(org.trial_ends_at).toLocaleDateString() : "—")
+                  : (org.current_period_end ? new Date(org.current_period_end).toLocaleDateString() : "—"),
+              },
+            ].map(({ label, value, cap }) => (
+              <div key={label}>
+                <p className="text-xs uppercase tracking-wide mb-0.5" style={{ color: "var(--text-secondary)" }}>{label}</p>
+                <p className={`font-medium ${cap ? "capitalize" : ""}`} style={{ color: "var(--text-primary)" }}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Users */}
       <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>

@@ -22,7 +22,10 @@ from app.schemas.platform import (
     OrganizationAdminRead,
     OrganizationCreate,
     OrganizationUpdate,
+    PlatformAuditRead,
+    PlatformBilling,
     PlatformOverview,
+    PlatformReports,
     RemediationActionOption,
     ViewAsToken,
 )
@@ -65,6 +68,43 @@ async def platform_overview(
     session: AsyncSession = Depends(get_db),
 ) -> PlatformOverview:
     return await PlatformService(session).overview()
+
+
+@router.get(
+    "/billing",
+    response_model=PlatformBilling,
+    summary="Platform-wide revenue rollup: MRR/ARR, providers, per-org economics (platform admin)",
+)
+async def platform_billing(
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> PlatformBilling:
+    return await PlatformService(session).billing()
+
+
+@router.get(
+    "/reports",
+    response_model=PlatformReports,
+    summary="Cross-org analytics: growth, self-healing outcomes, fleet, AI volume (platform admin)",
+)
+async def platform_reports(
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> PlatformReports:
+    return await PlatformService(session).reports()
+
+
+@router.get(
+    "/audit",
+    response_model=list[PlatformAuditRead],
+    summary="The operator's own action trail across all orgs (platform admin)",
+)
+async def platform_audit(
+    limit: int = 100,
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> list[PlatformAuditRead]:
+    return await PlatformService(session).audit_feed(limit=min(max(limit, 1), 500))
 
 
 @router.post(

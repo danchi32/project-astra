@@ -97,8 +97,11 @@ async def logout(body: RefreshRequest, session: AsyncSession = Depends(get_db)) 
 
 
 @router.get("/me", response_model=UserRead, summary="Current authenticated user")
-async def me(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+async def me(current_user: User = Depends(get_current_user)) -> UserRead:
+    read = UserRead.model_validate(current_user)
+    # Surface view-as mode so the portal renders the viewed org's (read-only) UI.
+    read.view_as = bool(getattr(current_user, "_view_as", False))
+    return read
 
 
 @router.patch("/me", response_model=UserRead, summary="Update your own profile")

@@ -30,4 +30,7 @@ class UserRead(BaseModel):
     role: UserRole
     is_active: bool
     is_platform_admin: bool = False
+    # True when this session is a platform admin's read-only "view as organization"
+    # token — org_id then points at the VIEWED org, not the admin's own.
+    view_as: bool = False
     created_at: datetime
