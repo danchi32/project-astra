@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   filterAssets, activeFilterCount, computeAssetSummary, countByField, uniqueValues,
+  statusByLocation, assetLocation, UNASSIGNED_LOCATION,
   EMPTY_ASSET_FILTERS, type AssetFilters,
 } from "./asset-filters";
 import type { Asset } from "./api/types";
@@ -27,6 +28,8 @@ function makeAsset(overrides: Partial<Asset>): Asset {
     warranty_expiry: null,
     purchase_cost: null,
     notes: null,
+    acknowledgement_status: "not_required",
+    acknowledged_at: null,
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
     ...overrides,
@@ -45,6 +48,27 @@ describe("uniqueValues", () => {
   it("returns sorted, deduped, non-empty values", () => {
     expect(uniqueValues(ASSETS, "location")).toEqual(["NYC", "SF"]);
     expect(uniqueValues(ASSETS, "manufacturer")).toEqual(["Dell", "HP"]);
+  });
+});
+
+describe("statusByLocation", () => {
+  it("groups by location with a status breakdown, value, and Unassigned bucket", () => {
+    const rows = statusByLocation(ASSETS);
+    // NYC (2) and SF (2) tie; Unassigned (1) last.
+    expect(rows.map((r) => r.location)).toEqual(["NYC", "SF", UNASSIGNED_LOCATION]);
+    const nyc = rows.find((r) => r.location === "NYC")!;
+    expect(nyc.total).toBe(2);
+    expect(nyc.value).toBe(1200);
+    expect(nyc.byStatus.in_use).toBe(1);
+    expect(nyc.byStatus.retired).toBe(1);
+    const unassigned = rows.find((r) => r.location === UNASSIGNED_LOCATION)!;
+    expect(unassigned.total).toBe(1);
+    expect(unassigned.byStatus.in_use).toBe(1);
+  });
+
+  it("normalizes blank/whitespace locations to Unassigned", () => {
+    expect(assetLocation(makeAsset({ location: "   " }))).toBe(UNASSIGNED_LOCATION);
+    expect(assetLocation(makeAsset({ location: "Berlin" }))).toBe("Berlin");
   });
 });
 

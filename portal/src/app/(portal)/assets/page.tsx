@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Package, Plus, Trash2, Pencil, X, MailCheck, Mail, Clock } from "lucide-react";
+import { assetLocation, UNASSIGNED_LOCATION } from "@/lib/asset-filters";
 import {
   listAssets, getAssetSummary, createAsset, updateAsset, deleteAsset, resendAcknowledgement,
 } from "@/lib/api/assets";
@@ -52,6 +53,20 @@ export default function AssetsPage() {
   const { data: users } = useQuery({ queryKey: ["users"], queryFn: listUsers });
   const { data: devices } = useQuery({ queryKey: ["devices"], queryFn: getDevices });
   const isStaff = me?.role === "admin" || me?.role === "technician";
+
+  const [locFilter, setLocFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | AssetStatus>("all");
+  const locations = useMemo(
+    () => Array.from(new Set((assets ?? []).map(assetLocation))).sort((a, b) => a.localeCompare(b)),
+    [assets],
+  );
+  const visible = useMemo(
+    () => (assets ?? []).filter(
+      (a) => (locFilter === "all" || assetLocation(a) === locFilter)
+        && (statusFilter === "all" || a.status === statusFilter),
+    ),
+    [assets, locFilter, statusFilter],
+  );
 
   function openNew() { setForm(EMPTY); setError(""); setEditing("new"); }
   function openEdit(a: Asset) {
@@ -167,25 +182,45 @@ export default function AssetsPage() {
         </div>
       )}
 
+      {/* Filters — slice the register by location and status */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <select value={locFilter} onChange={(e) => setLocFilter(e.target.value)}
+          className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
+          style={{ background: locFilter !== "all" ? "rgba(37,99,235,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: locFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+          <option value="all">All locations</option>
+          {locations.map((l) => <option key={l} value={l}>{l}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | AssetStatus)}
+          className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
+          style={{ background: statusFilter !== "all" ? "rgba(37,99,235,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: statusFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+          <option value="all">All statuses</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_STYLE[s].label}</option>)}
+        </select>
+        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{visible.length} of {assets?.length ?? 0}</span>
+      </div>
+
       <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
         <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Tag", "Name", "Category", "Status", "Assigned to", "Device", "Serial", "Value", "Warranty", ""].map((h) => (
+                {["Tag", "Name", "Category", "Status", "Assigned to", "Location", "Device", "Serial", "Value", "Warranty", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
                     style={{ color: "var(--text-secondary)" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={10} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>}
+              {isLoading && <tr><td colSpan={11} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>}
               {!isLoading && !assets?.length && (
-                <tr><td colSpan={10} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>
+                <tr><td colSpan={11} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>
                   No assets yet. {isStaff ? "Click “Add asset” to register one." : ""}
                 </td></tr>
               )}
-              {assets?.map((a) => (
+              {!isLoading && !!assets?.length && !visible.length && (
+                <tr><td colSpan={11} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>No assets match these filters.</td></tr>
+              )}
+              {visible.map((a) => (
                 <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.asset_tag ?? "—"}</td>
                   <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{a.name}</td>
@@ -211,6 +246,7 @@ export default function AssetsPage() {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.location ?? "—"}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.device_hostname ?? "—"}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.serial_number ?? "—"}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.purchase_cost != null ? money(a.purchase_cost) : "—"}</td>
@@ -333,7 +369,7 @@ export default function AssetsPage() {
             <div className="grid grid-cols-2 gap-3">
               {([
                 ["manufacturer", "Manufacturer"], ["model", "Model"],
-                ["serial_number", "Serial number"], ["location", "Location"],
+                ["serial_number", "Serial number"],
               ] as const).map(([key, label]) => (
                 <div key={key}>
                   <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</label>
@@ -341,6 +377,15 @@ export default function AssetsPage() {
                     className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
                 </div>
               ))}
+              <div>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Location</label>
+                <input list="asset-locations" value={form.location ?? ""} placeholder="Pick or add a location…"
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+                <datalist id="asset-locations">
+                  {locations.filter((l) => l !== UNASSIGNED_LOCATION).map((l) => <option key={l} value={l} />)}
+                </datalist>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">

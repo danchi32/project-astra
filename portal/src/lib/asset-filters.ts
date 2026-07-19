@@ -108,3 +108,43 @@ export function countByField(assets: Asset[], key: "category" | "status"): Recor
   }
   return out;
 }
+
+// ── Location analytics ──────────────────────────────────────────────────────
+
+export const UNASSIGNED_LOCATION = "Unassigned";
+
+/** An asset's location, normalized — blank/whitespace becomes "Unassigned". */
+export function assetLocation(a: Asset): string {
+  return (a.location && a.location.trim()) || UNASSIGNED_LOCATION;
+}
+
+export interface LocationBreakdown {
+  location: string;
+  total: number;
+  value: number;
+  byStatus: Record<AssetStatus, number>;
+}
+
+const ZERO_STATUS = (): Record<AssetStatus, number> => ({
+  in_use: 0, in_storage: 0, in_repair: 0, retired: 0, lost: 0,
+});
+
+/** Per-location totals, value, and a status breakdown — the matrix behind the BI view.
+ *  Sorted by asset count (largest sites first). */
+export function statusByLocation(assets: Asset[]): LocationBreakdown[] {
+  const map = new Map<string, LocationBreakdown>();
+  for (const a of assets) {
+    const loc = assetLocation(a);
+    let row = map.get(loc);
+    if (!row) {
+      row = { location: loc, total: 0, value: 0, byStatus: ZERO_STATUS() };
+      map.set(loc, row);
+    }
+    row.total += 1;
+    if (a.purchase_cost != null) row.value += a.purchase_cost;
+    row.byStatus[a.status] += 1;
+  }
+  return Array.from(map.values()).sort(
+    (x, y) => y.total - x.total || x.location.localeCompare(y.location),
+  );
+}

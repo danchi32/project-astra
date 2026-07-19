@@ -19,7 +19,9 @@ import {
 import {
   type AssetFilters, EMPTY_ASSET_FILTERS, WARRANTY_BUCKETS,
   filterAssets, activeFilterCount, computeAssetSummary, countByField, uniqueValues,
+  statusByLocation,
 } from "@/lib/asset-filters";
+import type { Asset } from "@/lib/api/types";
 
 type Tab = "fleet" | "remediation" | "assets";
 
@@ -28,6 +30,67 @@ const TABS: { key: Tab; label: string; icon: typeof HardDrive }[] = [
   { key: "remediation", label: "Remediation", icon: Wrench },
   { key: "assets", label: "Assets", icon: Package },
 ];
+
+// Assets-by-location × status matrix — the BI centerpiece. Rows are sites (busiest first),
+// each with a stacked bar of its status mix, per-status counts, total and value.
+function LocationStatusMatrix({ assets }: { assets: Asset[] }) {
+  const rows = statusByLocation(assets);
+  if (rows.length === 0) return null;
+  const peak = Math.max(1, ...rows.map((r) => r.total));
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+      <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+        <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Assets by location &amp; status</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          {ASSET_STATUSES.map((s) => (
+            <span key={s} className="inline-flex items-center gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: ASSET_STATUS_COLORS[s] }} />
+              {ASSET_STATUS_LABELS[s]}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+        <table className="w-full text-sm whitespace-nowrap">
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Location</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide w-[28%]" style={{ color: "var(--text-secondary)" }}>Status mix</th>
+              {ASSET_STATUSES.map((s) => (
+                <th key={s} className="px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{ASSET_STATUS_LABELS[s]}</th>
+              ))}
+              <th className="px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Total</th>
+              <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.location} style={{ borderBottom: "1px solid var(--border)" }}>
+                <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{r.location}</td>
+                <td className="px-4 py-2.5">
+                  <div className="flex h-2.5 rounded-full overflow-hidden" style={{ background: "var(--bg)", width: `${Math.max(12, (r.total / peak) * 100)}%`, minWidth: 40 }}
+                    title={ASSET_STATUSES.map((s) => `${ASSET_STATUS_LABELS[s]}: ${r.byStatus[s]}`).join("  ·  ")}>
+                    {ASSET_STATUSES.map((s) => r.byStatus[s] > 0 && (
+                      <span key={s} style={{ width: `${(r.byStatus[s] / r.total) * 100}%`, background: ASSET_STATUS_COLORS[s] }} />
+                    ))}
+                  </div>
+                </td>
+                {ASSET_STATUSES.map((s) => (
+                  <td key={s} className="px-3 py-2.5 text-right tabular-nums" style={{ color: r.byStatus[s] ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                    {r.byStatus[s] || "—"}
+                  </td>
+                ))}
+                <td className="px-3 py-2.5 text-right tabular-nums font-semibold" style={{ color: "var(--text-primary)" }}>{r.total}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>{r.value ? formatCurrency(r.value) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function Card({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
@@ -276,6 +339,7 @@ function AssetsTab() {
 
   const filteredAssets = useMemo(() => filterAssets(assets, filters), [assets, filters]);
   const summary = useMemo(() => computeAssetSummary(filteredAssets), [filteredAssets]);
+  const locationCount = useMemo(() => statusByLocation(filteredAssets).length, [filteredAssets]);
 
   const categoryData: DonutDatum[] = useMemo(() => {
     const counts = countByField(filteredAssets, "category");
@@ -348,9 +412,10 @@ function AssetsTab() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <Card label="Total assets" value={String(summary.total)} />
             <Card label="Total value" value={formatCurrency(summary.totalValue)} />
+            <Card label="Locations" value={String(locationCount)} />
             <Card label="In repair" value={String(summary.inRepair)} accent="#f59e0b" />
             <Card label="Warranty <60d" value={String(summary.warrantyExpiringSoon)}
               accent={summary.warrantyExpiringSoon > 0 ? "#ef4444" : undefined} />
@@ -366,6 +431,8 @@ function AssetsTab() {
               <StatusBarChart data={statusData} height={200} />
             </div>
           </div>
+
+          <LocationStatusMatrix assets={filteredAssets} />
         </>
       )}
 
