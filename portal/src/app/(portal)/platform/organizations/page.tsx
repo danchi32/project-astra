@@ -14,7 +14,7 @@ import type { OrganizationAdmin, SubscriptionStatus } from "@/lib/api/types";
 
 const emptyOrgForm = { organization_name: "", admin_name: "", admin_email: "", admin_password: "" };
 
-export const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
+const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
   trialing: { label: "Trial", color: "#3b82f6" },
   active: { label: "Active", color: "#10b981" },
   past_due: { label: "Past due", color: "#f59e0b" },
