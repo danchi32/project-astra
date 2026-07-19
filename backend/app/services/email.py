@@ -179,19 +179,18 @@ class EmailService:
         )
 
     async def send_asset_assignment(
-        self, *, to: str, name: str, asset_name: str, org_name: str, ack_link: str,
-        asset_tag: str | None = None, subject_tmpl: str | None = None,
-        body_tmpl: str | None = None, from_name: str | None = None, from_email: str | None = None,
+        self, *, to: str, context: dict, ack_link: str,
+        subject_tmpl: str | None = None, body_tmpl: str | None = None,
+        from_name: str | None = None, from_email: str | None = None,
     ) -> bool:
         """Ask an employee to confirm receipt of an asset just assigned to them. Uses the
         org's customized template when set, else the default; sent AS the organization when
-        they've verified a sending domain."""
+        they've verified a sending domain. `context` maps placeholders to values."""
         from app.services.email_templates import render_asset_assignment
 
         subject, html, text = render_asset_assignment(
             subject_tmpl=subject_tmpl, body_tmpl=body_tmpl,
-            employee_name=name, asset_name=asset_name, asset_tag=asset_tag,
-            org_name=org_name, ack_link=ack_link,
+            context=context, ack_link=ack_link,
         )
         return await self.send(
             to=to, subject=subject, html=html, text=text,

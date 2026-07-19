@@ -124,8 +124,9 @@ async def test_email_settings_admin_only(client, user_headers):
 
 def test_render_default_template_has_link_and_values():
     subj, html, text = render_asset_assignment(
-        subject_tmpl=None, body_tmpl=None, employee_name="Sam", asset_name="Dell 7440",
-        asset_tag="A-1", org_name="Acme", ack_link="https://x/ack?token=t")
+        subject_tmpl=None, body_tmpl=None,
+        context={"employee_name": "Sam", "asset_name": "Dell 7440", "org_name": "Acme"},
+        ack_link="https://x/ack?token=t")
     assert "Dell 7440" in subj
     assert "Sam" in html and "Acme" in html
     assert "Acknowledge receipt" in html
@@ -136,18 +137,33 @@ def test_render_custom_template_positions_button_once():
     subj, html, _ = render_asset_assignment(
         subject_tmpl="Your {{asset_name}} is ready",
         body_tmpl="Hi {{employee_name}}\n{{acknowledge_button}}\nThanks, {{org_name}}",
-        employee_name="Sam", asset_name="Laptop", asset_tag=None,
-        org_name="Acme", ack_link="https://x/a")
+        context={"asset_name": "Laptop", "employee_name": "Sam", "org_name": "Acme"},
+        ack_link="https://x/a")
     assert subj == "Your Laptop is ready"
     assert html.count("Acknowledge receipt") == 1  # not appended twice
 
 
 def test_render_escapes_injected_values():
     _, html, _ = render_asset_assignment(
-        subject_tmpl=None, body_tmpl="{{asset_name}}", employee_name="x",
-        asset_name="<script>bad</script>", asset_tag=None, org_name="o", ack_link="https://x/a")
+        subject_tmpl=None, body_tmpl="{{asset_name}}",
+        context={"asset_name": "<script>bad</script>"}, ack_link="https://x/a")
     assert "<script>bad" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_render_device_placeholders():
+    _, html, _ = render_asset_assignment(
+        subject_tmpl="Kit for {{employee_name}}",
+        body_tmpl="Host {{hostname}} · CPU {{cpu}} · RAM {{ram}} · Serial {{serial}} · "
+                  "Storage {{storage}} · Apps {{software}} · Logged in {{device_user}} · {{status}}",
+        context={
+            "employee_name": "Sam", "hostname": "PC-1", "cpu": "Intel i7", "ram": "16 GB",
+            "serial": "SN-9", "storage": "512 GB", "software": "142 apps",
+            "device_user": "ACME\\sam", "status": "in use",
+        },
+        ack_link="https://x/a")
+    for token in ("PC-1", "Intel i7", "16 GB", "SN-9", "512 GB", "142 apps", "in use"):
+        assert token in html
 
 
 async def test_get_settings_returns_default_template(client, admin_headers):

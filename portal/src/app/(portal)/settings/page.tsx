@@ -374,8 +374,10 @@ function DnsValue({ value }: { value: string }) {
 }
 
 const TEMPLATE_SAMPLE: Record<string, string> = {
-  employee_name: "Sam Rivera", asset_name: "Dell Latitude 7440",
-  asset_tag: "AST-001", org_name: "Your Company",
+  employee_name: "Sam Rivera", asset_name: "Dell Latitude 7440", asset_tag: "AST-001",
+  status: "in use", hostname: "LAPTOP-SAM", brand_model: "Dell Latitude 7440",
+  serial: "5CD1234XYZ", cpu: "Intel Core i7-1365U", ram: "16 GB", storage: "512 GB",
+  software: "142 apps", device_user: "ACME\\sam", org_name: "Your Company",
 };
 
 function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {

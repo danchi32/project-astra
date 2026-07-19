@@ -9,8 +9,14 @@ from __future__ import annotations
 
 import html as _html
 
-# Placeholders offered to the org (shown in the editor). Keep in sync with the UI.
-ASSET_PLACEHOLDERS = ["employee_name", "asset_name", "asset_tag", "org_name"]
+# Placeholders offered to the org (shown in the editor). Device-derived ones are blank
+# when the asset isn't linked to a device. `employee_name` is the assignee ("name of user");
+# `device_user` is the account currently logged into the linked device ("User").
+ASSET_PLACEHOLDERS = [
+    "employee_name", "asset_name", "asset_tag", "status",
+    "hostname", "brand_model", "serial", "cpu", "ram", "storage",
+    "software", "device_user", "org_name",
+]
 _ACK_MARKER = "{{acknowledge_button}}"
 
 DEFAULT_ASSET_SUBJECT = "Please confirm receipt of {{asset_name}}"
@@ -50,22 +56,15 @@ def render_asset_assignment(
     *,
     subject_tmpl: str | None,
     body_tmpl: str | None,
-    employee_name: str,
-    asset_name: str,
-    asset_tag: str | None,
-    org_name: str,
+    context: dict[str, str],
     ack_link: str,
 ) -> tuple[str, str, str]:
     """Return (subject, html, text) for the assignment email, using the org's template
-    when provided or the built-in default otherwise."""
+    when provided or the built-in default otherwise. `context` supplies the placeholder
+    values (see ASSET_PLACEHOLDERS); missing keys render as empty."""
     subject_tmpl = subject_tmpl or DEFAULT_ASSET_SUBJECT
     body_tmpl = body_tmpl or DEFAULT_ASSET_BODY
-    ctx = {
-        "employee_name": employee_name,
-        "asset_name": asset_name,
-        "asset_tag": asset_tag or "",
-        "org_name": org_name,
-    }
+    ctx = {key: (context.get(key) or "") for key in ASSET_PLACEHOLDERS}
 
     subject = _substitute(subject_tmpl, ctx).replace("\n", " ").strip() or DEFAULT_ASSET_SUBJECT
 

@@ -202,15 +202,50 @@ class AssetService:
 
             base = get_settings().public_api_url.rstrip("/")
             link = f"{base}/api/v1/assets/acknowledge?token={asset.ack_token}"
+            context = await self._email_context(asset, user, org_name)
             await email_service.send_asset_assignment(
-                to=user.email, name=user.full_name, asset_name=asset.name,
-                asset_tag=asset.asset_tag, org_name=org_name, ack_link=link,
+                to=user.email, context=context, ack_link=link,
                 subject_tmpl=email_row.asset_email_subject if email_row else None,
                 body_tmpl=email_row.asset_email_body if email_row else None,
                 from_name=from_name, from_email=from_email,
             )
         except Exception:
             logger.exception("Asset acknowledgement email failed for asset %s", asset.id)
+
+    async def _email_context(self, asset: Asset, user: User, org_name: str) -> dict[str, str]:
+        """Placeholder values for the assignment email — asset fields plus, when the asset is
+        linked to a device, that device's telemetry (hostname, CPU, RAM, etc.)."""
+        device = await self.devices.get(asset.device_id) if asset.device_id else None
+        app_count = None
+        if device is not None:
+            from app.repositories.telemetry import TelemetryRepository
+            app_count = await TelemetryRepository(self.session).count_apps_for_device(device.id)
+
+        def ram(mb: int | None) -> str:
+            return f"{round(mb / 1024)} GB" if mb else ""
+
+        def storage(gb: float | None) -> str:
+            if not gb:
+                return ""
+            return f"{gb / 1024:.1f} TB" if gb >= 1024 else f"{round(gb)} GB"
+
+        manufacturer = asset.manufacturer or (device.manufacturer if device else None)
+        model = asset.model or (device.model if device else None)
+        return {
+            "employee_name": user.full_name,                     # "Name of user" (assignee)
+            "asset_name": asset.name,
+            "asset_tag": asset.asset_tag or "",
+            "status": asset.status.value.replace("_", " "),
+            "hostname": (device.hostname if device else "") or "",
+            "brand_model": " ".join(x for x in (manufacturer, model) if x),
+            "serial": asset.serial_number or (device.serial_number if device else "") or "",
+            "cpu": (device.cpu_name if device else "") or "",
+            "ram": ram(device.total_ram_mb) if device else "",
+            "storage": storage(device.total_storage_gb) if device else "",
+            "software": f"{app_count} apps" if app_count is not None else "",
+            "device_user": (device.logged_in_user if device else "") or "",  # "User" on the device
+            "org_name": org_name,
+        }
 
     async def delete(self, *, actor: User, asset_id: uuid.UUID) -> None:
         asset = await self._get_owned(actor.org_id, asset_id)
