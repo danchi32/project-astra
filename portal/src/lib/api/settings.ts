@@ -16,6 +16,9 @@ export const configureEmailSettings = (data: { from_name: string; from_address: 
 export const verifyEmailSettings = () =>
   apiClient.post<EmailSettings>("/settings/email/verify").then((r) => r.data);
 
+export const updateAssetEmailTemplate = (data: { subject: string; body: string }) =>
+  apiClient.put<EmailSettings>("/settings/email/asset-template", data).then((r) => r.data);
+
 export const getOrgSettings = () =>
   apiClient.get<OrganizationSettings>("/settings/organization").then((r) => r.data);
 

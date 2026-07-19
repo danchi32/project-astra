@@ -90,6 +90,9 @@ export interface EmailSettings {
   dns_records: EmailDnsRecord[];
   last_error: string | null;
   verified_at: string | null;
+  asset_email_subject: string | null;
+  asset_email_body: string | null;
+  asset_email_placeholders: string[];
 }
 
 // ── Operator console (platform admin) ──────────────────────────────────────

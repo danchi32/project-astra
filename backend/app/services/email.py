@@ -180,24 +180,21 @@ class EmailService:
 
     async def send_asset_assignment(
         self, *, to: str, name: str, asset_name: str, org_name: str, ack_link: str,
-        from_name: str | None = None, from_email: str | None = None,
+        asset_tag: str | None = None, subject_tmpl: str | None = None,
+        body_tmpl: str | None = None, from_name: str | None = None, from_email: str | None = None,
     ) -> bool:
-        """Ask an employee to confirm receipt of an asset just assigned to them. Sent AS
-        the organization when they've verified a sending domain."""
-        html = _shell(
-            "Please confirm you received this asset",
-            f"""<p>Hi {name},</p>
-            <p><strong>{org_name}</strong> has assigned the following asset to you:</p>
-            <p style="font-size:16px;font-weight:600;margin:16px 0;color:#111">{asset_name}</p>
-            <p>Please confirm you've received it by clicking the button below:</p>
-            <p style="margin:24px 0"><a href="{ack_link}" style="display:inline-block;background:#2563eb;
-            color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Acknowledge receipt</a></p>
-            <p style="color:#666">If you didn't expect this, contact your IT team.</p>""",
+        """Ask an employee to confirm receipt of an asset just assigned to them. Uses the
+        org's customized template when set, else the default; sent AS the organization when
+        they've verified a sending domain."""
+        from app.services.email_templates import render_asset_assignment
+
+        subject, html, text = render_asset_assignment(
+            subject_tmpl=subject_tmpl, body_tmpl=body_tmpl,
+            employee_name=name, asset_name=asset_name, asset_tag=asset_tag,
+            org_name=org_name, ack_link=ack_link,
         )
         return await self.send(
-            to=to, subject=f"Please confirm receipt of {asset_name}", html=html,
-            text=f"Hi {name}, {org_name} assigned '{asset_name}' to you. "
-                 f"Confirm receipt: {ack_link}",
+            to=to, subject=subject, html=html, text=text,
             from_name=from_name, from_email=from_email,
         )
 

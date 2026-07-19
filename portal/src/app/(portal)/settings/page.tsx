@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Settings as SettingsIcon, User as UserIcon, Palette, Building2, ShieldCheck,
@@ -8,10 +8,10 @@ import {
 import { getMe, updateProfile, changePassword } from "@/lib/api/auth";
 import {
   getOrgSettings, updateOrgSettings, getPermissionMatrix,
-  getEmailSettings, configureEmailSettings, verifyEmailSettings,
+  getEmailSettings, configureEmailSettings, verifyEmailSettings, updateAssetEmailTemplate,
 } from "@/lib/api/settings";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
-import type { EmailVerificationStatus, OrganizationSettingsInput, UserRole } from "@/lib/api/types";
+import type { EmailSettings, EmailVerificationStatus, OrganizationSettingsInput, UserRole } from "@/lib/api/types";
 
 type Tab = "profile" | "preferences" | "organization" | "email" | "permissions";
 
@@ -373,6 +373,81 @@ function DnsValue({ value }: { value: string }) {
   );
 }
 
+const TEMPLATE_SAMPLE: Record<string, string> = {
+  employee_name: "Sam Rivera", asset_name: "Dell Latitude 7440",
+  asset_tag: "AST-001", org_name: "Your Company",
+};
+
+function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
+  const queryClient = useQueryClient();
+  const [subject, setSubject] = useState(settings.asset_email_subject ?? "");
+  const [body, setBody] = useState(settings.asset_email_body ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  async function save() {
+    setSaving(true); setSaved(false);
+    try {
+      const next = await updateAssetEmailTemplate({ subject, body });
+      queryClient.setQueryData(["email-settings"], next);
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+    } finally { setSaving(false); }
+  }
+
+  function insert(token: string) {
+    const t = `{{${token}}}`;
+    const ta = bodyRef.current;
+    if (!ta) { setBody(body + t); return; }
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    setBody(body.slice(0, start) + t + body.slice(end));
+    requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + t.length; });
+  }
+
+  const render = (s: string) =>
+    s.replace(/\{\{(\w+)\}\}/g, (_, k) =>
+      k === "acknowledge_button" ? "[ Acknowledge receipt ]" : (TEMPLATE_SAMPLE[k] ?? `{{${k}}}`));
+
+  return (
+    <Panel title="Asset assignment email"
+      description="Customize the email sent automatically when you assign an asset to someone. The “Acknowledge receipt” button is added for you (or place it yourself with {{acknowledge_button}}).">
+      <Field label="Subject">
+        <input value={subject} onChange={(e) => setSubject(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+      </Field>
+      <Field label="Message">
+        <textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={7}
+          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono" style={inputStyle} />
+      </Field>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Insert:</span>
+        {settings.asset_email_placeholders.map((p) => (
+          <button key={p} type="button" onClick={() => insert(p)}
+            className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+            {`{{${p}}}`}
+          </button>
+        ))}
+        <button type="button" onClick={() => insert("acknowledge_button")}
+          className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--accent)" }}>
+          {`{{acknowledge_button}}`}
+        </button>
+      </div>
+      <div className="rounded-lg p-4" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+        <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "var(--text-secondary)" }}>Preview</p>
+        <p className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>{render(subject) || "—"}</p>
+        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{render(body)}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <button onClick={save} disabled={saving}
+          className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
+          {saving ? "Saving…" : "Save template"}
+        </button>
+        {saved && <span className="text-sm" style={{ color: "#10b981" }}>Saved</span>}
+      </div>
+    </Panel>
+  );
+}
+
 function EmailTab() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery({ queryKey: ["email-settings"], queryFn: getEmailSettings });
@@ -475,6 +550,8 @@ function EmailTab() {
           </p>
         </Panel>
       )}
+
+      {settings && <AssetEmailTemplateEditor settings={settings} />}
     </div>
   );
 }

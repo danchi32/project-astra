@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import generate_opaque_token
-from app.models import AcknowledgementStatus, Asset, Organization, User
+from app.models import (
+    AcknowledgementStatus,
+    Asset,
+    EmailSettings,
+    EmailVerificationStatus,
+    Organization,
+    User,
+)
 from app.models.base import utcnow
 from app.repositories.assets import AssetRepository
 from app.repositories.devices import DeviceRepository
@@ -15,7 +22,6 @@ from app.repositories.users import UserRepository
 from app.schemas.asset import AssetCreate, AssetRead, AssetSummary, AssetUpdate
 from app.services.audit import AuditService
 from app.services.email import EmailService
-from app.services.email_integration import EmailIntegrationService
 from app.services.exceptions import ConflictError, NotFoundError
 
 logger = logging.getLogger("astra.assets")
@@ -169,8 +175,9 @@ class AssetService:
         return asset
 
     async def _send_ack_email(self, asset: Asset) -> None:
-        """Email the assignee a receipt-confirmation link, sent AS the org when they've
-        verified a sending domain. Never raises — an email hiccup must not fail the assignment."""
+        """Email the assignee a receipt-confirmation link, using the org's customized
+        template and (when verified) sending AS the org. Never raises — an email hiccup
+        must not fail the assignment."""
         try:
             email_service = EmailService()
             if not email_service.enabled or not asset.assigned_to_user_id or not asset.ack_token:
@@ -183,9 +190,12 @@ class AssetService:
             )).scalar_one_or_none()
             org_name = org.name if org else "Your organization"
 
-            sender = await EmailIntegrationService.resolve_sender(self.session, asset.org_id)
-            if sender is not None:
-                from_name, from_email = (sender.from_name or org_name), sender.from_address
+            # One read for both the sending identity and the custom template.
+            email_row = (await self.session.execute(
+                select(EmailSettings).where(EmailSettings.org_id == asset.org_id)
+            )).scalar_one_or_none()
+            if email_row and email_row.status is EmailVerificationStatus.VERIFIED and email_row.from_address:
+                from_name, from_email = (email_row.from_name or org_name), email_row.from_address
             else:
                 # Not yet verified → send from ASTRA's default, clearly on the org's behalf.
                 from_name, from_email = f"{org_name} (via ASTRA)", None
@@ -194,7 +204,10 @@ class AssetService:
             link = f"{base}/api/v1/assets/acknowledge?token={asset.ack_token}"
             await email_service.send_asset_assignment(
                 to=user.email, name=user.full_name, asset_name=asset.name,
-                org_name=org_name, ack_link=link, from_name=from_name, from_email=from_email,
+                asset_tag=asset.asset_tag, org_name=org_name, ack_link=link,
+                subject_tmpl=email_row.asset_email_subject if email_row else None,
+                body_tmpl=email_row.asset_email_body if email_row else None,
+                from_name=from_name, from_email=from_email,
             )
         except Exception:
             logger.exception("Asset acknowledgement email failed for asset %s", asset.id)

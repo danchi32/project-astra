@@ -92,6 +92,25 @@ class EmailIntegrationService:
         await self.session.refresh(row)
         return row
 
+    async def update_asset_template(
+        self, *, actor: User, subject: str, body: str
+    ) -> EmailSettings:
+        """Save the org's asset-assignment email template. Blank fields reset to the default
+        (stored as NULL). A row is created even before a sending domain is set."""
+        row = await self._row(actor.org_id)
+        if row is None:
+            row = EmailSettings(org_id=actor.org_id)
+            self.session.add(row)
+        row.asset_email_subject = subject.strip() or None
+        row.asset_email_body = body.strip() or None
+        await self.audit.record(
+            org_id=actor.org_id, actor_id=actor.id, action="email.asset_template",
+            target_type="email_settings", target_id=row.domain or "",
+        )
+        await self.session.commit()
+        await self.session.refresh(row)
+        return row
+
     async def verify(self, *, actor: User) -> EmailSettings:
         """Trigger a DNS re-check with the provider and update our stored status."""
         row = await self._row(actor.org_id)

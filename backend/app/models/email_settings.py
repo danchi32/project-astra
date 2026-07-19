@@ -58,6 +58,12 @@ class EmailSettings(TimestampMixin, Base):
     dns_records: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Org-customizable asset-assignment email. Null = use the built-in default template.
+    # Bodies are plain text with {{placeholders}}; the acknowledge button is appended
+    # (or positioned with {{acknowledge_button}}).
+    asset_email_subject: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    asset_email_body: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(

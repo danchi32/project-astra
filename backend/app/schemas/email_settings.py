@@ -26,8 +26,18 @@ class EmailSettingsRead(BaseModel):
     dns_records: list[EmailDnsRecord] = []
     last_error: str | None = None
     verified_at: datetime | None = None
+    # Asset-assignment email template. When null, the built-in default (returned here) is used.
+    asset_email_subject: str | None = None
+    asset_email_body: str | None = None
+    asset_email_placeholders: list[str] = []
 
 
 class EmailSettingsConfigure(BaseModel):
     from_name: str = Field(min_length=1, max_length=120)
     from_address: EmailStr
+
+
+class AssetEmailTemplateUpdate(BaseModel):
+    """Customize the asset-assignment email. Empty strings reset to the default."""
+    subject: str = Field(max_length=300)
+    body: str = Field(max_length=4000)

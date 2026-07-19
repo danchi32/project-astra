@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.models import Asset
 from app.services import email_domains
 from app.services.email import EmailService
+from app.services.email_templates import render_asset_assignment
 
 
 async def _assign(client, headers, user_id, name="Dell Latitude 7440"):
@@ -117,6 +118,77 @@ async def test_email_settings_admin_only(client, user_headers):
     assert (await client.get("/api/v1/settings/email", headers=user_headers)).status_code == 403
     assert (await client.post("/api/v1/settings/email", json={
         "from_name": "X", "from_address": "x@x.com"}, headers=user_headers)).status_code == 403
+
+
+# ── Asset-assignment email template ────────────────────────────────────────
+
+def test_render_default_template_has_link_and_values():
+    subj, html, text = render_asset_assignment(
+        subject_tmpl=None, body_tmpl=None, employee_name="Sam", asset_name="Dell 7440",
+        asset_tag="A-1", org_name="Acme", ack_link="https://x/ack?token=t")
+    assert "Dell 7440" in subj
+    assert "Sam" in html and "Acme" in html
+    assert "Acknowledge receipt" in html
+    assert "https://x/ack?token=t" in html and "https://x/ack?token=t" in text
+
+
+def test_render_custom_template_positions_button_once():
+    subj, html, _ = render_asset_assignment(
+        subject_tmpl="Your {{asset_name}} is ready",
+        body_tmpl="Hi {{employee_name}}\n{{acknowledge_button}}\nThanks, {{org_name}}",
+        employee_name="Sam", asset_name="Laptop", asset_tag=None,
+        org_name="Acme", ack_link="https://x/a")
+    assert subj == "Your Laptop is ready"
+    assert html.count("Acknowledge receipt") == 1  # not appended twice
+
+
+def test_render_escapes_injected_values():
+    _, html, _ = render_asset_assignment(
+        subject_tmpl=None, body_tmpl="{{asset_name}}", employee_name="x",
+        asset_name="<script>bad</script>", asset_tag=None, org_name="o", ack_link="https://x/a")
+    assert "<script>bad" not in html
+    assert "&lt;script&gt;" in html
+
+
+async def test_get_settings_returns_default_template(client, admin_headers):
+    body = (await client.get("/api/v1/settings/email", headers=admin_headers)).json()
+    assert body["asset_email_subject"]
+    assert body["asset_email_body"]
+    assert "employee_name" in body["asset_email_placeholders"]
+
+
+async def test_customize_and_persist_template(client, admin_headers):
+    resp = await client.put("/api/v1/settings/email/asset-template", json={
+        "subject": "Kit for {{employee_name}}",
+        "body": "Hi {{employee_name}}, your {{asset_name}} is ready.",
+    }, headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["asset_email_subject"] == "Kit for {{employee_name}}"
+    again = (await client.get("/api/v1/settings/email", headers=admin_headers)).json()
+    assert again["asset_email_body"].startswith("Hi {{employee_name}}")
+
+
+async def test_custom_template_used_on_assignment(client, admin_headers, regular_user, monkeypatch):
+    await client.put("/api/v1/settings/email/asset-template", json={
+        "subject": "CUSTOMSUBJ {{asset_name}}", "body": "CUSTOMBODY {{employee_name}}",
+    }, headers=admin_headers)
+    captured: dict = {}
+
+    async def fake_send(self, *, to, subject, html, text=None, from_name=None, from_email=None):
+        captured.update(to=to, subject=subject, html=html)
+        return True
+
+    monkeypatch.setattr(EmailService, "enabled", property(lambda self: True))
+    monkeypatch.setattr(EmailService, "send", fake_send)
+    await _assign(client, admin_headers, regular_user.id)
+    assert captured["subject"].startswith("CUSTOMSUBJ")
+    assert "CUSTOMBODY" in captured["html"]
+
+
+async def test_asset_template_is_admin_only(client, user_headers):
+    resp = await client.put("/api/v1/settings/email/asset-template",
+                            json={"subject": "x", "body": "y"}, headers=user_headers)
+    assert resp.status_code == 403
 
 
 async def test_ack_email_sends_as_verified_org_address(
