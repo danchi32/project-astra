@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import Device, Organization, SubscriptionStatus, User
-from app.services.exceptions import ValidationError
+from app.services.exceptions import SubscriptionNotFound, ValidationError
 from app.services.payments import SubscriptionEvent, available_providers, get_provider
 from app.services.subscription import org_is_writable, read_only_reason
 
@@ -149,7 +149,18 @@ class BillingService:
         provider = get_provider(org.billing_provider)
         if provider is None:
             raise ValidationError("This organization has no subscription to cancel.")
-        await provider.cancel(org=org)
+        try:
+            await provider.cancel(org=org)
+        except SubscriptionNotFound:
+            # Already gone on the rail's side — just clear our stale link.
+            await self._clear_stale_subscription(org)
+
+    async def _clear_stale_subscription(self, org: Organization) -> None:
+        """Drop a dead provider link so the org can subscribe again (has_subscription flips
+        false, so the Subscribe flow reappears in the portal)."""
+        org.provider_subscription_id = None
+        org.billing_provider = None
+        await self.session.commit()
 
     async def apply_event(self, event: SubscriptionEvent) -> dict:
         """Apply a rail's normalized webhook to the org. Webhooks are the source of
@@ -277,7 +288,15 @@ class BillingService:
         # Current rails: route through the org's provider (the same seam as cancel).
         provider = get_provider(org.billing_provider)
         if provider is not None and org.provider_subscription_id:
-            await provider.set_quantity(org=org, quantity=count)
+            try:
+                await provider.set_quantity(org=org, quantity=count)
+            except SubscriptionNotFound:
+                await self._clear_stale_subscription(org)
+                raise ValidationError(
+                    "Your subscription is no longer valid — it may have been created in a "
+                    "different payment environment (sandbox vs live) or cancelled. It's been "
+                    "reset; please subscribe again."
+                )
             org.license_count = count
             await self.session.commit()
             return count, used, f"Updated to {count} license(s)."

@@ -19,7 +19,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.models import Organization, SubscriptionStatus
-from app.services.exceptions import ValidationError
+from app.services.exceptions import SubscriptionNotFound, ValidationError
 from app.services.payments.base import SubscriptionEvent
 
 settings = get_settings()
@@ -93,6 +93,10 @@ class PayPalProvider:
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                 json=body,
             )
+        if r.status_code == 404:
+            # A resource-id path (revise/cancel/get) whose subscription PayPal can't find —
+            # usually an environment mismatch (sandbox vs live) or a cancelled subscription.
+            raise SubscriptionNotFound("PayPal could not find that subscription.")
         if r.status_code >= 400:
             raise ValidationError(f"PayPal error ({r.status_code}): {r.text[:300]}")
         return r.json() if r.content else {}
@@ -103,7 +107,23 @@ class PayPalProvider:
         if not self.can_checkout:
             raise ValidationError("PayPal is not configured on the server.")
         base = (settings.public_app_url or "").rstrip("/")
-        data = await self._request(
+        try:
+            data = await self._create_subscription(org, quantity, base)
+        except SubscriptionNotFound:
+            # On create, a 404 is the PLAN not existing in this environment, not a subscription.
+            raise ValidationError(
+                "PayPal couldn't create the subscription — the plan id isn't valid for this "
+                "environment. Check ASTRA_PAYPAL_PLAN_ID and ASTRA_PAYPAL_SANDBOX."
+            )
+        org.billing_provider = self.name
+        org.provider_subscription_id = data.get("id")
+        for link in data.get("links") or []:
+            if link.get("rel") == "approve":
+                return link["href"]
+        raise ValidationError("PayPal did not return an approval URL.")
+
+    async def _create_subscription(self, org: Organization, quantity: int, base: str) -> dict:
+        return await self._request(
             "POST",
             "/v1/billing/subscriptions",
             {
@@ -118,12 +138,6 @@ class PayPalProvider:
                 },
             },
         )
-        org.billing_provider = self.name
-        org.provider_subscription_id = data.get("id")
-        for link in data.get("links") or []:
-            if link.get("rel") == "approve":
-                return link["href"]
-        raise ValidationError("PayPal did not return an approval URL.")
 
     async def set_quantity(self, *, org: Organization, quantity: int) -> None:
         if not org.provider_subscription_id:
