@@ -275,6 +275,7 @@ export interface Asset {
   notes: string | null;
   acknowledgement_status: AcknowledgementStatus;
   acknowledged_at: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -287,7 +288,7 @@ export interface Location {
 
 export type AssetEventType =
   | "created" | "assigned" | "unassigned" | "status_changed"
-  | "location_changed" | "acknowledged" | "note";
+  | "location_changed" | "acknowledged" | "archived" | "restored" | "note";
 
 export interface AssetEvent {
   id: string;

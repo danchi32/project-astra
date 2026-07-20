@@ -13,10 +13,12 @@ class AssetRepository:
     async def get(self, asset_id: uuid.UUID) -> Asset | None:
         return await self.session.get(Asset, asset_id)
 
-    async def list_by_org(self, org_id: uuid.UUID) -> list[Asset]:
+    async def list_by_org(self, org_id: uuid.UUID, *, archived: bool = False) -> list[Asset]:
+        """Active assets by default; pass archived=True for the archive view."""
+        cond = Asset.archived_at.is_not(None) if archived else Asset.archived_at.is_(None)
         result = await self.session.execute(
             select(Asset)
-            .where(Asset.org_id == org_id)
+            .where(Asset.org_id == org_id, cond)
             .order_by(Asset.created_at.desc())
         )
         return list(result.scalars().all())

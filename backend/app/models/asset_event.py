@@ -16,6 +16,8 @@ class AssetEventType(str, enum.Enum):
     STATUS_CHANGED = "status_changed"      # from_value/to_value = status
     LOCATION_CHANGED = "location_changed"  # from_value/to_value = location name
     ACKNOWLEDGED = "acknowledged"          # to_value = holder who confirmed receipt
+    ARCHIVED = "archived"                  # soft-deleted (retired from the active register)
+    RESTORED = "restored"                  # brought back from the archive
     NOTE = "note"                          # free-text note (note field)
 
 

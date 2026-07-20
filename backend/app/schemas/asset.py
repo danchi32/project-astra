@@ -53,6 +53,7 @@ class AssetRead(AssetBase):
     org_id: uuid.UUID
     acknowledgement_status: AcknowledgementStatus = AcknowledgementStatus.NOT_REQUIRED
     acknowledged_at: datetime | None = None
+    archived_at: datetime | None = None
     # Enriched for display (not stored on the row).
     assigned_to_name: str | None = None
     device_hostname: str | None = None

@@ -91,6 +91,12 @@ class Asset(TimestampMixin, Base):
     )
     ack_token: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
+    # Soft-delete: an archived asset keeps its full record + passport but drops out of the
+    # active register. Cleared on restore; null = active.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

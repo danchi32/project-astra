@@ -30,6 +30,7 @@ function makeAsset(overrides: Partial<Asset>): Asset {
     notes: null,
     acknowledgement_status: "not_required",
     acknowledged_at: null,
+    archived_at: null,
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
     ...overrides,

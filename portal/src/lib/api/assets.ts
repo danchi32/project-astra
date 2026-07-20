@@ -5,7 +5,14 @@ import type { Asset, AssetInput, AssetPassport, AssetSummary } from "./types";
 export const getAssetPassport = (id: string) =>
   apiClient.get<AssetPassport>(`/assets/${id}/passport`).then((r) => r.data);
 
-export const listAssets = () => apiClient.get<Asset[]>("/assets").then((r) => r.data);
+export const listAssets = (archived = false) =>
+  apiClient.get<Asset[]>("/assets", { params: { archived } }).then((r) => r.data);
+
+export const archiveAsset = (id: string) =>
+  apiClient.post<Asset>(`/assets/${id}/archive`).then((r) => r.data);
+
+export const restoreAsset = (id: string) =>
+  apiClient.post<Asset>(`/assets/${id}/restore`).then((r) => r.data);
 
 export const getAssetSummary = () =>
   apiClient.get<AssetSummary>("/assets/summary").then((r) => r.data);

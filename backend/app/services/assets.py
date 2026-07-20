@@ -44,8 +44,8 @@ class AssetService:
 
     # -- Reads -----------------------------------------------------------------
 
-    async def list_for_org(self, *, org_id: uuid.UUID) -> list[AssetRead]:
-        assets = await self.repo.list_by_org(org_id)
+    async def list_for_org(self, *, org_id: uuid.UUID, archived: bool = False) -> list[AssetRead]:
+        assets = await self.repo.list_by_org(org_id, archived=archived)
         user_names, device_hosts = await self._lookup_maps(org_id)
         return [self._to_read(a, user_names, device_hosts) for a in assets]
 
@@ -349,7 +349,38 @@ class AssetService:
             "org_name": org_name,
         }
 
+    async def archive(self, *, actor: User, asset_id: uuid.UUID) -> AssetRead:
+        """Soft-delete: retire the asset from the active register but keep its full
+        record + passport. Restorable."""
+        asset = await self._get_owned(actor.org_id, asset_id)
+        if asset.archived_at is None:
+            asset.archived_at = utcnow()
+            self._record_event(asset, AssetEventType.ARCHIVED, actor_id=actor.id)
+            await self.audit.record(
+                org_id=actor.org_id, actor_id=actor.id, action="asset.archive",
+                target_type="asset", target_id=str(asset.id), detail={"name": asset.name},
+            )
+            await self.session.commit()
+        user_names, device_hosts = await self._lookup_maps(actor.org_id)
+        return self._to_read(asset, user_names, device_hosts)
+
+    async def restore(self, *, actor: User, asset_id: uuid.UUID) -> AssetRead:
+        """Bring an archived asset back into the active register."""
+        asset = await self._get_owned(actor.org_id, asset_id)
+        if asset.archived_at is not None:
+            asset.archived_at = None
+            self._record_event(asset, AssetEventType.RESTORED, actor_id=actor.id)
+            await self.audit.record(
+                org_id=actor.org_id, actor_id=actor.id, action="asset.restore",
+                target_type="asset", target_id=str(asset.id), detail={"name": asset.name},
+            )
+            await self.session.commit()
+        user_names, device_hosts = await self._lookup_maps(actor.org_id)
+        return self._to_read(asset, user_names, device_hosts)
+
     async def delete(self, *, actor: User, asset_id: uuid.UUID) -> None:
+        """Permanent hard delete — removes the asset AND its passport history. For genuine
+        mistakes; the archive path is the safe default."""
         asset = await self._get_owned(actor.org_id, asset_id)
         await self.repo.delete(asset)
         await self.audit.record(

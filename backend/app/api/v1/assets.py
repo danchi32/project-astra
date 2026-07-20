@@ -56,10 +56,11 @@ async def acknowledge_asset(
 
 @router.get("", response_model=list[AssetRead], summary="List assets in your organization")
 async def list_assets(
+    archived: bool = False,
     actor: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> list[AssetRead]:
-    return await AssetService(session).list_for_org(org_id=actor.org_id)
+    return await AssetService(session).list_for_org(org_id=actor.org_id, archived=archived)
 
 
 @router.get("/summary", response_model=AssetSummary, summary="Asset register summary")
@@ -127,12 +128,37 @@ async def resend_acknowledgement(
     return await AssetService(session).resend_acknowledgement(actor=actor, asset_id=asset_id)
 
 
+@router.post(
+    "/{asset_id}/archive", response_model=AssetRead,
+    summary="Archive an asset — keeps its record + passport (staff)",
+)
+async def archive_asset(
+    asset_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> AssetRead:
+    return await AssetService(session).archive(actor=actor, asset_id=asset_id)
+
+
+@router.post(
+    "/{asset_id}/restore", response_model=AssetRead,
+    summary="Restore an archived asset to the active register (staff)",
+)
+async def restore_asset(
+    asset_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> AssetRead:
+    return await AssetService(session).restore(actor=actor, asset_id=asset_id)
+
+
 @router.delete(
-    "/{asset_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete an asset (staff)"
+    "/{asset_id}", status_code=status.HTTP_204_NO_CONTENT,
+    summary="Permanently delete an asset and its history (admin)",
 )
 async def delete_asset(
     asset_id: uuid.UUID,
-    actor: User = Depends(staff_required),
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     await AssetService(session).delete(actor=actor, asset_id=asset_id)
