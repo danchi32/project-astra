@@ -279,6 +279,12 @@ export interface Asset {
   updated_at: string;
 }
 
+export interface Location {
+  id: string;
+  name: string;
+  asset_count: number;
+}
+
 export interface AssetSummary {
   total: number;
   by_status: Record<string, number>;

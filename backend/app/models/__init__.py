@@ -12,6 +12,7 @@ from app.models.enrollment_token import EnrollmentToken
 from app.models.invite_code import InviteCode
 from app.models.knowledge import KnowledgeArticle, KnowledgeSource
 from app.models.learned_action import LearnedAction
+from app.models.location import Location
 from app.models.notification import Notification, NotificationCategory, NotificationSeverity
 from app.models.organization import Organization, SubscriptionStatus
 from app.models.organization_settings import OrganizationSettings
@@ -50,6 +51,7 @@ __all__ = [
     "KnowledgeArticle",
     "KnowledgeSource",
     "LearnedAction",
+    "Location",
     "Message",
     "MessageRole",
     "Notification",

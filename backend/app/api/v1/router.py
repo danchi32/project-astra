@@ -10,6 +10,7 @@ from app.api.v1 import (
     devices,
     downloads,
     knowledge,
+    locations,
     notifications,
     platform,
     remediation,
@@ -29,6 +30,7 @@ api_router.include_router(telemetry.router)
 api_router.include_router(conversations.router)
 api_router.include_router(remediation.router)
 api_router.include_router(knowledge.router)
+api_router.include_router(locations.router)
 api_router.include_router(audit.router)
 api_router.include_router(reports.router)
 api_router.include_router(notifications.router)

@@ -2,13 +2,14 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Package, Plus, Trash2, Pencil, X, MailCheck, Mail, Clock } from "lucide-react";
-import { assetLocation, UNASSIGNED_LOCATION } from "@/lib/asset-filters";
+import { assetLocation } from "@/lib/asset-filters";
 import {
   listAssets, getAssetSummary, createAsset, updateAsset, deleteAsset, resendAcknowledgement,
 } from "@/lib/api/assets";
 import { listUsers } from "@/lib/api/users";
 import { getDevices } from "@/lib/api/dashboard";
 import { getMe } from "@/lib/api/auth";
+import { listLocations } from "@/lib/api/locations";
 import { SearchableSelect } from "@/components/searchable-select";
 import type { Asset, AssetCategory, AssetStatus, AssetInput } from "@/lib/api/types";
 
@@ -52,6 +53,7 @@ export default function AssetsPage() {
   const { data: summary } = useQuery({ queryKey: ["asset-summary"], queryFn: getAssetSummary });
   const { data: users } = useQuery({ queryKey: ["users"], queryFn: listUsers });
   const { data: devices } = useQuery({ queryKey: ["devices"], queryFn: getDevices });
+  const { data: managedLocations } = useQuery({ queryKey: ["locations"], queryFn: listLocations });
   const isStaff = me?.role === "admin" || me?.role === "technician";
 
   const [locFilter, setLocFilter] = useState("all");
@@ -379,12 +381,15 @@ export default function AssetsPage() {
               ))}
               <div>
                 <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Location</label>
-                <input list="asset-locations" value={form.location ?? ""} placeholder="Pick or add a location…"
+                <input list="asset-locations" value={form.location ?? ""} placeholder="Pick a location…"
                   onChange={(e) => setForm({ ...form, location: e.target.value })}
                   className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
                 <datalist id="asset-locations">
-                  {locations.filter((l) => l !== UNASSIGNED_LOCATION).map((l) => <option key={l} value={l} />)}
+                  {(managedLocations ?? []).map((l) => <option key={l.id} value={l.name} />)}
                 </datalist>
+                <p className="text-[11px] mt-1" style={{ color: "var(--text-secondary)" }}>
+                  Manage the list in Settings → Locations.
+                </p>
               </div>
             </div>
 

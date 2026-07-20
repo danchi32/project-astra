@@ -3,17 +3,22 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Settings as SettingsIcon, User as UserIcon, Palette, Building2, ShieldCheck,
-  Check, Minus, Monitor, Sun, Moon, Mail, Copy, RefreshCw,
+  Check, Minus, Monitor, Sun, Moon, Mail, Copy, RefreshCw, MapPin, Pencil, Trash2,
 } from "lucide-react";
 import { getMe, updateProfile, changePassword } from "@/lib/api/auth";
 import {
   getOrgSettings, updateOrgSettings, getPermissionMatrix,
   getEmailSettings, configureEmailSettings, verifyEmailSettings, updateAssetEmailTemplate,
 } from "@/lib/api/settings";
+import { listLocations, createLocation, renameLocation, deleteLocation } from "@/lib/api/locations";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
 import type { EmailSettings, EmailVerificationStatus, OrganizationSettingsInput, UserRole } from "@/lib/api/types";
 
-type Tab = "profile" | "preferences" | "organization" | "email" | "permissions";
+type Tab = "profile" | "preferences" | "organization" | "email" | "locations" | "permissions";
+
+function errDetail(err: unknown): string | undefined {
+  return (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+}
 
 const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
   admin: { color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
@@ -558,6 +563,85 @@ function EmailTab() {
   );
 }
 
+/* ── Locations ───────────────────────────────────────────────────────────── */
+
+function LocationsTab() {
+  const queryClient = useQueryClient();
+  const { data: locations, isLoading } = useQuery({ queryKey: ["locations"], queryFn: listLocations });
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["locations"] });
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    setBusy(true); setError("");
+    try { await createLocation(newName.trim()); setNewName(""); await refresh(); }
+    catch (err) { setError(errDetail(err) || "Couldn't add that location."); }
+    finally { setBusy(false); }
+  }
+  async function saveRename(id: string) {
+    if (!editName.trim()) { setEditingId(null); return; }
+    setError("");
+    try { await renameLocation(id, editName.trim()); setEditingId(null); await refresh(); }
+    catch (err) { setError(errDetail(err) || "Couldn't rename that location."); }
+  }
+  async function remove(id: string, name: string) {
+    if (!confirm(`Delete location "${name}"?`)) return;
+    setError("");
+    try { await deleteLocation(id); await refresh(); }
+    catch (err) { setError(errDetail(err) || "Couldn't delete that location."); }
+  }
+
+  return (
+    <Panel title="Locations"
+      description="Your sites and offices. Assets pick a location from this list; renaming one updates every asset there, and a location can't be deleted while assets still use it.">
+      <form onSubmit={add} className="flex gap-2">
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Add a location — e.g. HQ, SF Office, Warehouse-2"
+          className="flex-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+        <button type="submit" disabled={busy || !newName.trim()}
+          className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
+          Add
+        </button>
+      </form>
+      {error && <p className="text-sm text-red-500">{error}</p>}
+
+      <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+        {isLoading && <p className="px-4 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>Loading…</p>}
+        {locations && locations.length === 0 && (
+          <p className="px-4 py-6 text-sm text-center" style={{ color: "var(--text-secondary)" }}>No locations yet — add your first above.</p>
+        )}
+        {locations?.map((l) => (
+          <div key={l.id} className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
+            {editingId === l.id ? (
+              <>
+                <input value={editName} autoFocus onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveRename(l.id); if (e.key === "Escape") setEditingId(null); }}
+                  className="flex-1 px-2 py-1 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+                <button onClick={() => saveRename(l.id)} className="text-xs px-2 py-1 rounded-lg text-white" style={{ background: "var(--accent)" }}>Save</button>
+                <button onClick={() => setEditingId(null)} className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>{l.name}</span>
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{l.asset_count} asset{l.asset_count === 1 ? "" : "s"}</span>
+                <button onClick={() => { setEditingId(l.id); setEditName(l.name); }} title="Rename"
+                  className="p-1 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" style={{ color: "var(--text-secondary)" }}><Pencil size={14} /></button>
+                <button onClick={() => remove(l.id, l.name)} title="Delete"
+                  className="p-1 rounded-lg hover:bg-red-500/10 hover:text-red-500" style={{ color: "var(--text-secondary)" }}><Trash2 size={14} /></button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 export default function SettingsPage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isAdmin = me?.role === "admin";
@@ -568,6 +652,7 @@ export default function SettingsPage() {
     { key: "preferences", label: "Preferences", icon: Palette, show: true },
     { key: "organization", label: "Organization", icon: Building2, show: !!isAdmin },
     { key: "email", label: "Email", icon: Mail, show: !!isAdmin },
+    { key: "locations", label: "Locations", icon: MapPin, show: !!isAdmin },
     { key: "permissions", label: "Permissions", icon: ShieldCheck, show: true },
   ];
 
@@ -601,6 +686,7 @@ export default function SettingsPage() {
       {tab === "preferences" && <PreferencesTab />}
       {tab === "organization" && isAdmin && <OrganizationTab />}
       {tab === "email" && isAdmin && <EmailTab />}
+      {tab === "locations" && isAdmin && <LocationsTab />}
       {tab === "permissions" && <PermissionsTab />}
     </div>
   );
