@@ -157,8 +157,23 @@ class Settings(BaseSettings):
 
     # Security contact published at /.well-known/security.txt (RFC 9116).
     security_contact: str = "mailto:security@example.com"
-    # Portal base URL Stripe Checkout/Portal redirect back to after payment.
+    # Portal base URL that payment rails and email links redirect back to. Stored as the
+    # ORIGIN only — redirects append their own path (/billing, /reset-password, …).
     public_app_url: str = "http://localhost:3000"
+
+    @field_validator("public_app_url", mode="before")
+    @classmethod
+    def _origin_only(cls, value):
+        """Keep only scheme://host. Tolerates a pasted full URL like
+        'https://astra.technomateai.com/login' — otherwise appending '/billing' would produce
+        a broken '/login/billing' redirect (404 after a PayPal cancel/return)."""
+        if not value or not isinstance(value, str):
+            return value
+        from urllib.parse import urlparse
+        parsed = urlparse(value.strip())
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return value.strip().rstrip("/")
 
 
 def _ensure_database_url() -> None:
