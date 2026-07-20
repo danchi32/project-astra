@@ -331,12 +331,14 @@ export default function AssetsPage() {
       </div>
 
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card label="Total assets" value={String(summary.total)} />
-          <Card label="Total value" value={money(summary.total_value)} />
+          <Card label="In use" value={String(summary.by_status["in_use"] ?? 0)} accent="#10b981" />
+          <Card label="Idle" value={String(summary.by_status["in_storage"] ?? 0)} accent="#3b82f6" />
           <Card label="In repair" value={String(summary.by_status["in_repair"] ?? 0)} accent="#f59e0b" />
-          <Card label="Warranty <60d" value={String(summary.warranty_expiring_soon)}
-            accent={summary.warranty_expiring_soon > 0 ? "#ef4444" : undefined} />
+          <Card label="Discard"
+            value={String((summary.by_status["retired"] ?? 0) + (summary.by_status["lost"] ?? 0))}
+            accent="#64748b" />
         </div>
       )}
 
