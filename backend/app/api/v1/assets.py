@@ -8,6 +8,7 @@ from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.asset import AssetCreate, AssetRead, AssetSummary, AssetUpdate
+from app.schemas.asset_event import AssetPassport
 from app.services.assets import AssetService
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -76,6 +77,19 @@ async def get_asset(
     session: AsyncSession = Depends(get_db),
 ) -> AssetRead:
     return await AssetService(session).get(actor=actor, asset_id=asset_id)
+
+
+@router.get(
+    "/{asset_id}/passport",
+    response_model=AssetPassport,
+    summary="Device passport — full lifecycle history + analytics",
+)
+async def asset_passport(
+    asset_id: uuid.UUID,
+    actor: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> AssetPassport:
+    return await AssetService(session).passport(actor=actor, asset_id=asset_id)
 
 
 @router.post(

@@ -285,6 +285,39 @@ export interface Location {
   asset_count: number;
 }
 
+export type AssetEventType =
+  | "created" | "assigned" | "unassigned" | "status_changed"
+  | "location_changed" | "acknowledged" | "note";
+
+export interface AssetEvent {
+  id: string;
+  event_type: AssetEventType;
+  actor_name: string | null;
+  user_name: string | null;
+  from_value: string | null;
+  to_value: string | null;
+  note: string | null;
+  occurred_at: string;
+}
+
+export interface AssetPassport {
+  asset_id: string;
+  name: string;
+  category: string;
+  asset_tag: string | null;
+  serial_number: string | null;
+  current_status: AssetStatus;
+  current_location: string | null;
+  current_holder: string | null;
+  holder_since: string | null;
+  acquired_at: string;
+  age_days: number;
+  repair_count: number;
+  assignment_count: number;
+  time_in_status: { status: string; seconds: number }[];
+  events: AssetEvent[];
+}
+
 export interface AssetSummary {
   total: number;
   by_status: Record<string, number>;

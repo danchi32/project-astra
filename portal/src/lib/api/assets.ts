@@ -1,5 +1,9 @@
 import { apiClient } from "./client";
-import type { Asset, AssetInput, AssetSummary } from "./types";
+import type { Asset, AssetInput, AssetPassport, AssetSummary } from "./types";
+
+// Device passport — full lifecycle history + analytics for one asset.
+export const getAssetPassport = (id: string) =>
+  apiClient.get<AssetPassport>(`/assets/${id}/passport`).then((r) => r.data);
 
 export const listAssets = () => apiClient.get<Asset[]>("/assets").then((r) => r.data);
 

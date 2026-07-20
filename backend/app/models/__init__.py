@@ -1,4 +1,5 @@
 from app.models.asset import AcknowledgementStatus, Asset, AssetCategory, AssetStatus
+from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
@@ -34,6 +35,8 @@ __all__ = [
     "AcknowledgementStatus",
     "Asset",
     "AssetCategory",
+    "AssetEvent",
+    "AssetEventType",
     "AssetStatus",
     "AuditLog",
     "Base",
