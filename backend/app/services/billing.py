@@ -263,26 +263,39 @@ class BillingService:
     # -- License management (org admin) ----------------------------------------
 
     async def set_licenses(self, org: Organization, count: int) -> tuple[int, int, str]:
-        """Change the number of purchased licenses on an existing subscription.
-        Stripe prorates. Cannot drop below the number of seats already in use."""
+        """Change the number of purchased licenses on the org's existing subscription,
+        via whichever rail it's on (Razorpay / Paddle / PayPal, or legacy Stripe). The
+        provider prorates. Cannot drop below the number of seats already in use."""
         used = await self.used_seats(org.id)
+        count = max(1, count)
         if count < used:
             raise ValidationError(
                 f"You have {used} active {self.seat_type}(s) in use — remove some before "
                 f"reducing to {count} licenses."
             )
-        if not self.enabled or not org.stripe_subscription_id:
-            raise ValidationError("No active subscription. Subscribe first to buy licenses.")
-        sub = await run_in_threadpool(stripe.Subscription.retrieve, org.stripe_subscription_id)
-        item = sub["items"]["data"][0]
-        await run_in_threadpool(
-            lambda: stripe.SubscriptionItem.modify(
-                item["id"], quantity=count, proration_behavior="create_prorations"
+
+        # Current rails: route through the org's provider (the same seam as cancel).
+        provider = get_provider(org.billing_provider)
+        if provider is not None and org.provider_subscription_id:
+            await provider.set_quantity(org=org, quantity=count)
+            org.license_count = count
+            await self.session.commit()
+            return count, used, f"Updated to {count} license(s)."
+
+        # Legacy Stripe path, for any org still subscribed via Stripe.
+        if self.enabled and org.stripe_subscription_id:
+            sub = await run_in_threadpool(stripe.Subscription.retrieve, org.stripe_subscription_id)
+            item = sub["items"]["data"][0]
+            await run_in_threadpool(
+                lambda: stripe.SubscriptionItem.modify(
+                    item["id"], quantity=count, proration_behavior="create_prorations"
+                )
             )
-        )
-        org.license_count = count
-        await self.session.commit()
-        return count, used, f"Updated to {count} license(s)."
+            org.license_count = count
+            await self.session.commit()
+            return count, used, f"Updated to {count} license(s)."
+
+        raise ValidationError("No active subscription. Subscribe first to buy licenses.")
 
     # -- Discounts (super-admin only) ------------------------------------------
 
