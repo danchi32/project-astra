@@ -109,9 +109,25 @@ jobs:
             "$VERSION" "$URL" "$SHA" "$VERSION" > manifest.json
           echo "Manifest: $(cat manifest.json)"
 
+          # Materialize the signing key. Accept it either as a raw PEM (a multi-line secret) or
+          # as a single-line base64 blob of the PEM — the latter avoids the newline-mangling that
+          # breaks a PEM pasted as one line. Detect which by the presence of the PEM header.
+          if printf '%s' "$SIGNING_KEY" | grep -q "BEGIN"; then
+            printf '%s\n' "$SIGNING_KEY" > signing-key.pem
+          else
+            printf '%s' "$SIGNING_KEY" | base64 -d > signing-key.pem 2>/dev/null || true
+          fi
+
+          if ! openssl pkey -in signing-key.pem -noout 2>/dev/null; then
+            rm -f signing-key.pem
+            echo "::error::AGENT_UPDATE_SIGNING_KEY is not a readable PEM private key."
+            echo "::error::Store the FULL private key including the -----BEGIN/END ... PRIVATE KEY-----"
+            echo "::error::lines and its line breaks, or store its single-line base64 (base64 -w0 key.pem)."
+            exit 1
+          fi
+
           # Sign with the CI-held private key; publish the signature base64-encoded (text),
           # which is the form the agent's verifier expects.
-          printf '%s' "$SIGNING_KEY" > signing-key.pem
           openssl dgst -sha256 -sign signing-key.pem -out manifest.sig.bin manifest.json
           base64 -w0 manifest.sig.bin > manifest.json.sig
           rm -f signing-key.pem manifest.sig.bin
