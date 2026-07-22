@@ -4,6 +4,9 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Allow the signed-release CI (Linux runner) to cross-build this Windows-target
+         service; publish stays win-x64. No effect when building on Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>AstraAgent.Service</RootNamespace>
     <AssemblyName>AstraAgent.Service</AssemblyName>
     <Version>0.3.0</Version>

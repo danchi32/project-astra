@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Allow the signed-release CI (Linux runner) to cross-build this Windows/WinForms
+         app; publish stays win-x64. No effect when building on Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>AstraAgent.Tray</RootNamespace>
     <AssemblyName>AstraAgent.Tray</AssemblyName>
     <Version>0.3.0</Version>
