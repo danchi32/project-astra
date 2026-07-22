@@ -45,5 +45,6 @@ builder.Services.AddSingleton<AstraAgent.Service.Update.UpdateInstaller>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
 builder.Services.AddHostedService<UpdateWorker>();
+builder.Services.AddHostedService<RemediationWorker>();
 
 builder.Build().Run();

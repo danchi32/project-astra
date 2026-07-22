@@ -18,6 +18,17 @@ public sealed record HeartbeatRequest(
     [property: JsonPropertyName("agent_version")] string AgentVersion,
     [property: JsonPropertyName("logged_in_user")] string? LoggedInUser);
 
+// ── Remediation (elevated / system-context tasks the Service executes) ───────
+
+public sealed record AgentRemediationTask(
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("action_id")] string ActionId,
+    [property: JsonPropertyName("params")] Dictionary<string, string>? Params);
+
+public sealed record AgentRemediationResult(
+    [property: JsonPropertyName("success")] bool Success,
+    [property: JsonPropertyName("output")] string Output);
+
 // ── Telemetry ──────────────────────────────────────────────────────────────
 
 public sealed record TelemetryDiskInfo(

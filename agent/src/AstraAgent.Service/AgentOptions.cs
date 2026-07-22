@@ -13,6 +13,10 @@ public sealed class AgentOptions
 
     public int HeartbeatIntervalSeconds { get; set; } = 60;
 
+    /// <summary>How often the elevated service polls for approved system-context remediation
+    /// tasks (machine-wide cleanup). Clamped to a 10s floor.</summary>
+    public int RemediationPollSeconds { get; set; } = 30;
+
     /// <summary>How often to check the backend for a newer signed agent release. Auto-update
     /// stays off entirely unless a real signing public key is pinned into the build.</summary>
     public int UpdateCheckIntervalMinutes { get; set; } = 60;
@@ -20,5 +24,5 @@ public sealed class AgentOptions
 
 public static class AgentVersion
 {
-    public const string Current = "0.2.0";
+    public const string Current = "0.3.0";
 }

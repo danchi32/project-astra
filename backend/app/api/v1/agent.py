@@ -105,10 +105,13 @@ async def conversation_history(
     summary="Claim approved remediation tasks to execute (agent only)",
 )
 async def claim_tasks(
+    context: str = "user",
     device: Device = Depends(get_current_device),
     session: AsyncSession = Depends(get_db),
 ) -> list[AgentRemediationTask]:
-    tasks = await RemediationService(session).claim_for_device(device=device)
+    # context selects which agent process is claiming: "user" (desktop Tray) or "system"
+    # (elevated Service). Each only ever receives the tasks it has the privilege to run.
+    tasks = await RemediationService(session).claim_for_device(device=device, context=context)
     return [
         AgentRemediationTask(id=t.id, action_id=t.action_id, params=t.params) for t in tasks
     ]

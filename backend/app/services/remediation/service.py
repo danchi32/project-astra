@@ -237,13 +237,27 @@ class RemediationService:
 
     # -- Agent-facing (device executes approved work) --------------------------
 
-    async def claim_for_device(self, *, device: Device) -> list[RemediationTask]:
-        """Return approved tasks for this device and mark them dispatched."""
+    async def claim_for_device(
+        self, *, device: Device, context: str = "user"
+    ) -> list[RemediationTask]:
+        """Return approved tasks this agent process is allowed to run, and mark them
+        dispatched. ``context`` ("user" or "system") selects only the tasks whose action
+        runs in that process, so the user-session Tray and the elevated Service never claim
+        each other's work. An unknown context is treated as "user" (the safe default a
+        legacy agent that sends no context param falls into)."""
+        if context != "system":
+            context = "user"
         tasks = await self.repo.list_approved_for_device(device.id)
+        claimed: list[RemediationTask] = []
         for task in tasks:
+            action = get_action(task.action_id)
+            task_context = action.execution_context if action else "user"
+            if task_context != context:
+                continue
             task.status = RemediationStatus.DISPATCHED
+            claimed.append(task)
         await self.session.commit()
-        return tasks
+        return claimed
 
     async def record_result(
         self, *, device: Device, task_id: uuid.UUID, success: bool, output: str

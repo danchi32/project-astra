@@ -21,6 +21,16 @@ public interface IAstraApiClient
     /// <summary>Ask the backend for the current signed update manifest. Returns null on any
     /// transport error; an envelope with Available=false means no channel is configured.</summary>
     Task<UpdateEnvelope?> GetUpdateAsync(string deviceToken, CancellationToken ct);
+
+    /// <summary>Claim approved remediation tasks for the given execution context ("system"
+    /// for the elevated Service). The backend marks the returned tasks dispatched. Returns
+    /// null on Unauthorized (credential rotated), an empty list when there's nothing to do.</summary>
+    Task<IReadOnlyList<AgentRemediationTask>?> ClaimTasksAsync(
+        string deviceToken, string context, CancellationToken ct);
+
+    /// <summary>Report the outcome of a remediation task back to the backend.</summary>
+    Task<bool> ReportTaskResultAsync(
+        string deviceToken, Guid taskId, AgentRemediationResult result, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -64,6 +74,46 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             return null;   // offline / timeout — try again next cycle
         }
+    }
+
+    public async Task<IReadOnlyList<AgentRemediationTask>?> ClaimTasksAsync(
+        string deviceToken, string context, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Get, $"/api/v1/agent/tasks?context={Uri.EscapeDataString(context)}");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+                return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Task claim failed with status {Status}", response.StatusCode);
+                return Array.Empty<AgentRemediationTask>();
+            }
+            return await response.Content.ReadFromJsonAsync<List<AgentRemediationTask>>(ct)
+                   ?? (IReadOnlyList<AgentRemediationTask>)Array.Empty<AgentRemediationTask>();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return Array.Empty<AgentRemediationTask>();   // offline / timeout — retry next cycle
+        }
+    }
+
+    public async Task<bool> ReportTaskResultAsync(
+        string deviceToken, Guid taskId, AgentRemediationResult result, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post, $"/api/v1/agent/tasks/{taskId}/result")
+        {
+            Content = JsonContent.Create(result),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        var response = await http.SendAsync(message, ct);
+        if (!response.IsSuccessStatusCode)
+            logger.LogWarning("Task result report failed with status {Status}", response.StatusCode);
+        return response.IsSuccessStatusCode;
     }
 
     public async Task<HeartbeatStatus> HeartbeatAsync(

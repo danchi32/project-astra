@@ -43,6 +43,13 @@ class RemediationAction:
     description: str
     # Names of parameters this action accepts (validated per-action in the service).
     params: tuple[str, ...] = field(default_factory=tuple)
+    # Which agent process executes this action:
+    #   "user"   → the desktop Tray, running in the logged-in user's session (default).
+    #   "system" → the elevated Windows Service (LocalSystem), for machine-wide work
+    #              that needs admin rights (e.g. cleaning C:\Windows\Temp).
+    # The agent claims tasks per-context (GET /agent/tasks?context=), so a task is only
+    # ever handed to the process that has the privilege to run it.
+    execution_context: str = "user"
 
 
 _ACTIONS: tuple[RemediationAction, ...] = (
@@ -62,7 +69,14 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     RemediationAction("flush_dns", "Flush DNS cache", RemediationTier.AUTOMATIC,
                       "Clears the DNS resolver cache to fix name-resolution / website-loading issues."),
     RemediationAction("clear_temp", "Clear temporary files", RemediationTier.AUTOMATIC,
-                      "Deletes temp files to free disk space and clear corrupt caches."),
+                      "Deletes the signed-in user's temp files to free disk space and clear "
+                      "corrupt caches. Runs in the user session (does not touch system folders)."),
+    RemediationAction("clear_system_temp", "Deep clean system temp", RemediationTier.AUTOMATIC,
+                      "Clears machine-wide temp and caches — C:\\Windows\\Temp, the Prefetch "
+                      "folder, the Windows Update download cache and Windows Error Reports — to "
+                      "free disk space and speed up a slow device. Runs under the elevated "
+                      "service; safe and self-rebuilding.",
+                      execution_context="system"),
     RemediationAction("clear_browser_cache", "Clear browser cache", RemediationTier.AUTOMATIC,
                       "Clears the HTTP cache for Chrome, Edge and Firefox to fix slow or broken "
                       "page loads. Does NOT touch history, passwords, bookmarks or cookies."),
