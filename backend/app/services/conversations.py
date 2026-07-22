@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import Conversation, Device, Message, MessageRole, User
+from app.models import Conversation, Device, Message, MessageRole, Organization, User
 from app.repositories.conversations import ConversationRepository, MessageRepository
 from app.repositories.organizations import OrganizationRepository
 from app.services.ai.cache import SemanticCache
@@ -219,7 +219,8 @@ class ConversationService:
         1. An injected provider (tests) always wins.
         2. A listed/common issue → free built-in rules.
         3. A previously-learned fix for this kind of issue → free built-in path.
-        4. Otherwise → the LLM (Claude) if a key is set, else built-in guidance.
+        4. Otherwise → the real LLM (Claude) — but only for Pro-AI orgs with a key set;
+           Basic orgs stay on the built-in engine (its own memory/rules).
         The returned source string is recorded for cost telemetry."""
         if self._forced_provider is not None:
             return self._forced_provider, "engine"
@@ -228,7 +229,14 @@ class ConversationService:
         fix = await self.learned.lookup(org_id=org_id, query=content)
         if fix is not None:
             return LearnedActionProvider(fix.action_id, fix.params), "learned"
-        return get_provider(), "engine"
+        # Escalation to the real Claude LLM is a Pro-plan entitlement.
+        if get_settings().anthropic_api_key and await self._org_is_ai_pro(org_id):
+            return get_provider(), "engine"
+        return StubProvider(), "engine"
+
+    async def _org_is_ai_pro(self, org_id: uuid.UUID) -> bool:
+        org = await self.session.get(Organization, org_id)
+        return bool(org and org.ai_pro)
 
     async def _get_owned(self, actor: User, conversation_id: uuid.UUID) -> Conversation:
         conversation = await self.conversations.get(conversation_id)

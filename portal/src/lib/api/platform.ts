@@ -87,6 +87,7 @@ export const updateOrganization = (
     trial_ends_at: string | null;
     current_period_end: string | null;
     extend_trial_days: number;
+    ai_pro: boolean;
   }>
 ) => apiClient.patch<OrganizationAdmin>(`/platform/organizations/${id}`, data).then((r) => r.data);
 

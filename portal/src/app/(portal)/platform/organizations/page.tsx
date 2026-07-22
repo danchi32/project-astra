@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Eye, Plus, Search, X } from "lucide-react";
+import { Building2, Eye, Plus, Search, X, Sparkles } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   listOrganizations, updateOrganization, deleteOrganization,
@@ -90,6 +90,10 @@ export default function PlatformOrganizationsPage() {
   }
   async function setStatus(id: string, subscription_status: SubscriptionStatus) {
     await updateOrganization(id, { subscription_status });
+    await refresh();
+  }
+  async function toggleAiPro(o: OrganizationAdmin) {
+    await updateOrganization(o.id, { ai_pro: !o.ai_pro });
     await refresh();
   }
   async function extendTrial(id: string, days: number) {
@@ -253,6 +257,13 @@ export default function PlatformOrganizationsPage() {
                       <button onClick={() => viewAs(o)} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
                         style={{ background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }}>
                         <Eye size={12} /> View
+                      </button>
+                      <button onClick={() => toggleAiPro(o)} title={o.ai_pro ? "Pro AI enabled — click to downgrade" : "Enable Pro AI (real Claude)"}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
+                        style={o.ai_pro
+                          ? { background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }
+                          : { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                        <Sparkles size={12} /> {o.ai_pro ? "Pro AI" : "Basic AI"}
                       </button>
                       <button onClick={() => extendTrial(o.id, 14)} className="text-xs px-2 py-1 rounded-lg"
                         style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>+14d trial</button>

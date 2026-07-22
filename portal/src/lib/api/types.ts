@@ -47,6 +47,7 @@ export interface OrganizationAdmin {
   license_count: number;
   discount_percent: number | null;
   billing_provider: string | null;
+  ai_pro: boolean;
   user_count: number;
   device_count: number;
 }

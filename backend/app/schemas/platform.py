@@ -20,6 +20,7 @@ class OrganizationAdminRead(BaseModel):
     license_count: int = 0
     discount_percent: int | None = None
     billing_provider: str | None = None
+    ai_pro: bool = False
     user_count: int = 0
     device_count: int = 0
 
@@ -176,3 +177,4 @@ class OrganizationUpdate(BaseModel):
     trial_ends_at: datetime | None = None
     current_period_end: datetime | None = None
     extend_trial_days: int | None = Field(default=None, ge=1, le=365)
+    ai_pro: bool | None = None            # Pro-AI entitlement (real Claude access)

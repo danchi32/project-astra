@@ -484,6 +484,9 @@ class PlatformService:
             base = max(as_utc(org.trial_ends_at), utcnow()) if org.trial_ends_at else utcnow()
             org.trial_ends_at = base + timedelta(days=data.extend_trial_days)
             changes["extended_trial_days"] = str(data.extend_trial_days)
+        if data.ai_pro is not None:
+            org.ai_pro = data.ai_pro
+            changes["ai_pro"] = str(data.ai_pro)
 
         await self.audit.record(
             org_id=org.id,

@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -60,3 +60,10 @@ class Organization(TimestampMixin, Base):
     # coupon attached to the subscription + future checkouts.
     discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stripe_coupon_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Pro-AI entitlement (super-admin toggle). When False (Basic plan), the chat agent
+    # answers only from its built-in engine/memory; when True (Pro), it may escalate to
+    # the real Claude LLM — provided a platform Anthropic key is configured.
+    ai_pro: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )

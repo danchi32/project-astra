@@ -3,10 +3,11 @@ import { use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye } from "lucide-react";
+import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken,
+  updateOrganization,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
@@ -35,6 +36,13 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
     queryClient.clear();
     enterViewAs(access_token, { id, name: org.name });
     router.push("/dashboard");
+  }
+
+  async function toggleAiPro() {
+    if (!org) return;
+    const next = await updateOrganization(id, { ai_pro: !org.ai_pro });
+    queryClient.setQueryData(["platform-org", id], next);
+    queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
   }
 
   if (me && !me.is_platform_admin) {
@@ -69,6 +77,40 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           <Eye size={15} /> View full portal
         </button>
       </div>
+
+      {/* AI plan — Pro unlocks the real Claude engine */}
+      {org && (
+        <div className="rounded-xl p-5 flex items-start justify-between gap-4" style={card}>
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg shrink-0" style={{ background: org.ai_pro ? "rgba(124,58,237,0.12)" : "rgba(100,116,139,0.12)", color: org.ai_pro ? "#7c3aed" : "var(--text-secondary)" }}>
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>AI plan</h2>
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                  style={org.ai_pro
+                    ? { color: "#7c3aed", background: "rgba(124,58,237,0.12)" }
+                    : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
+                  {org.ai_pro ? "Pro — real AI" : "Basic"}
+                </span>
+              </div>
+              <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-secondary)" }}>
+                {org.ai_pro
+                  ? "The assistant uses the real Claude engine — full AI IT agent."
+                  : "The assistant answers only from its built-in engine/memory. Enable Pro to unlock the real Claude AI."}
+              </p>
+            </div>
+          </div>
+          <button onClick={toggleAiPro}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+            style={org.ai_pro
+              ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
+              : { background: "#7c3aed", color: "#fff" }}>
+            <Sparkles size={15} /> {org.ai_pro ? "Downgrade to Basic" : "Enable Pro AI"}
+          </button>
+        </div>
+      )}
 
       {/* Subscription & billing */}
       {org && (
