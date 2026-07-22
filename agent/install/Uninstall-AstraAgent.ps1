@@ -1,11 +1,11 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     Completely removes the ASTRA Windows agent (Service + Tray) from this machine.
 
 .DESCRIPTION
-    Reverses everything either installer creates, and — unlike a naive
-    "Stop-Service + sc delete" — guarantees the service process is really dead
+    Reverses everything either installer creates, and - unlike a naive
+    "Stop-Service + sc delete" - guarantees the service process is really dead
     before deleting files. That matters because the portable install hosts the
     service as `dotnet.exe AstraAgent.Service.dll`: `sc delete` unregisters the
     service but never kills the process, so the DLL stays locked and the next
@@ -25,7 +25,7 @@
 .PARAMETER BackendHosts
     Hostnames to strip from the hosts file. Defaults to every backend ASTRA has
     shipped, because a machine in the field may carry a pin from any past
-    installer — leaving a stale pin behind would blackhole a future reinstall.
+    installer - leaving a stale pin behind would blackhole a future reinstall.
     Pass @() to leave the hosts file alone.
 
 .EXAMPLE
@@ -68,7 +68,7 @@ if ($svc) {
     # script was missing, and the reason files stayed locked.
     $svc = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
     if ($svc -and $svc.ProcessId -and $svc.ProcessId -ne 0) {
-        Write-Host "Service did not stop cleanly — force-killing PID $($svc.ProcessId)." -ForegroundColor Yellow
+        Write-Host "Service did not stop cleanly - force-killing PID $($svc.ProcessId)." -ForegroundColor Yellow
         Stop-Process -Id $svc.ProcessId -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
     }
@@ -95,7 +95,7 @@ if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
         $key = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
         if (Test-Path $key) { Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue }
         if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-            $script:Problems += "The $ServiceName service is 'marked for deletion' — something still holds a handle to it. CLOSE services.msc and Task Manager, then re-run this uninstaller. If it persists, reboot; it will be gone on restart."
+            $script:Problems += "The $ServiceName service is 'marked for deletion' - something still holds a handle to it. CLOSE services.msc and Task Manager, then re-run this uninstaller. If it persists, reboot; it will be gone on restart."
         }
     }
 }
@@ -124,7 +124,7 @@ if (Get-ItemProperty -Path $runKey -Name "AstraAssistant" -ErrorAction SilentlyC
 }
 
 # ---------------------------------------------------------------------------
-# 5. Install directories — retry, since a lock may take a moment to release.
+# 5. Install directories - retry, since a lock may take a moment to release.
 # ---------------------------------------------------------------------------
 function Remove-Tree($path) {
     if (-not (Test-Path $path)) { return $true }
@@ -141,7 +141,7 @@ foreach ($dir in @($InstallDir, $TrayDir)) {
         if (Remove-Tree $dir) {
             Write-Host "Removed $dir"
         } else {
-            $script:Problems += "Could not delete $dir — a file there is still locked. Reboot and re-run this uninstaller."
+            $script:Problems += "Could not delete $dir - a file there is still locked. Reboot and re-run this uninstaller."
         }
     }
 }
@@ -171,7 +171,7 @@ Get-ChildItem $usersRoot -Directory -ErrorAction SilentlyContinue | ForEach-Obje
 if ($BackendHosts -and $BackendHosts.Count -gt 0) {
     $hostsFile = "$env:windir\System32\drivers\etc\hosts"
     if (Test-Path $hostsFile) {
-        # One read, one filtered write — retried, because Defender scans the hosts
+        # One read, one filtered write - retried, because Defender scans the hosts
         # file on close and briefly locks it (writing it twice in a row fails).
         foreach ($attempt in 1..3) {
             try {
@@ -187,7 +187,7 @@ if ($BackendHosts -and $BackendHosts.Count -gt 0) {
                 break
             } catch {
                 if ($attempt -eq 3) {
-                    $script:Problems += "Could not clean the hosts file — it is locked (usually antivirus). Remove any ASTRA line from $hostsFile by hand, or a stale pin may blackhole a reinstall."
+                    $script:Problems += "Could not clean the hosts file - it is locked (usually antivirus). Remove any ASTRA line from $hostsFile by hand, or a stale pin may blackhole a reinstall."
                 }
                 Start-Sleep -Seconds 2
             }
@@ -196,14 +196,14 @@ if ($BackendHosts -and $BackendHosts.Count -gt 0) {
 }
 
 # ---------------------------------------------------------------------------
-# Verdict — tell the truth about whether a reinstall will succeed.
+# Verdict - tell the truth about whether a reinstall will succeed.
 # ---------------------------------------------------------------------------
 Write-Host ""
 if ($script:Problems.Count -eq 0) {
     Write-Host "ASTRA agent fully uninstalled. This machine is clean for a reinstall." -ForegroundColor Green
     Write-Host "The device will show OFFLINE in the portal; remove it there to delete its record." -ForegroundColor DarkGray
 } else {
-    Write-Host "Uninstall finished WITH PROBLEMS — a reinstall may fail:" -ForegroundColor Red
+    Write-Host "Uninstall finished WITH PROBLEMS - a reinstall may fail:" -ForegroundColor Red
     $script:Problems | ForEach-Object { Write-Host "  * $_" -ForegroundColor Yellow }
     exit 1
 }
