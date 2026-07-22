@@ -16,6 +16,9 @@ public sealed class RemediationWorker(
     ILogger<RemediationWorker> logger) : BackgroundService
 {
     private const string Context = "system";
+    // Hard ceiling for a single system action (a Windows Update install can run for minutes);
+    // beyond this the loop stops waiting so a wedged call can't disable system remediation.
+    private static readonly TimeSpan MaxExecution = TimeSpan.FromMinutes(60);
     private readonly SystemRemediationExecutor _executor = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -77,7 +80,20 @@ public sealed class RemediationWorker(
             else
             {
                 logger.LogInformation("Executing system remediation {ActionId}", task.ActionId);
-                (success, output) = _executor.Execute(task.ActionId);
+                // Run on a worker thread with a hard time budget: a Windows Update install can
+                // legitimately take minutes, but a wedged WUA call must never permanently block
+                // this poll loop (which would silently disable all system remediation here).
+                var execTask = Task.Run(() => _executor.Execute(task.ActionId, task.Params), ct);
+                if (await Task.WhenAny(execTask, Task.Delay(MaxExecution, ct)) == execTask)
+                {
+                    (success, output) = await execTask;
+                }
+                else
+                {
+                    success = false;
+                    output = $"Action timed out after {MaxExecution.TotalMinutes:0} minutes; it may "
+                           + "still be completing in the background. Check the device.";
+                }
                 logger.LogInformation("System remediation {ActionId} -> success={Success}",
                     task.ActionId, success);
             }

@@ -64,6 +64,19 @@ def _validate_folder_name(value: Any) -> str:
     return name
 
 
+def _validate_kb_article_id(value: Any) -> str:
+    """Normalize a KB article id to the canonical 'KB<digits>' form. Rejects anything else so
+    the value handed to the agent's Windows Update search can never be an injection vector."""
+    raw = str(value or "").strip().upper()
+    digits = raw[2:] if raw.startswith("KB") else raw
+    # isascii() guards against Unicode digit characters (e.g. superscripts) slipping through.
+    if not (digits.isascii() and digits.isdigit()) or not (5 <= len(digits) <= 8):
+        raise RemediationError(
+            f"'{value}' is not a valid Windows Update KB id (expected e.g. KB5034123)."
+        )
+    return "KB" + digits
+
+
 # Which roles may approve a task of a given tier. AUTOMATIC never reaches approval.
 _APPROVER_ROLES: dict[RemediationTier, set[UserRole]] = {
     RemediationTier.APPROVAL_REQUIRED: {UserRole.ADMIN, UserRole.TECHNICIAN},
@@ -183,6 +196,8 @@ class RemediationService:
             params["from_address"] = _validate_email(params.get("from_address"))
         if "folder_name" in action.params:
             params["folder_name"] = _validate_folder_name(params.get("folder_name"))
+        if "kb_article_id" in action.params and params.get("kb_article_id"):
+            params["kb_article_id"] = _validate_kb_article_id(params["kb_article_id"])
         return params
 
     # -- Approval workflow (portal staff) --------------------------------------

@@ -104,7 +104,10 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     RemediationAction("network_reset", "Reset network stack", RemediationTier.APPROVAL_REQUIRED,
                       "Resets Winsock/TCP-IP. Drops all connections; needs IT approval."),
     RemediationAction("windows_update_install", "Install pending Windows updates", RemediationTier.APPROVAL_REQUIRED,
-                      "Installs pending Windows updates (may reboot). Needs IT approval."),
+                      "Installs pending Windows updates via the elevated service. Pass kb_article_id "
+                      "to install one specific update, or omit it to install all pending. Never "
+                      "auto-reboots: reports when a restart is required. Needs IT approval.",
+                      params=("kb_article_id",), execution_context="system"),
 
     # ── Admin only: high-risk, admin approval mandatory ─────────────────────
     RemediationAction("registry_fix", "Apply a registry fix", RemediationTier.ADMIN_ONLY,

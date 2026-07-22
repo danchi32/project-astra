@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
@@ -16,15 +17,17 @@ public sealed class SystemRemediationExecutor
 {
     // The only actions the elevated service will ever perform. Everything else is refused.
     public static readonly IReadOnlySet<string> SupportedActions =
-        new HashSet<string> { "clear_system_temp" };
+        new HashSet<string> { "clear_system_temp", "windows_update_install" };
 
-    public (bool Success, string Output) Execute(string actionId)
+    public (bool Success, string Output) Execute(
+        string actionId, IReadOnlyDictionary<string, string>? parameters = null)
     {
         try
         {
             return actionId switch
             {
                 "clear_system_temp" => ClearSystemTemp(),
+                "windows_update_install" => InstallWindowsUpdates(GetKbFilter(parameters)),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),
@@ -34,6 +37,101 @@ public sealed class SystemRemediationExecutor
         {
             return (false, "Execution failed: " + ex.Message);
         }
+    }
+
+    private static string? GetKbFilter(IReadOnlyDictionary<string, string>? parameters)
+    {
+        if (parameters is not null
+            && parameters.TryGetValue("kb_article_id", out var kb)
+            && !string.IsNullOrWhiteSpace(kb))
+            return kb.Trim();
+        return null;   // no KB -> install all pending
+    }
+
+    /// <summary>Installs pending Windows updates via the Windows Update Agent (WUA) COM API as
+    /// LocalSystem. With a KB filter it installs just that update; otherwise all pending software
+    /// updates. NEVER reboots — it reports when a restart is required and leaves that to the user.
+    /// Can run for several minutes (download + install are synchronous).</summary>
+    private static (bool, string) InstallWindowsUpdates(string? kbFilter)
+    {
+        var sessionType = Type.GetTypeFromProgID("Microsoft.Update.Session");
+        var collType = Type.GetTypeFromProgID("Microsoft.Update.UpdateColl");
+        if (sessionType is null || collType is null)
+            return (false, "Windows Update is not available on this machine (WUA COM missing).");
+
+        var coms = new List<object>();
+        try
+        {
+            dynamic session = Activator.CreateInstance(sessionType)!;
+            coms.Add(session);
+            dynamic searcher = session.CreateUpdateSearcher();
+            coms.Add(searcher);
+            // Not-yet-installed, non-hidden software updates.
+            dynamic searchResult = searcher.Search("IsInstalled=0 and Type='Software' and IsHidden=0");
+            coms.Add(searchResult);
+
+            dynamic toInstall = Activator.CreateInstance(collType)!;
+            coms.Add(toInstall);
+
+            var total = (int)searchResult.Updates.Count;
+            var matched = 0;
+            for (var i = 0; i < total; i++)
+            {
+                dynamic u = searchResult.Updates.Item(i);
+                if (kbFilter is not null && !KbMatches(u, kbFilter)) continue;
+                try { if (!(bool)u.EulaAccepted) u.AcceptEula(); } catch { /* best effort */ }
+                toInstall.Add(u);
+                matched++;
+            }
+
+            if (matched == 0)
+                return (true, kbFilter is null
+                    ? "No pending Windows updates to install."
+                    : $"{kbFilter} was not found among pending updates (already installed, hidden, or superseded).");
+
+            dynamic downloader = session.CreateUpdateDownloader();
+            coms.Add(downloader);
+            downloader.Updates = toInstall;
+            downloader.Download();
+
+            dynamic installer = session.CreateUpdateInstaller();
+            coms.Add(installer);
+            installer.Updates = toInstall;
+            dynamic installResult = installer.Install();
+            coms.Add(installResult);
+
+            var code = (int)installResult.ResultCode;      // 2 = Succeeded, 3 = SucceededWithErrors
+            var reboot = (bool)installResult.RebootRequired;
+            var succeeded = code == 2 || code == 3;
+            var label = kbFilter ?? $"{matched} pending update(s)";
+            var status = code == 2 ? "installed" : code == 3 ? "installed with some errors" : "did not complete";
+            var msg = $"Windows Update: {label} {status}.";
+            if (reboot)
+                msg += " A RESTART is required to finish - reboot when convenient (the agent did NOT reboot).";
+            return (succeeded, msg);
+        }
+        finally
+        {
+            // Release COM objects newest-first; best-effort.
+            for (var i = coms.Count - 1; i >= 0; i--)
+                try { if (Marshal.IsComObject(coms[i])) Marshal.FinalReleaseComObject(coms[i]); } catch { /* ignore */ }
+        }
+    }
+
+    private static bool KbMatches(dynamic update, string kbFilter)
+    {
+        try
+        {
+            var ids = update.KBArticleIDs;
+            var n = (int)ids.Count;
+            for (var i = 0; i < n; i++)
+            {
+                var kb = "KB" + (string)ids.Item(i);
+                if (kb.Equals(kbFilter, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+        }
+        catch { /* some updates expose no KB list */ }
+        return false;
     }
 
     /// <summary>Fixed, safe, machine-wide temp/cache folders. Each is a *subfolder* of a

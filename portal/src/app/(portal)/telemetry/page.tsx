@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity } from "lucide-react";
+import { Activity, DownloadCloud } from "lucide-react";
 import { getDevices } from "@/lib/api/dashboard";
+import { getMe } from "@/lib/api/auth";
+import { createRemediation, approveRemediation } from "@/lib/api/remediation";
 import {
   getDeviceTelemetry,
   getDeviceEvents,
@@ -45,6 +47,39 @@ export default function TelemetryPage() {
 
   const { data: devices } = useQuery({ queryKey: ["devices"], queryFn: getDevices });
   const selected = deviceId || devices?.[0]?.id || "";
+
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const isAdmin = me?.role === "admin";
+  const [pushing, setPushing] = useState<string | null>(null);
+  const [wuNotice, setWuNotice] = useState("");
+  const [wuError, setWuError] = useState("");
+
+  // Push a Windows Update install to the selected device. With a KB it installs just that
+  // update; without one it installs all pending. The task is approval-tier — the admin's
+  // click both creates and approves it. The elevated agent installs in the background and
+  // never auto-reboots.
+  async function pushUpdate(kb?: string) {
+    const what = kb ? kb : "all pending Windows updates";
+    if (!confirm(
+      `Install ${what} on this device now?\n\n` +
+      `The agent downloads and installs in the background and will NOT reboot — it reports ` +
+      `if a restart is needed. Only devices that are online will pick this up.`
+    )) return;
+    setPushing(kb ?? "__all__"); setWuError(""); setWuNotice("");
+    try {
+      const task = await createRemediation({
+        device_id: selected,
+        action_id: "windows_update_install",
+        params: kb ? { kb_article_id: kb } : undefined,
+      });
+      await approveRemediation(task.id);
+      setWuNotice(`Queued: ${what} will install shortly (no auto-reboot). Track progress under Self-Healing.`);
+    } catch {
+      setWuError("Couldn't queue the update. The device may be offline, or you may lack permission.");
+    } finally {
+      setPushing(null);
+    }
+  }
 
   const { data: telemetry } = useQuery({
     queryKey: ["telemetry", selected],
@@ -125,6 +160,24 @@ export default function TelemetryPage() {
           ))}
         </div>
 
+        {tab === "updates" && isAdmin && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs space-y-1">
+              {wuNotice && <p style={{ color: "#10b981" }}>{wuNotice}</p>}
+              {wuError && <p className="text-red-500">{wuError}</p>}
+            </div>
+            {(updates?.some((u) => !u.is_installed)) && (
+              <button
+                onClick={() => pushUpdate()}
+                disabled={pushing !== null || !selected}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0"
+                style={{ background: "var(--accent)" }}>
+                <DownloadCloud size={15} /> {pushing === "__all__" ? "Queuing…" : "Install all pending"}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="rounded-b-xl overflow-hidden mt-3" style={{ border: "1px solid var(--border)" }}>
           <div className="overflow-x-auto max-h-[28rem] overflow-y-auto" style={{ background: "var(--surface)" }}>
             <table className="w-full text-sm whitespace-nowrap">
@@ -192,6 +245,7 @@ export default function TelemetryPage() {
                     {["KB", "Title", "Status", "Installed On"].map((h) => (
                       <th key={h} className="px-4 py-2.5 text-left text-xs font-medium uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>
                     ))}
+                    {isAdmin && <th className="px-4 py-2.5 text-right text-xs font-medium uppercase" style={{ color: "var(--text-secondary)" }}>Action</th>}
                   </tr></thead>
                   <tbody>
                     {updates?.map((u) => (
@@ -200,6 +254,20 @@ export default function TelemetryPage() {
                         <td className="px-4 py-2.5 max-w-lg truncate" style={{ color: "var(--text-secondary)" }} title={u.title}>{u.title}</td>
                         <td className="px-4 py-2.5"><span className="text-xs font-medium" style={{ color: u.is_installed ? "#10b981" : "#f59e0b" }}>{u.is_installed ? "Installed" : "Pending"}</span></td>
                         <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{u.installed_on ?? "—"}</td>
+                        {isAdmin && (
+                          <td className="px-4 py-2.5 text-right">
+                            {!u.is_installed && u.kb_article_id && (
+                              <button
+                                onClick={() => pushUpdate(u.kb_article_id)}
+                                disabled={pushing !== null}
+                                title={`Install ${u.kb_article_id} on this device`}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--accent)" }}>
+                                <DownloadCloud size={13} /> {pushing === u.kb_article_id ? "Queuing…" : "Install"}
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
