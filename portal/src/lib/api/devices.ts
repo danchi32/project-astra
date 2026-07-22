@@ -23,6 +23,12 @@ export const downloadUninstaller = async () => {
   triggerDownload(res.data as Blob, "AstraAgent-Uninstaller.zip");
 };
 
+// Permanently remove a device record (admin only). Uninstalling the agent only stops
+// heartbeats — the device stays visible as OFFLINE until it's removed here. This also
+// deletes its telemetry history and cannot be undone.
+export const deleteDevice = (id: string) =>
+  apiClient.delete(`/devices/${id}`).then((r) => r.data);
+
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Monitor, Download, Copy, Check, RefreshCw,
+  Monitor, Download, Copy, Check, RefreshCw, Trash2,
 } from "lucide-react";
 import { getDevices } from "@/lib/api/dashboard";
 import { getMe } from "@/lib/api/auth";
-import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller, downloadUninstaller } from "@/lib/api/devices";
+import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller, downloadUninstaller, deleteDevice } from "@/lib/api/devices";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import type { Device } from "@/lib/api/types";
@@ -212,6 +212,7 @@ function InstallAgentPanel() {
 }
 
 export default function DevicesPage() {
+  const queryClient = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: devices, isLoading } = useQuery({
     queryKey: ["devices"],
@@ -219,6 +220,27 @@ export default function DevicesPage() {
     refetchInterval: 30_000,
   });
   const isAdmin = me?.role === "admin";
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function removeDevice(d: Device) {
+    if (!confirm(
+      `Remove "${d.hostname}" from the portal?\n\n` +
+      `This permanently deletes the device and its telemetry history and cannot be undone. ` +
+      `Uninstalling the agent alone only marks it OFFLINE. ` +
+      `If the agent is still installed and running, the device will re-enroll and reappear.`
+    )) return;
+    setDeletingId(d.id);
+    try {
+      await deleteDevice(d.id);
+      await queryClient.invalidateQueries({ queryKey: ["devices"] });
+    } catch {
+      alert("Couldn't remove the device. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const colCount = isAdmin ? 10 : 9;
 
   return (
     <div className="space-y-6">
@@ -258,14 +280,18 @@ export default function DevicesPage() {
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
                     style={{ color: "var(--text-secondary)" }}>{h}</th>
                 ))}
+                {isAdmin && (
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide"
+                    style={{ color: "var(--text-secondary)" }}>Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>
+                <tr><td colSpan={colCount} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>
               )}
               {!isLoading && (!devices || devices.length === 0) && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
+                <tr><td colSpan={colCount} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
                   No devices enrolled yet. {isAdmin ? "Use “Install agent” above to add your first endpoint." : ""}
                 </td></tr>
               )}
@@ -292,6 +318,18 @@ export default function DevicesPage() {
                   </td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{d.logged_in_user ?? "—"}</td>
                   <td className="px-4 py-3"><DeviceStatusBadge status={d.status} /></td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => removeDevice(d)}
+                        disabled={deletingId === d.id}
+                        title="Remove device from portal"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                        style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#ef4444" }}>
+                        <Trash2 size={13} /> {deletingId === d.id ? "Removing…" : "Remove"}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
