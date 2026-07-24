@@ -1,3 +1,5 @@
+import json
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -18,8 +20,27 @@ from app.services.ai.provider import (
     StubProvider,
     get_provider,
 )
+from app.services.agent_update import AgentUpdateService
 from app.services.exceptions import NotFoundError
 from app.services.subscription import org_is_writable
+
+# "What version are you?" asked of the ASTRA agent itself — answered directly with the
+# device's real agent version, never routed to the generic assistant reply.
+_VERSION_WORD = re.compile(r"\b(version|build|v\d)\b", re.IGNORECASE)
+_VERSION_SUBJECT = ("your", "you", "astra", "agent", "assistant", "yourself", "u r", "ur ")
+_VERSION_EXCLUDE = (
+    "windows", " os ", "driver", "office", "chrome", "edge", "outlook", "teams",
+    "zoom", "app version", "software version", "python", "node", ".net",
+)
+
+
+def _is_version_question(text: str) -> bool:
+    t = f" {text.lower().strip()} "
+    if not _VERSION_WORD.search(t):
+        return False
+    if any(w in t for w in _VERSION_EXCLUDE):
+        return False   # asking about the OS / another app, not the agent
+    return any(w in t for w in _VERSION_SUBJECT)
 
 # Shown in the tray when the org can't use chat (suspended, past due, canceled, or
 # an expired trial). No LLM call and no remediation — chat simply doesn't function.
@@ -126,6 +147,20 @@ class ConversationService:
         await self.messages.add(
             Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
         )
+
+        # "What version are you?" — answer with this device's real agent version directly,
+        # instead of the generic assistant reply.
+        if _is_version_question(content):
+            assistant_message = await self.messages.add(
+                Message(
+                    conversation_id=conversation.id,
+                    role=MessageRole.ASSISTANT,
+                    content=await self._version_reply(device),
+                )
+            )
+            await self.session.commit()
+            return conversation, assistant_message, "version"
+
         reply = await self._reply(
             org_id=device.org_id, history=history, content=content,
             device_hostname=device.hostname, acting_device_id=device.id,
@@ -152,6 +187,28 @@ class ConversationService:
             return None, []
         messages = await self.messages.list_by_conversation(conversation.id)
         return conversation.id, [(m.role.value, m.content) for m in messages]
+
+    async def _version_reply(self, device: Device) -> str:
+        """A plain answer to 'what version are you?' — the device's real agent version, and
+        whether a newer signed release is available (best-effort; never fails the reply)."""
+        current = device.agent_version or "unknown"
+        latest = None
+        try:
+            served = await AgentUpdateService(get_settings()).current()
+            if served is not None:
+                latest = json.loads(served[0]).get("version")
+        except Exception:
+            latest = None
+        msg = f"I'm the ASTRA agent on {device.hostname}, running version {current}."
+        if latest and current != "unknown":
+            if latest == current:
+                msg += " That's the latest release — you're up to date."
+            else:
+                msg += (
+                    f" The latest release is {latest}, so an update is pending — it installs "
+                    "automatically, usually within an hour."
+                )
+        return msg
 
     # -- Shared reply path: intent gate → semantic cache → cognitive engine ----
 

@@ -19,11 +19,11 @@ function csvCell(value: unknown): string {
 
 function exportDevicesCsv(devices: Device[]) {
   const headers = [
-    "Hostname", "OS", "Manufacturer", "Model", "Serial", "CPU",
+    "Hostname", "OS", "Agent version", "Manufacturer", "Model", "Serial", "CPU",
     "RAM (MB)", "Storage (GB)", "Installed apps", "Logged-in user", "Status", "Last seen",
   ];
   const rows = devices.map((d) => [
-    d.hostname, d.os_version, d.manufacturer, d.model, d.serial_number, d.cpu_name,
+    d.hostname, d.os_version, d.agent_version, d.manufacturer, d.model, d.serial_number, d.cpu_name,
     d.total_ram_mb, d.total_storage_gb, d.installed_app_count, d.logged_in_user,
     d.status, d.last_seen_at,
   ]);
@@ -299,7 +299,9 @@ export default function DevicesPage() {
                 <tr key={d.id} className="hover:bg-brand-500/5 transition-colors" style={{ borderBottom: "1px solid var(--border)" }}>
                   <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
                     {d.hostname}
-                    <div className="text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{d.os_version}</div>
+                    <div className="text-xs font-normal" style={{ color: "var(--text-secondary)" }}>
+                      {d.os_version}{d.agent_version ? ` · agent ${d.agent_version}` : ""}
+                    </div>
                   </td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
                     {d.manufacturer || d.model ? (
