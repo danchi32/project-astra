@@ -92,6 +92,29 @@ def _validate_kb_article_id(value: Any) -> str:
     return "KB" + digits
 
 
+# Friendly, outcome-focused lines the assistant shows the user after a fix runs — the point is
+# reassurance ("it's fixed"), not the mechanics ("I restarted the service").
+_FRIENDLY_OUTCOME: dict[str, str] = {
+    "restart_explorer": "Your desktop and taskbar should be back to normal.",
+    "restart_outlook": "Outlook should be working smoothly again.",
+    "restart_teams": "Microsoft Teams should be working again.",
+    "restart_zoom": "Zoom should be working again.",
+    "restart_chrome": "Chrome should be running smoothly again.",
+    "restart_edge": "Microsoft Edge should be running smoothly again.",
+    "restart_application": "That app should be working again.",
+    "flush_dns": "Your connection to websites should be sorted now.",
+    "clear_temp": "I've cleared out the clutter and freed up some space.",
+    "clear_system_temp": "I've deep-cleaned the system files and freed up space.",
+    "clear_browser_cache": "Your browser will load pages fresh now.",
+    "restart_network_adapter": "Your network connection has been refreshed.",
+    "restart_service": "That's back up and running.",
+    "create_outlook_rule": "Your Outlook rule is all set.",
+    "office_repair": "Microsoft Office has been repaired.",
+    "network_reset": "Your network settings have been refreshed.",
+    "windows_update_install": "Your Windows updates are sorted.",
+}
+
+
 # Which roles may approve a task of a given tier. AUTOMATIC never reaches approval.
 _APPROVER_ROLES: dict[RemediationTier, set[UserRole]] = {
     RemediationTier.APPROVAL_REQUIRED: {UserRole.ADMIN, UserRole.TECHNICIAN},
@@ -327,9 +350,17 @@ class RemediationService:
         if task.conversation_id is not None:
             snippet = (output or "").strip()
             if success:
-                text = f"✅ Done — {label.lower()} completed on your device."
+                outcome = _FRIENDLY_OUTCOME.get(task.action_id)
+                text = "✅ All done — I've taken care of that for you."
+                if outcome:
+                    text += f" {outcome}"
+                text += " Let me know if anything still isn't right."
             else:
-                text = f"⚠️ I couldn't complete {label.lower()}: {snippet[:400] or 'the fix failed on your device.'}"
+                text = "⚠️ I wasn't able to finish that one automatically."
+                if snippet:
+                    text += f" {snippet[:400]}"
+                else:
+                    text += " I've flagged it for your IT team to take a look."
             self.session.add(
                 Message(
                     conversation_id=task.conversation_id,
