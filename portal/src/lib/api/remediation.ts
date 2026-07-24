@@ -10,6 +10,7 @@ export const createRemediation = (data: {
   device_id: string;
   action_id: string;
   params?: Record<string, string>;
+  reason: string;   // required by the backend — an audit-visible justification
 }) => apiClient.post<RemediationTask>("/remediations", data).then((r) => r.data);
 
 export const approveRemediation = (id: string) =>

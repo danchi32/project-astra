@@ -270,6 +270,9 @@ export default function DevicesPage() {
         device_id: lockTarget.id,
         action_id: enable ? "enable_local_account" : "disable_local_account",
         params: { username: user },
+        reason: enable
+          ? `Re-enable local account "${user}" (offboarding)`
+          : `Disable local account "${user}" and sign out (offboarding)`,
       });
       await approveRemediation(task.id);
       setLockMsg({ ok: true, text: enable

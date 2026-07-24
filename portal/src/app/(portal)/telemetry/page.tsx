@@ -71,6 +71,7 @@ export default function TelemetryPage() {
         device_id: selected,
         action_id: "windows_update_install",
         params: kb ? { kb_article_id: kb } : undefined,
+        reason: kb ? `Install ${kb} from portal` : "Install all pending Windows updates from portal",
       });
       await approveRemediation(task.id);
       setWuNotice(`Queued: ${what} will install shortly (no auto-reboot). Track progress under Self-Healing.`);
