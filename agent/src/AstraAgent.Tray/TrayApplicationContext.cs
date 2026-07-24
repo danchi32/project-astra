@@ -25,17 +25,20 @@ public sealed class TrayApplicationContext : ApplicationContext
             .AddEnvironmentVariables()
             .Build();
         var serverUrl = config["Astra:ServerUrl"] ?? "http://localhost:8000";
+        // Same corporate-proxy handling as the service, so the tray's chat/remediation/update
+        // traffic also traverses a proxied network. Empty by default (auto-detect).
+        var proxyUrl = config["Astra:ProxyUrl"];
 
         var tokenStore = new DpapiTokenStore();
-        _client = new TrayChatClient(serverUrl, tokenStore);
+        _client = new TrayChatClient(serverUrl, tokenStore, proxyUrl);
 
         // Execute approved remediation tasks in the background while the assistant runs.
-        _runner = new RemediationRunner(serverUrl, tokenStore);
+        _runner = new RemediationRunner(serverUrl, tokenStore, proxyUrl);
         _runner.Start();
 
         // Keep the tray up to date in the background (no-op unless it's running from its live
         // copy and a signing key is pinned).
-        _updater = new TrayUpdater(serverUrl, tokenStore);
+        _updater = new TrayUpdater(serverUrl, tokenStore, proxyUrl);
         _updater.Start();
 
         var menu = new ContextMenuStrip();

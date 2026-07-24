@@ -11,6 +11,11 @@ public sealed class AgentOptions
     /// a device credential has been stored.</summary>
     public string? EnrollmentToken { get; set; }
 
+    /// <summary>Optional explicit outbound proxy (e.g. http://proxy.corp:8080) for locked-down
+    /// networks. Left empty by default: the agent auto-detects the corporate proxy (machine
+    /// config + WPAD/PAC) via the Windows HTTP stack, which works even under LocalSystem.</summary>
+    public string? ProxyUrl { get; set; }
+
     public int HeartbeatIntervalSeconds { get; set; } = 60;
 
     /// <summary>How often the elevated service polls for approved system-context remediation
@@ -24,5 +29,5 @@ public sealed class AgentOptions
 
 public static class AgentVersion
 {
-    public const string Current = "0.4.0";
+    public const string Current = "0.5.0";
 }

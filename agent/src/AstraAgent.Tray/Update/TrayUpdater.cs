@@ -26,10 +26,15 @@ public sealed class TrayUpdater : IDisposable
     private readonly UpdateVerifier? _verifier = UpdateVerifier.FromEmbeddedKey();
     private readonly UpdateFloorStore _floor = new(Path.Combine(TrayPaths.UpdateWorkDir, "version-floor.txt"));
     private readonly CancellationTokenSource _cts = new();
+    private readonly string? _proxyUrl;
 
-    public TrayUpdater(string serverUrl, ITokenStore store)
+    public TrayUpdater(string serverUrl, ITokenStore store, string? proxyUrl = null)
     {
-        _http = new HttpClient { BaseAddress = new Uri(serverUrl), Timeout = TimeSpan.FromSeconds(30) };
+        _proxyUrl = proxyUrl;
+        _http = new HttpClient(AstraAgent.Service.Net.ProxyHttp.CreateHandler(proxyUrl))
+        {
+            BaseAddress = new Uri(serverUrl), Timeout = TimeSpan.FromSeconds(30),
+        };
         _store = store;
     }
 
@@ -145,7 +150,10 @@ public sealed class TrayUpdater : IDisposable
     {
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+            using var client = new HttpClient(AstraAgent.Service.Net.ProxyHttp.CreateHandler(_proxyUrl))
+            {
+                Timeout = TimeSpan.FromMinutes(10),
+            };
             using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!response.IsSuccessStatusCode)
                 return false;

@@ -25,9 +25,12 @@ public sealed class RemediationRunner : IDisposable
     private readonly string _logPath;
     private Task? _loop;
 
-    public RemediationRunner(string serverUrl, ITokenStore store)
+    public RemediationRunner(string serverUrl, ITokenStore store, string? proxyUrl = null)
     {
-        _http = new HttpClient { BaseAddress = new Uri(serverUrl), Timeout = TimeSpan.FromSeconds(60) };
+        _http = new HttpClient(AstraAgent.Service.Net.ProxyHttp.CreateHandler(proxyUrl))
+        {
+            BaseAddress = new Uri(serverUrl), Timeout = TimeSpan.FromSeconds(60),
+        };
         _store = store;
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astra");

@@ -48,6 +48,7 @@ _INSTALL_TEMPLATE = r"""#Requires -RunAsAdministrator
 param(
     [string]$ServerUrl       = "@@SERVER_URL@@",
     [string]$EnrollmentToken = "@@TOKEN@@",
+    [string]$ProxyUrl        = "",
     [string]$InstallDir      = "$env:ProgramFiles\Astra\Agent"
 )
 
@@ -81,7 +82,7 @@ Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 $exePath = Join-Path $InstallDir $Exe
 if (-not (Test-Path $exePath)) { throw "Expected $Exe in $InstallDir." }
 
-@{ Astra = @{ ServerUrl = $ServerUrl; EnrollmentToken = $EnrollmentToken; HeartbeatIntervalSeconds = 60 } } |
+@{ Astra = @{ ServerUrl = $ServerUrl; EnrollmentToken = $EnrollmentToken; HeartbeatIntervalSeconds = 60; ProxyUrl = $ProxyUrl } } |
     ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $InstallDir "appsettings.json") -Encoding UTF8
 
 sc.exe create $ServiceName binPath= "`"$exePath`"" start= auto | Out-Null
@@ -105,6 +106,10 @@ param(
     [string]$EnrollmentToken = "@@TOKEN@@",
     [string]$ServerUrl       = "@@SERVER_URL@@",
     [string]$BackendIp       = "@@BACKEND_IP@@",
+    # Optional outbound proxy for locked-down corporate networks, e.g. http://proxy.corp:8080.
+    # Leave empty to auto-detect the corporate proxy (machine config); the agent works direct
+    # or through an auto-detected proxy without this.
+    [string]$ProxyUrl        = "",
     [string]$ServiceSrc      = "$PSScriptRoot\dist-fd",
     [string]$TraySrc         = "$PSScriptRoot\dist-tray"
 )
@@ -226,7 +231,7 @@ Start-Sleep -Seconds 1
 New-Item -ItemType Directory -Force -Path $svcDir | Out-Null
 Copy-Item "$ServiceSrc\*" $svcDir -Recurse -Force
 if (-not (Test-Path "$svcDir\AstraAgent.Service.dll")) { throw "AstraAgent.Service.dll missing in $ServiceSrc" }
-@{ Astra = @{ ServerUrl = $ServerUrl; EnrollmentToken = $EnrollmentToken; HeartbeatIntervalSeconds = 60 } } |
+@{ Astra = @{ ServerUrl = $ServerUrl; EnrollmentToken = $EnrollmentToken; HeartbeatIntervalSeconds = 60; ProxyUrl = $ProxyUrl } } |
     ConvertTo-Json -Depth 5 | Set-Content "$svcDir\appsettings.json" -Encoding UTF8
 $svcBin = '"{0}" "{1}"' -f $dotnet, "$svcDir\AstraAgent.Service.dll"
 New-Service -Name $svcName -BinaryPathName $svcBin -DisplayName "ASTRA Agent" `
@@ -237,7 +242,7 @@ Write-Host "Service installed and started." -ForegroundColor Green
 
 New-Item -ItemType Directory -Force -Path $trayDir | Out-Null
 Copy-Item "$TraySrc\*" $trayDir -Recurse -Force
-@{ Astra = @{ ServerUrl = $ServerUrl } } | ConvertTo-Json -Depth 5 |
+@{ Astra = @{ ServerUrl = $ServerUrl; ProxyUrl = $ProxyUrl } } | ConvertTo-Json -Depth 5 |
     Set-Content "$trayDir\appsettings.json" -Encoding UTF8
 $vbs = "$trayDir\launch-tray.vbs"
 @"

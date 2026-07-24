@@ -21,9 +21,9 @@ public sealed class TrayChatClient
     private readonly string _statePath;
     private Guid? _conversationId;
 
-    public TrayChatClient(string serverUrl, ITokenStore store)
+    public TrayChatClient(string serverUrl, ITokenStore store, string? proxyUrl = null)
     {
-        _http = new HttpClient
+        _http = new HttpClient(AstraAgent.Service.Net.ProxyHttp.CreateHandler(proxyUrl))
         {
             BaseAddress = new Uri(serverUrl),
             Timeout = TimeSpan.FromSeconds(90),

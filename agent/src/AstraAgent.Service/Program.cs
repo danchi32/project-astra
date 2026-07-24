@@ -29,7 +29,12 @@ builder.Services.AddHttpClient<IAstraApiClient, AstraApiClient>((provider, http)
         throw new InvalidOperationException("Astra:ServerUrl is not configured");
     http.BaseAddress = new Uri(options.ServerUrl);
     http.Timeout = TimeSpan.FromSeconds(30);
-});
+})
+// Route every backend call through the corporate proxy (auto-detected, or the explicit
+// ProxyUrl) so the LocalSystem service works on locked-down networks — globally, all orgs.
+.ConfigurePrimaryHttpMessageHandler(provider =>
+    AstraAgent.Service.Net.ProxyHttp.CreateHandler(
+        provider.GetRequiredService<IOptions<AgentOptions>>().Value.ProxyUrl));
 
 builder.Services.AddSingleton<ICpuCollector, CpuCollector>();
 builder.Services.AddSingleton<IMemoryCollector, MemoryCollector>();
