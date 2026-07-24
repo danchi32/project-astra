@@ -11,7 +11,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>AstraAgent.Tray</RootNamespace>
     <AssemblyName>AstraAgent.Tray</AssemblyName>
-    <Version>0.6.2</Version>
+    <Version>0.6.3</Version>
     <!-- Technomate brand mark used for the tray icon and the executable icon. -->
     <ApplicationIcon>astra.ico</ApplicationIcon>
     <!-- The referenced Service project also ships an appsettings.json; both land at

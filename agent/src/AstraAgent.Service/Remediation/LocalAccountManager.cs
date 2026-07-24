@@ -52,9 +52,27 @@ public static class LocalAccountManager
 
         if (!enable)
         {
-            var kicked = TryLogoff(name);   // best-effort: the disable already took effect
-            return (true, $"Local account '{name}' disabled and signed out ({kicked} active session(s)). "
-                        + "The password is unchanged — re-enable any time to restore access.");
+            // Force the user out of any live session now (the disable alone only blocks the NEXT
+            // sign-in). Match the target first; if they can't be matched but exactly one real
+            // interactive user is signed in, log that session off too — on an offboarded endpoint
+            // that is the person being removed.
+            var (loggedOff, sessions) = ForceLogoff(name);
+            string signedOut;
+            if (loggedOff > 0)
+                signedOut = $"signed {name} out of {loggedOff} live session(s)";
+            else if (sessions.Count == 1)
+            {
+                signedOut = WTSLogoffSession(IntPtr.Zero, sessions[0].SessionId, false)
+                    ? $"signed out the active session ({sessions[0].User})"
+                    : "couldn't sign out the active session (a reboot will complete it)";
+            }
+            else if (sessions.Count > 1)
+                signedOut = $"{name} was not in an active session ({sessions.Count} other users are "
+                          + "signed in — left untouched; reboot to fully clear)";
+            else
+                signedOut = "no one was signed in";
+            return (true, $"Local account '{name}' disabled — {signedOut}. The password is unchanged; "
+                        + "re-enable any time to restore access.");
         }
         return (true, $"Local account '{name}' re-enabled — the user can sign in again with their "
                     + "existing password.");
@@ -149,29 +167,38 @@ public static class LocalAccountManager
         }
     }
 
-    // ── Best-effort force-logoff of the target user's interactive sessions ─────
-    private static int TryLogoff(string username)
+    // ── Force-logoff the target user's interactive sessions ───────────────────
+    // Returns how many sessions matching the target were logged off, plus every OTHER real
+    // interactive session (Active/Disconnected with a non-service user) so the caller can decide
+    // what to do when the target itself couldn't be matched.
+    private static (int LoggedOff, List<(int SessionId, string User)> Others) ForceLogoff(string username)
     {
-        var count = 0;
+        var loggedOff = 0;
+        var others = new List<(int, string)>();
         var infoPtr = IntPtr.Zero;
         try
         {
             if (!WTSEnumerateSessions(IntPtr.Zero, 0, 1, ref infoPtr, out var sessionCount))
-                return 0;
+                return (0, others);
             var size = Marshal.SizeOf<WTS_SESSION_INFO>();
             var cursor = infoPtr;
             for (var i = 0; i < sessionCount; i++)
             {
                 var info = Marshal.PtrToStructure<WTS_SESSION_INFO>(cursor);
                 cursor += size;
-                if (!WTSQuerySessionInformation(IntPtr.Zero, info.SessionId, 5 /* WTSUserName */,
-                        out var buffer, out _))
-                    continue;
-                var user = Marshal.PtrToStringUni(buffer) ?? string.Empty;
-                WTSFreeMemory(buffer);
-                if (user.Equals(username, StringComparison.OrdinalIgnoreCase)
-                    && WTSLogoffSession(IntPtr.Zero, info.SessionId, false))
-                    count++;
+                // WTS_CONNECTSTATE_CLASS: Active = 0, Disconnected = 4 are the interactive states.
+                if (info.State != 0 && info.State != 4) continue;
+                var user = QuerySessionString(info.SessionId, 5 /* WTSUserName */);
+                if (string.IsNullOrWhiteSpace(user)) continue;   // no interactive user (services etc.)
+
+                if (user.Equals(username, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (WTSLogoffSession(IntPtr.Zero, info.SessionId, false)) loggedOff++;
+                }
+                else
+                {
+                    others.Add((info.SessionId, user));
+                }
             }
         }
         catch { /* best effort */ }
@@ -179,7 +206,15 @@ public static class LocalAccountManager
         {
             if (infoPtr != IntPtr.Zero) WTSFreeMemory(infoPtr);
         }
-        return count;
+        return (loggedOff, others);
+    }
+
+    private static string QuerySessionString(int sessionId, int infoClass)
+    {
+        if (!WTSQuerySessionInformation(IntPtr.Zero, sessionId, infoClass, out var buffer, out _))
+            return string.Empty;
+        try { return Marshal.PtrToStringUni(buffer) ?? string.Empty; }
+        finally { if (buffer != IntPtr.Zero) WTSFreeMemory(buffer); }
     }
 
     [StructLayout(LayoutKind.Sequential)]
