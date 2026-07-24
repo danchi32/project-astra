@@ -75,30 +75,45 @@ public sealed class UpdateWorker(
             return false;
         }
 
-        // Anti-replay floor: the highest version we've ever seen signed, the version we're
-        // running, and any signed min_version all raise a monotonic floor. Refuse anything at or
-        // below it so a replayed older-but-signed manifest can't roll the agent back.
-        _floor.Raise(manifest.Version);
+        // Anti-replay floor: the highest version we've applied before, the version we're running,
+        // and any signed min_version raise a monotonic floor. Refuse anything at or below it so a
+        // replayed older-but-signed manifest can't roll the agent back.
+        //
+        // The manifest's OWN version must NOT raise the floor before this check — doing so makes
+        // the floor equal to the offered version, so the agent would refuse its own update. We
+        // record it only once we've decided to apply (below).
         if (!string.IsNullOrEmpty(manifest.MinVersion))
             _floor.Raise(manifest.MinVersion!);
 
-        var floor = _floor.Current();
-        if (SemVer.Compare(AgentVersion.Current, floor) > 0)
-            floor = AgentVersion.Current;
-
-        if (!SemVer.IsNewer(manifest.Version, floor))
+        if (!IsApplicable(AgentVersion.Current, manifest.Version, _floor.Current()))
         {
             // Newer than we run but not above the floor ⇒ a superseded/replayed manifest.
             if (SemVer.IsNewer(manifest.Version, AgentVersion.Current))
                 logger.LogWarning(
                     "Refusing update {New}: below the version floor {Floor} (possible rollback/replay).",
-                    manifest.Version, floor);
+                    manifest.Version, _floor.Current());
             return false;
         }
+
+        // Decided to apply — now record this version so a later replay of an older signed manifest
+        // is refused even before the new build is running.
+        _floor.Raise(manifest.Version);
 
         logger.LogInformation(
             "Newer agent {New} available (running {Cur}); applying.",
             manifest.Version, AgentVersion.Current);
         return await installer.ApplyAsync(manifest, lifetime, ct);
+    }
+
+    /// <summary>Pure decision: may we apply <paramref name="manifestVersion"/> given the running
+    /// version and the current anti-replay floor? The offered version must be strictly newer than
+    /// both. Crucially, <paramref name="floorNow"/> must NOT already include the offered version —
+    /// otherwise the agent refuses its own update (the bug this replaced).</summary>
+    internal static bool IsApplicable(string currentVersion, string manifestVersion, string floorNow)
+    {
+        var floor = floorNow;
+        if (SemVer.Compare(currentVersion, floor) > 0)
+            floor = currentVersion;
+        return SemVer.IsNewer(manifestVersion, floor);
     }
 }

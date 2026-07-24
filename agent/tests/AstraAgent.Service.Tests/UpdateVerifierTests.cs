@@ -154,6 +154,22 @@ public class UpdateFloorStoreTests
     }
 }
 
+public class UpdateApplicabilityTests
+{
+    [Theory]
+    // The regression: a fresh device (floor 0.0.0) running 0.5.1 MUST accept an offered 0.6.0.
+    // The old code raised the floor to the offered version first, so it refused its own update.
+    [InlineData("0.5.1", "0.6.0", "0.0.0", true)]
+    [InlineData("0.5.1", "0.6.0", "0.5.1", true)]   // floor already at the running version
+    [InlineData("0.6.0", "0.6.0", "0.0.0", false)]  // already on the offered version
+    [InlineData("0.5.1", "0.5.0", "0.0.0", false)]  // an older manifest is refused
+    [InlineData("0.5.1", "0.6.0", "0.7.0", false)]  // floor above the offer (replay/rollback) refused
+    public void IsApplicable_AcceptsNewer_RefusesReplays(
+        string current, string manifestVersion, string floor, bool expected)
+        => Assert.Equal(expected, AstraAgent.Service.Workers.UpdateWorker.IsApplicable(
+            current, manifestVersion, floor));
+}
+
 public class SemVerTests
 {
     [Theory]
