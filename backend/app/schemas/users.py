@@ -9,13 +9,13 @@ from app.models import UserRole
 class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=200)
-    password: str = Field(min_length=12, max_length=72)
+    password: str = Field(min_length=8, max_length=72)
     role: UserRole = UserRole.USER
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
-    password: str | None = Field(default=None, min_length=12, max_length=72)
+    password: str | None = Field(default=None, min_length=8, max_length=72)
     role: UserRole | None = None
     is_active: bool | None = None
 

@@ -21,7 +21,7 @@ export default function ResetPasswordPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (password.length < 12) { setError("Password must be at least 12 characters."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (password !== confirm) { setError("Passwords don't match."); return; }
     if (!token) { setError("This reset link is missing its token. Request a new one."); return; }
     setLoading(true);
@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>New password</label>
               <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                className={inputCls} style={inputStyle} placeholder="At least 12 characters" />
+                className={inputCls} style={inputStyle} placeholder="At least 8 characters" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Confirm new password</label>

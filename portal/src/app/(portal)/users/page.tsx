@@ -57,7 +57,7 @@ export default function UsersPage() {
       setAdding(false);
       await queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch {
-      setError("Couldn't create the user (email may already exist, or the password is under 12 characters).");
+      setError("Couldn't create the user (email may already exist, or the password is under 8 characters).");
     } finally {
       setSaving(false);
     }
@@ -101,7 +101,7 @@ export default function UsersPage() {
         await createUser(row);
         created++;
       } catch {
-        errors.push(`${row.email}: failed (email already exists, or password under 12 chars)`);
+        errors.push(`${row.email}: failed (email already exists, or password under 8 chars)`);
       }
     }
     setImportResult({ created, errors });
@@ -144,7 +144,7 @@ export default function UsersPage() {
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
             Paste rows or upload a CSV with columns{" "}
             <span className="font-mono" style={{ color: "var(--text-primary)" }}>email, full_name, role, password</span>{" "}
-            — one user per line. Role is <span className="font-mono">admin</span>/<span className="font-mono">technician</span>/<span className="font-mono">user</span> (defaults to user); password must be at least 12 characters.
+            — one user per line. Role is <span className="font-mono">admin</span>/<span className="font-mono">technician</span>/<span className="font-mono">user</span> (defaults to user); password must be at least 8 characters.
           </p>
           <input type="file" accept=".csv,text/csv" onChange={onCsvFile}
             className="block text-sm" style={{ color: "var(--text-secondary)" }} />
@@ -187,7 +187,7 @@ export default function UsersPage() {
             placeholder="Full name" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="Password (min 12 chars)" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
+            placeholder="Password (min 8 chars)" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <div className="flex gap-2">
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}

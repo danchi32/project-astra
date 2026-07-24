@@ -25,6 +25,12 @@ class OrganizationRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_email_domain(self, domain: str) -> Organization | None:
+        result = await self.session.execute(
+            select(Organization).where(Organization.email_domain == domain)
+        )
+        return result.scalars().first()
+
     async def add(self, org: Organization) -> Organization:
         self.session.add(org)
         await self.session.flush()

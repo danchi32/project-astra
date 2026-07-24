@@ -5,6 +5,7 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.email_domains import corporate_domain
 from app.core.security import (
     create_access_token,
     generate_opaque_token,
@@ -52,7 +53,8 @@ class AuthService:
         self.email = EmailService()
 
     async def _provision_org(
-        self, *, organization_name: str, admin_name: str, email: str, hashed_password: str
+        self, *, organization_name: str, admin_name: str, email: str, hashed_password: str,
+        email_domain: str | None = None,
     ) -> tuple[Organization, User]:
         """Create the org + its first admin (no commit). Shared by every signup path."""
         org = await self.orgs.add(
@@ -60,6 +62,7 @@ class AuthService:
                 name=organization_name.strip(),
                 trial_ends_at=utcnow() + timedelta(days=TRIAL_DAYS),
                 agent_enrollment_key=generate_opaque_token(),
+                email_domain=email_domain,
             )
         )
         admin = await self.users.add(
@@ -82,6 +85,18 @@ class AuthService:
         )
         return org, admin
 
+    async def _guard_org_domain(self, email: str) -> str | None:
+        """Enforce one organisation per corporate email domain. Returns the domain to record on
+        the new org (or None for a personal/free provider, which may register freely). Raises if
+        that corporate domain has already registered."""
+        domain = corporate_domain(email)
+        if domain is not None and await self.orgs.get_by_email_domain(domain) is not None:
+            raise ConflictError(
+                f"Your organisation ({domain}) is already registered with ASTRA. "
+                "Ask your organisation's admin to add you to it, or sign in."
+            )
+        return domain
+
     async def _send_welcome(self, *, to: str, name: str, org_name: str) -> None:
         try:
             await self.email.send_welcome(to=to, name=name, org_name=org_name, trial_days=TRIAL_DAYS)
@@ -101,10 +116,12 @@ class AuthService:
         email = data.admin_email.lower()
         if await self.users.get_by_email(email) is not None:
             raise ConflictError("A user with that email already exists")
+        email_domain = await self._guard_org_domain(email)
 
         org, admin = await self._provision_org(
             organization_name=data.organization_name, admin_name=data.admin_name,
             email=email, hashed_password=hash_password(data.admin_password),
+            email_domain=email_domain,
         )
         if invite is not None:
             invite.used_at = utcnow()
@@ -123,6 +140,8 @@ class AuthService:
         email = data.admin_email.lower()
         if await self.users.get_by_email(email) is not None:
             raise ConflictError("A user with that email already exists")
+        # Fail fast on a corporate domain that's already registered, before emailing a code.
+        await self._guard_org_domain(email)
 
         if not self.email.enabled:
             access, refresh = await self.register(data)
@@ -171,10 +190,13 @@ class AuthService:
             await self.pending.delete_by_email(email)
             await self.session.commit()
             raise ConflictError("A user with that email already exists")
+        # Re-check at completion in case the domain was registered during the OTP window.
+        email_domain = await self._guard_org_domain(email)
 
         org, admin = await self._provision_org(
             organization_name=pending.organization_name, admin_name=pending.admin_name,
             email=email, hashed_password=pending.hashed_password,
+            email_domain=email_domain,
         )
         await self.pending.delete_by_email(email)
         access = create_access_token(user_id=admin.id, org_id=admin.org_id, role=admin.role.value)

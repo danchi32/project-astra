@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Absolute security floor — an org may raise the minimum password length above this
 # but never below it, regardless of what is submitted.
-PASSWORD_FLOOR = 12
+PASSWORD_FLOOR = 8
 
 
 class OrganizationSettingsRead(BaseModel):

@@ -31,7 +31,7 @@ async def test_get_settings_returns_defaults(client, admin_headers):
     assert body["org_name"] == "Acme Corp"
     assert body["auto_approve_automatic"] is True
     assert body["require_admin_for_approval_tier"] is False
-    assert body["min_password_length"] == 12
+    assert body["min_password_length"] == 8
     assert body["enrollment_token_default_days"] == 7
 
 
@@ -168,7 +168,7 @@ async def test_min_password_length_enforced_on_user_create(client, admin_headers
         json={"min_password_length": 16},
         headers=admin_headers,
     )
-    # 12 chars satisfies the schema floor but not the org's 16-char policy.
+    # 12 chars satisfies the schema floor (8) but not the org's 16-char policy.
     resp = await client.post(
         "/api/v1/users",
         json={"email": "new@acme.com", "full_name": "New", "password": "Passw0rd!123", "role": "user"},
@@ -234,7 +234,7 @@ async def test_change_password_enforces_org_minimum(client, admin_headers, admin
         json={"min_password_length": 20},
         headers=admin_headers,
     )
-    # 15 chars — above the schema floor of 12 but below the org's 20.
+    # 15 chars — above the schema floor (8) but below the org's 20.
     resp = await client.post(
         "/api/v1/auth/change-password",
         json={"current_password": ADMIN_PASSWORD, "new_password": "FifteenChars!12"},

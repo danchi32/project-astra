@@ -22,6 +22,11 @@ class Organization(TimestampMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
 
+    # The corporate email domain this org signed up with (e.g. "acme.com"), so a second
+    # self-service signup from the same domain is refused — one organisation, one account.
+    # Null for personal/free-mail signups (gmail, outlook, …), which may register freely.
+    email_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
     # -- Subscription / lifecycle (managed by the platform operator + billing) --
     plan: Mapped[str] = mapped_column(String(40), nullable=False, default="trial")
     subscription_status: Mapped[SubscriptionStatus] = mapped_column(

@@ -38,7 +38,7 @@ class OrganizationSettings(TimestampMixin, Base):
 
     # Security baseline. The absolute floor of 12 is still enforced in schemas; this
     # value may raise it, never lower it.
-    min_password_length: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+    min_password_length: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
 
     # Default lifetime applied to new enrollment tokens when the request omits one.
     enrollment_token_default_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)

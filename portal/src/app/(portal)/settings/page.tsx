@@ -271,7 +271,7 @@ function OrganizationTab() {
       <Panel title="Security & enrollment" description="Baseline policy for accounts and agent enrollment.">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Minimum password length">
-            <input type="number" min={12} max={128} value={form.min_password_length ?? 12}
+            <input type="number" min={8} max={128} value={form.min_password_length ?? 8}
               onChange={(e) => setForm({ ...form, min_password_length: Number(e.target.value) })}
               className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
           </Field>
@@ -282,7 +282,7 @@ function OrganizationTab() {
           </Field>
         </div>
         <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-          Password length has an enforced floor of 12 characters; you can only raise it.
+          Password length has an enforced floor of 8 characters; you can only raise it.
         </p>
       </Panel>
 

@@ -14,7 +14,7 @@ class RegisterRequest(BaseModel):
     organization_name: str = Field(min_length=1, max_length=200)
     admin_name: str = Field(min_length=1, max_length=200)
     admin_email: EmailStr
-    admin_password: str = Field(min_length=12)
+    admin_password: str = Field(min_length=8)
 
 
 class RegisterVerifyRequest(BaseModel):
@@ -48,4 +48,4 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     token: str = Field(min_length=1)
-    new_password: str = Field(min_length=12)
+    new_password: str = Field(min_length=8)

@@ -65,7 +65,7 @@ export default function PlatformOrganizationsPage() {
 
   async function submitCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (orgForm.admin_password.length < 12) { setCreateErr("Initial password must be at least 12 characters."); return; }
+    if (orgForm.admin_password.length < 8) { setCreateErr("Initial password must be at least 8 characters."); return; }
     setCreating(true); setCreateErr("");
     try {
       await createOrganizationAsAdmin({
@@ -190,7 +190,7 @@ export default function PlatformOrganizationsPage() {
               { k: "organization_name", label: "Organization name", type: "text", ph: "Acme Corp" },
               { k: "admin_name", label: "Admin name", type: "text", ph: "Jane Admin" },
               { k: "admin_email", label: "Admin email", type: "email", ph: "admin@acme.com" },
-              { k: "admin_password", label: "Initial password (min 12 chars)", type: "text", ph: "Share with the customer" },
+              { k: "admin_password", label: "Initial password (min 8 chars)", type: "text", ph: "Share with the customer" },
             ].map(({ k, label, type, ph }) => (
               <div key={k}>
                 <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</label>

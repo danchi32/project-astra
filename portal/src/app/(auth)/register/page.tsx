@@ -24,8 +24,8 @@ export default function RegisterPage() {
   async function submitDetails(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (form.admin_password.length < 12) {
-      setError("Password must be at least 12 characters.");
+    if (form.admin_password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
     setLoading(true);
@@ -36,8 +36,11 @@ export default function RegisterPage() {
       } else {
         router.push("/dashboard"); // email off — created immediately
       }
-    } catch {
-      setError("Couldn't start signup. That email may already be registered — try signing in instead.");
+    } catch (err) {
+      // Surface the backend's message (e.g. "Your organisation is already registered") so the
+      // user sees the real reason, with a sensible fallback.
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(detail || "Couldn't start signup. That email may already be registered — try signing in instead.");
     } finally {
       setLoading(false);
     }
@@ -95,7 +98,7 @@ export default function RegisterPage() {
             <div>
               <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Password</label>
               <input type="password" required value={form.admin_password} onChange={set("admin_password")}
-                className={inputCls} style={inputStyle} placeholder="At least 12 characters" />
+                className={inputCls} style={inputStyle} placeholder="At least 8 characters" />
             </div>
 
             {error && <p className="text-sm text-red-500 text-center">{error}</p>}
