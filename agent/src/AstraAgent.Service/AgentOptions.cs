@@ -29,5 +29,5 @@ public sealed class AgentOptions
 
 public static class AgentVersion
 {
-    public const string Current = "0.5.1";
+    public const string Current = "0.6.0";
 }

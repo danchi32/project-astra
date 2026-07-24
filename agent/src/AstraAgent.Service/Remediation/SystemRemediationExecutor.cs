@@ -17,7 +17,11 @@ public sealed class SystemRemediationExecutor
 {
     // The only actions the elevated service will ever perform. Everything else is refused.
     public static readonly IReadOnlySet<string> SupportedActions =
-        new HashSet<string> { "clear_system_temp", "windows_update_install" };
+        new HashSet<string>
+        {
+            "clear_system_temp", "windows_update_install",
+            "disable_local_account", "enable_local_account",
+        };
 
     public (bool Success, string Output) Execute(
         string actionId, IReadOnlyDictionary<string, string>? parameters = null)
@@ -28,6 +32,8 @@ public sealed class SystemRemediationExecutor
             {
                 "clear_system_temp" => ClearSystemTemp(),
                 "windows_update_install" => InstallWindowsUpdates(GetKbFilter(parameters)),
+                "disable_local_account" => LocalAccountManager.SetEnabled(GetParam(parameters, "username"), enable: false),
+                "enable_local_account" => LocalAccountManager.SetEnabled(GetParam(parameters, "username"), enable: true),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),
@@ -38,6 +44,9 @@ public sealed class SystemRemediationExecutor
             return (false, "Execution failed: " + ex.Message);
         }
     }
+
+    private static string? GetParam(IReadOnlyDictionary<string, string>? parameters, string key)
+        => parameters is not null && parameters.TryGetValue(key, out var v) ? v : null;
 
     private static string? GetKbFilter(IReadOnlyDictionary<string, string>? parameters)
     {

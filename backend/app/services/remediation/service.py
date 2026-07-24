@@ -64,6 +64,21 @@ def _validate_folder_name(value: Any) -> str:
     return name
 
 
+_USERNAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9 ._-]{0,62}[A-Za-z0-9.])?$")
+
+
+def _validate_username(value: Any) -> str:
+    """A local Windows account name. Deliberately strict — no characters that Windows forbids
+    in account names or that could be abused when the agent hands the name to `net user`
+    (the agent also passes it as a single argv element, never through a shell)."""
+    name = str(value or "").strip()
+    if not _USERNAME_RE.match(name) or any(c in name for c in '"/\\[]:;|=,+*?<>@'):
+        raise RemediationError(
+            f"'{value}' is not a valid local Windows account name."
+        )
+    return name
+
+
 def _validate_kb_article_id(value: Any) -> str:
     """Normalize a KB article id to the canonical 'KB<digits>' form. Rejects anything else so
     the value handed to the agent's Windows Update search can never be an injection vector."""
@@ -198,6 +213,8 @@ class RemediationService:
             params["folder_name"] = _validate_folder_name(params.get("folder_name"))
         if "kb_article_id" in action.params and params.get("kb_article_id"):
             params["kb_article_id"] = _validate_kb_article_id(params["kb_article_id"])
+        if "username" in action.params:
+            params["username"] = _validate_username(params.get("username"))
         return params
 
     # -- Approval workflow (portal staff) --------------------------------------

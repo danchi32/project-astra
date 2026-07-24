@@ -15,10 +15,15 @@ from app.repositories.devices import DeviceRepository
 from app.repositories.telemetry import TelemetryRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
-from app.services.remediation.actions import ACTIONS
+from app.services.remediation.actions import ACTIONS, RemediationTier
 from app.services.remediation.service import RemediationError, RemediationService
 
-_ACTION_IDS = sorted(ACTIONS.keys())
+# The assistant may only ever PROPOSE non-admin-only fixes. Admin-only actions (registry,
+# WU-component reset, and account offboarding) are deliberately withheld from the model so
+# prompt-injected content can never nudge it toward a high-privilege action.
+_ACTION_IDS = sorted(
+    aid for aid, action in ACTIONS.items() if action.tier is not RemediationTier.ADMIN_ONLY
+)
 
 # Anthropic tool schemas advertised to the model.
 TOOL_SCHEMAS: list[dict[str, Any]] = [

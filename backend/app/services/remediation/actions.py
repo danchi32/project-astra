@@ -115,6 +115,18 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     RemediationAction("reset_windows_update_components", "Reset Windows Update components",
                       RemediationTier.ADMIN_ONLY,
                       "Rebuilds the Windows Update component store. Admin approval only."),
+
+    # ── Secure offboarding (elevated, admin-only): lock a local Windows account ──
+    RemediationAction("disable_local_account", "Disable a local user account", RemediationTier.ADMIN_ONLY,
+                      "Offboarding: disables a LOCAL Windows account and signs the user out now, so "
+                      "they can't sign back in. Does NOT change the password or delete anything — "
+                      "fully reversible with 'enable_local_account'. Local accounts only (domain/Entra "
+                      "accounts are managed in AD/Intune). Elevated + admin approval only.",
+                      params=("username",), execution_context="system"),
+    RemediationAction("enable_local_account", "Re-enable a local user account", RemediationTier.ADMIN_ONLY,
+                      "Reverses disable_local_account: re-activates the local account so the user can "
+                      "sign in again with their existing password. Elevated + admin approval only.",
+                      params=("username",), execution_context="system"),
 )
 
 ACTIONS: dict[str, RemediationAction] = {a.id: a for a in _ACTIONS}
