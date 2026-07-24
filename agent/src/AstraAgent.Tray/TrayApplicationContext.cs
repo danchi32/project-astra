@@ -15,7 +15,23 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly TrayChatClient _client;
     private readonly RemediationRunner _runner;
     private readonly TrayUpdater _updater;
+    private readonly Icon _brandIcon = LoadBrandIcon();
     private ChatForm? _chatForm;
+
+    /// <summary>The Technomate brand mark, embedded in this assembly. Falls back to a system
+    /// icon if the resource is somehow missing, so the tray never fails to appear.</summary>
+    private static Icon LoadBrandIcon()
+    {
+        try
+        {
+            var stream = typeof(TrayApplicationContext).Assembly
+                .GetManifestResourceStream("AstraAgent.Tray.astra.ico");
+            if (stream is not null)
+                return new Icon(stream);
+        }
+        catch { /* fall through */ }
+        return SystemIcons.Information;
+    }
 
     public TrayApplicationContext()
     {
@@ -48,7 +64,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _icon = new NotifyIcon
         {
-            Icon = SystemIcons.Information,
+            Icon = _brandIcon,
             Text = "ASTRA Assistant — click for help",
             Visible = true,
             ContextMenuStrip = menu,
@@ -71,7 +87,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (_chatForm is null || _chatForm.IsDisposed)
         {
-            _chatForm = new ChatForm(_client);
+            _chatForm = new ChatForm(_client) { Icon = _brandIcon };
             _chatForm.HiddenToTray += (_, _) => _icon.ShowBalloonTip(
                 2500, "ASTRA Assistant",
                 "I'm still here — click this icon to chat again.", ToolTipIcon.Info);
@@ -88,6 +104,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             _icon.Visible = false;
             _icon.Dispose();
             _chatForm?.Dispose();
+            _brandIcon.Dispose();
         }
         base.Dispose(disposing);
     }

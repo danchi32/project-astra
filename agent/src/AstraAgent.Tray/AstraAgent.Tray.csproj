@@ -11,7 +11,9 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>AstraAgent.Tray</RootNamespace>
     <AssemblyName>AstraAgent.Tray</AssemblyName>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
+    <!-- Technomate brand mark used for the tray icon and the executable icon. -->
+    <ApplicationIcon>astra.ico</ApplicationIcon>
     <!-- The referenced Service project also ships an appsettings.json; both land at
          the same publish path. The tray's own copy is what matters, so allow the
          duplicate instead of failing the publish (NETSDK1152). -->
@@ -33,6 +35,9 @@
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Embedded so the tray can load it at runtime for the NotifyIcon (logical name
+         AstraAgent.Tray.astra.ico). -->
+    <EmbeddedResource Include="astra.ico" />
   </ItemGroup>
 
 </Project>
