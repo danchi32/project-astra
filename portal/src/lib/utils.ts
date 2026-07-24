@@ -5,6 +5,21 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Extract a human string from an API error. FastAPI returns `detail` as a string for our
+ * service errors but as an ARRAY of objects for request-validation (422) errors — rendering that
+ * array as a React child crashes the page, so always coerce to a string. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((e) => (e && typeof e === "object" && "msg" in e ? String((e as { msg: unknown }).msg) : ""))
+      .filter(Boolean);
+    if (msgs.length) return msgs.join("; ");
+  }
+  return fallback;
+}
+
 /** Format megabytes as GB for display, e.g. 16065 -> "16 GB". */
 export function formatRam(mb: number | null): string {
   if (mb == null || mb <= 0) return "—";

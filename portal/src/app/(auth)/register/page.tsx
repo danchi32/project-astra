@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerStart, registerVerify } from "@/lib/api/auth";
+import { apiErrorMessage } from "@/lib/utils";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -38,9 +39,9 @@ export default function RegisterPage() {
       }
     } catch (err) {
       // Surface the backend's message (e.g. "Your organisation is already registered") so the
-      // user sees the real reason, with a sensible fallback.
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(detail || "Couldn't start signup. That email may already be registered — try signing in instead.");
+      // user sees the real reason, with a sensible fallback. apiErrorMessage coerces a
+      // validation-error array to a string so it can never crash the render.
+      setError(apiErrorMessage(err, "Couldn't start signup. That email may already be registered — try signing in instead."));
     } finally {
       setLoading(false);
     }

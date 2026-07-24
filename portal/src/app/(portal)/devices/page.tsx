@@ -9,7 +9,7 @@ import { getMe } from "@/lib/api/auth";
 import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller, downloadUninstaller, deleteDevice } from "@/lib/api/devices";
 import { createRemediation, approveRemediation } from "@/lib/api/remediation";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
-import { formatRam, formatStorage } from "@/lib/utils";
+import { formatRam, formatStorage, apiErrorMessage } from "@/lib/utils";
 import type { Device } from "@/lib/api/types";
 
 // Quote a CSV cell only when it contains a comma, quote or newline (RFC 4180).
@@ -276,8 +276,7 @@ export default function DevicesPage() {
         ? `Re-enabling "${user}" on ${lockTarget.hostname} — they can sign in again shortly.`
         : `Disabling "${user}" on ${lockTarget.hostname} and signing them out. Track it under Self-Healing.` });
     } catch (err) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setLockMsg({ ok: false, text: detail || "Couldn't queue it. The device may be offline, or you may lack permission." });
+      setLockMsg({ ok: false, text: apiErrorMessage(err, "Couldn't queue it. The device may be offline, or you may lack permission.") });
     } finally {
       setLockBusy(false);
     }
