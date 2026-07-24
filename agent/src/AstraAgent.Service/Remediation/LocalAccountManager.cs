@@ -56,7 +56,7 @@ public static class LocalAccountManager
             // sign-in). Match the target first; if they can't be matched but exactly one real
             // interactive user is signed in, log that session off too — on an offboarded endpoint
             // that is the person being removed.
-            var (loggedOff, sessions) = ForceLogoff(name);
+            var (loggedOff, sessions) = ForceLogoff(sid);
             string signedOut;
             if (loggedOff > 0)
                 signedOut = $"signed {name} out of {loggedOff} live session(s)";
@@ -167,11 +167,12 @@ public static class LocalAccountManager
         }
     }
 
-    // ── Force-logoff the target user's interactive sessions ───────────────────
-    // Returns how many sessions matching the target were logged off, plus every OTHER real
-    // interactive session (Active/Disconnected with a non-service user) so the caller can decide
-    // what to do when the target itself couldn't be matched.
-    private static (int LoggedOff, List<(int SessionId, string User)> Others) ForceLogoff(string username)
+    // ── Force-logoff the target account's interactive sessions ────────────────
+    // Matches by the account SID (from the session's own user token), NOT by username string —
+    // usernames with spaces / different casing / display-vs-SAM forms make string matching
+    // unreliable. Returns how many of the target's sessions were logged off, plus every OTHER
+    // interactive session so the caller can decide what to do if the target wasn't matched.
+    private static (int LoggedOff, List<(int SessionId, string User)> Others) ForceLogoff(string targetSid)
     {
         var loggedOff = 0;
         var others = new List<(int, string)>();
@@ -188,16 +189,16 @@ public static class LocalAccountManager
                 cursor += size;
                 // WTS_CONNECTSTATE_CLASS: Active = 0, Disconnected = 4 are the interactive states.
                 if (info.State != 0 && info.State != 4) continue;
-                var user = QuerySessionString(info.SessionId, 5 /* WTSUserName */);
-                if (string.IsNullOrWhiteSpace(user)) continue;   // no interactive user (services etc.)
+                var sid = SessionUserSid(info.SessionId);
+                if (sid is null) continue;   // no interactive user token (services / session 0)
 
-                if (user.Equals(username, StringComparison.OrdinalIgnoreCase))
+                if (sid.Equals(targetSid, StringComparison.OrdinalIgnoreCase))
                 {
                     if (WTSLogoffSession(IntPtr.Zero, info.SessionId, false)) loggedOff++;
                 }
                 else
                 {
-                    others.Add((info.SessionId, user));
+                    others.Add((info.SessionId, QuerySessionString(info.SessionId, 5 /* WTSUserName */)));
                 }
             }
         }
@@ -215,6 +216,31 @@ public static class LocalAccountManager
             return string.Empty;
         try { return Marshal.PtrToStringUni(buffer) ?? string.Empty; }
         finally { if (buffer != IntPtr.Zero) WTSFreeMemory(buffer); }
+    }
+
+    /// <summary>The SID string of the user owning <paramref name="sessionId"/>, via that session's
+    /// own access token (LocalSystem holds the privilege). Null if it can't be resolved.</summary>
+    private static string? SessionUserSid(int sessionId)
+    {
+        var token = IntPtr.Zero;
+        try
+        {
+            if (!WTSQueryUserToken(sessionId, out token)) return null;
+            GetTokenInformation(token, 1 /* TokenUser */, IntPtr.Zero, 0, out var len);
+            if (len <= 0) return null;
+            var buf = Marshal.AllocHGlobal(len);
+            try
+            {
+                if (!GetTokenInformation(token, 1, buf, len, out _)) return null;
+                var user = Marshal.PtrToStructure<TOKEN_USER>(buf);
+                if (!ConvertSidToStringSid(user.User.Sid, out var sidPtr)) return null;
+                try { return Marshal.PtrToStringUni(sidPtr); }
+                finally { LocalFree(sidPtr); }
+            }
+            finally { Marshal.FreeHGlobal(buf); }
+        }
+        catch { return null; }
+        finally { if (token != IntPtr.Zero) CloseHandle(token); }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -238,4 +264,35 @@ public static class LocalAccountManager
 
     [DllImport("wtsapi32.dll", SetLastError = true)]
     private static extern bool WTSLogoffSession(IntPtr hServer, int sessionId, bool bWait);
+
+    // ── Session user-token → SID (robust match, independent of the display name) ──
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SID_AND_ATTRIBUTES
+    {
+        public IntPtr Sid;
+        public int Attributes;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TOKEN_USER
+    {
+        public SID_AND_ATTRIBUTES User;
+    }
+
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    private static extern bool WTSQueryUserToken(int sessionId, out IntPtr phToken);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetTokenInformation(
+        IntPtr tokenHandle, int tokenInformationClass, IntPtr tokenInformation,
+        int tokenInformationLength, out int returnLength);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool ConvertSidToStringSid(IntPtr sid, out IntPtr stringSid);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr LocalFree(IntPtr handle);
 }
