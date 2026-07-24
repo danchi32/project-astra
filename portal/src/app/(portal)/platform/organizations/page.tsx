@@ -15,7 +15,7 @@ import type { OrganizationAdmin, SubscriptionStatus } from "@/lib/api/types";
 const emptyOrgForm = { organization_name: "", admin_name: "", admin_email: "", admin_password: "" };
 
 const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
-  trialing: { label: "Trial", color: "#3b82f6" },
+  trialing: { label: "Trial", color: "#b246d4" },
   active: { label: "Active", color: "#10b981" },
   past_due: { label: "Past due", color: "#f59e0b" },
   suspended: { label: "Suspended", color: "#ef4444" },
@@ -127,7 +127,7 @@ export default function PlatformOrganizationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
             <Building2 size={18} />
           </div>
           <div>
@@ -155,7 +155,7 @@ export default function PlatformOrganizationsPage() {
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search organizations…"
-            className="pl-8 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-64"
+            className="pl-8 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 w-64"
             style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
         </div>
         <div className="flex gap-1">
@@ -163,7 +163,7 @@ export default function PlatformOrganizationsPage() {
             <button key={f} onClick={() => setStatusFilter(f)}
               className="text-xs px-2.5 py-1.5 rounded-lg font-medium capitalize"
               style={statusFilter === f
-                ? { background: "rgba(37,99,235,0.1)", border: "1px solid var(--accent)", color: "var(--accent)" }
+                ? { background: "rgba(154,47,187,0.1)", border: "1px solid var(--accent)", color: "var(--accent)" }
                 : { background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
               {f === "all" ? "All" : STATUS_STYLE[f].label}
             </button>
@@ -197,7 +197,7 @@ export default function PlatformOrganizationsPage() {
                 <input required type={type} placeholder={ph}
                   value={orgForm[k as keyof typeof orgForm]}
                   onChange={(e) => setOrgForm({ ...orgForm, [k]: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
                   style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
               </div>
             ))}

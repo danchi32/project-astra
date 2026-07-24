@@ -60,7 +60,7 @@ export default function RegisterPage() {
   const inputStyle = {
     background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)",
   } as const;
-  const inputCls = "w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500";
+  const inputCls = "w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500";
   const labelCls = "block text-sm font-medium mb-1";
 
   return (
@@ -113,7 +113,7 @@ export default function RegisterPage() {
             </p>
             <input required value={code} onChange={(e) => setCode(e.target.value)}
               inputMode="numeric" autoFocus placeholder="123456"
-              className="w-full px-3 py-2 rounded-lg text-center text-lg tracking-[0.4em] font-mono outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 rounded-lg text-center text-lg tracking-[0.4em] font-mono outline-none focus:ring-2 focus:ring-brand-500"
               style={inputStyle} />
 
             {error && <p className="text-sm text-red-500 text-center">{error}</p>}

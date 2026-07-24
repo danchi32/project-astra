@@ -7,7 +7,7 @@ import { getPlatformBilling } from "@/lib/api/platform";
 import type { SubscriptionStatus } from "@/lib/api/types";
 
 const STATUS_COLOR: Record<SubscriptionStatus, string> = {
-  trialing: "#3b82f6", active: "#10b981", past_due: "#f59e0b", suspended: "#ef4444", canceled: "#64748b",
+  trialing: "#b246d4", active: "#10b981", past_due: "#f59e0b", suspended: "#ef4444", canceled: "#64748b",
 };
 
 function fmtMoney(cents: number | null): string {
@@ -32,7 +32,7 @@ export default function PlatformBillingPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <CreditCard size={18} />
         </div>
         <div>
@@ -51,7 +51,7 @@ export default function PlatformBillingPage() {
 
       {/* Revenue KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-xl p-4" style={{ background: "rgba(37,99,235,0.06)", border: "1px solid var(--accent)" }}>
+        <div className="rounded-xl p-4" style={{ background: "rgba(154,47,187,0.06)", border: "1px solid var(--accent)" }}>
           <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>MRR</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{fmtMoney(billing?.mrr_cents ?? null)}</p>
         </div>

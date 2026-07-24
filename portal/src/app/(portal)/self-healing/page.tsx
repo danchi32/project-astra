@@ -13,7 +13,7 @@ const TIER_STYLE: Record<RemediationTier, { label: string; color: string; bg: st
 
 const STATUS_STYLE: Record<RemediationStatus, { color: string; bg: string }> = {
   pending_approval: { color: "#f59e0b", bg: "rgba(245,158,11,0.1)" },
-  approved: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
+  approved: { color: "#b246d4", bg: "rgba(59,130,246,0.1)" },
   dispatched: { color: "#8b5cf6", bg: "rgba(139,92,246,0.1)" },
   succeeded: { color: "#10b981", bg: "rgba(16,185,129,0.1)" },
   failed: { color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
@@ -49,7 +49,7 @@ export default function SelfHealingPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <Zap size={18} />
         </div>
         <div>

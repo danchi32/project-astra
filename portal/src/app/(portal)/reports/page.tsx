@@ -394,7 +394,7 @@ function AssetsTab() {
             onChange={(e) => setFilters((f) => ({ ...f, warranty: e.target.value as typeof f.warranty }))}
             className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
             style={{
-              background: filters.warranty !== "all" ? "rgba(37,99,235,0.1)" : "var(--bg)",
+              background: filters.warranty !== "all" ? "rgba(154,47,187,0.1)" : "var(--bg)",
               border: "1px solid var(--border)",
               color: filters.warranty !== "all" ? "var(--accent)" : "var(--text-primary)",
             }}
@@ -496,7 +496,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <BarChart3 size={18} />
         </div>
         <div>

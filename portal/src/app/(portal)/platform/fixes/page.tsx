@@ -62,7 +62,7 @@ export default function GlobalFixesPage() {
       </Link>
 
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <Zap size={18} />
         </div>
         <div>
@@ -78,7 +78,7 @@ export default function GlobalFixesPage() {
           <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>When the user says (problem)</label>
           <input required value={problem} onChange={(e) => setProblem(e.target.value)}
             placeholder="e.g. the shared network drive keeps disconnecting"
-            className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+            className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -95,7 +95,7 @@ export default function GlobalFixesPage() {
                 {needsProcess ? "App process (e.g. EXCEL)" : "Service (e.g. Spooler)"}
               </label>
               <input required value={param} onChange={(e) => setParam(e.target.value)}
-                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
             </div>
           )}
         </div>

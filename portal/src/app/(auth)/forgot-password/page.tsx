@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
               Enter your email and we&apos;ll send you a link to set a new password.
             </p>
             <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
               style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
               placeholder="admin@company.com" />
             <button type="submit" disabled={loading}

@@ -109,7 +109,7 @@ export function InsightButton({ href, children }: { href: string; children: Reac
   return (
     <Link
       href={href}
-      className="text-xs font-medium px-3.5 py-2 rounded-lg transition-colors hover:bg-blue-500/5"
+      className="text-xs font-medium px-3.5 py-2 rounded-lg transition-colors hover:bg-brand-500/5"
       style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}
     >
       {children}

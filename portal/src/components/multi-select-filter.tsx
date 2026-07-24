@@ -40,7 +40,7 @@ export function MultiSelectFilter({
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap"
         style={{
-          background: selected.length ? "rgba(37,99,235,0.1)" : "var(--bg)",
+          background: selected.length ? "rgba(154,47,187,0.1)" : "var(--bg)",
           border: "1px solid var(--border)",
           color: selected.length ? "var(--accent)" : "var(--text-primary)",
         }}
@@ -59,7 +59,7 @@ export function MultiSelectFilter({
           {options.map((opt) => (
             <label
               key={opt.value}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-pointer hover:bg-blue-500/5"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-pointer hover:bg-brand-500/5"
               style={{ color: "var(--text-primary)" }}
             >
               <input

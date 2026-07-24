@@ -104,7 +104,7 @@ export function Sidebar() {
               href={href}
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
               style={{
-                background: active ? "rgba(37,99,235,0.1)" : "transparent",
+                background: active ? "rgba(154,47,187,0.1)" : "transparent",
                 color: active ? "var(--accent)" : "var(--text-secondary)",
               }}
             >

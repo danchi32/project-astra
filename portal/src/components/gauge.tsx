@@ -9,7 +9,7 @@ interface GaugeProps {
 function gaugeColor(v: number) {
   if (v >= 90) return "#ef4444";
   if (v >= 75) return "#f59e0b";
-  return "#3b82f6";
+  return "#b246d4";
 }
 
 export function Gauge({ label, value, unit = "%" }: GaugeProps) {

@@ -29,7 +29,7 @@ import type { NotificationSeverity } from "@/lib/api/types";
 const REFETCH = 30_000;
 
 const SEVERITY_COLOR: Record<NotificationSeverity, string> = {
-  info: "#3b82f6",
+  info: "#b246d4",
   warning: "#f59e0b",
   critical: "#ef4444",
 };
@@ -120,7 +120,7 @@ export default function DashboardPage() {
   const remediationChartData: BarDatum[] = Object.entries(remediationStatusCounts).map(([status, count]) => ({
     name: REMEDIATION_STATUS_LABELS[status as keyof typeof REMEDIATION_STATUS_LABELS] ?? status.replace(/_/g, " "),
     value: count,
-    color: REMEDIATION_STATUS_COLORS[status as keyof typeof REMEDIATION_STATUS_COLORS] ?? "#3b82f6",
+    color: REMEDIATION_STATUS_COLORS[status as keyof typeof REMEDIATION_STATUS_COLORS] ?? "#b246d4",
   }));
   const pendingApprovalCount = remediationStatusCounts["pending_approval"] ?? 0;
 
@@ -319,7 +319,7 @@ export default function DashboardPage() {
           ) : (
             <Panel>
               <div className="flex items-center gap-2 mb-3">
-                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
                   <Bell size={16} />
                 </div>
                 <MiniStat label="Unread" value={String(unreadNotifications?.length ?? 0)} />
@@ -415,7 +415,7 @@ export default function DashboardPage() {
                   </td></tr>
                 )}
                 {devices?.map((d) => (
-                  <tr key={d.id} className="transition-colors hover:bg-blue-500/5" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <tr key={d.id} className="transition-colors hover:bg-brand-500/5" style={{ borderBottom: "1px solid var(--border)" }}>
                     <td className="px-5 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
                       {d.hostname}
                       <div className="text-xs font-normal max-w-[160px] truncate" style={{ color: "var(--text-secondary)" }} title={d.os_version}>{d.os_version}</div>

@@ -37,7 +37,7 @@ export default function ResetPasswordPage() {
   }
 
   const inputStyle = { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" } as const;
-  const inputCls = "w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500";
+  const inputCls = "w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500";
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>

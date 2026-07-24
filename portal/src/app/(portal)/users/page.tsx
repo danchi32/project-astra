@@ -28,7 +28,7 @@ function parseCsvUsers(text: string): ImportRow[] {
 
 const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
   admin: { color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
-  technician: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
+  technician: { color: "#b246d4", bg: "rgba(59,130,246,0.1)" },
   user: { color: "#64748b", bg: "rgba(100,116,139,0.1)" },
 };
 
@@ -113,7 +113,7 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
             <UsersIcon size={18} />
           </div>
           <div>
@@ -149,7 +149,7 @@ export default function UsersPage() {
           <input type="file" accept=".csv,text/csv" onChange={onCsvFile}
             className="block text-sm" style={{ color: "var(--text-secondary)" }} />
           <textarea value={importText} onChange={(e) => setImportText(e.target.value)} rows={6}
-            className="w-full px-3 py-2 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <div className="flex gap-2">
             <button onClick={runImport} disabled={importBusy}
@@ -181,13 +181,13 @@ export default function UsersPage() {
         <form onSubmit={save} className="rounded-xl p-4 grid grid-cols-1 md:grid-cols-4 gap-3"
           style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
           <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-            placeholder="Email" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Email" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            placeholder="Full name" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Full name" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="Password (min 12 chars)" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Password (min 12 chars)" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <div className="flex gap-2">
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}

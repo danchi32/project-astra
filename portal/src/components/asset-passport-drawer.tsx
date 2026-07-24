@@ -13,7 +13,7 @@ const STATUS_LABEL: Record<string, string> = {
   retired: "Retired", lost: "Lost",
 };
 const STATUS_COLOR: Record<string, string> = {
-  in_use: "#10b981", in_storage: "#3b82f6", in_repair: "#f59e0b", retired: "#64748b", lost: "#ef4444",
+  in_use: "#10b981", in_storage: "#b246d4", in_repair: "#f59e0b", retired: "#64748b", lost: "#ef4444",
 };
 
 function fmtDuration(seconds: number): string {
@@ -71,7 +71,7 @@ export function AssetPassportDrawer({ asset, onClose }: { asset: Asset; onClose:
         style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)" }}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}><History size={18} /></div>
+            <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}><History size={18} /></div>
             <div>
               <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Device passport</h2>
               <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
@@ -138,7 +138,7 @@ export function AssetPassportDrawer({ asset, onClose }: { asset: Asset; onClose:
                   return (
                     <div key={e.id} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="p-1.5 rounded-full shrink-0" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}><Icon size={13} /></div>
+                        <div className="p-1.5 rounded-full shrink-0" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}><Icon size={13} /></div>
                         {i < p.events.length - 1 && <div className="w-px flex-1 my-1" style={{ background: "var(--border)" }} />}
                       </div>
                       <div className="pb-4 min-w-0">

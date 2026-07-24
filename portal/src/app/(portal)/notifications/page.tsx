@@ -7,7 +7,7 @@ import { listNotifications, markNotificationRead, markAllNotificationsRead } fro
 import type { Notification, NotificationSeverity } from "@/lib/api/types";
 
 const SEVERITY_STYLE: Record<NotificationSeverity, { color: string; icon: typeof Info }> = {
-  info: { color: "#3b82f6", icon: Info },
+  info: { color: "#b246d4", icon: Info },
   warning: { color: "#f59e0b", icon: AlertTriangle },
   critical: { color: "#ef4444", icon: AlertOctagon },
 };
@@ -28,7 +28,7 @@ function NotificationRow({ n, onRead }: { n: Notification; onRead: (id: string) 
   const content = (
     <div
       className="flex items-start gap-3 px-4 py-3"
-      style={{ background: n.is_read ? "transparent" : "rgba(37,99,235,0.04)" }}
+      style={{ background: n.is_read ? "transparent" : "rgba(154,47,187,0.04)" }}
     >
       <div className="p-1.5 rounded-full shrink-0" style={{ background: `${color}1a`, color }}>
         <Icon size={16} />
@@ -95,7 +95,7 @@ export default function NotificationsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
             <Bell size={18} />
           </div>
           <div>

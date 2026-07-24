@@ -23,7 +23,7 @@ const STATUSES: AssetStatus[] = ["in_use", "in_storage", "in_repair", "retired",
 
 const STATUS_STYLE: Record<AssetStatus, { label: string; color: string }> = {
   in_use: { label: "In use", color: "#10b981" },
-  in_storage: { label: "In storage", color: "#3b82f6" },
+  in_storage: { label: "In storage", color: "#b246d4" },
   in_repair: { label: "In repair", color: "#f59e0b" },
   retired: { label: "Retired", color: "#64748b" },
   lost: { label: "Lost", color: "#ef4444" },
@@ -160,7 +160,7 @@ export default function AssetsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
             <Package size={18} />
           </div>
           <div>
@@ -190,7 +190,7 @@ export default function AssetsPage() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card label="Total assets" value={String(summary.total)} />
           <Card label="In use" value={String(summary.by_status["in_use"] ?? 0)} accent="#10b981" />
-          <Card label="Idle" value={String(summary.by_status["in_storage"] ?? 0)} accent="#3b82f6" />
+          <Card label="Idle" value={String(summary.by_status["in_storage"] ?? 0)} accent="#b246d4" />
           <Card label="In repair" value={String(summary.by_status["in_repair"] ?? 0)} accent="#f59e0b" />
           <Card label="Discard"
             value={String((summary.by_status["retired"] ?? 0) + (summary.by_status["lost"] ?? 0))}
@@ -202,13 +202,13 @@ export default function AssetsPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <select value={locFilter} onChange={(e) => setLocFilter(e.target.value)}
           className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
-          style={{ background: locFilter !== "all" ? "rgba(37,99,235,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: locFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+          style={{ background: locFilter !== "all" ? "rgba(154,47,187,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: locFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
           <option value="all">All locations</option>
           {locations.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | AssetStatus)}
           className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
-          style={{ background: statusFilter !== "all" ? "rgba(37,99,235,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: statusFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+          style={{ background: statusFilter !== "all" ? "rgba(154,47,187,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: statusFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
           <option value="all">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{STATUS_STYLE[s].label}</option>)}
         </select>
@@ -270,19 +270,19 @@ export default function AssetsPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => setPassportFor(a)} title="Device passport (full history)"
-                        className="p-1 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" style={{ color: "var(--text-secondary)" }}>
+                        className="p-1 rounded-lg hover:bg-brand-500/10 hover:text-brand-500" style={{ color: "var(--text-secondary)" }}>
                         <History size={14} />
                       </button>
                       {isStaff && (
                         <>
                           {a.acknowledgement_status === "pending" && a.assigned_to_user_id && (
                             <button onClick={() => resend(a.id)} title="Re-send acknowledgement email"
-                              className="p-1 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" style={{ color: "var(--text-secondary)" }}>
+                              className="p-1 rounded-lg hover:bg-brand-500/10 hover:text-brand-500" style={{ color: "var(--text-secondary)" }}>
                               <Mail size={14} />
                             </button>
                           )}
                           <button onClick={() => openEdit(a)} title="Edit"
-                            className="p-1 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" style={{ color: "var(--text-secondary)" }}>
+                            className="p-1 rounded-lg hover:bg-brand-500/10 hover:text-brand-500" style={{ color: "var(--text-secondary)" }}>
                             <Pencil size={14} />
                           </button>
                           <button onClick={() => archive(a.id, a.name)} title="Archive (keeps history)"

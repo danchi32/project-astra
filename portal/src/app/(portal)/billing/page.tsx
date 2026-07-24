@@ -13,7 +13,7 @@ const PROVIDER_LABEL: Record<BillingProvider, string> = {
 };
 
 const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
-  trialing: { label: "Trial", color: "#3b82f6" },
+  trialing: { label: "Trial", color: "#b246d4" },
   active: { label: "Active", color: "#10b981" },
   past_due: { label: "Past due", color: "#f59e0b" },
   suspended: { label: "Suspended", color: "#ef4444" },
@@ -104,7 +104,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <CreditCard size={18} />
         </div>
         <div>
@@ -116,7 +116,7 @@ export default function BillingPage() {
       </div>
 
       {notice && (
-        <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "rgba(37,99,235,0.08)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+        <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "rgba(154,47,187,0.08)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
           {notice}
         </div>
       )}
@@ -209,7 +209,7 @@ export default function BillingPage() {
                 <label className="text-sm" style={{ color: "var(--text-secondary)" }}>Licenses</label>
                 <input type="number" min={minQty} value={qty}
                   onChange={(e) => setQty(Math.max(minQty, Number(e.target.value) || minQty))}
-                  className="w-24 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-24 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
                   style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <button onClick={() => redirect(() => startCheckout(qty, (provider || status.providers[0]) as BillingProvider), "checkout")}
                   disabled={busy !== null || status.providers.length === 0}
@@ -226,7 +226,7 @@ export default function BillingPage() {
                 <label className="text-sm" style={{ color: "var(--text-secondary)" }}>Licenses</label>
                 <input type="number" min={minQty} value={qty}
                   onChange={(e) => setQty(Math.max(minQty, Number(e.target.value) || minQty))}
-                  className="w-24 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-24 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
                   style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
                 <button onClick={updateLicenses} disabled={busy !== null || qty === status.licenses}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"

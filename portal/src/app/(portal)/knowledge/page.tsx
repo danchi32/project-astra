@@ -40,7 +40,7 @@ export default function KnowledgePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
             <BookOpen size={18} />
           </div>
           <div>
@@ -59,7 +59,7 @@ export default function KnowledgePage() {
 
       {/* AI note */}
       <div className="flex items-start gap-2 rounded-lg p-3 text-sm"
-        style={{ background: "rgba(37,99,235,0.06)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+        style={{ background: "rgba(154,47,187,0.06)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
         <Sparkles size={16} style={{ color: "var(--accent)", marginTop: 1 }} />
         <span>When a user asks a how-to question, ASTRA searches these articles and grounds its answer in the most relevant one — so your team&apos;s knowledge is reused automatically.</span>
       </div>
@@ -68,10 +68,10 @@ export default function KnowledgePage() {
         <form onSubmit={save} className="rounded-xl p-4 space-y-3"
           style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title (e.g. How to connect to the VPN)"
-            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="Steps or guidance…"
-            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 resize-y"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <div className="flex gap-2 justify-end">
             <button type="button" onClick={() => setAdding(false)}

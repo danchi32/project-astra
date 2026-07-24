@@ -19,7 +19,7 @@ const card = { background: "var(--surface)", border: "1px solid var(--border)" }
 
 function Kpi({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
   return (
-    <div className="rounded-xl p-4" style={accent ? { background: "rgba(37,99,235,0.06)", border: "1px solid var(--accent)" } : card}>
+    <div className="rounded-xl p-4" style={accent ? { background: "rgba(154,47,187,0.06)", border: "1px solid var(--accent)" } : card}>
       <p className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{value}</p>
       {sub && <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>{sub}</p>}
@@ -50,7 +50,7 @@ export default function PlatformOverviewPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
             <ShieldCheck size={18} />
           </div>
           <div>

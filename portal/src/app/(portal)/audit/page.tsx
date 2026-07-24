@@ -6,7 +6,7 @@ import { listAuditLogs } from "@/lib/api/audit";
 function actionColor(action: string): string {
   if (action.includes("delete") || action.includes("reject")) return "#ef4444";
   if (action.includes("create") || action.includes("approve")) return "#10b981";
-  if (action.includes("update") || action.includes("login")) return "#3b82f6";
+  if (action.includes("update") || action.includes("login")) return "#b246d4";
   return "#64748b";
 }
 
@@ -20,7 +20,7 @@ export default function AuditPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <Shield size={18} />
         </div>
         <div>

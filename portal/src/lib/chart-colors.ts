@@ -24,14 +24,14 @@ export const ASSET_STATUS_LABELS: Record<AssetStatus, string> = {
 
 export const ASSET_STATUS_COLORS: Record<AssetStatus, string> = {
   in_use: "#10b981",
-  in_storage: "#3b82f6",
+  in_storage: "#b246d4",
   in_repair: "#f59e0b",
   retired: "#64748b",
   lost: "#ef4444",
 };
 
 const CATEGORY_PALETTE = [
-  "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#b246d4", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
   "#06b6d4", "#ec4899", "#64748b", "#84cc16", "#f97316", "#14b8a6",
 ];
 
@@ -58,8 +58,8 @@ export const REMEDIATION_STATUS_LABELS: Record<RemediationStatus, string> = {
 
 export const REMEDIATION_STATUS_COLORS: Record<RemediationStatus, string> = {
   pending_approval: "#f59e0b",
-  approved: "#3b82f6",
-  dispatched: "#3b82f6",
+  approved: "#b246d4",
+  dispatched: "#b246d4",
   succeeded: "#10b981",
   failed: "#ef4444",
   rejected: "#64748b",

@@ -52,7 +52,7 @@ export default function GlobalKnowledgePage() {
       </Link>
 
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <BookOpen size={18} />
         </div>
         <div>
@@ -68,13 +68,13 @@ export default function GlobalKnowledgePage() {
           <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Problem</label>
           <input required value={title} onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Teams keeps asking to sign in"
-            className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+            className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
         </div>
         <div>
           <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Solution</label>
           <textarea required value={content} onChange={(e) => setContent(e.target.value)} rows={4}
             placeholder="Steps that fix it…"
-            className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+            className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
         </div>
         {error && <p className="text-sm text-red-500">{error}</p>}
         <button type="submit" disabled={saving}

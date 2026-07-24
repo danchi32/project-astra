@@ -22,7 +22,7 @@ function errDetail(err: unknown): string | undefined {
 
 const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
   admin: { color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
-  technician: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
+  technician: { color: "#b246d4", bg: "rgba(59,130,246,0.1)" },
   user: { color: "#64748b", bg: "rgba(100,116,139,0.1)" },
 };
 
@@ -188,7 +188,7 @@ function PreferencesTab() {
                 className="flex flex-col items-center gap-2 py-4 rounded-xl transition-colors"
                 style={{
                   border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-                  background: active ? "rgba(37,99,235,0.06)" : "var(--bg)",
+                  background: active ? "rgba(154,47,187,0.06)" : "var(--bg)",
                   color: active ? "var(--accent)" : "var(--text-secondary)",
                 }}>
                 <Icon size={20} />
@@ -420,11 +420,11 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
       description="Customize the email sent automatically when you assign an asset to someone. The “Acknowledge receipt” button is added for you (or place it yourself with {{acknowledge_button}}).">
       <Field label="Subject">
         <input value={subject} onChange={(e) => setSubject(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
       </Field>
       <Field label="Message">
         <textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={7}
-          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono" style={inputStyle} />
+          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 font-mono" style={inputStyle} />
       </Field>
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Insert:</span>
@@ -512,11 +512,11 @@ function EmailTab() {
           </div>
           <Field label="Display name">
             <input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Acme IT"
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
           </Field>
           <Field label="Send from address">
             <input type="email" value={fromAddress} onChange={(e) => setFromAddress(e.target.value)} placeholder="it-support@yourcompany.com"
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
           </Field>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <button type="submit" disabled={busy !== null || !fromAddress.trim() || !fromName.trim()}
@@ -602,7 +602,7 @@ function LocationsTab() {
       description="Your sites and offices. Assets pick a location from this list; renaming one updates every asset there, and a location can't be deleted while assets still use it.">
       <form onSubmit={add} className="flex gap-2">
         <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Add a location — e.g. HQ, SF Office, Warehouse-2"
-          className="flex-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+          className="flex-1 px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
         <button type="submit" disabled={busy || !newName.trim()}
           className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
           Add
@@ -621,7 +621,7 @@ function LocationsTab() {
               <>
                 <input value={editName} autoFocus onChange={(e) => setEditName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") saveRename(l.id); if (e.key === "Escape") setEditingId(null); }}
-                  className="flex-1 px-2 py-1 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500" style={inputStyle} />
+                  className="flex-1 px-2 py-1 rounded text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
                 <button onClick={() => saveRename(l.id)} className="text-xs px-2 py-1 rounded-lg text-white" style={{ background: "var(--accent)" }}>Save</button>
                 <button onClick={() => setEditingId(null)} className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
               </>
@@ -630,7 +630,7 @@ function LocationsTab() {
                 <span className="flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>{l.name}</span>
                 <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{l.asset_count} asset{l.asset_count === 1 ? "" : "s"}</span>
                 <button onClick={() => { setEditingId(l.id); setEditName(l.name); }} title="Rename"
-                  className="p-1 rounded-lg hover:bg-blue-500/10 hover:text-blue-500" style={{ color: "var(--text-secondary)" }}><Pencil size={14} /></button>
+                  className="p-1 rounded-lg hover:bg-brand-500/10 hover:text-brand-500" style={{ color: "var(--text-secondary)" }}><Pencil size={14} /></button>
                 <button onClick={() => remove(l.id, l.name)} title="Delete"
                   className="p-1 rounded-lg hover:bg-red-500/10 hover:text-red-500" style={{ color: "var(--text-secondary)" }}><Trash2 size={14} /></button>
               </>
@@ -659,7 +659,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <SettingsIcon size={18} />
         </div>
         <div>

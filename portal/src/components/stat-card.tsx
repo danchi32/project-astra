@@ -10,7 +10,7 @@ interface StatCardProps {
 }
 
 const variantStyles = {
-  default: "text-blue-500 bg-blue-500/10",
+  default: "text-brand-500 bg-brand-500/10",
   success: "text-emerald-500 bg-emerald-500/10",
   warning: "text-amber-500 bg-amber-500/10",
   danger: "text-red-500 bg-red-500/10",

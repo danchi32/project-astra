@@ -104,7 +104,7 @@ function InstallAgentPanel() {
     <div className="rounded-xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
             <Download size={18} />
           </div>
           <div>
@@ -245,7 +245,7 @@ export default function DevicesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <Monitor size={18} />
         </div>
         <div>
@@ -296,7 +296,7 @@ export default function DevicesPage() {
                 </td></tr>
               )}
               {devices?.map((d) => (
-                <tr key={d.id} className="hover:bg-blue-500/5 transition-colors" style={{ borderBottom: "1px solid var(--border)" }}>
+                <tr key={d.id} className="hover:bg-brand-500/5 transition-colors" style={{ borderBottom: "1px solid var(--border)" }}>
                   <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
                     {d.hostname}
                     <div className="text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{d.os_version}</div>
