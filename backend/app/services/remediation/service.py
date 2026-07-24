@@ -72,6 +72,10 @@ def _validate_username(value: Any) -> str:
     in account names or that could be abused when the agent hands the name to `net user`
     (the agent also passes it as a single argv element, never through a shell)."""
     name = str(value or "").strip()
+    # Devices report the signed-in user as "DOMAIN\\user" (DOMAIN is the machine name for a
+    # local account) — keep only the account part so a prefilled name validates.
+    if "\\" in name:
+        name = name.rsplit("\\", 1)[-1].strip()
     if not _USERNAME_RE.match(name) or any(c in name for c in '"/\\[]:;|=,+*?<>@'):
         raise RemediationError(
             f"'{value}' is not a valid local Windows account name."

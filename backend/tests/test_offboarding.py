@@ -22,7 +22,10 @@ def test_username_validation():
     assert _validate_username("jsmith") == "jsmith"
     assert _validate_username("  John Doe  ") == "John Doe"
     assert _validate_username("a.b_c-1") == "a.b_c-1"
-    for bad in ("", "a/b", "x;drop", 'q"uote', "user@dom", "back\\slash", "a" * 70, "n[ame]"):
+    # Devices report "DOMAIN\\user" (DOMAIN = machine name for a local account) — strip it.
+    assert _validate_username("LSI-1322\\Rahul") == "Rahul"
+    assert _validate_username("ACME\\John Doe") == "John Doe"
+    for bad in ("", "a/b", "x;drop", 'q"uote', "user@dom", "a" * 70, "n[ame]", "dom\\"):
         with pytest.raises(RemediationError):
             _validate_username(bad)
 

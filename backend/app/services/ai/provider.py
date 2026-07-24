@@ -404,28 +404,16 @@ class StubProvider:
                 return LLMResponse(
                     text=(
                         f"Your system is at {cpu}% CPU and {ram}% memory right now. "
-                        "I'll free up space to help it run smoother — clearing both your "
-                        "user temp files and the machine-wide Windows caches "
-                        "(C:\\Windows\\Temp, Prefetch and the Windows Update cache). "
-                        "Doing that now."
+                        "I'll clear out temporary files to free up space and help it run "
+                        "smoother — doing that now."
                     ),
-                    tool_calls=[
-                        ToolCall(
-                            id="stub-cleanup", name="propose_remediation",
-                            input={
-                                "action_id": "clear_temp",
-                                "reason": "User reports the device is slow; clearing user temp files.",
-                            },
-                        ),
-                        ToolCall(
-                            id="stub-cleanup-sys", name="propose_remediation",
-                            input={
-                                "action_id": "clear_system_temp",
-                                "reason": "User reports the device is slow; deep-cleaning system-wide "
-                                          "temp and caches.",
-                            },
-                        ),
-                    ],
+                    tool_calls=[ToolCall(
+                        id="stub-cleanup", name="propose_remediation",
+                        input={
+                            "action_id": "clear_temp",
+                            "reason": "User reports the device is slow; clearing temp files.",
+                        },
+                    )],
                 )
         return None
 

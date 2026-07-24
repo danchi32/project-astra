@@ -250,7 +250,8 @@ export default function DevicesPage() {
 
   function openLock(d: Device) {
     setLockTarget(d);
-    setLockUser(d.logged_in_user ?? "");
+    // Devices report the user as "DOMAIN\\user"; prefill just the account name.
+    setLockUser((d.logged_in_user ?? "").split("\\").pop() ?? "");
     setLockConfirm("");
     setLockMsg(null);
   }
