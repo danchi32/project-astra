@@ -275,8 +275,9 @@ export default function DevicesPage() {
       setLockMsg({ ok: true, text: enable
         ? `Re-enabling "${user}" on ${lockTarget.hostname} — they can sign in again shortly.`
         : `Disabling "${user}" on ${lockTarget.hostname} and signing them out. Track it under Self-Healing.` });
-    } catch {
-      setLockMsg({ ok: false, text: "Couldn't queue it. The device may be offline, the account may be a domain account, or the name is invalid." });
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setLockMsg({ ok: false, text: detail || "Couldn't queue it. The device may be offline, or you may lack permission." });
     } finally {
       setLockBusy(false);
     }
