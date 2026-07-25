@@ -1,0 +1,22 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="f" x1="12" y1="50" x2="52" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7f2599"/>
+      <stop offset="0.5" stop-color="#b246d4"/>
+      <stop offset="1" stop-color="#e04ad0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0b1120"/>
+  <g fill="url(#f)">
+    <rect x="15.5" y="40" width="9" height="8" rx="2.4" transform="rotate(-8 20 44)"/>
+    <rect x="15.5" y="31" width="9" height="8" rx="2.4" transform="rotate(-8 20 35)" opacity="0.95"/>
+    <rect x="15.5" y="22" width="9" height="8" rx="2.4" transform="rotate(-8 20 26)" opacity="0.9"/>
+    <rect x="28.1" y="35.4" width="7.8" height="7.2" rx="2.1" transform="rotate(-13 32 39)" opacity="0.9"/>
+    <rect x="28.1" y="26.4" width="7.8" height="7.2" rx="2.1" transform="rotate(-13 32 30)" opacity="0.85"/>
+    <rect x="28.1" y="17.4" width="7.8" height="7.2" rx="2.1" transform="rotate(-13 32 21)" opacity="0.8"/>
+    <rect x="40.7" y="30.8" width="6.6" height="6.4" rx="1.8" transform="rotate(-18 44 34)" opacity="0.78"/>
+    <rect x="40.7" y="21.8" width="6.6" height="6.4" rx="1.8" transform="rotate(-18 44 25)" opacity="0.72"/>
+    <rect x="40.7" y="12.8" width="6.6" height="6.4" rx="1.8" transform="rotate(-18 44 16)" opacity="0.66"/>
+  </g>
+  <path d="M48 16 C 55 19, 57 25, 53 31" stroke="url(#f)" stroke-width="2.4" stroke-linecap="round" fill="none" opacity="0.7"/>
+</svg>

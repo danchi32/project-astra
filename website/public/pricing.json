@@ -1,0 +1,4 @@
+{
+  "upto50": { "monthly": 10, "annual": 100 },
+  "over50": { "monthly": 8, "annual": 80 }
+}

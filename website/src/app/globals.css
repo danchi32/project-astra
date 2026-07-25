@@ -1,0 +1,175 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #faf7fd;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f5eefb;
+  --border: #ecdcf5;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #6b6478;
+  --accent: #9a2fbb;
+  --accent-soft: rgba(154, 47, 187, 0.1);
+  --grid-line: rgba(87, 29, 100, 0.05);
+}
+
+.dark {
+  --bg: #0b0715;
+  --bg-elevated: #141021;
+  --surface: #16112a;
+  --surface-2: #1e1738;
+  --border: #322350;
+  --text-primary: #f5f1fb;
+  --text-secondary: #b6abcb;
+  --text-muted: #8b7fa6;
+  --accent: #c86ce7;
+  --accent-soft: rgba(200, 108, 231, 0.15);
+  --grid-line: rgba(180, 150, 220, 0.07);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Utility tokens bound to CSS variables so components stay theme-agnostic. */
+@layer utilities {
+  .bg-app {
+    background-color: var(--bg);
+  }
+  .bg-surface {
+    background-color: var(--surface);
+  }
+  .bg-surface-2 {
+    background-color: var(--surface-2);
+  }
+  .border-token {
+    border-color: var(--border);
+  }
+  .text-primary-token {
+    color: var(--text-primary);
+  }
+  .text-secondary-token {
+    color: var(--text-secondary);
+  }
+  .text-muted-token {
+    color: var(--text-muted);
+  }
+}
+
+/* Reusable visual treatments */
+.gradient-text {
+  background: linear-gradient(135deg, #c86ce7 0%, #b246d4 45%, #e04ad0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.glass {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.glow {
+  box-shadow: 0 0 0 1px var(--border), 0 20px 60px -20px rgba(154, 47, 187, 0.35);
+}
+
+/* Aurora mesh — layered radial gradients for hero backdrops */
+.aurora {
+  background:
+    radial-gradient(40% 55% at 15% 20%, rgba(178, 70, 212, 0.22), transparent 60%),
+    radial-gradient(45% 50% at 85% 15%, rgba(224, 74, 208, 0.18), transparent 60%),
+    radial-gradient(50% 60% at 50% 100%, rgba(200, 108, 231, 0.16), transparent 65%);
+}
+
+/* Subtle film grain overlay (SVG noise, no network) */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Animated conic border for feature/premium cards */
+.ring-conic {
+  position: relative;
+}
+.ring-conic::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--angle, 0deg),
+    transparent 0%,
+    var(--accent) 25%,
+    transparent 45%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  animation: spin-angle 4s linear infinite;
+}
+.ring-conic:hover::before {
+  opacity: 1;
+}
+
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes spin-angle {
+  to {
+    --angle: 360deg;
+  }
+}
+
+/* Thin, theme-aware scrollbars for mock panels */
+.mini-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.mini-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
