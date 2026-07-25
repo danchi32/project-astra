@@ -12,9 +12,12 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@tailwindcss/typography": "^0.5.20",
     "clsx": "^2.1.1",
     "framer-motion": "^11.15.0",
+    "gray-matter": "^4.0.3",
     "lucide-react": "^0.469.0",
+    "marked": "^18.0.7",
     "next": "15.3.8",
     "nodemailer": "^6.10.1",
     "react": "^19.0.0",
