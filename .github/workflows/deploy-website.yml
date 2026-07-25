@@ -56,9 +56,12 @@ jobs:
           # this account, change this to its folder (e.g. /domains/technomateai.com/public_html/).
           local-dir: ./website/out/
           server-dir: /public_html/
-          # Protect files that live on the server but are NOT part of out/, plus
-          # the two JSON files that are meant to be edited on the server without
-          # a rebuild. These are never uploaded/overwritten/deleted by the action.
+          # Protect files that live on the server but are NOT part of out/.
+          # contact.php + mail-config.php are the PHP mailer (uploaded manually).
+          # content.json stays server-editable (site text can be tweaked in
+          # Hostinger File Manager without a rebuild). pricing.json is now
+          # git-controlled — it deploys from source so code is the single source
+          # of truth for prices.
           exclude: |
             **/.git*
             **/.git*/**
@@ -66,4 +69,3 @@ jobs:
             **/contact.php
             **/mail-config.php
             **/content.json
-            **/pricing.json
