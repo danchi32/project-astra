@@ -1,4 +1,4 @@
 {
-  "upto50": { "monthly": 10, "annual": 100 },
-  "over50": { "monthly": 8, "annual": 80 }
+  "upto50": { "monthly": 5.99, "annual": 60 },
+  "over50": { "monthly": 4.49, "annual": 45 }
 }

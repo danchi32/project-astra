@@ -14,6 +14,7 @@ import {
   BrainCircuit,
   CheckCircle2,
   DownloadCloud,
+  UserX,
 } from "lucide-react";
 import { Container, Section, Reveal, Button, Badge, SectionHeading } from "@/components/ui";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
@@ -39,12 +40,13 @@ const pillarDefaults = [
   },
 ];
 
-const capIcons = [Boxes, Wrench, Activity, DownloadCloud, BrainCircuit, ShieldCheck, Gauge];
+const capIcons = [Boxes, Wrench, Activity, DownloadCloud, UserX, BrainCircuit, ShieldCheck, Gauge];
 const capDefaults = [
   "Asset Inventory",
   "Self-Healing",
   "Live Telemetry",
   "Patch Management",
+  "Secure Offboarding",
   "AI Reasoning",
   "Approval Tiers",
   "Real-time Dashboards",

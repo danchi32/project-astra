@@ -21,6 +21,8 @@ import {
   Cpu,
   RefreshCcw,
   DownloadCloud,
+  UserX,
+  LogOut,
 } from "lucide-react";
 import {
   Container,
@@ -47,7 +49,7 @@ import { site } from "@/lib/site";
 
 const featureIcons = [
   Boxes, Activity, BrainCircuit, Wrench, DownloadCloud,
-  MessageSquare, ShieldCheck, FileBarChart, Bell, ScrollText,
+  UserX, MessageSquare, ShieldCheck, FileBarChart, Bell, ScrollText,
 ];
 const featureDefaults = [
   { title: "Asset Inventory", desc: "A live, auto-discovered registry of every device, spec, app and license across your fleet." },
@@ -55,6 +57,7 @@ const featureDefaults = [
   { title: "AI Cognitive Engine", desc: "An agentic reasoning loop that recognizes intent, searches knowledge and scores confidence." },
   { title: "Self-Healing", desc: "Allowlisted, tiered remediations that fix issues automatically — or with approval." },
   { title: "Patch Management", desc: "Push Windows Updates to any device — or the whole fleet — from the admin panel and watch rollout live." },
+  { title: "Secure Offboarding", desc: "When someone leaves, lock down their account and force them out of their session in one click — before data can walk out." },
   { title: "Conversational AI", desc: "Users describe problems in plain language; Astra investigates and resolves." },
   { title: "Approval Tiers", desc: "Automatic, approval-required and admin-only — enforced in code, not just prompts." },
   { title: "Reporting", desc: "Fleet health, resolution and compliance reports ready for stakeholders." },
@@ -105,6 +108,12 @@ export function AstraContent() {
     "Live rollout status for every endpoint",
     "Driven from Telemetry → Updates in the portal",
     "Every push captured in the audit log",
+  ]);
+  const offboardingBullets = list<string>("astra.offboarding.bullets", [
+    "Instantly disable a departing employee's local account",
+    "Force sign-out — ends their active Windows session, not just next login",
+    "Matches the exact user by security ID (SID), never the wrong account",
+    "Admin-only tier with a full audit trail on every lock-down",
   ]);
 
   return (
@@ -373,6 +382,87 @@ export function AstraContent() {
             </Reveal>
             <Reveal delay={0.1}>
               <PatchPushPanel />
+            </Reveal>
+          </div>
+        </Container>
+      </Section>
+
+      {/* ------------------------------------------ DEEP DIVE: OFFBOARDING */}
+      <Section>
+        <Container>
+          <div className="grid items-center gap-12 lg:grid-cols-2">
+            <Reveal>
+              <div>
+                <Badge>
+                  <UserX className="h-3.5 w-3.5 text-brand-500" />{" "}
+                  {c("astra.offboarding.badge", "Secure Offboarding")}
+                </Badge>
+                <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+                  <Rich
+                    text={c(
+                      "astra.offboarding.title",
+                      "Stop data walking out [[the door]]",
+                    )}
+                  />
+                </h2>
+                <p className="mt-4 text-secondary-token">
+                  {c(
+                    "astra.offboarding.desc",
+                    "Offboarding is the riskiest moment for your data — a leaver with an open session can copy files long after HR says goodbye. With Astra, lock down their account and force them out of their active Windows session in one click. Instant, precise and fully audited.",
+                  )}
+                </p>
+                <ul className="mt-5 space-y-2.5">
+                  {offboardingBullets.map((t) => (
+                    <li
+                      key={t}
+                      className="flex items-center gap-2.5 text-sm text-secondary-token"
+                    >
+                      <BadgeCheck className="h-4 w-4 text-emerald-500" /> {t}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+
+            {/* Lock-down sequence visual */}
+            <Reveal delay={0.1}>
+              <div className="rounded-2xl border border-token bg-surface p-6">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">Lock-down sequence</span>
+                  <span className="rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-500">
+                    Employee offboarded
+                  </span>
+                </div>
+                <ol className="mt-5 space-y-3">
+                  {[
+                    { icon: Lock, label: "Disable local account", tag: "instant" },
+                    { icon: LogOut, label: "Force sign-out of active session", tag: "SID-matched" },
+                    { icon: ShieldCheck, label: "Block re-login", tag: "enforced" },
+                    { icon: ScrollText, label: "Action written to audit trail", tag: "logged" },
+                  ].map((step, i) => {
+                    const Icon = step.icon;
+                    return (
+                      <li
+                        key={step.label}
+                        className="flex items-center gap-3 rounded-xl border border-token bg-app p-3"
+                      >
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-500">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="flex-1 text-sm font-medium">
+                          {step.label}
+                        </span>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-token">
+                          {step.tag}
+                        </span>
+                        <span className="ml-1 hidden text-xs font-bold text-brand-500/40 sm:inline">
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
             </Reveal>
           </div>
         </Container>

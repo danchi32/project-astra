@@ -72,6 +72,14 @@ export function Footer() {
                 </li>
               ))}
               <li>
+                <Link
+                  href="/compare"
+                  className="text-secondary-token hover:text-brand-500"
+                >
+                  {c("nav.compare", "Compare")}
+                </Link>
+              </li>
+              <li>
                 <a
                   href={site.appUrl}
                   className="text-secondary-token hover:text-brand-500"

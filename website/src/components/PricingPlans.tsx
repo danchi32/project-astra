@@ -21,6 +21,7 @@ const FEATURES = [
   "Conversational AI assistant",
   "Self-healing with all approval tiers",
   "Patch management — push Windows Updates",
+  "Secure offboarding & device lock-down",
   "Reporting & dashboards",
   "Role-based access control & audit logs",
   "Notifications & proactive alerts",
@@ -30,20 +31,20 @@ const FEATURES = [
 const tiers: Tier[] = [
   {
     id: "upto50",
-    name: "Up to 50 users",
-    tagline: "For teams of up to 50 users.",
+    name: "1–50 users",
+    tagline: "For small teams getting started.",
     cta: "Start free trial",
   },
   {
     id: "over50",
-    name: "Over 50 users",
-    tagline: "For growing teams above 50 users.",
+    name: "51–500 users",
+    tagline: "For growing organizations that scale.",
     featured: true,
     cta: "Start free trial",
   },
   {
     id: "bulk",
-    name: "Bulk",
+    name: "500+ users",
     tagline: "For large-scale or custom deployments.",
     cta: "Contact sales",
   },
@@ -54,8 +55,8 @@ type Prices = Record<string, Price>;
 
 // Defaults — overridden at runtime by /pricing.json (editable on the server).
 const DEFAULT_PRICES: Prices = {
-  upto50: { monthly: 10, annual: 100 },
-  over50: { monthly: 8, annual: 80 },
+  upto50: { monthly: 5.99, annual: 60 },
+  over50: { monthly: 4.49, annual: 45 },
   bulk: { monthly: null, annual: null },
 };
 
