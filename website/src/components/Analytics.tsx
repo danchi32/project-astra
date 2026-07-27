@@ -12,8 +12,10 @@ import Script from "next/script";
  */
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "G-GKPCWJGVEY";
 const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID ?? "";
-const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "870269791759130";
-const GOOGLE_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID ?? "AW-18354148692";
+// NOTE: use `||` not `??` — the CI/build env may set these to an EMPTY string
+// (not undefined), and `??` would not fall back on "". `||` falls back on empty.
+const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || "870269791759130";
+const GOOGLE_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID || "AW-18354148692";
 
 export function Analytics() {
   return (
