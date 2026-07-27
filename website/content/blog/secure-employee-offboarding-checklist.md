@@ -54,6 +54,8 @@ Run that checklist by hand and two things go wrong. First, it's **slow** — by 
 
 What secure offboarding really needs is to be *instant* and *complete*: the moment HR marks someone as leaving, the lock-down should happen automatically.
 
+> 📄 **Free download:** Get this as a one-page PDF your team can print and reuse for every leaver → **[The Secure Offboarding Checklist](/resources/offboarding-checklist/)**
+
 ## Automating offboarding with Astra
 
 This is exactly the problem [Astra's secure offboarding](/astra/) was built for. In one click, Astra:
