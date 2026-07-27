@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Users as UsersIcon, Plus, Trash2, Upload } from "lucide-react";
 import { listUsers, createUser, updateUser, deleteUser } from "@/lib/api/users";
 import { getMe } from "@/lib/api/auth";
+import { apiErrorMessage } from "@/lib/utils";
 import type { UserRole } from "@/lib/api/types";
 
 const ROLES: UserRole[] = ["admin", "technician", "user"];
@@ -56,8 +57,8 @@ export default function UsersPage() {
       setForm({ email: "", full_name: "", password: "", role: "user" });
       setAdding(false);
       await queryClient.invalidateQueries({ queryKey: ["users"] });
-    } catch {
-      setError("Couldn't create the user (email may already exist, or the password is under 8 characters).");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Couldn't create the user (email may already exist, or the password is too short)."));
     } finally {
       setSaving(false);
     }
