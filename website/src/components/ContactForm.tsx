@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Send, CheckCircle2, Loader2 } from "lucide-react";
 import { site } from "@/lib/site";
 import { useContent } from "@/lib/content";
+import { getAttribution, trackEvent } from "@/lib/analytics";
 
 type Status = "idle" | "submitting" | "success";
 
@@ -48,12 +49,16 @@ export function ContactForm() {
       const res = await fetch("/contact.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ...getAttribution() }),
       });
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.ok) {
         // Email was sent to sales@ via the PHP handler.
+        trackEvent("generate_lead", {
+          lead_type: form.interest,
+          form_name: "contact",
+        });
         setStatus("success");
       } else if (res.status === 422) {
         // Validation error from the server.

@@ -10,7 +10,7 @@ type Faq = { q: string; a: string };
 const faqDefaults: Faq[] = [
   {
     q: "How is Astra priced?",
-    a: "Per user. Up to 50 users is $10/user per month; above 50 users it's $8/user per month, with discounted annual billing. For bulk or custom needs, contact sales.",
+    a: "Astra is priced per user. Current plans start at $5.99/user per month for teams up to 50 users and $4.49/user per month for larger teams, with discounted annual billing. For 500+ users or custom requirements, contact sales.",
   },
   {
     q: "Is there a free trial?",
