@@ -11,6 +11,11 @@ export const site = {
   // Login / Sign-up redirects to the Astra product app.
   appUrl: "https://astra.technomateai.com",
 
+  // Demo booking link (Cal.com / Calendly / Google — any provider). Paste the
+  // full URL here to make every "Book a demo" CTA open it in a new tab. Leave
+  // empty to fall back to the contact form.
+  booking: "https://cal.com/astraai/30min",
+
   // --- Contact details ---
   contact: {
     email: "astra@technomateai.com",
@@ -30,6 +35,17 @@ export const site = {
     twitter: "#",
     instagram: "#",
   },
+} as const;
+
+/**
+ * Resolved "Book a demo" target. If a booking URL is configured it opens in a
+ * new tab; otherwise CTAs fall back to the contact page. Vendor-agnostic —
+ * works with any Cal.com / Calendly / Google scheduling link.
+ */
+const bookingUrl = site.booking as string;
+export const bookDemo = {
+  href: bookingUrl.length > 0 ? bookingUrl : "/contact",
+  external: bookingUrl.length > 0,
 } as const;
 
 export const nav = [

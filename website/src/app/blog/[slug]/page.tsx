@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Clock } from "lucide-react";
 import { Container, Button } from "@/components/ui";
-import { site } from "@/lib/site";
+import { site, bookDemo } from "@/lib/site";
 import { getAllSlugs, getPost } from "@/lib/blog";
 
 export function generateStaticParams() {
@@ -110,7 +110,7 @@ export default async function BlogPostPage({
             self-heals IT issues — with human approval where it matters.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Button href="/contact">
+            <Button href={bookDemo.href} external={bookDemo.external}>
               Book a demo <ArrowRight className="h-4 w-4" />
             </Button>
             <Button href="/astra" variant="secondary">

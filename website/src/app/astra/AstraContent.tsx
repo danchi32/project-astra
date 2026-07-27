@@ -45,7 +45,7 @@ import {
   PatchPushPanel,
 } from "@/components/visuals";
 import { useContent, Rich } from "@/lib/content";
-import { site } from "@/lib/site";
+import { site, bookDemo } from "@/lib/site";
 
 const featureIcons = [
   Boxes, Activity, BrainCircuit, Wrench, DownloadCloud,
@@ -561,7 +561,8 @@ export function AstraContent() {
                     <ArrowRight className="h-4 w-4" />
                   </a>
                   <a
-                    href="/contact"
+                    href={bookDemo.href}
+                    {...(bookDemo.external ? { target: "_blank", rel: "noopener" } : {})}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
                   >
                     {c("astra.cta.btn2", "Book a demo")}

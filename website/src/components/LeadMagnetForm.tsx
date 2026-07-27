@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
-import { site } from "@/lib/site";
+import { bookDemo } from "@/lib/site";
 import { getAttribution, trackEvent } from "@/lib/analytics";
 
 type Status = "idle" | "submitting" | "done";
@@ -94,7 +94,8 @@ export function LeadMagnetForm({
           <Download className="h-4 w-4" /> Download the PDF
         </a>
         <a
-          href="/contact"
+          href={bookDemo.href}
+          {...(bookDemo.external ? { target: "_blank", rel: "noopener" } : {})}
           className="mt-3 block text-sm font-medium text-brand-500 hover:underline"
         >
           Want to automate this? Book a demo →
