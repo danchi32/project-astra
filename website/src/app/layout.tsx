@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { ContentProvider } from "@/lib/content";
 import { SiteJsonLd } from "@/components/JsonLd";
 import { Analytics } from "@/components/Analytics";
+import { ConversionTracker } from "@/components/ConversionTracker";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -87,6 +88,7 @@ export default function RootLayout({
           <Footer />
         </ContentProvider>
         <Analytics />
+        <ConversionTracker />
       </body>
     </html>
   );
