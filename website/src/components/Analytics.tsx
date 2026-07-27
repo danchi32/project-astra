@@ -12,7 +12,7 @@ import Script from "next/script";
  */
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "G-GKPCWJGVEY";
 const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID ?? "";
-const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "";
+const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "870269791759130";
 const GOOGLE_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID ?? "AW-18354148692";
 
 export function Analytics() {
