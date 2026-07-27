@@ -56,8 +56,8 @@ jobs:
           # this account, change this to its folder (e.g. /domains/technomateai.com/public_html/).
           local-dir: ./website/out/
           server-dir: /public_html/
-          # Protect files that live on the server but are NOT part of out/.
-          # contact.php + mail-config.php are the PHP mailer (uploaded manually).
+          # Protect server-only mailbox configuration. The versioned PHP handler
+          # is deployed with the site so lead-capture fixes are released too.
           # content.json stays server-editable (site text can be tweaked in
           # Hostinger File Manager without a rebuild). pricing.json is now
           # git-controlled — it deploys from source so code is the single source
@@ -66,6 +66,27 @@ jobs:
             **/.git*
             **/.git*/**
             **/node_modules/**
-            **/contact.php
             **/mail-config.php
             **/content.json
+
+      # Instant indexing for Bing + Yandex (IndexNow). Reads every URL from the
+      # freshly built sitemap and pings the shared IndexNow API, so new/changed
+      # pages get picked up in minutes instead of waiting for a crawl. Google
+      # doesn't consume IndexNow — it discovers pages via the deployed sitemap.
+      # Non-blocking: a failed ping never fails the deploy.
+      - name: Notify IndexNow (Bing / Yandex)
+        if: success()
+        continue-on-error: true
+        run: |
+          KEY="94693e40dbb9f994af1be32ed2779f3d"
+          HOST="technomateai.com"
+          URLS=$(grep -oE '<loc>[^<]+</loc>' out/sitemap.xml | sed -E 's#</?loc>##g')
+          COUNT=$(printf '%s\n' "$URLS" | grep -c . || true)
+          echo "Submitting $COUNT URLs to IndexNow"
+          BODY=$(printf '%s\n' "$URLS" | jq -R 'select(length>0)' | jq -sc \
+            --arg host "$HOST" --arg key "$KEY" \
+            --arg loc "https://$HOST/$KEY.txt" \
+            '{host:$host,key:$key,keyLocation:$loc,urlList:.}')
+          curl -sS -X POST "https://api.indexnow.org/indexnow" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$BODY" -w "\nIndexNow HTTP %{http_code}\n"
