@@ -20,6 +20,27 @@ async def test_admin_creates_user(client, admin_headers):
     assert "password" not in body and "hashed_password" not in body
 
 
+async def test_user_without_password_is_directory_only_and_cannot_login(client, admin_headers):
+    # No password → a directory user (for asset assignment / offboarding) with no portal login.
+    resp = await client.post("/api/v1/users", headers=admin_headers, json={
+        "email": "nologin@acme.com", "full_name": "No Login", "role": "user"})
+    assert resp.status_code == 201, resp.text
+
+    rejected = await client.post(
+        "/api/v1/auth/login", json={"email": "nologin@acme.com", "password": "whatever12345"})
+    assert rejected.status_code == 401   # cannot sign in — no credential
+
+
+async def test_user_created_with_password_can_login(client, admin_headers):
+    resp = await client.post("/api/v1/users", headers=admin_headers, json={
+        "email": "canlogin@acme.com", "full_name": "Can Login", "role": "technician",
+        "password": "GoodPassw0rd!23"})
+    assert resp.status_code == 201, resp.text
+    ok = await client.post(
+        "/api/v1/auth/login", json={"email": "canlogin@acme.com", "password": "GoodPassw0rd!23"})
+    assert ok.status_code == 200
+
+
 async def test_user_create_writes_audit_entry(client, admin_headers, admin_user, session_factory):
     await client.post("/api/v1/users", json=NEW_USER, headers=admin_headers)
     async with session_factory() as session:

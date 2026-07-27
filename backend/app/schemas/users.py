@@ -9,7 +9,8 @@ from app.models import UserRole
 class UserCreate(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=200)
-    password: str = Field(min_length=8, max_length=72)
+    # Optional: omit to create a login-less directory user (cannot sign in to the portal).
+    password: str | None = Field(default=None, min_length=8, max_length=72)
     role: UserRole = UserRole.USER
 
 

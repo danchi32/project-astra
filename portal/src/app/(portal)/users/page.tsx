@@ -36,7 +36,7 @@ const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ email: "", full_name: "", password: "", role: "user" as UserRole });
+  const [form, setForm] = useState({ email: "", full_name: "", role: "user" as UserRole });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -54,7 +54,7 @@ export default function UsersPage() {
     setSaving(true);
     try {
       await createUser(form);
-      setForm({ email: "", full_name: "", password: "", role: "user" });
+      setForm({ email: "", full_name: "", role: "user" });
       setAdding(false);
       await queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch (err) {
@@ -94,15 +94,19 @@ export default function UsersPage() {
     let created = 0;
     const errors: string[] = [];
     for (const row of rows) {
-      if (!row.email || !row.full_name || !row.password) {
-        errors.push(`${row.email || "(no email)"}: needs email, full name, and password`);
+      if (!row.email || !row.full_name) {
+        errors.push(`${row.email || "(no email)"}: needs at least an email and full name`);
         continue;
       }
       try {
-        await createUser(row);
+        // password is optional — omit it for a login-less directory user.
+        await createUser({
+          email: row.email, full_name: row.full_name, role: row.role,
+          password: row.password || undefined,
+        });
         created++;
       } catch {
-        errors.push(`${row.email}: failed (email already exists, or password under 8 chars)`);
+        errors.push(`${row.email}: failed (email may already exist, or password under 8 chars)`);
       }
     }
     setImportResult({ created, errors });
@@ -145,7 +149,8 @@ export default function UsersPage() {
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
             Paste rows or upload a CSV with columns{" "}
             <span className="font-mono" style={{ color: "var(--text-primary)" }}>email, full_name, role, password</span>{" "}
-            — one user per line. Role is <span className="font-mono">admin</span>/<span className="font-mono">technician</span>/<span className="font-mono">user</span> (defaults to user); password must be at least 8 characters.
+            — one user per line. Role is <span className="font-mono">admin</span>/<span className="font-mono">technician</span>/<span className="font-mono">user</span> (defaults to user).
+            Password is <b>optional</b> — leave it blank to create a directory-only user with no portal login (at least 8 characters if set).
           </p>
           <input type="file" accept=".csv,text/csv" onChange={onCsvFile}
             className="block text-sm" style={{ color: "var(--text-secondary)" }} />
@@ -179,16 +184,13 @@ export default function UsersPage() {
       )}
 
       {adding && isAdmin && (
-        <form onSubmit={save} className="rounded-xl p-4 grid grid-cols-1 md:grid-cols-4 gap-3"
+        <form onSubmit={save} className="rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-3"
           style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
           <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
             placeholder="Email" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })}
             placeholder="Full name" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
-            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-          <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="Password (min 8 chars)" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <div className="flex gap-2">
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}

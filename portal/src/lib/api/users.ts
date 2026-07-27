@@ -6,8 +6,8 @@ export const listUsers = () => apiClient.get<User[]>("/users").then((r) => r.dat
 export const createUser = (data: {
   email: string;
   full_name: string;
-  password: string;
   role: UserRole;
+  password?: string;   // omit for a login-less directory user
 }) => apiClient.post<User>("/users", data).then((r) => r.data);
 
 export const updateUser = (

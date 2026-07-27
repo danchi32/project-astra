@@ -207,9 +207,11 @@ class AuthService:
 
     async def login(self, email: str, password: str) -> tuple[str, str]:
         user = await self.users.get_by_email(email)
-        # Verify even when the user is missing so response timing doesn't leak account existence.
-        password_ok = verify_password(password, user.hashed_password if user else "$2b$12$" + "x" * 53)
-        if user is None or not password_ok or not user.is_active:
+        # Verify even when the user is missing (or is a login-less directory user with no password
+        # hash) so response timing doesn't leak account existence, and such users can never sign in.
+        stored_hash = user.hashed_password if user and user.hashed_password else "$2b$12$" + "x" * 53
+        password_ok = verify_password(password, stored_hash)
+        if user is None or user.hashed_password is None or not password_ok or not user.is_active:
             raise AuthenticationError("Invalid email or password")
 
         access = create_access_token(user_id=user.id, org_id=user.org_id, role=user.role.value)
@@ -313,7 +315,9 @@ class AuthService:
         """Email a reset link. Always silent (never reveals whether the account
         exists), and a no-op when email isn't configured."""
         user = await self.users.get_by_email(email.lower())
-        if user is None or not user.is_active or not self.email.enabled:
+        # A login-less directory user (no password hash) has no portal access — a reset must not
+        # be a back door to grant it.
+        if user is None or user.hashed_password is None or not user.is_active or not self.email.enabled:
             return
 
         raw = generate_opaque_token()

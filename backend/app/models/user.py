@@ -22,7 +22,9 @@ class User(TimestampMixin, Base):
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Null for directory-only users created by an admin without a login (they exist for asset
+    # assignment / offboarding / emails but cannot sign in to the portal).
+    hashed_password: Mapped[str | None] = mapped_column(String(128), nullable=True)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False, length=20, values_callable=lambda e: [m.value for m in e]),
         nullable=False,
