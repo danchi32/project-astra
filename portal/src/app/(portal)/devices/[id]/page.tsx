@@ -3,10 +3,11 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench } from "lucide-react";
+import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench, Check, Minus } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
 import { listAssets, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
+import { getDeviceCompliance } from "@/lib/api/compliance";
 import { listUsers } from "@/lib/api/users";
 import { listLocations } from "@/lib/api/locations";
 import { getMe } from "@/lib/api/auth";
@@ -77,11 +78,12 @@ function suggestFixes(sources: string[]): Fix[] {
   return FIXES.filter((f) => wanted.has(fixTag(f)));
 }
 
-type Tab = "overview" | "telemetry" | "events" | "software" | "services" | "updates" | "assignment" | "history";
+type Tab = "overview" | "telemetry" | "events" | "compliance" | "software" | "services" | "updates" | "assignment" | "history";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "telemetry", label: "Telemetry" },
   { key: "events", label: "Health" },
+  { key: "compliance", label: "Compliance" },
   { key: "software", label: "Software" },
   { key: "services", label: "Services" },
   { key: "updates", label: "Windows Updates" },
@@ -165,6 +167,7 @@ export default function DeviceDetailPage() {
   const { data: device, isLoading } = useQuery({ queryKey: ["device", id], queryFn: () => getDevice(id) });
   const { data: telemetry } = useQuery({ queryKey: ["telemetry", id], queryFn: () => getDeviceTelemetry(id), refetchInterval: 30_000 });
   const { data: events } = useQuery({ queryKey: ["dev-events", id], queryFn: () => getDeviceEvents(id), enabled: tab === "events" });
+  const { data: compliance } = useQuery({ queryKey: ["dev-compliance", id], queryFn: () => getDeviceCompliance(id), enabled: tab === "compliance" });
   const { data: apps } = useQuery({ queryKey: ["dev-apps", id], queryFn: () => getDeviceApps(id), enabled: tab === "software" });
   const { data: services } = useQuery({ queryKey: ["dev-services", id], queryFn: () => getDeviceServices(id), enabled: tab === "services" });
   const { data: updates } = useQuery({ queryKey: ["dev-updates", id], queryFn: () => getDeviceUpdates(id), enabled: tab === "updates" });
@@ -547,6 +550,35 @@ export default function DeviceDetailPage() {
               </div>
             );
           })()}
+
+          {tab === "compliance" && (
+            <div className="space-y-2">
+              {compliance?.checks.map((c) => {
+                const color = c.status === "pass" ? "#10b981" : c.status === "fail" ? "#ef4444" : "#64748b";
+                return (
+                  <div key={c.key} className="flex items-center justify-between gap-3 py-2.5 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="p-1 rounded-full shrink-0" style={{ background: `${color}1a`, color }}>
+                        {c.status === "pass" ? <Check size={13} /> : c.status === "fail" ? <X size={13} /> : <Minus size={13} />}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{c.label}</p>
+                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{c.detail}</p>
+                      </div>
+                    </div>
+                    {isStaff && c.status === "fail" && c.fix_action_id && (
+                      <button onClick={() => runFix({ id: c.fix_action_id!, label: c.label, tier: "approval_required" })} disabled={busy}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 shrink-0"
+                        style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--accent)" }}>
+                        <Wrench size={12} /> Fix
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {!compliance?.checks?.length && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No compliance data yet — the device needs to report telemetry first.</p>}
+            </div>
+          )}
 
           {tab === "software" && (
             <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>

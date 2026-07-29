@@ -16,6 +16,7 @@ import { getViewAs } from "@/lib/viewAs";
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/devices", icon: Monitor, label: "Devices" },
+  { href: "/compliance", icon: ShieldCheck, label: "Compliance" },
   { href: "/users", icon: Users, label: "Users" },
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/self-healing", icon: Zap, label: "Self Healing" },

@@ -1,6 +1,7 @@
 from app.models.asset import AcknowledgementStatus, Asset, AssetCategory, AssetStatus
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.audit_log import AuditLog
+from app.models.banned_software import BannedSoftware
 from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.device import Device
@@ -39,6 +40,7 @@ __all__ = [
     "AssetEventType",
     "AssetStatus",
     "AuditLog",
+    "BannedSoftware",
     "Base",
     "Conversation",
     "Device",
