@@ -243,6 +243,45 @@ agents self-heal via their offline queue, and rollback is a single DNS flip.
 
 ---
 
+## 13b. Warm standby — keep the parallel env ready for an *instant* flip
+
+Instead of building everything at cutover time, **stand the new stack up now and keep it
+running in parallel** (DNS still on Railway). When the trigger comes, migration is just a
+tiny final sync + a DNS flip → **downtime in seconds**.
+
+**Repo is already prepared for this:**
+- `entrypoint.sh` honours `RUN_MIGRATIONS_ON_START` (default `true` = Railway unchanged;
+  Cloud Run sets `false` and migrates via a Job — no multi-instance race).
+- `deploy/cloudrun-deploy.sh` — one command to build → push → migrate-job → deploy the
+  standby (does **not** touch DNS).
+- `deploy/env.cloudrun.example` — the full env inventory to fill into Secret Manager.
+
+**Set up the standby (one time, ~30–45 min):**
+1. Create Neon (Mumbai, PITR), Upstash, Qdrant Cloud.
+2. Put all secret values into Secret Manager (`env.cloudrun.example` is the checklist).
+3. `PROJECT_ID=… REGION=asia-south1 ./deploy/cloudrun-deploy.sh`
+4. Smoke-test on the `*.run.app` URL (`/health`, a login). **Leave DNS on Railway.**
+
+**Keep Neon fresh (pick one):**
+- **Simple / cheap:** a nightly `pg_dump | pg_restore` Railway→Neon (a cron). At flip time
+  the final incremental is tiny ⇒ a ~1–2 min window.
+- **Near‑zero downtime:** **logical replication** Railway (publisher, `wal_level=logical`) →
+  Neon (subscriber). Neon stays continuously current; the flip is only DNS ⇒ seconds.
+  (Verify Railway allows `wal_level=logical`; otherwise use the nightly-dump option.)
+
+**The flip (when you decide to migrate):**
+1. Re-run `cloudrun-deploy.sh` so the standby is on the latest image.
+2. Final sync (tiny, if replicating) / final dump (if not).
+3. `gcloud run domain-mappings create --service astra-backend --domain api.technomateai.com`
+   and switch the DNS record (TTL was pre-lowered to 60s).
+4. Watch agents flip back Online; verify portal + auto-update + a webhook.
+5. Keep Railway stopped-but-recoverable for a week (rollback = flip DNS back).
+
+**Standby running cost:** `min-instances 1` + a small Neon tier ≈ a few $/mo to keep warm —
+cheap insurance for an on-demand, low-downtime migration.
+
+---
+
 ## 14. Rough monthly cost (low → growing scale)
 
 - Cloud Run: pay-per-use; `min-instances 1` ≈ a few $/mo idle + usage.
