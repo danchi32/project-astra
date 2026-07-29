@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Protected areas of the portal. Anything here requires a session.
 const PROTECTED = [
-  "/dashboard", "/devices", "/install", "/compliance", "/assets", "/users", "/knowledge",
+  "/dashboard", "/devices", "/install", "/compliance", "/fleet", "/assets", "/users", "/knowledge",
   "/self-healing", "/reports", "/notifications", "/audit", "/settings",
   "/billing", "/platform",
 ];

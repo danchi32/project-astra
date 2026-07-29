@@ -10,6 +10,7 @@ from app.api.v1 import (
     conversations,
     devices,
     downloads,
+    fleet,
     knowledge,
     locations,
     notifications,
@@ -27,6 +28,7 @@ api_router.include_router(users.router)
 api_router.include_router(devices.router)
 api_router.include_router(assets.router)
 api_router.include_router(compliance.router)
+api_router.include_router(fleet.router)
 api_router.include_router(agent.router)
 api_router.include_router(telemetry.router)
 api_router.include_router(conversations.router)
