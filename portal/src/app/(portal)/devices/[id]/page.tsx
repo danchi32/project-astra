@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle } from "lucide-react";
+import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
 import { listAssets, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
@@ -22,6 +22,60 @@ const CATEGORIES: AssetCategory[] = [
   "peripheral", "network", "license", "software", "other",
 ];
 const STATUSES: AssetStatus[] = ["in_use", "in_storage", "in_repair", "retired", "lost"];
+
+// One-click remediations the admin can push to this endpoint. Mirrors the backend
+// allowlist (tiers enforced server-side); only parameterless / fixed-param actions
+// are exposed here so a push is always a single confident click.
+type FixTier = "automatic" | "approval_required" | "admin_only";
+type Fix = { id: string; label: string; tier: FixTier; params?: Record<string, string> };
+const FIXES: Fix[] = [
+  { id: "restart_explorer", label: "Restart Windows Explorer", tier: "automatic" },
+  { id: "flush_dns", label: "Flush DNS cache", tier: "automatic" },
+  { id: "restart_network_adapter", label: "Restart network adapter", tier: "automatic" },
+  { id: "clear_temp", label: "Clear temporary files", tier: "automatic" },
+  { id: "clear_system_temp", label: "Deep clean system temp", tier: "automatic" },
+  { id: "clear_browser_cache", label: "Clear browser cache", tier: "automatic" },
+  { id: "restart_outlook", label: "Restart Outlook", tier: "automatic" },
+  { id: "restart_teams", label: "Restart Microsoft Teams", tier: "automatic" },
+  { id: "restart_zoom", label: "Restart Zoom", tier: "automatic" },
+  { id: "restart_chrome", label: "Restart Google Chrome", tier: "automatic" },
+  { id: "restart_edge", label: "Restart Microsoft Edge", tier: "automatic" },
+  { id: "restart_service", label: "Restart Print Spooler", tier: "automatic", params: { service_name: "Spooler" } },
+  { id: "restart_service", label: "Restart Windows Search", tier: "automatic", params: { service_name: "WSearch" } },
+  { id: "restart_service", label: "Restart Audio service", tier: "automatic", params: { service_name: "Audiosrv" } },
+  { id: "office_repair", label: "Repair Microsoft Office", tier: "approval_required" },
+  { id: "network_reset", label: "Reset network stack", tier: "approval_required" },
+  { id: "windows_update_install", label: "Install pending Windows updates", tier: "approval_required" },
+  { id: "reset_windows_update_components", label: "Reset Windows Update components", tier: "admin_only" },
+];
+const TIER_LABEL: Record<FixTier, string> = { automatic: "Automatic", approval_required: "Needs approval", admin_only: "Admin only" };
+const TIER_COLOR: Record<FixTier, string> = { automatic: "#10b981", approval_required: "#f59e0b", admin_only: "#ef4444" };
+
+// A fix's stable tag — encodes the service name for restart_service so the three
+// spooler/search/audio variants stay distinct.
+const fixTag = (f: Fix) => (f.id === "restart_service" ? `restart_service:${f.params?.service_name}` : f.id);
+
+// Map what the event log is showing (its source names) to the fixes most likely to help.
+function suggestFixes(sources: string[]): Fix[] {
+  const s = sources.join(" ").toLowerCase();
+  const rules: [RegExp, string][] = [
+    [/spool|print/, "restart_service:Spooler"],
+    [/dns|resolver|dnscache/, "flush_dns"],
+    [/tcpip|netbt|dhcp|wlan|nic|network|ethernet|lan/, "restart_network_adapter"],
+    [/disk|ntfs|volsnap|space|volume/, "clear_system_temp"],
+    [/explorer|shell/, "restart_explorer"],
+    [/outlook/, "restart_outlook"],
+    [/teams/, "restart_teams"],
+    [/chrome/, "restart_chrome"],
+    [/edge|msedge/, "restart_edge"],
+    [/word|excel|powerpnt|office|onenote/, "office_repair"],
+    [/windowsupdate|wuau|\bupdate\b/, "windows_update_install"],
+    [/search|wsearch|indexer/, "restart_service:WSearch"],
+    [/audio|audiosrv|sound/, "restart_service:Audiosrv"],
+  ];
+  const wanted = new Set(rules.filter(([re]) => re.test(s)).map(([, id]) => id));
+  return FIXES.filter((f) => wanted.has(fixTag(f)));
+}
 
 type Tab = "overview" | "telemetry" | "events" | "software" | "services" | "updates" | "assignment" | "history";
 const TABS: { key: Tab; label: string }[] = [
@@ -100,6 +154,7 @@ export default function DeviceDetailPage() {
   const [form, setForm] = useState<AssetInput>({ name: "", category: "laptop", status: "in_use" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [fixMenu, setFixMenu] = useState(false);
 
   const { data: device, isLoading } = useQuery({ queryKey: ["device", id], queryFn: () => getDevice(id) });
   const { data: telemetry } = useQuery({ queryKey: ["telemetry", id], queryFn: () => getDeviceTelemetry(id), refetchInterval: 30_000 });
@@ -136,6 +191,23 @@ export default function DeviceDetailPage() {
       await approveRemediation(task.id);
       setMsg({ ok: true, text: `Queued: ${what} will install shortly. Track it under Self-Healing.` });
     } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't queue the update.") }); }
+    finally { setBusy(false); }
+  }
+
+  // Push a one-click remediation to this endpoint (the same createRemediation + approve
+  // path the AI engine uses; tiers are still enforced server-side).
+  async function runFix(fix: Fix) {
+    if (!device) return;
+    if (!confirm(`Push "${fix.label}" to ${device.hostname}?\n\nASTRA sends this fix to the endpoint and runs it in the background. Only online devices pick it up immediately.`)) return;
+    setBusy(true); setMsg(null); setFixMenu(false);
+    try {
+      const task = await createRemediation({
+        device_id: device.id, action_id: fix.id, params: fix.params,
+        reason: `Push "${fix.label}" from device Health (portal)`,
+      });
+      await approveRemediation(task.id);
+      setMsg({ ok: true, text: `Queued "${fix.label}" on ${device.hostname}. Track it under Self-Healing.` });
+    } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't push the fix. The device may be offline, or you may lack permission.") }); }
     finally { setBusy(false); }
   }
 
@@ -357,6 +429,7 @@ export default function DeviceDetailPage() {
             const sources = Object.entries(
               list.reduce<Record<string, number>>((acc, e) => { acc[e.source] = (acc[e.source] ?? 0) + 1; return acc; }, {})
             ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            const suggested = isStaff ? suggestFixes(list.map((e) => e.source)) : [];
             return (
               <div className="space-y-4">
                 {/* Health banner — reframes raw errors as ASTRA's proactive monitoring */}
@@ -383,6 +456,36 @@ export default function DeviceDetailPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Fix actions — push a remediation to this endpoint */}
+                {isStaff && (
+                  <div className="rounded-xl p-4" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Push a fix to this device</p>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>ASTRA runs it on the endpoint in the background. Tracked under Self-Healing.</p>
+                      </div>
+                      <button onClick={() => setFixMenu(true)} disabled={busy}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
+                        <Wrench size={15} /> Run a fix…
+                      </button>
+                    </div>
+                    {suggested.length > 0 && (
+                      <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Suggested for what we&apos;re seeing</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {suggested.map((f) => (
+                            <button key={fixTag(f)} onClick={() => runFix(f)} disabled={busy}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--accent)" }}>
+                              <Wrench size={12} /> {f.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {sources.length > 0 && (
                   <div>
@@ -513,6 +616,40 @@ export default function DeviceDetailPage() {
           </Section>
           )}
       </div>
+
+      {/* Run a fix — pick a remediation to push to this endpoint */}
+      {fixMenu && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setFixMenu(false)}>
+          <div className="w-full max-w-lg rounded-xl p-5 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div>
+                <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Push a fix to {device.hostname}</h2>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                  ASTRA sends the fix to the endpoint and runs it in the background. Every push is approved by you and audit-logged.
+                </p>
+              </div>
+              <button onClick={() => setFixMenu(false)} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>
+            </div>
+
+            <div className="mt-3 space-y-1.5">
+              {FIXES.filter((f) => f.tier !== "admin_only" || isAdmin).map((f) => (
+                <button key={fixTag(f)} onClick={() => runFix(f)} disabled={busy}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-brand-500/5 disabled:opacity-50"
+                  style={{ border: "1px solid var(--border)", background: "var(--bg)" }}>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Wrench size={14} style={{ color: "var(--accent)" }} className="shrink-0" />
+                    <span className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{f.label}</span>
+                  </span>
+                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0"
+                    style={{ color: TIER_COLOR[f.tier], background: `${TIER_COLOR[f.tier]}1a` }}>{TIER_LABEL[f.tier]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Asset details editor — same fields as the Assets register */}
       {editing && (
