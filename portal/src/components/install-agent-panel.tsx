@@ -40,8 +40,8 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
     setOfflineBusy(true); setError("");
     try {
       await downloadOfflineInstaller();
-    } catch {
-      setError("Couldn't build the portable installer. Try again.");
+    } catch (err) {
+      setError((err as Error)?.message || "Couldn't build the portable installer. Try again.");
     } finally { setOfflineBusy(false); }
   }
 

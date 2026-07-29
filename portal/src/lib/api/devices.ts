@@ -31,11 +31,30 @@ export const getInstaller = () =>
 export const rotateEnrollmentKey = () =>
   apiClient.post<Installer>("/devices/enrollment-key/rotate").then((r) => r.data);
 
+// When a blob-typed request fails, the error body is itself a Blob — pull the real
+// `detail` out of it so we can show the actual backend reason, not a generic message.
+async function blobErrorMessage(err: unknown, fallback: string): Promise<string> {
+  const data = (err as { response?: { data?: unknown } })?.response?.data;
+  if (data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text());
+      if (typeof parsed?.detail === "string") return parsed.detail;
+    } catch {
+      /* not JSON — fall through */
+    }
+  }
+  return fallback;
+}
+
 // Downloads the portable installer bundle (.zip) for mass deployment — the agent
 // binaries + a pre-keyed installer, for locked-down machines. Triggers a download.
 export const downloadOfflineInstaller = async () => {
-  const res = await apiClient.post("/devices/offline-installer", undefined, { responseType: "blob" });
-  triggerDownload(res.data as Blob, "AstraAgent-Portable.zip");
+  try {
+    const res = await apiClient.post("/devices/offline-installer", undefined, { responseType: "blob" });
+    triggerDownload(res.data as Blob, "AstraAgent-Portable.zip");
+  } catch (err) {
+    throw new Error(await blobErrorMessage(err, "Couldn't build the portable installer."));
+  }
 };
 
 // Org-agnostic uninstaller (Uninstall-AstraAgent.bat + .ps1), offered as a separate download.

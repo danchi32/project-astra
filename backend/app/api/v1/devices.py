@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
@@ -66,7 +66,12 @@ async def generate_offline_installer(
     actor: User = Depends(admin_required),
     session: AsyncSession = Depends(get_db),
 ) -> Response:
-    filename, content = await DeviceService(session).generate_offline_bundle(actor=actor)
+    try:
+        filename, content = await DeviceService(session).generate_offline_bundle(actor=actor)
+    except FileNotFoundError as exc:
+        # Surface the real reason (e.g. the portable bundle wasn't shipped) instead of a
+        # generic 500, so the portal can tell the admin exactly what's wrong.
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     return Response(
         content=content,
         status_code=status.HTTP_201_CREATED,
