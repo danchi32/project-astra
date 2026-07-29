@@ -5,6 +5,23 @@ import type { Device, Installer } from "./types";
 export const getDevice = (id: string) =>
   apiClient.get<Device>(`/devices/${id}`).then((r) => r.data);
 
+export interface DevicePage {
+  items: Device[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+// Searched + paginated device list — the database does the filtering + paging, so this
+// stays fast on large fleets. Pass a big page_size to pull everything (e.g. for export).
+export const listDevicesPaged = (params: {
+  q?: string;
+  status?: "online" | "offline";
+  page?: number;
+  page_size?: number;
+}) => apiClient.get<DevicePage>("/devices/paged", { params }).then((r) => r.data);
+
 // The org's ready-to-run installer — the permanent enrollment key is baked in.
 export const getInstaller = () =>
   apiClient.get<Installer>("/devices/installer").then((r) => r.data);

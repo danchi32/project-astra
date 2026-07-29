@@ -217,6 +217,33 @@ class DeviceService:
     async def list_devices(self, *, actor: User) -> list[Device]:
         return await self.devices.list_by_org(actor.org_id)
 
+    async def list_devices_page(
+        self,
+        *,
+        actor: User,
+        q: str | None = None,
+        status: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[Device], int, int, int]:
+        """A searched, status-filtered, paginated slice of the org's devices.
+        Returns (items, total, page, page_size) with page/page_size clamped."""
+        from app.models.base import utcnow
+        from app.schemas.devices import ONLINE_THRESHOLD
+
+        page = max(1, page)
+        page_size = min(max(1, page_size), 10_000)  # generous cap so exports can pull all
+        cutoff = utcnow() - ONLINE_THRESHOLD
+        devices, total = await self.devices.list_page(
+            actor.org_id,
+            q=q,
+            status=status,
+            online_cutoff=cutoff,
+            offset=(page - 1) * page_size,
+            limit=page_size,
+        )
+        return devices, total, page, page_size
+
     async def get_device(self, *, actor: User, device_id: uuid.UUID) -> Device:
         device = await self.devices.get(device_id)
         if device is None or device.org_id != actor.org_id:

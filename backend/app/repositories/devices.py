@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Device
@@ -28,6 +29,49 @@ class DeviceRepository:
             select(Device).where(Device.org_id == org_id).order_by(Device.hostname)
         )
         return list(result.scalars().all())
+
+    async def list_page(
+        self,
+        org_id: uuid.UUID,
+        *,
+        q: str | None = None,
+        status: str | None = None,
+        online_cutoff: datetime | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Device], int]:
+        """A page of the org's devices, searched + optionally filtered by online status.
+        Search and paging happen in the database so this scales to large fleets.
+        Returns (page_items, total_matching)."""
+        conditions = [Device.org_id == org_id]
+        if q:
+            like = f"%{q.lower()}%"
+            conditions.append(
+                or_(
+                    func.lower(Device.hostname).like(like),
+                    func.lower(Device.serial_number).like(like),
+                    func.lower(Device.logged_in_user).like(like),
+                    func.lower(Device.manufacturer).like(like),
+                    func.lower(Device.model).like(like),
+                    func.lower(Device.os_version).like(like),
+                )
+            )
+        if status == "online" and online_cutoff is not None:
+            conditions.append(Device.last_seen_at.is_not(None))
+            conditions.append(Device.last_seen_at >= online_cutoff)
+        elif status == "offline" and online_cutoff is not None:
+            conditions.append(
+                or_(Device.last_seen_at.is_(None), Device.last_seen_at < online_cutoff)
+            )
+        where = and_(*conditions)
+
+        total = (
+            await self.session.execute(select(func.count()).select_from(Device).where(where))
+        ).scalar_one()
+        result = await self.session.execute(
+            select(Device).where(where).order_by(Device.hostname).offset(offset).limit(limit)
+        )
+        return list(result.scalars().all()), int(total)
 
     async def add(self, device: Device) -> Device:
         self.session.add(device)

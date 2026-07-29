@@ -1,14 +1,16 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Monitor, Download, Search, X } from "lucide-react";
-import { getDevices } from "@/lib/api/dashboard";
+import { Monitor, Download, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { listDevicesPaged } from "@/lib/api/devices";
 import { listAssets } from "@/lib/api/assets";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import { ASSET_STATUS_LABELS, ASSET_STATUS_COLORS } from "@/lib/chart-colors";
 import type { Device, Asset } from "@/lib/api/types";
+
+const PAGE_SIZE = 50;
 
 // Quote a CSV cell only when it contains a comma, quote or newline (RFC 4180).
 function csvCell(value: unknown): string {
@@ -50,38 +52,50 @@ function assetState(a?: Asset) {
   return { label: ASSET_STATUS_LABELS[a.status] ?? a.status, color: ASSET_STATUS_COLORS[a.status] ?? "#64748b" };
 }
 
+type StatusFilter = "all" | "online" | "offline";
+
 export default function DevicesPage() {
-  const { data: devices, isLoading } = useQuery({
-    queryKey: ["devices"],
-    queryFn: getDevices,
+  const [searchInput, setSearchInput] = useState("");
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [page, setPage] = useState(1);
+
+  // Debounce the search box → server query, and jump back to page 1 on any new filter.
+  useEffect(() => {
+    const t = setTimeout(() => { setQ(searchInput.trim()); setPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  useEffect(() => { setPage(1); }, [status]);
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["devices-paged", q, status, page],
+    queryFn: () => listDevicesPaged({
+      q: q || undefined,
+      status: status !== "all" ? status : undefined,
+      page,
+      page_size: PAGE_SIZE,
+    }),
     refetchInterval: 30_000,
   });
-  const { data: assets } = useQuery({ queryKey: ["assets"], queryFn: () => listAssets() });
 
-  // Link each device to its asset record (for state + location + the report).
+  // Assets are joined client-side for the state + location columns of the visible page.
+  const { data: assets } = useQuery({ queryKey: ["assets"], queryFn: () => listAssets() });
   const assetByDevice = useMemo(() => {
     const m = new Map<string, Asset>();
     for (const a of assets ?? []) if (a.device_id) m.set(a.device_id, a);
     return m;
   }, [assets]);
 
-  const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
-  const filtered = useMemo(() => {
-    if (!devices) return devices;
-    if (!q) return devices;
-    return devices.filter((d) => {
-      const a = assetByDevice.get(d.id);
-      return [
-        d.hostname, d.serial_number, d.logged_in_user, d.manufacturer, d.model, d.cpu_name, d.os_version,
-        a?.location, a ? ASSET_STATUS_LABELS[a.status] : "", a?.assigned_to_name,
-      ].some((f) => (f ?? "").toLowerCase().includes(q));
-    });
-  }, [devices, assetByDevice, q]);
+  const devices = data?.items;
+  const total = data?.total ?? 0;
+  const pages = data?.pages ?? 1;
+  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, total);
 
   // Export dialog — pick which columns the CSV report should carry.
   const [exporting, setExporting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set(DEFAULT_FIELDS));
+  const [exportBusy, setExportBusy] = useState(false);
   function toggle(key: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -89,25 +103,34 @@ export default function DevicesPage() {
       return next;
     });
   }
-  function downloadReport() {
+  async function downloadReport() {
     const cols = FIELDS.filter((f) => selected.has(f.key));
-    if (!cols.length || !filtered) return;
-    const headers = cols.map((c) => c.label);
-    const rows = filtered.map((d) => {
-      const a = assetByDevice.get(d.id);
-      return cols.map((c) => c.get(d, a));
-    });
-    const csv = [headers, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `astra-devices-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    setExporting(false);
+    if (!cols.length) return;
+    setExportBusy(true);
+    try {
+      // Pull ALL matching devices (not just the current page) so the report is complete.
+      const all = await listDevicesPaged({
+        q: q || undefined, status: status !== "all" ? status : undefined, page: 1, page_size: 10_000,
+      });
+      const headers = cols.map((c) => c.label);
+      const rows = all.items.map((d) => {
+        const a = assetByDevice.get(d.id);
+        return cols.map((c) => c.get(d, a));
+      });
+      const csv = [headers, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `astra-devices-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExporting(false);
+    } finally {
+      setExportBusy(false);
+    }
   }
 
   return (
@@ -124,24 +147,33 @@ export default function DevicesPage() {
         </div>
       </div>
 
-      {/* Toolbar: search + export */}
+      {/* Toolbar: search + status filter + export */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search hostname, serial, user, location…"
-            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+        <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+          <div className="relative flex-1 max-w-md">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} />
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search hostname, serial, user, model…"
+              className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+          </div>
+          <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}
+            className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
+            style={{ background: status !== "all" ? "rgba(154,47,187,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: status !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+            <option value="all">All statuses</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+          </select>
         </div>
         <div className="flex items-center gap-3">
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            {filtered ? `${filtered.length} device${filtered.length === 1 ? "" : "s"}` : ""}
+            {total} device{total === 1 ? "" : "s"}
           </p>
           <button
             onClick={() => setExporting(true)}
-            disabled={!devices || devices.length === 0}
+            disabled={total === 0}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
             style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
             <Download size={15} /> Export report
@@ -164,12 +196,12 @@ export default function DevicesPage() {
               {isLoading && (
                 <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>
               )}
-              {!isLoading && (!filtered || filtered.length === 0) && (
+              {!isLoading && (!devices || devices.length === 0) && (
                 <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
-                  {q ? "No devices match your search." : "No devices enrolled yet. Use “Get installer” on the dashboard to add your first endpoint."}
+                  {q || status !== "all" ? "No devices match your filters." : "No devices enrolled yet. Use “Get installer” on the dashboard to add your first endpoint."}
                 </td></tr>
               )}
-              {filtered?.map((d) => {
+              {devices?.map((d) => {
                 const a = assetByDevice.get(d.id);
                 const state = assetState(a);
                 return (
@@ -195,22 +227,44 @@ export default function DevicesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination footer */}
+        {total > 0 && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap" style={{ borderTop: "1px solid var(--border)", background: "var(--surface)" }}>
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              Showing {from}–{to} of {total}{isFetching ? " · updating…" : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                <ChevronLeft size={15} /> Prev
+              </button>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Page {page} of {pages}</span>
+              <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                Next <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Export report — choose which details to include */}
       {exporting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={() => setExporting(false)}>
+          onClick={() => !exportBusy && setExporting(false)}>
           <div className="w-full max-w-lg rounded-xl p-5 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}
             style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
             <div className="flex items-start justify-between gap-3 mb-1">
               <div>
                 <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Export report</h2>
                 <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
-                  Pick the columns to include. Every {filtered?.length ?? 0} device{(filtered?.length ?? 0) === 1 ? "" : "s"} in view is exported, each joined with its asset details (user, location, warranty, cost…).
+                  Pick the columns to include. All {total} device{total === 1 ? "" : "s"} matching your filters are exported, each joined with its asset details (user, location, warranty, cost…).
                 </p>
               </div>
-              <button onClick={() => setExporting(false)} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>
+              <button onClick={() => !exportBusy && setExporting(false)} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>
             </div>
 
             <div className="flex gap-2 my-3">
@@ -230,13 +284,13 @@ export default function DevicesPage() {
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => setExporting(false)}
-                className="px-3 py-2 rounded-lg text-sm font-medium"
+              <button onClick={() => setExporting(false)} disabled={exportBusy}
+                className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
-              <button onClick={downloadReport} disabled={selected.size === 0}
+              <button onClick={downloadReport} disabled={selected.size === 0 || exportBusy}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
                 style={{ background: "var(--accent)" }}>
-                <Download size={15} /> Download CSV
+                <Download size={15} /> {exportBusy ? "Preparing…" : "Download CSV"}
               </button>
             </div>
           </div>

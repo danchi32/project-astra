@@ -7,6 +7,7 @@ from app.api.deps import require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.devices import (
+    DevicePage,
     DeviceRead,
     DeviceUpdate,
     EnrollmentTokenCreate,
@@ -127,6 +128,36 @@ async def list_devices(
     devices = await service.list_devices(actor=actor)
     counts = await TelemetryRepository(session).count_apps_by_device_for_org(actor.org_id)
     return [DeviceRead.from_device(d, counts.get(d.id, 0)) for d in devices]
+
+
+# Declared before /{device_id} so the literal path wins over the UUID capture.
+@router.get(
+    "/paged",
+    response_model=DevicePage,
+    summary="Search + paginate devices (database-side, scales to large fleets)",
+)
+async def list_devices_paged(
+    q: str | None = None,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> DevicePage:
+    import math
+
+    service = DeviceService(session)
+    devices, total, page, page_size = await service.list_devices_page(
+        actor=actor,
+        q=(q.strip() or None) if q else None,
+        status=status if status in ("online", "offline") else None,
+        page=page,
+        page_size=page_size,
+    )
+    counts = await TelemetryRepository(session).count_apps_by_device_for_org(actor.org_id)
+    items = [DeviceRead.from_device(d, counts.get(d.id, 0)) for d in devices]
+    pages = max(1, math.ceil(total / page_size)) if total else 1
+    return DevicePage(items=items, total=total, page=page, page_size=page_size, pages=pages)
 
 
 @router.get("/{device_id}", response_model=DeviceRead, summary="Get a device")

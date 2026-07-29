@@ -234,6 +234,40 @@ async def test_regular_user_cannot_list_devices(client, user_headers):
     assert response.status_code == 403
 
 
+async def test_devices_paged_searches_and_paginates(client, admin_headers, other_org, session_factory):
+    token = await create_enrollment_token(client, admin_headers)
+    await enroll_device(client, token["token"])  # hostname LAPTOP-001
+    async with session_factory() as session:
+        session.add(
+            Device(
+                org_id=other_org.id, hostname="GLOBEX-PC", machine_id="globex-machine",
+                os_version="Windows 11", agent_version="0.1.0",
+                token_hash=hash_opaque_token("other-org-device-token"),
+            )
+        )
+        await session.commit()
+
+    # Envelope shape + org scoping (the other org's device must not appear).
+    resp = await client.get("/api/v1/devices/paged", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert {"items", "total", "page", "page_size", "pages"} <= body.keys()
+    assert body["total"] == 1
+    assert {d["hostname"] for d in body["items"]} == {"LAPTOP-001"}
+
+    # Search matches by hostname (case-insensitive), and misses return nothing.
+    hit = await client.get("/api/v1/devices/paged?q=laptop", headers=admin_headers)
+    assert hit.json()["total"] == 1
+    miss = await client.get("/api/v1/devices/paged?q=zzznope", headers=admin_headers)
+    assert miss.json()["total"] == 0
+    assert miss.json()["items"] == []
+
+
+async def test_devices_paged_requires_staff(client, user_headers):
+    response = await client.get("/api/v1/devices/paged", headers=user_headers)
+    assert response.status_code == 403
+
+
 async def test_device_from_other_org_is_404(client, admin_headers, other_org, session_factory):
     async with session_factory() as session:
         device = Device(

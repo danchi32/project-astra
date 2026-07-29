@@ -128,3 +128,13 @@ class DeviceRead(BaseModel):
             total_storage_gb=device.total_storage_gb,
             installed_app_count=installed_app_count,
         )
+
+
+class DevicePage(BaseModel):
+    """One page of a searched device list — the database does the search + paging so
+    this scales to large fleets."""
+    items: list[DeviceRead]
+    total: int
+    page: int
+    page_size: int
+    pages: int
