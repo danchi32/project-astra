@@ -156,6 +156,12 @@ export default function DeviceDetailPage() {
   const [formError, setFormError] = useState("");
   const [fixMenu, setFixMenu] = useState(false);
 
+  // Lock down (secure offboarding) modal.
+  const [lockOpen, setLockOpen] = useState(false);
+  const [lockUser, setLockUser] = useState("");
+  const [lockConfirm, setLockConfirm] = useState("");
+  const [lockMsg, setLockMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   const { data: device, isLoading } = useQuery({ queryKey: ["device", id], queryFn: () => getDevice(id) });
   const { data: telemetry } = useQuery({ queryKey: ["telemetry", id], queryFn: () => getDeviceTelemetry(id), refetchInterval: 30_000 });
   const { data: events } = useQuery({ queryKey: ["dev-events", id], queryFn: () => getDeviceEvents(id), enabled: tab === "events" });
@@ -276,21 +282,41 @@ export default function DeviceDetailPage() {
     } finally { setSaving(false); }
   }
 
-  async function lockDown() {
+  function openLock() {
     if (!device) return;
-    const user = (device.logged_in_user ?? "").split("\\").pop() ?? "";
-    const target = prompt("Disable which local Windows account on this device? (signs them out now)", user);
-    if (!target) return;
-    setBusy(true); setMsg(null);
+    // Devices report the user as "DOMAIN\\user"; prefill just the account name.
+    setLockUser((device.logged_in_user ?? "").split("\\").pop() ?? "");
+    setLockConfirm("");
+    setLockMsg(null);
+    setLockOpen(true);
+  }
+
+  // Secure offboarding: disable (sign out + block sign-in) or re-enable a LOCAL Windows account.
+  async function runLock(enable: boolean) {
+    if (!device) return;
+    const user = lockUser.trim();
+    if (!user) { setLockMsg({ ok: false, text: "Enter the local Windows account name." }); return; }
+    if (!enable && lockConfirm.trim() !== device.hostname) {
+      setLockMsg({ ok: false, text: `Type the device name "${device.hostname}" to confirm.` });
+      return;
+    }
+    setBusy(true); setLockMsg(null);
     try {
       const task = await createRemediation({
-        device_id: device.id, action_id: "disable_local_account",
-        params: { username: target }, reason: `Disable local account "${target}" (offboarding)`,
+        device_id: device.id,
+        action_id: enable ? "enable_local_account" : "disable_local_account",
+        params: { username: user },
+        reason: enable
+          ? `Re-enable local account "${user}" (offboarding)`
+          : `Disable local account "${user}" and sign out (offboarding)`,
       });
       await approveRemediation(task.id);
-      setMsg({ ok: true, text: `Locking down "${target}" — they'll be signed out shortly.` });
-    } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't lock down.") }); }
-    finally { setBusy(false); }
+      setLockMsg({ ok: true, text: enable
+        ? `Re-enabling "${user}" on ${device.hostname} — they can sign in again shortly.`
+        : `Disabling "${user}" on ${device.hostname} and signing them out. Track it under Self-Healing.` });
+    } catch (err) {
+      setLockMsg({ ok: false, text: apiErrorMessage(err, "Couldn't queue it. The device may be offline, or you may lack permission.") });
+    } finally { setBusy(false); }
   }
 
   async function remove() {
@@ -336,7 +362,7 @@ export default function DeviceDetailPage() {
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}><Pencil size={15} /> Edit details</button>
             )}
             {isAdmin && (<>
-              <button onClick={lockDown} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              <button onClick={openLock} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#d97706" }}><UserX size={15} /> Lock down</button>
               <button onClick={remove} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#ef4444" }}><Trash2 size={15} /> Remove</button>
@@ -646,6 +672,59 @@ export default function DeviceDetailPage() {
                     style={{ color: TIER_COLOR[f.tier], background: `${TIER_COLOR[f.tier]}1a` }}>{TIER_LABEL[f.tier]}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lock down — secure offboarding: disable / re-enable a local Windows account */}
+      {lockOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => !busy && setLockOpen(false)}>
+          <div className="w-full max-w-md rounded-xl p-5" onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg" style={{ background: "rgba(217,119,6,0.12)", color: "#d97706" }}><UserX size={18} /></div>
+                <div>
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Lock down — {device.hostname}</h2>
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Disable or re-enable this device&apos;s local account.</p>
+                </div>
+              </div>
+              <button onClick={() => !busy && setLockOpen(false)} style={{ color: "var(--text-secondary)" }}><X size={16} /></button>
+            </div>
+
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Local account name</label>
+            <input value={lockUser} onChange={(e) => setLockUser(e.target.value)}
+              placeholder="the employee's Windows username"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 mb-3"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+
+            <div className="rounded-lg p-3 text-xs mb-3 space-y-1" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+              <p><b>Disable</b> signs the user out now and blocks future sign-in. The password is <b>not</b> changed and <b>nothing is deleted</b> — fully reversible with Re-enable.</p>
+              <p>Works on <b>local</b> Windows accounts only; domain/Entra accounts are managed in AD/Intune.</p>
+            </div>
+
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+              Type <span className="font-mono" style={{ color: "var(--text-primary)" }}>{device.hostname}</span> to confirm disabling
+            </label>
+            <input value={lockConfirm} onChange={(e) => setLockConfirm(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 mb-3"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+
+            {lockMsg && <p className="text-xs mb-3" style={{ color: lockMsg.ok ? "#10b981" : "#ef4444" }}>{lockMsg.text}</p>}
+
+            <div className="flex items-center justify-between gap-2">
+              <button onClick={() => runLock(true)} disabled={busy}
+                className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                Re-enable account
+              </button>
+              <button onClick={() => runLock(false)} disabled={busy}
+                className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ background: "#dc2626" }}>
+                {busy ? "Working…" : "Disable & sign out"}
+              </button>
             </div>
           </div>
         </div>
