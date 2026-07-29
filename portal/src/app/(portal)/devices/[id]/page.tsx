@@ -390,10 +390,16 @@ export default function DeviceDetailPage() {
 
           {tab === "updates" && (
             <div className="space-y-3">
-              {isAdmin && updates?.some((u) => !u.is_installed) && (
-                <button onClick={() => pushUpdate()} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
-                  <DownloadCloud size={15} /> Install all pending
-                </button>
+              {isAdmin && (
+                <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    Push Windows Updates to this device. The agent installs everything pending in the background and won&apos;t reboot.
+                    {(() => { const n = updates?.filter((u) => !u.is_installed).length ?? 0; return n > 0 ? ` ${n} pending in the last scan.` : ""; })()}
+                  </p>
+                  <button onClick={() => pushUpdate()} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
+                    <DownloadCloud size={15} /> Install all pending
+                  </button>
+                </div>
               )}
               <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
                 {["KB", "Title", "Status"].map((h) => <th key={h} className="text-left py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
