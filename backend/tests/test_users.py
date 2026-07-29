@@ -41,6 +41,17 @@ async def test_user_created_with_password_can_login(client, admin_headers):
     assert ok.status_code == 200
 
 
+async def test_user_created_without_password_is_login_less(client, admin_headers):
+    # No password -> a directory-only user (asset assignment / offboarding). They're created fine
+    # but can't sign in to the portal. A password can be given later to enable login.
+    resp = await client.post("/api/v1/users", headers=admin_headers, json={
+        "email": "directory@acme.com", "full_name": "Directory Only", "role": "user"})
+    assert resp.status_code == 201, resp.text
+    denied = await client.post(
+        "/api/v1/auth/login", json={"email": "directory@acme.com", "password": "anything-at-all"})
+    assert denied.status_code == 401
+
+
 async def test_user_create_writes_audit_entry(client, admin_headers, admin_user, session_factory):
     await client.post("/api/v1/users", json=NEW_USER, headers=admin_headers)
     async with session_factory() as session:

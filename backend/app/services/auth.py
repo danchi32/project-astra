@@ -208,7 +208,7 @@ class AuthService:
     async def login(self, email: str, password: str) -> tuple[str, str]:
         user = await self.users.get_by_email(email)
         # Verify even when the user is missing (or is a login-less directory user with no password
-        # hash) so response timing doesn't leak account existence, and such users can never sign in.
+        # hash) so response timing doesn't leak account existence, and such users can't sign in.
         stored_hash = user.hashed_password if user and user.hashed_password else "$2b$12$" + "x" * 53
         password_ok = verify_password(password, stored_hash)
         if user is None or user.hashed_password is None or not password_ok or not user.is_active:

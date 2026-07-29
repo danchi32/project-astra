@@ -32,7 +32,8 @@ class UserService:
     async def create_user(self, *, actor: User, data: UserCreate) -> User:
         if await self.users.get_by_email(data.email) is not None:
             raise ConflictError("A user with this email already exists")
-        # No password → a login-less directory user (can't sign in to the portal).
+        # No password → a login-less directory user (asset assignment / offboarding / emails), who
+        # can't sign in to the portal. A password (any role) makes the account able to log in.
         hashed: str | None = None
         if data.password:
             await self._enforce_password_policy(actor.org_id, data.password)

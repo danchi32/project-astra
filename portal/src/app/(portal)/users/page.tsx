@@ -36,7 +36,7 @@ const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ email: "", full_name: "", role: "user" as UserRole });
+  const [form, setForm] = useState({ email: "", full_name: "", password: "", role: "user" as UserRole });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -53,8 +53,11 @@ export default function UsersPage() {
     setError("");
     setSaving(true);
     try {
-      await createUser(form);
-      setForm({ email: "", full_name: "", role: "user" });
+      await createUser({
+        email: form.email, full_name: form.full_name, role: form.role,
+        password: form.role === "user" ? undefined : form.password,   // users get no login
+      });
+      setForm({ email: "", full_name: "", password: "", role: "user" });
       setAdding(false);
       await queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch (err) {
@@ -184,13 +187,19 @@ export default function UsersPage() {
       )}
 
       {adding && isAdmin && (
-        <form onSubmit={save} className="rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-3"
+        <form onSubmit={save} className="rounded-xl p-4 grid grid-cols-1 md:grid-cols-4 gap-3"
           style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
           <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
             placeholder="Email" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })}
             placeholder="Full name" className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
+            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+          <input type="password" value={form.role === "user" ? "" : form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            disabled={form.role === "user"} required={form.role !== "user"}
+            placeholder={form.role === "user" ? "No login for users" : "Password (min 8)"}
+            className="px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           <div className="flex gap-2">
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
