@@ -67,6 +67,14 @@ if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
     sc.exe delete $ServiceName | Out-Null
     Start-Sleep -Seconds 2
 }
+# Wipe any previous install first. Expand-Archive -Force only OVERWRITES files that
+# exist in the new zip - it never deletes stray files left behind by an older version
+# (e.g. an old build's extra DLLs). A leftover file with the same name but a mismatched
+# version can make the .NET host load the wrong assembly and crash on start, which
+# Windows then reports only as a generic "cannot start service" - so always start clean.
+if (Test-Path $InstallDir) {
+    Remove-Item "$InstallDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+}
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 $zipPath = Join-Path $env:TEMP "astra-agent.zip"
@@ -228,6 +236,16 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 1
 
+# Wipe any previous install first. Copy-Item -Force only OVERWRITES files that exist in
+# the new bundle - it never deletes stray files left behind by an older version (e.g. an
+# old self-contained build's extra DLLs, from before the framework-dependent switch). A
+# leftover file with the same name but a mismatched version can make the .NET host load
+# the wrong assembly and crash on start, which Windows then reports only as a generic
+# "cannot start service" - so always start from an empty directory.
+if (Test-Path $svcDir) {
+    Write-Host "Clearing the previous install (avoids stale files from an older version)..."
+    Remove-Item "$svcDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+}
 New-Item -ItemType Directory -Force -Path $svcDir | Out-Null
 Copy-Item "$ServiceSrc\*" $svcDir -Recurse -Force
 if (-not (Test-Path "$svcDir\AstraAgent.Service.dll")) { throw "AstraAgent.Service.dll missing in $ServiceSrc" }
@@ -240,6 +258,9 @@ sc.exe failure $svcName reset= 86400 actions= restart/60000/restart/60000/restar
 Start-Service $svcName
 Write-Host "Service installed and started." -ForegroundColor Green
 
+if (Test-Path $trayDir) {
+    Remove-Item "$trayDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+}
 New-Item -ItemType Directory -Force -Path $trayDir | Out-Null
 Copy-Item "$TraySrc\*" $trayDir -Recurse -Force
 @{ Astra = @{ ServerUrl = $ServerUrl; ProxyUrl = $ProxyUrl } } | ConvertTo-Json -Depth 5 |
