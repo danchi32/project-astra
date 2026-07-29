@@ -10,7 +10,6 @@ import { getMe } from "@/lib/api/auth";
 import { deleteDevice } from "@/lib/api/devices";
 import { createRemediation, approveRemediation } from "@/lib/api/remediation";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
-import { InstallAgentPanel } from "@/components/install-agent-panel";
 import { formatRam, formatStorage, apiErrorMessage } from "@/lib/utils";
 import type { Device } from "@/lib/api/types";
 
@@ -136,8 +135,6 @@ export default function DevicesPage() {
           </p>
         </div>
       </div>
-
-      {isAdmin && <InstallAgentPanel />}
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[220px] max-w-sm">

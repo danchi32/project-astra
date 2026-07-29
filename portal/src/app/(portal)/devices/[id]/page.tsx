@@ -3,17 +3,25 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud } from "lucide-react";
+import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
 import { listAssets, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
 import { listUsers } from "@/lib/api/users";
+import { listLocations } from "@/lib/api/locations";
 import { getMe } from "@/lib/api/auth";
 import { createRemediation, approveRemediation } from "@/lib/api/remediation";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { SearchableSelect } from "@/components/searchable-select";
 import { formatRam, formatStorage, apiErrorMessage } from "@/lib/utils";
 import { ASSET_STATUS_LABELS } from "@/lib/chart-colors";
+import type { AssetInput, AssetCategory, AssetStatus } from "@/lib/api/types";
+
+const CATEGORIES: AssetCategory[] = [
+  "laptop", "desktop", "server", "monitor", "phone", "tablet",
+  "peripheral", "network", "license", "software", "other",
+];
+const STATUSES: AssetStatus[] = ["in_use", "in_storage", "in_repair", "retired", "lost"];
 
 type Tab = "overview" | "telemetry" | "events" | "software" | "services" | "updates" | "assignment" | "history";
 const TABS: { key: Tab; label: string }[] = [
@@ -62,6 +70,13 @@ export default function DeviceDetailPage() {
 
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isAdmin = me?.role === "admin";
+  const isStaff = me?.role === "admin" || me?.role === "technician";
+
+  // Asset details editor (location, warranty, purchase date, cost, status, tag, notes…).
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<AssetInput>({ name: "", category: "laptop", status: "in_use" });
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const { data: device, isLoading } = useQuery({ queryKey: ["device", id], queryFn: () => getDevice(id) });
   const { data: telemetry } = useQuery({ queryKey: ["telemetry", id], queryFn: () => getDeviceTelemetry(id), refetchInterval: 30_000 });
@@ -71,6 +86,7 @@ export default function DeviceDetailPage() {
   const { data: updates } = useQuery({ queryKey: ["dev-updates", id], queryFn: () => getDeviceUpdates(id), enabled: tab === "updates" });
   const { data: assets } = useQuery({ queryKey: ["assets"], queryFn: () => listAssets() });
   const { data: users } = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const { data: managedLocations } = useQuery({ queryKey: ["locations"], queryFn: listLocations });
 
   const asset = assets?.find((a) => a.device_id === id) ?? null;
   const { data: passport } = useQuery({
@@ -121,6 +137,50 @@ export default function DeviceDetailPage() {
     finally { setBusy(false); }
   }
 
+  // Open the asset editor. If this device already has an asset record, prefill it; otherwise
+  // seed a new one from the device's own telemetry (name/make/model/serial) linked to it.
+  function openEditAsset() {
+    if (!device) return;
+    if (asset) {
+      setForm({
+        name: asset.name, asset_tag: asset.asset_tag ?? "", category: asset.category, status: asset.status,
+        manufacturer: asset.manufacturer ?? "", model: asset.model ?? "", serial_number: asset.serial_number ?? "",
+        location: asset.location ?? "", purchase_date: asset.purchase_date ?? "", warranty_expiry: asset.warranty_expiry ?? "",
+        purchase_cost: asset.purchase_cost ?? undefined, assigned_to_user_id: asset.assigned_to_user_id ?? undefined,
+        device_id: device.id, notes: asset.notes ?? "",
+      });
+    } else {
+      setForm({
+        name: [device.manufacturer, device.model].filter(Boolean).join(" ") || device.hostname,
+        category: "laptop", status: "in_use", device_id: device.id,
+        manufacturer: device.manufacturer ?? "", model: device.model ?? "", serial_number: device.serial_number ?? "",
+      });
+    }
+    setFormError("");
+    setEditing(true);
+  }
+
+  async function saveAsset(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true); setFormError("");
+    // Blank strings → omit; keep numbers as numbers.
+    const clean: AssetInput = { name: form.name.trim() };
+    for (const [k, v] of Object.entries(form)) {
+      if (k === "name") continue;
+      if (v === "" || v === undefined || v === null) continue;
+      (clean as Record<string, unknown>)[k] = v;
+    }
+    try {
+      if (asset) await updateAsset(asset.id, clean);
+      else await createAsset(clean);
+      await qc.invalidateQueries({ queryKey: ["assets"] });
+      setEditing(false);
+      setMsg({ ok: true, text: "Asset details saved." });
+    } catch (err) {
+      setFormError(apiErrorMessage(err, "Couldn't save the asset. Check the fields and try again."));
+    } finally { setSaving(false); }
+  }
+
   async function lockDown() {
     if (!device) return;
     const user = (device.logged_in_user ?? "").split("\\").pop() ?? "";
@@ -165,14 +225,18 @@ export default function DeviceDetailPage() {
             </p>
           </div>
         </div>
-        {isAdmin && (
-          <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {isStaff && (
+            <button onClick={openEditAsset} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}><Pencil size={15} /> Edit details</button>
+          )}
+          {isAdmin && (<>
             <button onClick={lockDown} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
               style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "#d97706" }}><UserX size={15} /> Lock down</button>
             <button onClick={remove} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
               style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "#ef4444" }}><Trash2 size={15} /> Remove</button>
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       {msg && <p className="text-sm" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}
@@ -209,10 +273,17 @@ export default function DeviceDetailPage() {
                 <Row label="Last seen" value={device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "—"} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Asset</h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Asset</h3>
+                  {isStaff && (
+                    <button onClick={openEditAsset} className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "var(--accent)" }}>
+                      <Pencil size={12} /> Edit details
+                    </button>
+                  )}
+                </div>
                 {asset ? (<>
                   <Row label="Asset tag" value={asset.asset_tag} />
-                  <Row label="Category" value={asset.category} />
+                  <Row label="Category" value={<span className="capitalize">{asset.category}</span>} />
                   <Row label="Status" value={ASSET_STATUS_LABELS[asset.status] ?? asset.status} />
                   <Row label="Location" value={asset.location} />
                   <Row label="Assigned to" value={asset.assigned_to_name} />
@@ -220,9 +291,10 @@ export default function DeviceDetailPage() {
                   <Row label="Purchase date" value={asset.purchase_date} />
                   <Row label="Warranty expiry" value={asset.warranty_expiry} />
                   <Row label="Cost" value={asset.purchase_cost != null ? `$${asset.purchase_cost}` : "—"} />
+                  <Row label="Notes" value={asset.notes} />
                 </>) : (
                   <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                    No asset record yet. Assign this device to a user (Assignment tab) to start tracking it as an asset.
+                    No asset record yet. {isStaff ? "Click “Edit details” to set location, warranty, cost and more — it starts tracking this device as an asset." : "Ask an admin to add asset details."}
                   </p>
                 )}
               </div>
@@ -343,6 +415,120 @@ export default function DeviceDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Asset details editor — same fields as the Assets register */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex justify-end" style={{ background: "rgba(0,0,0,0.4)" }} onClick={() => setEditing(false)}>
+          <form onClick={(e) => e.stopPropagation()} onSubmit={saveAsset}
+            className="w-full max-w-md h-full overflow-y-auto p-6 space-y-4"
+            style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)" }}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Asset details — {device.hostname}</h2>
+              <button type="button" onClick={() => setEditing(false)} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Name *</label>
+              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            </div>
+            <div>
+              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Asset tag</label>
+              <input value={form.asset_tag ?? ""} onChange={(e) => setForm({ ...form, asset_tag: e.target.value })}
+                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Category</label>
+                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as AssetCategory })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none capitalize" style={inputStyle}>
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Status</label>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as AssetStatus })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
+                  {STATUSES.map((s) => <option key={s} value={s}>{ASSET_STATUS_LABELS[s] ?? s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Assigned to</label>
+              <SearchableSelect
+                value={form.assigned_to_user_id ?? ""}
+                onChange={(v) => setForm({ ...form, assigned_to_user_id: v || undefined })}
+                placeholder="— Unassigned —"
+                searchPlaceholder="Search by name or email…"
+                options={[
+                  { value: "", label: "— Unassigned —" },
+                  ...(users ?? []).map((u) => ({ value: u.id, label: u.full_name, sublabel: u.email, keywords: u.email })),
+                ]}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>Assigning emails the employee a receipt-confirmation link.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {([["manufacturer", "Manufacturer"], ["model", "Model"], ["serial_number", "Serial number"]] as const).map(([key, label]) => (
+                <div key={key}>
+                  <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{label}</label>
+                  <input value={(form[key] as string) ?? ""} onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+                </div>
+              ))}
+              <div>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Location</label>
+                <input list="dev-asset-locations" value={form.location ?? ""} placeholder="Pick a location…"
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+                <datalist id="dev-asset-locations">
+                  {(managedLocations ?? []).map((l) => <option key={l.id} value={l.name} />)}
+                </datalist>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Purchased</label>
+                <input type="date" value={form.purchase_date ?? ""} onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
+                  className="w-full mt-1 px-2 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Warranty</label>
+                <input type="date" value={form.warranty_expiry ?? ""} onChange={(e) => setForm({ ...form, warranty_expiry: e.target.value })}
+                  className="w-full mt-1 px-2 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Cost</label>
+                <input type="number" min="0" step="0.01" value={form.purchase_cost ?? ""}
+                  onChange={(e) => setForm({ ...form, purchase_cost: e.target.value ? Number(e.target.value) : undefined })}
+                  className="w-full mt-1 px-2 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Notes</label>
+              <textarea value={form.notes ?? ""} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3}
+                className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none resize-none" style={inputStyle} />
+            </div>
+
+            {formError && <p className="text-sm text-red-500">{formError}</p>}
+
+            <div className="flex gap-2 pt-2">
+              <button type="submit" disabled={saving}
+                className="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ background: "var(--accent)" }}>{saving ? "Saving…" : "Save details"}</button>
+              <button type="button" onClick={() => setEditing(false)}
+                className="px-3 py-2 rounded-lg text-sm font-medium"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
+
+const inputStyle = { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" } as const;
