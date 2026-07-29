@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu } from "lucide-react";
+import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
 import { listAssets, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
@@ -27,7 +27,7 @@ type Tab = "overview" | "telemetry" | "events" | "software" | "services" | "upda
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "telemetry", label: "Telemetry" },
-  { key: "events", label: "Event Log" },
+  { key: "events", label: "Health" },
   { key: "software", label: "Software" },
   { key: "services", label: "Services" },
   { key: "updates", label: "Windows Updates" },
@@ -348,21 +348,76 @@ export default function DeviceDetailPage() {
             </div>
           ) : <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No telemetry received yet.</p>)}
 
-          {tab === "events" && (
-            <div className="max-h-[28rem] overflow-y-auto">
-            <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Level", "Source", "Event", "Message", "When"].map((h) => <th key={h} className="text-left py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
-            </tr></thead><tbody>
-              {events?.map((e) => <tr key={e.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td className="py-2 text-xs font-medium" style={{ color: LEVEL_COLOR[e.level] ?? "var(--text-secondary)" }}>{e.level}</td>
-                <td className="py-2" style={{ color: "var(--text-primary)" }}>{e.source}</td>
-                <td className="py-2" style={{ color: "var(--text-secondary)" }}>{e.event_id}</td>
-                <td className="py-2 max-w-md truncate" style={{ color: "var(--text-secondary)" }} title={e.message}>{e.message}</td>
-                <td className="py-2 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{new Date(e.occurred_at).toLocaleString()}</td></tr>)}
-              {!events?.length && <tr><td colSpan={5} className="py-6 text-center" style={{ color: "var(--text-secondary)" }}>No events collected yet.</td></tr>}
-            </tbody></table>
-            </div>
-          )}
+          {tab === "events" && (() => {
+            const list = events ?? [];
+            const critical = list.filter((e) => e.level === "Critical").length;
+            const errors = list.filter((e) => e.level === "Error").length;
+            const warnings = list.filter((e) => e.level === "Warning").length;
+            const healthy = list.length === 0;
+            const sources = Object.entries(
+              list.reduce<Record<string, number>>((acc, e) => { acc[e.source] = (acc[e.source] ?? 0) + 1; return acc; }, {})
+            ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            return (
+              <div className="space-y-4">
+                {/* Health banner — reframes raw errors as ASTRA's proactive monitoring */}
+                <div className="rounded-xl p-4 flex items-start gap-3"
+                  style={{ background: healthy ? "rgba(16,185,129,0.08)" : "rgba(245,158,11,0.08)", border: `1px solid ${healthy ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"}` }}>
+                  <div className="p-2 rounded-lg shrink-0" style={{ background: healthy ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)", color: healthy ? "#10b981" : "#f59e0b" }}>
+                    {healthy ? <ShieldCheck size={18} /> : <AlertTriangle size={18} />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {healthy ? "Healthy — no issues detected" : `ASTRA detected ${list.length} issue${list.length === 1 ? "" : "s"} in the last 24 hours`}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                      {healthy
+                        ? "This device is being actively monitored. No errors or critical events in the last 24 hours."
+                        : "Surfaced automatically so IT can act before users notice — many of these are auto-remediated under Self-Healing."}
+                    </p>
+                    {!healthy && (
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        {critical > 0 && <Pill color="#ef4444">{critical} critical</Pill>}
+                        {errors > 0 && <Pill color="#f97316">{errors} error{errors === 1 ? "" : "s"}</Pill>}
+                        {warnings > 0 && <Pill color="#f59e0b">{warnings} warning{warnings === 1 ? "" : "s"}</Pill>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {sources.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Most frequent sources</p>
+                    <div className="space-y-1.5">
+                      {sources.map(([src, n]) => (
+                        <div key={src} className="flex items-center justify-between text-sm gap-3">
+                          <span className="truncate" style={{ color: "var(--text-primary)" }}>{src}</span>
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>{n}×</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {list.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Recent diagnostic events (last 24h)</p>
+                    <div className="max-h-[22rem] overflow-y-auto rounded-lg" style={{ border: "1px solid var(--border)" }}>
+                      <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                        {["Level", "Source", "Event", "Message", "When"].map((h) => <th key={h} className="text-left px-3 py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
+                      </tr></thead><tbody>
+                        {list.map((e) => <tr key={e.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                          <td className="px-3 py-2 text-xs font-medium" style={{ color: LEVEL_COLOR[e.level] ?? "var(--text-secondary)" }}>{e.level}</td>
+                          <td className="px-3 py-2" style={{ color: "var(--text-primary)" }}>{e.source}</td>
+                          <td className="px-3 py-2" style={{ color: "var(--text-secondary)" }}>{e.event_id}</td>
+                          <td className="px-3 py-2 max-w-md truncate" style={{ color: "var(--text-secondary)" }} title={e.message}>{e.message}</td>
+                          <td className="px-3 py-2 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>{new Date(e.occurred_at).toLocaleString()}</td></tr>)}
+                      </tbody></table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {tab === "software" && (
             <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
