@@ -1,5 +1,9 @@
 import { apiClient } from "./client";
-import type { Installer } from "./types";
+import type { Device, Installer } from "./types";
+
+// A single device (for the detail page).
+export const getDevice = (id: string) =>
+  apiClient.get<Device>(`/devices/${id}`).then((r) => r.data);
 
 // The org's ready-to-run installer — the permanent enrollment key is baked in.
 export const getInstaller = () =>

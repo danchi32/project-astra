@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutDashboard, Monitor, Package, Users, Activity,
+  LayoutDashboard, Monitor, Users,
   BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield, ShieldCheck,
   CreditCard, Building2, ScrollText,
 } from "lucide-react";
@@ -16,9 +16,7 @@ import { getViewAs } from "@/lib/viewAs";
 const NAV = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/devices", icon: Monitor, label: "Devices" },
-  { href: "/assets", icon: Package, label: "Assets" },
   { href: "/users", icon: Users, label: "Users" },
-  { href: "/telemetry", icon: Activity, label: "Telemetry" },
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/self-healing", icon: Zap, label: "Self Healing" },
   { href: "/reports", icon: BarChart3, label: "Reports" },

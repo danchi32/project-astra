@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getMe } from "@/lib/api/auth";
 import {
   Monitor, AlertTriangle, RefreshCw, Package,
-  Zap, Bell, History, ArrowRight, CheckCircle2, XCircle, Clock,
+  Zap, Bell, History, ArrowRight, CheckCircle2, XCircle, Clock, Download,
 } from "lucide-react";
 import { getDashboardSummary, getDevices } from "@/lib/api/dashboard";
 import { getAssetSummary } from "@/lib/api/assets";
@@ -158,13 +158,24 @@ export default function DashboardPage() {
       }}
     >
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-          Dashboard
-        </h1>
-        <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-          Real-time overview of your IT environment
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            Dashboard
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            Real-time overview of your IT environment
+          </p>
+        </div>
+        {me?.role === "admin" && (
+          <Link
+            href="/install"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white shrink-0"
+            style={{ background: "var(--accent)" }}
+          >
+            <Download size={16} /> Get installer
+          </Link>
+        )}
       </div>
 
       {/* Hero insight cards: Devices / Assets / Remediation */}
