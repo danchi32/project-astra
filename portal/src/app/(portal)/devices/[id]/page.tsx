@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X } from "lucide-react";
+import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
 import { listAssets, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
@@ -14,7 +14,7 @@ import { createRemediation, approveRemediation } from "@/lib/api/remediation";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { SearchableSelect } from "@/components/searchable-select";
 import { formatRam, formatStorage, apiErrorMessage } from "@/lib/utils";
-import { ASSET_STATUS_LABELS } from "@/lib/chart-colors";
+import { ASSET_STATUS_LABELS, ASSET_STATUS_COLORS } from "@/lib/chart-colors";
 import type { AssetInput, AssetCategory, AssetStatus } from "@/lib/api/types";
 
 const CATEGORIES: AssetCategory[] = [
@@ -53,10 +53,33 @@ function Gauge({ label, value, sub }: { label: string; value: number; sub: strin
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-4 py-2 border-b text-sm" style={{ borderColor: "var(--border)" }}>
+    <div className="flex justify-between gap-4 py-2.5 border-b last:border-0 text-sm" style={{ borderColor: "var(--border)" }}>
       <span style={{ color: "var(--text-secondary)" }}>{label}</span>
       <span className="text-right font-medium" style={{ color: "var(--text-primary)" }}>{value ?? "—"}</span>
     </div>
+  );
+}
+
+function Pill({ icon: Icon, color, children }: { icon?: typeof User; color?: string; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full"
+      style={{ background: color ? `${color}1a` : "var(--bg)", border: `1px solid ${color ? "transparent" : "var(--border)"}`, color: color ?? "var(--text-secondary)" }}>
+      {Icon && <Icon size={12} />}{children}
+    </span>
+  );
+}
+
+function Section({ title, action, children, pad = true }: { title?: string; action?: React.ReactNode; children: React.ReactNode; pad?: boolean }) {
+  return (
+    <section className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      {title && (
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h3>
+          {action}
+        </div>
+      )}
+      <div className={pad ? "p-5" : ""}>{children}</div>
+    </section>
   );
 }
 
@@ -208,58 +231,65 @@ export default function DeviceDetailPage() {
   if (!device) return <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Device not found.</p>;
 
   const userOptions = [{ value: "", label: "— Unassigned —" }, ...(users ?? []).map((u) => ({ value: u.id, label: `${u.full_name} (${u.email})` }))];
+  const stateLabel = asset ? (ASSET_STATUS_LABELS[asset.status] ?? asset.status) : null;
+  const stateColor = asset ? (ASSET_STATUS_COLORS[asset.status] ?? "#64748b") : null;
 
   return (
-    <div className="space-y-4">
-      <Link href="/devices" className="inline-flex items-center gap-1 text-sm" style={{ color: "var(--accent)" }}>
+    <div className="space-y-5">
+      <Link href="/devices" className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: "var(--accent)" }}>
         <ChevronLeft size={15} /> Devices
       </Link>
 
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}><Monitor size={20} /></div>
-          <div>
-            <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>{device.hostname}</h1>
-            <p className="text-sm mt-0.5 flex items-center gap-2" style={{ color: "var(--text-secondary)" }}>
-              <DeviceStatusBadge status={device.status} /> · {device.os_version} · agent {device.agent_version}
-            </p>
+      {/* Header card */}
+      <div className="rounded-2xl p-5"
+        style={{ border: "1px solid var(--border)", background: "radial-gradient(600px circle at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%), var(--surface)" }}>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="p-3 rounded-2xl shrink-0" style={{ background: "rgba(154,47,187,0.12)", color: "var(--accent)" }}><Monitor size={26} /></div>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold truncate" style={{ color: "var(--text-primary)" }}>{device.hostname}</h1>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <DeviceStatusBadge status={device.status} />
+                <Pill icon={Cpu}>{device.os_version}</Pill>
+                <Pill>agent {device.agent_version}</Pill>
+                {asset?.assigned_to_name && <Pill icon={User}>{asset.assigned_to_name}</Pill>}
+                {asset?.location && <Pill icon={MapPin}>{asset.location}</Pill>}
+                {stateLabel && stateColor && <Pill color={stateColor}>{stateLabel}</Pill>}
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {isStaff && (
-            <button onClick={openEditAsset} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}><Pencil size={15} /> Edit details</button>
-          )}
-          {isAdmin && (<>
-            <button onClick={lockDown} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "#d97706" }}><UserX size={15} /> Lock down</button>
-            <button onClick={remove} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "#ef4444" }}><Trash2 size={15} /> Remove</button>
-          </>)}
+          <div className="flex gap-2 flex-wrap">
+            {isStaff && (
+              <button onClick={openEditAsset} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}><Pencil size={15} /> Edit details</button>
+            )}
+            {isAdmin && (<>
+              <button onClick={lockDown} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#d97706" }}><UserX size={15} /> Lock down</button>
+              <button onClick={remove} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#ef4444" }}><Trash2 size={15} /> Remove</button>
+            </>)}
+          </div>
         </div>
       </div>
 
       {msg && <p className="text-sm" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}
 
-      <div className="flex gap-4 flex-col md:flex-row">
-        {/* Left tab rail (Freshservice-style) */}
-        <div className="md:w-48 shrink-0">
-          <div className="flex md:flex-col gap-1 overflow-x-auto rounded-xl p-2" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-            {TABS.map((t) => (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                className="text-left px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors"
-                style={{ background: tab === t.key ? "rgba(154,47,187,0.1)" : "transparent", color: tab === t.key ? "var(--accent)" : "var(--text-secondary)" }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: "var(--border)" }}>
+        {TABS.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 whitespace-nowrap transition-colors"
+            style={{ borderColor: tab === t.key ? "var(--accent)" : "transparent", color: tab === t.key ? "var(--accent)" : "var(--text-secondary)" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="flex-1 min-w-0 rounded-xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <div className="space-y-4">
           {tab === "overview" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
-              <div>
-                <h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Device</h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Section title="Device">
                 <Row label="Hostname" value={device.hostname} />
                 <Row label="OS" value={device.os_version} />
                 <Row label="Serial" value={device.serial_number} />
@@ -271,36 +301,42 @@ export default function DeviceDetailPage() {
                 <Row label="Agent version" value={device.agent_version} />
                 <Row label="Logged-in user" value={device.logged_in_user} />
                 <Row label="Last seen" value={device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "—"} />
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Asset</h3>
-                  {isStaff && (
-                    <button onClick={openEditAsset} className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "var(--accent)" }}>
-                      <Pencil size={12} /> Edit details
-                    </button>
-                  )}
-                </div>
+              </Section>
+              <Section title="Asset" action={isStaff && (
+                <button onClick={openEditAsset} className="inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: "var(--accent)" }}>
+                  <Pencil size={12} /> Edit details
+                </button>
+              )}>
                 {asset ? (<>
                   <Row label="Asset tag" value={asset.asset_tag} />
                   <Row label="Category" value={<span className="capitalize">{asset.category}</span>} />
-                  <Row label="Status" value={ASSET_STATUS_LABELS[asset.status] ?? asset.status} />
+                  <Row label="Status" value={stateLabel} />
                   <Row label="Location" value={asset.location} />
                   <Row label="Assigned to" value={asset.assigned_to_name} />
-                  <Row label="Acknowledged" value={asset.acknowledgement_status} />
+                  <Row label="Acknowledged" value={<span className="capitalize">{asset.acknowledgement_status.replace(/_/g, " ")}</span>} />
                   <Row label="Purchase date" value={asset.purchase_date} />
                   <Row label="Warranty expiry" value={asset.warranty_expiry} />
                   <Row label="Cost" value={asset.purchase_cost != null ? `$${asset.purchase_cost}` : "—"} />
                   <Row label="Notes" value={asset.notes} />
                 </>) : (
-                  <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                    No asset record yet. {isStaff ? "Click “Edit details” to set location, warranty, cost and more — it starts tracking this device as an asset." : "Ask an admin to add asset details."}
-                  </p>
+                  <div className="flex flex-col items-center text-center py-8 gap-3">
+                    <div className="p-3 rounded-2xl" style={{ background: "var(--bg)", color: "var(--text-secondary)" }}><Pencil size={20} /></div>
+                    <p className="text-sm max-w-xs" style={{ color: "var(--text-secondary)" }}>
+                      No asset record yet — set location, warranty, cost and assignee to start tracking this device as an asset.
+                    </p>
+                    {isStaff && (
+                      <button onClick={openEditAsset} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "var(--accent)" }}>
+                        <Pencil size={14} /> Add asset details
+                      </button>
+                    )}
+                  </div>
                 )}
-              </div>
+              </Section>
             </div>
           )}
 
+          {tab !== "overview" && (
+          <Section>
           {tab === "telemetry" && (latest ? (
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -413,7 +449,8 @@ export default function DeviceDetailPage() {
               </div>
             ) : <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Assign this device to a user to start tracking its history.</p>
           )}
-        </div>
+          </Section>
+          )}
       </div>
 
       {/* Asset details editor — same fields as the Assets register */}
