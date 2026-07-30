@@ -146,9 +146,14 @@ jobs:
           ENVVARS=$ENVVARS,ASTRA_AGENT_UPDATE_SIGNATURE_URL=https://github.com/danchi32/project-astra/releases/latest/download/manifest.json.sig
           ENVVARS=$ENVVARS,ASTRA_AGENT_BACKEND_IP=
 
+          # max-instances is capped by the project's regional CPU quota
+          # (CpuAllocPerProjectRegion = 20000 mCPU = 20 vCPU, and each instance takes 1),
+          # so 20 is the ceiling until that quota is raised. It must be repeated here:
+          # `gcloud run deploy` resets anything not passed, so a value set by hand with
+          # `services update` would be silently reverted by the next deploy.
           gcloud run deploy "$SERVICE" \
             --image "$IMAGE" --region "$REGION" \
-            --min-instances 1 --max-instances 10 --concurrency 80 --port 8000 \
+            --min-instances 1 --max-instances 20 --concurrency 80 --port 8000 \
             --cpu 1 --memory 512Mi --timeout 60s \
             --allow-unauthenticated \
             --set-secrets "$SECRETS" \

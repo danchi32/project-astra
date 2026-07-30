@@ -1,4 +1,7 @@
+import hashlib
 import uuid
+from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +20,20 @@ from app.schemas.telemetry import DashboardSummary, TelemetryPush
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
 from app.services.exceptions import NotFoundError
+
+
+def _fingerprint(items: Sequence[Any], fields: tuple[str, ...]) -> str:
+    """Stable digest of an inventory collection, over `fields` only.
+
+    Sorted, so the agent reporting the same set in a different order still counts as
+    unchanged — otherwise the skip would almost never fire. `collected_at` is deliberately
+    excluded: it changes on every push by definition and would defeat the whole thing.
+    """
+    rows = sorted(
+        "\x1f".join("" if (v := getattr(i, f, None)) is None else str(v) for f in fields)
+        for i in items
+    )
+    return hashlib.sha256("\x1e".join(rows).encode("utf-8")).hexdigest()
 
 
 class TelemetryService:
@@ -63,74 +80,97 @@ class TelemetryService:
             keep_min_rows=settings.telemetry_keep_min_snapshots,
         )
 
+        # Inventory collections are re-sent in full every hour. Rewriting one that hasn't
+        # changed is pure churn (see Device.*_hash), so each is fingerprinted and skipped
+        # when identical — which also avoids building the ORM objects at all.
         if data.event_logs:
-            await self.repo.replace_event_logs(
-                device.id,
-                [
-                    DeviceEventLog(
-                        device_id=device.id,
-                        org_id=device.org_id,
-                        log_name=e.log_name,
-                        source=e.source,
-                        event_id=e.event_id,
-                        level=e.level,
-                        message=e.message[:2000],
-                        occurred_at=e.occurred_at,
-                    )
-                    for e in data.event_logs
-                ],
+            digest = _fingerprint(
+                data.event_logs, ("log_name", "source", "event_id", "level", "message", "occurred_at")
             )
+            if digest != device.events_hash:
+                await self.repo.replace_event_logs(
+                    device.id,
+                    [
+                        DeviceEventLog(
+                            device_id=device.id,
+                            org_id=device.org_id,
+                            log_name=e.log_name,
+                            source=e.source,
+                            event_id=e.event_id,
+                            level=e.level,
+                            message=e.message[:2000],
+                            occurred_at=e.occurred_at,
+                        )
+                        for e in data.event_logs
+                    ],
+                )
+                device.events_hash = digest
 
         if data.installed_apps:
-            await self.repo.replace_installed_apps(
-                device.id,
-                [
-                    DeviceInstalledApp(
-                        device_id=device.id,
-                        org_id=device.org_id,
-                        name=a.name,
-                        version=a.version,
-                        publisher=a.publisher,
-                        install_date=a.install_date,
-                        collected_at=now,
-                    )
-                    for a in data.installed_apps
-                ],
+            digest = _fingerprint(
+                data.installed_apps, ("name", "version", "publisher", "install_date")
             )
+            if digest != device.apps_hash:
+                await self.repo.replace_installed_apps(
+                    device.id,
+                    [
+                        DeviceInstalledApp(
+                            device_id=device.id,
+                            org_id=device.org_id,
+                            name=a.name,
+                            version=a.version,
+                            publisher=a.publisher,
+                            install_date=a.install_date,
+                            collected_at=now,
+                        )
+                        for a in data.installed_apps
+                    ],
+                )
+                device.apps_hash = digest
 
         if data.services:
-            await self.repo.replace_services(
-                device.id,
-                [
-                    DeviceService(
-                        device_id=device.id,
-                        org_id=device.org_id,
-                        name=s.name,
-                        display_name=s.display_name,
-                        status=s.status,
-                        start_type=s.start_type,
-                        collected_at=now,
-                    )
-                    for s in data.services
-                ],
+            digest = _fingerprint(
+                data.services, ("name", "display_name", "status", "start_type")
             )
+            if digest != device.services_hash:
+                await self.repo.replace_services(
+                    device.id,
+                    [
+                        DeviceService(
+                            device_id=device.id,
+                            org_id=device.org_id,
+                            name=s.name,
+                            display_name=s.display_name,
+                            status=s.status,
+                            start_type=s.start_type,
+                            collected_at=now,
+                        )
+                        for s in data.services
+                    ],
+                )
+                device.services_hash = digest
 
         if data.windows_updates:
-            await self.repo.replace_windows_updates(
-                device.id,
-                [
-                    DeviceWindowsUpdate(
-                        device_id=device.id,
-                        org_id=device.org_id,
-                        kb_article_id=u.kb_article_id,
-                        title=u.title,
-                        is_installed=u.is_installed,
-                        installed_on=u.installed_on,
-                        collected_at=now,
-                    )
-                    for u in data.windows_updates
-                ],
+            digest = _fingerprint(
+                data.windows_updates, ("kb_article_id", "title", "is_installed", "installed_on")
             )
+            if digest != device.updates_hash:
+                await self.repo.replace_windows_updates(
+                    device.id,
+                    [
+                        DeviceWindowsUpdate(
+                            device_id=device.id,
+                            org_id=device.org_id,
+                            kb_article_id=u.kb_article_id,
+                            title=u.title,
+                            is_installed=u.is_installed,
+                            installed_on=u.installed_on,
+                            collected_at=now,
+                        )
+                        for u in data.windows_updates
+                    ],
+                )
+                device.updates_hash = digest
 
         await self.session.commit()
 

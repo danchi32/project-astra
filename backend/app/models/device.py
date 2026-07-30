@@ -32,3 +32,19 @@ class Device(TimestampMixin, Base):
     cpu_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     total_ram_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_storage_gb: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Fingerprints of the last inventory the agent sent, one per collection.
+    #
+    # The agent re-sends its FULL inventory every hour and the old code answered with
+    # delete-all-then-insert-all. A device carries ~300 service rows, so that was ~600 row
+    # writes per device per hour whether or not anything had changed — at 10k devices,
+    # millions of dead tuples an hour for autovacuum to chase, which is what actually caps
+    # the fleet size (compute scales with a config change; write churn doesn't).
+    #
+    # Comparing a hash of the incoming set against these lets an unchanged collection skip
+    # the rewrite entirely. They live on `devices` rather than a side table because the
+    # device row is already loaded during ingest, so checking costs no extra query.
+    apps_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    services_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    updates_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    events_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

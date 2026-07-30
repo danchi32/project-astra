@@ -67,9 +67,12 @@ echo "==> Running migrations as a one-off Job"
   --command alembic --args upgrade,head --quiet
 "$GCLOUD" run jobs execute astra-migrate --region "$REGION" --wait
 
+# max-instances is bounded by the regional CPU quota (20 vCPU, 1 per instance), so 20 is
+# the ceiling until that quota is raised. Repeated on every deploy because `run deploy`
+# resets whatever isn't passed — a value set by hand would be quietly reverted.
 echo "==> Deploying service $SERVICE"
 "$GCLOUD" run deploy "$SERVICE" --image "$IMAGE" --region "$REGION" \
-  --min-instances 1 --max-instances 10 --concurrency 80 --port 8000 \
+  --min-instances 1 --max-instances 20 --concurrency 80 --port 8000 \
   --cpu 1 --memory 512Mi --timeout 60s \
   --allow-unauthenticated \
   --set-secrets "$SECRETS" \
