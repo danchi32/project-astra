@@ -92,9 +92,14 @@ export default function RegisterPage() {
                 className={inputCls} style={inputStyle} placeholder="Jane Admin" />
             </div>
             <div>
-              <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Email</label>
+              <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Work email</label>
               <input type="email" required value={form.admin_email} onChange={set("admin_email")}
-                className={inputCls} style={inputStyle} placeholder="admin@acme.com" />
+                className={inputCls} style={inputStyle} placeholder="admin@yourcompany.com" />
+              {/* Say it up front — the backend rejects personal providers, and finding that
+                  out only after submitting (and after the OTP email) is a poor first run. */}
+              <p className="text-xs mt-1.5" style={{ color: "var(--text-secondary)" }}>
+                Use your company email — personal addresses (Gmail, Outlook, Yahoo…) aren&apos;t accepted.
+              </p>
             </div>
             <div>
               <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Password</label>

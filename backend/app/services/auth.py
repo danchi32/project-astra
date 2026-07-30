@@ -5,7 +5,7 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.email_domains import corporate_domain
+from app.core.email_domains import corporate_domain, is_free_email_domain
 from app.core.security import (
     create_access_token,
     generate_opaque_token,
@@ -86,9 +86,27 @@ class AuthService:
         return org, admin
 
     async def _guard_org_domain(self, email: str) -> str | None:
-        """Enforce one organisation per corporate email domain. Returns the domain to record on
-        the new org (or None for a personal/free provider, which may register freely). Raises if
-        that corporate domain has already registered."""
+        """Gate self-service signup on the email domain, and return the domain to record on
+        the new org.
+
+        Two rules, both keyed off app/core/email_domains.py:
+
+        1. A personal / free / disposable provider cannot sign up at all when
+           ``require_work_email`` is set (the default). Raised as a validation error, since
+           the fix is for the user to supply a different address.
+        2. A corporate domain may back exactly one organisation, so colleagues join the
+           existing org rather than creating a rival one.
+
+        Called from every self-service path (direct register, OTP start, OTP verify) so the
+        rules can't be bypassed by entering through a different door. Operator-provisioned
+        orgs deliberately do not come through here.
+        """
+        if get_settings().require_work_email and is_free_email_domain(email):
+            raise ValidationError(
+                "Please sign up with your work email address. ASTRA accounts belong to an "
+                "organisation, so personal email providers aren't accepted. If your team "
+                "doesn't have a work domain, contact us and we'll set you up."
+            )
         domain = corporate_domain(email)
         if domain is not None and await self.orgs.get_by_email_domain(domain) is not None:
             raise ConflictError(

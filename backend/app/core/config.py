@@ -72,6 +72,13 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Self-service signup is for organisations, so a personal/free/disposable provider
+    # (gmail, outlook, mailinator…) is rejected — see app/core/email_domains.py. Kept as a
+    # switch rather than hardcoded: a genuine small-business prospect on a personal address
+    # is a sales conversation, not a bug, and an operator can also provision them directly
+    # via the platform console, which is not subject to this rule.
+    require_work_email: bool = True
+
     # Public base URL of this backend as reached by Windows agents. Baked into the
     # generated agent installer as the default ServerUrl; the portal can override it.
     # Production: set ASTRA_PUBLIC_API_URL to the custom domain, e.g.

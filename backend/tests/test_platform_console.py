@@ -94,7 +94,7 @@ async def test_console_endpoints_require_platform_admin(client, session_factory)
 
 
 async def test_me_reports_view_as_mode(client, session_factory):
-    headers = await _operator(client, session_factory, org="Me Co", email="op@me.com")
+    headers = await _operator(client, session_factory, org="Me Co", email="op@meco.com")
     await _register_org(client, session_factory, "Me Cust", "a@mecust.com")
     me = (await client.get("/api/v1/auth/me", headers=headers)).json()
     assert me["view_as"] is False
