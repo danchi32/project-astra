@@ -228,10 +228,18 @@ export interface DeviceServiceRow {
   start_type: string;
 }
 
+/** The states Windows itself distinguishes. is_installed could not tell "installed, waiting
+ *  for a restart" from "never installed", so both rendered as "Pending" and contradicted the
+ *  device's own Windows Update page. */
+export type WindowsUpdateState = "pending" | "pending_restart" | "failed" | "installed";
+
 export interface DeviceWindowsUpdate {
   id: string;
   kb_article_id: string;
   title: string;
+  state: WindowsUpdateState;
+  /** Windows' failure code, e.g. "0x80244018". Present only when state is "failed". */
+  error_code: string | null;
   is_installed: boolean;
   installed_on: string | null;
 }

@@ -151,8 +151,16 @@ class TelemetryService:
                 device.services_hash = digest
 
         if data.windows_updates:
+            # state, not is_installed: an update moving pending -> pending_restart, or
+            # failing with a new error code, is a change worth writing. Fingerprinting the
+            # boolean would treat "installed, needs a reboot" as identical to "not installed"
+            # and skip the write, so the portal would keep showing the older, wronger row.
             digest = _fingerprint(
-                data.windows_updates, ("kb_article_id", "title", "is_installed", "installed_on")
+                data.windows_updates,
+                # resolved_state, not the raw state field: an older agent leaves state None
+                # on every push, so fingerprinting it would make every collection look
+                # unchanged and the write would be skipped forever.
+                ("kb_article_id", "title", "resolved_state", "error_code", "installed_on"),
             )
             if digest != device.updates_hash:
                 await self.repo.replace_windows_updates(
@@ -163,7 +171,8 @@ class TelemetryService:
                             org_id=device.org_id,
                             kb_article_id=u.kb_article_id,
                             title=u.title,
-                            is_installed=u.is_installed,
+                            state=u.resolved_state,
+                            error_code=u.error_code,
                             installed_on=u.installed_on,
                             collected_at=now,
                         )

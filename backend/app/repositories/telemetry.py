@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import as_utc, utcnow
 from app.models.telemetry import (
+    UPDATE_INSTALLED,
     DeviceEventLog,
     DeviceInstalledApp,
     DeviceService,
@@ -241,10 +242,17 @@ class TelemetryRepository:
         return list(result.scalars().all())
 
     async def count_pending_updates_for_org(self, org_id: uuid.UUID) -> int:
+        """Updates not yet in effect anywhere in the org — the dashboard's headline number.
+
+        Deliberately state-based rather than `is_installed == False`. is_installed means the
+        update is on disk, which is true of one awaiting a restart, so the old predicate now
+        quietly excludes exactly the updates a patch dashboard most needs to show: installed,
+        not applied, and one reboot away.
+        """
         result = await self.session.execute(
             select(func.count()).where(
                 DeviceWindowsUpdate.org_id == org_id,
-                DeviceWindowsUpdate.is_installed == False,  # noqa: E712
+                DeviceWindowsUpdate.state != UPDATE_INSTALLED,
             )
         )
         return result.scalar_one()

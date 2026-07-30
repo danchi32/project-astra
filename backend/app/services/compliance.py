@@ -21,6 +21,11 @@ from app.models import (
     TelemetrySnapshot,
     User,
 )
+from app.models.telemetry import (
+    UPDATE_FAILED,
+    UPDATE_PENDING,
+    UPDATE_PENDING_RESTART,
+)
 from app.models.base import as_utc, utcnow
 from app.schemas.compliance import (
     CheckBreakdown,
@@ -103,12 +108,30 @@ class ComplianceService:
         if not devices:
             return []
 
-        # Pending updates + which devices have reported any updates at all.
+        # Updates still to install, split by why. These are not the same finding: a device
+        # that installed its updates and needs a reboot is nearly patched and the fix is a
+        # restart, while one whose download keeps failing needs someone to look at why. Both
+        # used to read as "N update(s) pending", so both got a pointless reinstall pushed.
         pending: dict[uuid.UUID, int] = dict((await self.session.execute(
             select(DeviceWindowsUpdate.device_id, func.count())
-            .where(DeviceWindowsUpdate.org_id == org_id, DeviceWindowsUpdate.is_installed.is_(False))
+            .where(DeviceWindowsUpdate.org_id == org_id,
+                   DeviceWindowsUpdate.state == UPDATE_PENDING)
             .group_by(DeviceWindowsUpdate.device_id)
         )).all())
+        awaiting_restart: dict[uuid.UUID, int] = dict((await self.session.execute(
+            select(DeviceWindowsUpdate.device_id, func.count())
+            .where(DeviceWindowsUpdate.org_id == org_id,
+                   DeviceWindowsUpdate.state == UPDATE_PENDING_RESTART)
+            .group_by(DeviceWindowsUpdate.device_id)
+        )).all())
+        failed_updates: dict[uuid.UUID, list[tuple[str, str | None]]] = {}
+        for dev_id, kb, code in (await self.session.execute(
+            select(DeviceWindowsUpdate.device_id, DeviceWindowsUpdate.kb_article_id,
+                   DeviceWindowsUpdate.error_code)
+            .where(DeviceWindowsUpdate.org_id == org_id,
+                   DeviceWindowsUpdate.state == UPDATE_FAILED)
+        )).all():
+            failed_updates.setdefault(dev_id, []).append((kb, code))
         have_updates = {r[0] for r in (await self.session.execute(
             select(DeviceWindowsUpdate.device_id).where(DeviceWindowsUpdate.org_id == org_id).distinct()
         )).all()}
@@ -164,13 +187,27 @@ class ComplianceService:
         for d in devices:
             checks: list[CheckResult] = []
 
-            # patch
+            # patch — the detail names the actual blocker, because the three cases need
+            # three different responses and only one of them is "push the update again".
             if d.id not in have_updates:
                 checks.append(self._chk("patch", "unknown", "No update scan yet"))
             else:
                 n = pending.get(d.id, 0)
-                checks.append(self._chk("patch", "pass" if n == 0 else "fail",
-                                        "Up to date" if n == 0 else f"{n} update(s) pending"))
+                restart_n = awaiting_restart.get(d.id, 0)
+                failures = failed_updates.get(d.id, [])
+                if failures:
+                    kb, code = failures[0]
+                    extra = f" ({code})" if code else ""
+                    more = f" +{len(failures) - 1} more" if len(failures) > 1 else ""
+                    detail = f"{kb} failed{extra}{more}"
+                elif n:
+                    detail = f"{n} update(s) pending"
+                elif restart_n:
+                    detail = f"{restart_n} installed — restart to finish"
+                else:
+                    detail = "Up to date"
+                ok = not failures and n == 0 and restart_n == 0
+                checks.append(self._chk("patch", "pass" if ok else "fail", detail))
 
             # disk
             snap = latest.get(d.id)

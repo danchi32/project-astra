@@ -76,7 +76,8 @@ public sealed class TelemetryWorker(
                 ? services.GetServices().Select(s => new TelemetryServiceEntry(s.Name, s.DisplayName, s.Status, s.StartType)).ToList()
                 : [],
             WindowsUpdates: collectInventory
-                ? updates.GetUpdates().Select(u => new TelemetryWindowsUpdate(u.KbArticleId, u.Title, u.IsInstalled, u.InstalledOn)).ToList()
+                ? updates.GetUpdates().Select(u => new TelemetryWindowsUpdate(
+                    u.KbArticleId, u.Title, u.IsInstalled, u.InstalledOn, u.State, u.ErrorCode)).ToList()
                 : []);
 
         if (await api.PushTelemetryAsync(token, payload, ct) && collectInventory)

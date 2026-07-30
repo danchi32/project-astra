@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import RemediationStatus, User
 from app.models.base import as_utc, utcnow
+from app.models.telemetry import UPDATE_INSTALLED
 from app.repositories.devices import DeviceRepository
 from app.repositories.remediation import RemediationRepository
 from app.repositories.telemetry import TelemetryRepository
@@ -71,7 +72,10 @@ class ReportService:
             events = await self.telemetry.get_event_logs(device.id)
             critical = sum(1 for e in events if e.level == "Error")
             updates = await self.telemetry.get_windows_updates(device.id)
-            pending = sum(1 for u in updates if not u.is_installed)
+            # Same reasoning as the dashboard count: is_installed is true for an update
+            # awaiting a restart, so the old predicate would report a device as fully
+            # patched while it is one reboot away from being so.
+            pending = sum(1 for u in updates if u.state != UPDATE_INSTALLED)
             total_critical += critical
             total_pending += pending
 

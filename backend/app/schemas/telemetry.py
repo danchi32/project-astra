@@ -1,8 +1,10 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.telemetry import UPDATE_INSTALLED, UPDATE_PENDING
 
 
 # ── Agent → Backend (ingestion) ────────────────────────────────────────────
@@ -42,6 +44,17 @@ class WindowsUpdateEntry(BaseModel):
     title: str = Field(max_length=400)
     is_installed: bool
     installed_on: str | None = Field(default=None, max_length=30)
+    # Sent by agents that can tell the states apart. Optional: agents released before this
+    # send only is_installed, and `state` below folds that into the two states it can mean
+    # rather than rejecting the push or inventing detail the agent never reported.
+    state: Literal["pending", "pending_restart", "failed", "installed"] | None = None
+    error_code: str | None = Field(default=None, max_length=20)
+
+    @property
+    def resolved_state(self) -> str:
+        if self.state is not None:
+            return self.state
+        return UPDATE_INSTALLED if self.is_installed else UPDATE_PENDING
 
 
 class HardwareInfo(BaseModel):
@@ -134,6 +147,8 @@ class DeviceWindowsUpdateRead(BaseModel):
     device_id: uuid.UUID
     kb_article_id: str
     title: str
+    state: str
+    error_code: str | None
     is_installed: bool
     installed_on: str | None
     collected_at: datetime

@@ -204,3 +204,52 @@ async def test_telemetry_org_isolation(client, admin_headers, other_org_user, us
     other_headers = {"Authorization": f"Bearer {other_token_resp.json()['access_token']}"}
     response = await client.get(f"/api/v1/devices/{device_id}/telemetry", headers=other_headers)
     assert response.status_code in (403, 404)
+
+
+async def test_an_older_agent_without_state_still_reports_correctly(client, admin_headers):
+    """Agents released before per-update state send only is_installed. Their pushes must
+    keep working and must not be recorded as more precise than they were."""
+    token = await _enroll_device(client, admin_headers)
+    await client.post(
+        "/api/v1/agent/telemetry",
+        json={**TELEMETRY_PAYLOAD, "windows_updates": [
+            {"kb_article_id": "KB111", "title": "Old agent pending", "is_installed": False},
+            {"kb_article_id": "KB222", "title": "Old agent installed", "is_installed": True},
+        ]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    devices = await client.get("/api/v1/devices", headers=admin_headers)
+    device_id = devices.json()[0]["id"]
+    rows = (await client.get(
+        f"/api/v1/devices/{device_id}/updates", headers=admin_headers
+    )).json()
+    by_kb = {r["kb_article_id"]: r for r in rows}
+    assert by_kb["KB111"]["state"] == "pending"
+    assert by_kb["KB222"]["state"] == "installed"
+    assert by_kb["KB111"]["error_code"] is None
+
+
+async def test_a_state_change_is_written_even_when_is_installed_does_not_move(
+    client, admin_headers
+):
+    """pending -> failed leaves is_installed false both times. The change-detection
+    fingerprint has to notice, or the portal keeps serving the older, wronger row."""
+    token = await _enroll_device(client, admin_headers)
+    for state, code in (("pending", None), ("failed", "0x80244018")):
+        resp = await client.post(
+            "/api/v1/agent/telemetry",
+            json={**TELEMETRY_PAYLOAD, "windows_updates": [{
+                "kb_article_id": "KB5007651", "title": "Security platform update",
+                "is_installed": False, "state": state, "error_code": code,
+            }]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200, resp.text
+
+    devices = await client.get("/api/v1/devices", headers=admin_headers)
+    device_id = devices.json()[0]["id"]
+    rows = (await client.get(
+        f"/api/v1/devices/{device_id}/updates", headers=admin_headers
+    )).json()
+    assert rows[0]["state"] == "failed"
+    assert rows[0]["error_code"] == "0x80244018"

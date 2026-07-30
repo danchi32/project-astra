@@ -49,6 +49,15 @@ const FIXES: Fix[] = [
   { id: "windows_update_install", label: "Install pending Windows updates", tier: "approval_required" },
   { id: "reset_windows_update_components", label: "Reset Windows Update components", tier: "admin_only" },
 ];
+// Worded to match the Windows Update page the user is looking at on the device, so the two
+// screens can be read side by side without translating between them.
+const UPDATE_STATE: Record<string, { label: string; color: string }> = {
+  pending: { label: "Pending", color: "#f59e0b" },
+  pending_restart: { label: "Pending restart", color: "#3b82f6" },
+  failed: { label: "Failed", color: "#ef4444" },
+  installed: { label: "Installed", color: "#10b981" },
+};
+
 const TIER_LABEL: Record<FixTier, string> = { automatic: "Automatic", approval_required: "Needs approval", admin_only: "Admin only" };
 const TIER_COLOR: Record<FixTier, string> = { automatic: "#10b981", approval_required: "#f59e0b", admin_only: "#ef4444" };
 
@@ -704,7 +713,20 @@ export default function DeviceDetailPage() {
                 <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
                   <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
                     Push Windows Updates to this device. The agent installs everything pending in the background and won&apos;t reboot.
-                    {(() => { const n = updates?.filter((u) => !u.is_installed).length ?? 0; return n > 0 ? ` ${n} pending in the last scan.` : ""; })()}
+                    {(() => {
+                      // Counted per state. Lumping them together is what made the portal
+                      // disagree with the device: updates that were installed and only
+                      // needed a reboot were counted as still needing an install.
+                      const pending = updates?.filter((u) => u.state === "pending").length ?? 0;
+                      const restart = updates?.filter((u) => u.state === "pending_restart").length ?? 0;
+                      const failed = updates?.filter((u) => u.state === "failed").length ?? 0;
+                      const bits = [
+                        pending ? `${pending} pending` : "",
+                        restart ? `${restart} waiting for a restart` : "",
+                        failed ? `${failed} failed` : "",
+                      ].filter(Boolean);
+                      return bits.length ? ` ${bits.join(", ")} in the last scan.` : "";
+                    })()}
                   </p>
                   <button onClick={() => pushUpdate()} disabled={busy || !!runningJob("windows_update_install")}
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
@@ -719,12 +741,22 @@ export default function DeviceDetailPage() {
                 {updates?.map((u) => <tr key={u.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td className="py-2 font-medium" style={{ color: "var(--text-primary)" }}>{u.kb_article_id}</td>
                   <td className="py-2 max-w-md truncate" style={{ color: "var(--text-secondary)" }} title={u.title}>{u.title}</td>
-                  <td className="py-2 text-xs font-medium" style={{ color: u.is_installed ? "#10b981" : "#f59e0b" }}>{u.is_installed ? "Installed" : "Pending"}</td>
-                  {isAdmin && <td className="py-2 text-right">{!u.is_installed && u.kb_article_id && (
+                  <td className="py-2 text-xs font-medium" style={{ color: UPDATE_STATE[u.state]?.color ?? "#f59e0b" }}>
+                    {UPDATE_STATE[u.state]?.label ?? u.state}
+                    {/* The code is the whole point of showing a failure: "failed" alone
+                        leaves the operator having to go to the machine to find out why. */}
+                    {u.error_code && <span className="ml-1 font-mono" style={{ color: "var(--text-secondary)" }}>{u.error_code}</span>}
+                  </td>
+                  {/* Installing again is only an answer for pending and failed. An update
+                      awaiting a restart is already on the device — reinstalling does nothing,
+                      and offering the button implies otherwise. */}
+                  {isAdmin && <td className="py-2 text-right">{(u.state === "pending" || u.state === "failed") && u.kb_article_id && (
                     <button onClick={() => pushUpdate(u.kb_article_id)}
                       disabled={busy || !!runningJob("windows_update_install", { kb_article_id: u.kb_article_id })}
                       className="text-xs px-2 py-1 rounded-lg disabled:opacity-50" style={{ border: "1px solid var(--border)", color: "var(--accent)" }}>
-                      {runningJob("windows_update_install", { kb_article_id: u.kb_article_id }) ? "Installing…" : "Install"}
+                      {runningJob("windows_update_install", { kb_article_id: u.kb_article_id })
+                        ? "Installing…"
+                        : u.state === "failed" ? "Retry" : "Install"}
                     </button>
                   )}</td>}
                 </tr>)}

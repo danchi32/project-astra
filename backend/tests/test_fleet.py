@@ -21,7 +21,7 @@ async def _device_with_pending_update(session_factory, org_id, host, machine, kb
         await session.flush()
         session.add(DeviceWindowsUpdate(
             org_id=org_id, device_id=device.id, kb_article_id=kb,
-            title="Cumulative Update", is_installed=False, collected_at=utcnow(),
+            title="Cumulative Update", state="pending", collected_at=utcnow(),
         ))
         await session.commit()
         return device.id
@@ -35,7 +35,7 @@ async def test_fleet_issues_group_update_across_devices(client, admin_headers, a
     resp = await client.get("/api/v1/fleet/issues", headers=admin_headers)
     assert resp.status_code == 200, resp.text
     issues = resp.json()["issues"]
-    kb_issue = next(i for i in issues if i["key"] == "update:KB5040442")
+    kb_issue = next(i for i in issues if i["key"] == "update:pending:KB5040442")
     assert len(kb_issue["affected"]) == 2                       # both devices grouped
     assert kb_issue["fix_action_id"] == "windows_update_install"
     assert kb_issue["fix_params"] == {"kb_article_id": "KB5040442"}

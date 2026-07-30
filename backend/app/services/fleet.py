@@ -17,6 +17,11 @@ from app.models import (
     RemediationSource,
     User,
 )
+from app.models.telemetry import (
+    UPDATE_FAILED,
+    UPDATE_PENDING,
+    UPDATE_PENDING_RESTART,
+)
 from app.repositories.devices import DeviceRepository
 from app.schemas.fleet import BulkRemediateResult, FleetAffected, FleetIssue
 from app.services.compliance import ComplianceService
@@ -88,24 +93,55 @@ class FleetService:
                 affected=[FleetAffected(device_id=x[0], hostname=x[1]) for x in devs],
             ))
 
-        # 2. Pending Windows updates, grouped by KB.
+        # 2. Windows updates not yet in effect, grouped by KB AND by why. Pushing an install
+        # is only the answer for one of these: an update that is installed and waiting on a
+        # reboot would be reinstalled to no effect, which is what happened before the state
+        # existed — every one of them read as "pending".
         rows = (await self.session.execute(
             select(
                 DeviceWindowsUpdate.kb_article_id, DeviceWindowsUpdate.title,
+                DeviceWindowsUpdate.state, DeviceWindowsUpdate.error_code,
                 Device.id, Device.hostname,
             )
             .join(Device, Device.id == DeviceWindowsUpdate.device_id)
-            .where(DeviceWindowsUpdate.org_id == org_id, DeviceWindowsUpdate.is_installed.is_(False))
+            .where(DeviceWindowsUpdate.org_id == org_id,
+                   DeviceWindowsUpdate.state.in_(
+                       (UPDATE_PENDING, UPDATE_PENDING_RESTART, UPDATE_FAILED)))
         )).all()
-        by_kb: dict[str, dict] = defaultdict(lambda: {"title": "", "devs": []})
-        for kb, title, dev_id, hostname in rows:
-            by_kb[kb]["title"] = title
-            by_kb[kb]["devs"].append((dev_id, hostname))
-        for kb, info in by_kb.items():
+        by_kb: dict[tuple[str, str], dict] = defaultdict(
+            lambda: {"title": "", "code": None, "devs": []}
+        )
+        for kb, title, state, code, dev_id, hostname in rows:
+            group = by_kb[(state, kb)]
+            group["title"] = title
+            group["code"] = group["code"] or code
+            group["devs"].append((dev_id, hostname))
+
+        for (state, kb), info in by_kb.items():
+            if state == UPDATE_PENDING_RESTART:
+                title, severity, fix, note = (
+                    f"{kb} installed — restart pending", "medium", None,
+                    "The update is already on these devices; only a reboot applies it. "
+                    "Reinstalling changes nothing. ASTRA never reboots a machine on its own, "
+                    "so ask the user to restart, or schedule one through Intune/GPO.",
+                )
+            elif state == UPDATE_FAILED:
+                code = info["code"]
+                # Retrying is what Windows itself offers, so the button stays — but the code
+                # is shown, because a repeatedly failing download needs a cause, not a retry.
+                title, severity, fix, note = (
+                    f"{kb} failed to install{f' ({code})' if code else ''}", "high",
+                    "windows_update_install", None,
+                )
+            else:
+                title, severity, fix, note = f"{kb} pending", "medium", "windows_update_install", None
+
             issues.append(FleetIssue(
-                key=f"update:{kb}", category="update",
-                title=f"{kb} pending", detail=info["title"], severity="medium",
-                fix_action_id="windows_update_install", fix_params={"kb_article_id": kb},
+                key=f"update:{state}:{kb}", category="update",
+                title=title, detail=info["title"], severity=severity,
+                fix_action_id=fix,
+                fix_params={"kb_article_id": kb} if fix else None,
+                fix_note=note,
                 affected=[FleetAffected(device_id=d[0], hostname=d[1]) for d in info["devs"]],
             ))
 

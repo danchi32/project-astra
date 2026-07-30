@@ -72,7 +72,11 @@ public sealed record TelemetryWindowsUpdate(
     [property: JsonPropertyName("kb_article_id")] string KbArticleId,
     [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("is_installed")] bool IsInstalled,
-    [property: JsonPropertyName("installed_on")] string? InstalledOn);
+    [property: JsonPropertyName("installed_on")] string? InstalledOn,
+    // What the update is actually doing — "pending", "pending_restart", "failed",
+    // "installed" — and Windows' own error code when it failed. Older backends ignore both.
+    [property: JsonPropertyName("state")] string? State = null,
+    [property: JsonPropertyName("error_code")] string? ErrorCode = null);
 
 public sealed record TelemetryHardware(
     [property: JsonPropertyName("manufacturer")] string? Manufacturer,

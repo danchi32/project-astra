@@ -124,6 +124,20 @@ class DeviceService(TimestampMixin, Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+# What an update is actually doing, mirroring what the Windows Update page shows the user.
+# is_installed was a bool, which cannot tell "waiting for a restart" from "not installed" or
+# from "failed to download" — so a device that had installed its updates and only needed a
+# reboot looked identical to one that had never patched, and an update failing to download
+# looked like one that simply hadn't been pushed yet.
+UPDATE_PENDING = "pending"                  # needs installing
+UPDATE_PENDING_RESTART = "pending_restart"  # installed; takes effect after a reboot
+UPDATE_FAILED = "failed"                    # download/install failed — error_code says why
+UPDATE_INSTALLED = "installed"
+
+# States where the update is on the machine and nothing more needs downloading or installing.
+_ON_DISK = frozenset({UPDATE_PENDING_RESTART, UPDATE_INSTALLED})
+
+
 class DeviceWindowsUpdate(TimestampMixin, Base):
     """Pending / recently installed Windows updates."""
 
@@ -137,6 +151,28 @@ class DeviceWindowsUpdate(TimestampMixin, Base):
 
     kb_article_id: Mapped[str] = mapped_column(String(30), nullable=False)
     title: Mapped[str] = mapped_column(String(400), nullable=False)
+
+    # The authoritative field. is_installed is derived from it below and never set directly,
+    # so the two cannot drift — a second, independently-written copy of the same fact is how
+    # the UI ends up confidently contradicting the device.
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default=UPDATE_PENDING)
+    # Windows' own failure code, e.g. "0x80244018". Only meaningful when state is failed;
+    # without it "failed" is untriageable and the operator has to go to the device anyway.
+    error_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     is_installed: Mapped[bool] = mapped_column(nullable=False)
     installed_on: Mapped[str | None] = mapped_column(String(30), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    def __init__(self, **kw):
+        # is_installed is kept because older rows and reports still read it, but it is a
+        # projection of state, never an input. Rejected rather than ignored: a caller passing
+        # it has a belief about this row, and silently substituting a different one is how a
+        # caller ends up sure the update is installed while the row says it failed.
+        if "is_installed" in kw:
+            raise TypeError(
+                "is_installed is derived from state; pass state="
+                f"{UPDATE_PENDING!r}/{UPDATE_PENDING_RESTART!r}/{UPDATE_FAILED!r}/{UPDATE_INSTALLED!r}"
+            )
+        state = kw.get("state") or UPDATE_PENDING
+        super().__init__(**kw, is_installed=state in _ON_DISK)
