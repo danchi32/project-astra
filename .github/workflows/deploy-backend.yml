@@ -85,20 +85,39 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      # --suppress-logs is required, not cosmetic. With LEGACY logging the build writes to
-      # a Google-managed bucket outside this project
-      # (gs://PROJECT_NUMBER.cloudbuild-logs.googleusercontent.com), which project-level
-      # storage roles do not cover. Without this flag `gcloud builds submit` fails trying
-      # to tail those logs and exits non-zero even though the build itself SUCCEEDED —
-      # exactly what happened on the first attempt. gcloud still waits for the build and
-      # still reports a real failure through its exit code; only the live tail is dropped,
-      # and the console URL below leads to the full log.
+      # Submit ASYNC and poll the build ourselves, rather than letting `gcloud builds
+      # submit` block.
+      #
+      # Why: in the synchronous form the command exited non-zero on two consecutive runs
+      # even though the build SUCCEEDED and pushed the correct image — the failure was in
+      # gcloud's post-build handling (it streams from a Google-managed logs bucket outside
+      # this project, which project-level storage roles don't cover), not in the build.
+      # `--suppress-logs` did not resolve it. Polling the build's own status makes the step
+      # depend only on the build result, which is the thing we actually care about, and
+      # removes the failure mode instead of guessing at it.
       - name: Build image via Cloud Build
         run: |
           IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${GITHUB_SHA::7}"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          gcloud builds submit --tag "$IMAGE" --region "$REGION" --suppress-logs .
-          echo "Build logs: https://console.cloud.google.com/cloud-build/builds;region=${REGION}?project=${PROJECT_ID}"
+
+          BUILD_ID=$(gcloud builds submit --async --tag "$IMAGE" --region "$REGION" \
+            --format='value(id)' .)
+          echo "build id: $BUILD_ID"
+          echo "logs: https://console.cloud.google.com/cloud-build/builds;region=${REGION}/${BUILD_ID}?project=${PROJECT_ID}"
+
+          # Builds take ~1 min; allow 20.
+          for i in $(seq 1 120); do
+            STATUS=$(gcloud builds describe "$BUILD_ID" --region "$REGION" --format='value(status)')
+            case "$STATUS" in
+              SUCCESS)
+                echo "build succeeded"; exit 0 ;;
+              FAILURE|TIMEOUT|CANCELLED|EXPIRED|INTERNAL_ERROR)
+                echo "build ended as $STATUS — see the logs URL above"; exit 1 ;;
+            esac
+            echo "  [$i] $STATUS"
+            sleep 10
+          done
+          echo "build did not finish within 20 minutes"; exit 1
 
       # Migrations run ONCE here, not per instance: entrypoint.sh is told to skip them
       # (RUN_MIGRATIONS_ON_START=false) because parallel Cloud Run cold starts would
