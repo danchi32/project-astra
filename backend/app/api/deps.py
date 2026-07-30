@@ -5,7 +5,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.rate_limit import FixedWindowLimiter, RateLimitExceeded, apply_limit
 from app.core.security import decode_access_token, hash_opaque_token
 from app.models import Device, User, UserRole
 from app.repositories.devices import DeviceRepository
@@ -65,6 +67,38 @@ async def get_current_device(
     )
     if device is None or not device.is_active:
         raise _credentials_error
+    return device
+
+
+# One limiter for the whole process, sized from settings at import time.
+_agent_limiter = FixedWindowLimiter(
+    limit=get_settings().agent_rate_limit_requests,
+    window_seconds=get_settings().agent_rate_limit_window_seconds,
+)
+
+
+async def get_rate_limited_device(device: Device = Depends(get_current_device)) -> Device:
+    """`get_current_device` plus a per-device rate limit — for the endpoints agents poll.
+
+    Keyed by device id (not IP) so one stuck agent can't affect the rest of an office
+    behind the same NAT. Log-only unless ASTRA_AGENT_RATE_LIMIT_ENFORCE is set; see
+    app/core/rate_limit.py for why the counter is per-process.
+    """
+    settings = get_settings()
+    if settings.agent_rate_limit_enabled:
+        try:
+            apply_limit(
+                _agent_limiter,
+                str(device.id),
+                enforce=settings.agent_rate_limit_enforce,
+                label="device",
+            )
+        except RateLimitExceeded as exc:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests from this device. Slow down and retry.",
+                headers={"Retry-After": str(exc.retry_after)},
+            )
     return device
 
 

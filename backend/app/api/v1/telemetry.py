@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_device, get_current_user, require_roles
+from app.api.deps import get_current_user, get_rate_limited_device, require_roles
 from app.core.database import get_db
 from app.models import Device, User, UserRole
 from app.schemas.telemetry import (
@@ -30,7 +30,7 @@ staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 )
 async def push_telemetry(
     body: TelemetryPush,
-    device: Device = Depends(get_current_device),
+    device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> TelemetryPushResponse:
     await TelemetryService(session).ingest(device=device, data=body)

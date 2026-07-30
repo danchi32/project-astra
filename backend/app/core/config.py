@@ -28,6 +28,44 @@ class Settings(BaseSettings):
                 value = "postgresql+asyncpg://" + value[len("postgresql://"):]
         return value
 
+    # ── Connection pool ────────────────────────────────────────────────────────
+    # Env-driven because the right values differ per platform: a single-instance PaaS
+    # can hold a big pool, while N Cloud Run instances each hold their own — so the
+    # total against Postgres is pool × instances and must stay under its limit.
+    # (Neon's pooled endpoint fronts PgBouncer, which absorbs a lot of this.)
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    # Recycle connections before a proxy/server silently drops them. Neon's pooler and
+    # most managed providers cut idle connections after a few minutes.
+    db_pool_recycle_seconds: int = 300
+    # Check a connection is alive before handing it out. REQUIRED on Neon: it scales the
+    # compute to zero after ~5 min idle and restarts weekly for updates, so pooled
+    # connections go dead and the next request would otherwise fail.
+    db_pool_pre_ping: bool = True
+
+    # ── Telemetry retention ────────────────────────────────────────────────────
+    # Raw snapshots arrive ~1/device/minute and are only ever read as "the latest" or
+    # "the last 60", so they are pruned per device on ingest. Long-range history is
+    # preserved in telemetry_daily_rollups, which is never pruned.
+    # 0 disables pruning (keeps every row).
+    telemetry_retention_days: int = 7
+    # Floor: never prune a device below its newest N snapshots, however old they are.
+    # Matches the largest read (`get_snapshots(limit=60)`) so the charts always have data,
+    # and protects devices that return from a long offline spell with only stale buffered
+    # telemetry.
+    telemetry_keep_min_snapshots: int = 60
+
+    # ── Agent rate limiting ────────────────────────────────────────────────────
+    # A healthy agent makes ~6 requests/min (heartbeat + telemetry + two remediation
+    # pollers), so 120/min is ~20x headroom — it should only ever catch a stuck retry
+    # loop. Starts in LOG-ONLY mode: breaches are logged but never rejected, because a
+    # too-tight limit would drop real heartbeats and show devices as offline. Watch the
+    # logs against live fleet traffic, then set ASTRA_AGENT_RATE_LIMIT_ENFORCE=true.
+    agent_rate_limit_enabled: bool = True
+    agent_rate_limit_enforce: bool = False
+    agent_rate_limit_requests: int = 120
+    agent_rate_limit_window_seconds: int = 60
+
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7

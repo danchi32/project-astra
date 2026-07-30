@@ -1,8 +1,17 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -26,6 +35,38 @@ class TelemetrySnapshot(TimestampMixin, Base):
     disks: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
 
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TelemetryDailyRollup(TimestampMixin, Base):
+    """One aggregated row per device per day, written as snapshots arrive.
+
+    Raw snapshots are pruned after a short retention window (they are only ever read as
+    "the latest" or "the last 60"), which would otherwise destroy all history. This table
+    keeps that history permanently at ~1 row/device/day — cheap enough to retain forever
+    and enough to build long-range trend charts from later.
+    """
+
+    __tablename__ = "telemetry_daily_rollups"
+    __table_args__ = (
+        UniqueConstraint("device_id", "day", name="uq_telemetry_rollup_device_day"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+
+    # UTC calendar day this row aggregates.
+    day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    samples: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    cpu_avg: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    cpu_max: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    ram_used_avg_mb: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ram_used_max_mb: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Worst free-space percentage seen across the device's disks that day.
+    disk_free_min_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class DeviceEventLog(TimestampMixin, Base):

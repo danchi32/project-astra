@@ -205,18 +205,32 @@ Ballpark **~$25–50/mo** at current scale.
 
 ---
 
-## 10. Before the flip — recommended hardening
+## 10. Hardening — **done** (migration 0035)
 
-Deferred deliberately, but wanted before a large rollout (see the scale discussion):
+All three landed before the flip, so the standby and Railway run the same hardened code.
 
-1. **Telemetry retention/rollup.** `telemetry_snapshots` is insert-only and never pruned —
-   already 25 k rows for 16 devices. Nothing reads snapshots older than the latest 60
-   (verified: no `since=` query anywhere), so pruning is safe. Rollups keep history for
-   future trend charts.
-2. **Connection pool sizing.** `create_async_engine()` uses SQLAlchemy defaults (5 + 10
-   overflow). Make it env-driven so Railway and Cloud Run can differ.
-3. **Rate limiting** on agent endpoints — start in log-only mode; note that without Redis
-   it's per-instance, so on Cloud Run the effective limit scales with instance count.
+1. **Connection pool + `pool_pre_ping`.** Pool settings are now env-driven
+   (`ASTRA_DB_POOL_SIZE`, `ASTRA_DB_MAX_OVERFLOW`, `ASTRA_DB_POOL_RECYCLE_SECONDS`), and
+   **`pool_pre_ping` is on** — *required* on Neon, which scales compute to zero after ~5
+   min idle and restarts weekly for updates. Without it the first request after either
+   event gets a dead pooled connection and fails. Total connections against Postgres are
+   `(pool + overflow) × instances`, which is why this is configurable per platform.
+2. **Telemetry retention + daily rollups.** New `telemetry_daily_rollups` table
+   (1 row/device/day: avg+max CPU, avg+max RAM, worst disk-free %) is written on every
+   ingest, *then* raw snapshots older than `ASTRA_TELEMETRY_RETENTION_DAYS` (7) are pruned
+   **for that device only** — no cron, work per ingest stays constant as the fleet grows.
+   Rollups are never pruned, so pruning doesn't destroy history.
+   A **floor** (`ASTRA_TELEMETRY_KEEP_MIN_SNAPSHOTS`, 60) keeps a device's newest rows
+   whatever their age: a device returning from weeks offline flushes its offline queue with
+   stale `collected_at` values, and pruning purely by age would delete all of them on
+   arrival — leaving it with no telemetry at all and an "unknown" disk compliance check.
+3. **Agent rate limiting — log-only.** Per-**device** fixed window (120 req/60 s vs a
+   healthy agent's ~6/min, so it only catches a stuck retry loop). Keyed by device id, not
+   IP, so one bad agent can't affect an office behind the same NAT. Breaches are logged and
+   **allowed**; flip `ASTRA_AGENT_RATE_LIMIT_ENFORCE=true` only after watching real fleet
+   traffic — a tight limit would drop genuine heartbeats and show devices offline. The
+   counter is in-process (no Redis here), so on Cloud Run the effective ceiling is
+   `limit × instances`.
 
 ---
 

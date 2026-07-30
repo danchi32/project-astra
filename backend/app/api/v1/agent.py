@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid
 
-from app.api.deps import get_current_device
+from app.api.deps import get_rate_limited_device
 from app.core.database import get_db
 from app.models import Device
 from app.schemas.conversations import (
@@ -38,7 +38,7 @@ async def enroll(body: EnrollRequest, session: AsyncSession = Depends(get_db)) -
 @router.post("/heartbeat", response_model=HeartbeatResponse, summary="Report device liveness")
 async def heartbeat(
     body: HeartbeatRequest,
-    device: Device = Depends(get_current_device),
+    device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> HeartbeatResponse:
     await DeviceService(session).heartbeat(device=device, data=body)
@@ -51,7 +51,7 @@ async def heartbeat(
     summary="Get the current signed agent-update manifest (device-authenticated)",
 )
 async def get_update(
-    device: Device = Depends(get_current_device),
+    device: Device = Depends(get_rate_limited_device),
 ) -> AgentUpdateEnvelope:
     # The backend only relays an already-signed manifest; the agent verifies it against a
     # pinned key, so this endpoint is not itself a trust boundary for update integrity.
@@ -69,7 +69,7 @@ async def get_update(
 )
 async def chat(
     body: AgentChatRequest,
-    device: Device = Depends(get_current_device),
+    device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> AgentChatResponse:
     conversation, assistant, source = await ConversationService(session).device_chat(
@@ -89,7 +89,7 @@ async def chat(
     summary="Get this device's most recent conversation so the tray can restore it",
 )
 async def conversation_history(
-    device: Device = Depends(get_current_device),
+    device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> AgentConversationHistory:
     conversation_id, messages = await ConversationService(session).device_history(device=device)
@@ -106,7 +106,7 @@ async def conversation_history(
 )
 async def claim_tasks(
     context: str = "user",
-    device: Device = Depends(get_current_device),
+    device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> list[AgentRemediationTask]:
     # context selects which agent process is claiming: "user" (desktop Tray) or "system"
@@ -125,7 +125,7 @@ async def claim_tasks(
 async def report_task_result(
     task_id: uuid.UUID,
     body: AgentRemediationResult,
-    device: Device = Depends(get_current_device),
+    device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     await RemediationService(session).record_result(

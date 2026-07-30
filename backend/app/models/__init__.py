@@ -28,6 +28,7 @@ from app.models.telemetry import (
     DeviceInstalledApp,
     DeviceService,
     DeviceWindowsUpdate,
+    TelemetryDailyRollup,
     TelemetrySnapshot,
 )
 from app.models.user import User, UserRole
@@ -72,6 +73,7 @@ __all__ = [
     "RemediationStatus",
     "RemediationTask",
     "SemanticCacheEntry",
+    "TelemetryDailyRollup",
     "TelemetrySnapshot",
     "User",
     "UserRole",

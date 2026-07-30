@@ -11,6 +11,7 @@ from app.models.telemetry import (
     DeviceWindowsUpdate,
     TelemetrySnapshot,
 )
+from app.core.config import get_settings
 from app.repositories.devices import DeviceRepository
 from app.repositories.telemetry import TelemetryRepository
 from app.schemas.telemetry import DashboardSummary, TelemetryPush
@@ -41,7 +42,7 @@ class TelemetryService:
             if hw.total_storage_gb is not None:
                 device.total_storage_gb = hw.total_storage_gb
 
-        await self.repo.add_snapshot(
+        snapshot = await self.repo.add_snapshot(
             TelemetrySnapshot(
                 device_id=device.id,
                 org_id=device.org_id,
@@ -51,6 +52,16 @@ class TelemetryService:
                 disks=[d.model_dump() for d in data.disks],
                 collected_at=now,
             )
+        )
+        # Fold into the day's rollup first, THEN prune — so history is captured before
+        # any raw row is dropped. Both are scoped to this device, so the work per ingest
+        # stays constant no matter how large the fleet gets.
+        await self.repo.roll_up_snapshot(snapshot)
+        settings = get_settings()
+        await self.repo.prune_snapshots(
+            device.id,
+            keep_days=settings.telemetry_retention_days,
+            keep_min_rows=settings.telemetry_keep_min_snapshots,
         )
 
         if data.event_logs:
