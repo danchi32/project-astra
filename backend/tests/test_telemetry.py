@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 
 TELEMETRY_PAYLOAD = {
     "collected_at": "2026-07-07T10:00:00Z",
@@ -185,7 +184,7 @@ async def test_hardware_optional_when_omitted(client, admin_headers):
 
 
 async def test_regular_user_cannot_read_telemetry(client, user_headers, admin_headers):
-    device_token = await _enroll_device(client, admin_headers)
+    await _enroll_device(client, admin_headers)
     devices = await client.get("/api/v1/devices", headers=admin_headers)
     device_id = devices.json()[0]["id"]
     response = await client.get(f"/api/v1/devices/{device_id}/telemetry", headers=user_headers)
@@ -194,7 +193,7 @@ async def test_regular_user_cannot_read_telemetry(client, user_headers, admin_he
 
 async def test_telemetry_org_isolation(client, admin_headers, other_org_user, user_headers):
     # other_org_user tries to access a device from the main org
-    device_token = await _enroll_device(client, admin_headers)
+    await _enroll_device(client, admin_headers)
     devices = await client.get("/api/v1/devices", headers=admin_headers)
     device_id = devices.json()[0]["id"]
 

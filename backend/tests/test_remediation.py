@@ -1,9 +1,7 @@
 """Self-healing / remediation tests. Security-critical: the tier system must be
 enforced server-side so a lower-tier action can never execute without approval and
 a lower role can never approve a higher-tier action."""
-import uuid
 
-import pytest_asyncio
 
 from tests.conftest import USER_PASSWORD, _create_user, auth_headers
 from app.models import UserRole

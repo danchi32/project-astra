@@ -17,7 +17,6 @@ async def test_installer_has_permanent_key_and_enrolls(client, admin_headers):
     body = r.json()
     key = body["enrollment_key"]
     assert key and len(key) > 20
-    assert key in body["script"]              # baked into the installer
     assert body["filename"].endswith(".ps1")
 
     enrolled = await _enroll(client, key, "PC-1")

@@ -1,16 +1,19 @@
-"""Generates per-organization, pre-configured Windows agent installers.
+"""Generates the per-organization, pre-configured Windows agent installer.
 
-Two shapes, both minting a reusable enrollment token (one token can enroll any
-number of machines — enroll() keys devices by machine id and never consumes the
-token):
+The **portable bundle** (build_offline_bundle_zip) is the only shape: a single .zip with
+the framework-dependent Service + Tray builds plus a pre-keyed installer that runs
+everything through the trusted `dotnet` host. That indirection is the point — it survives
+locked-down corporate machines (ASR blocking unsigned exes, a missing .NET runtime, DNS
+that can't reach the backend). Copy it to any number of PCs; the enrollment token is
+already baked in and is reusable (enroll() keys devices by machine id and never consumes
+the token).
 
-- Online installer  (build_install_script): a small .ps1 that downloads the agent
-  from the backend at install time. Good for one or a few unmanaged machines.
-- Portable bundle    (build_portable_bundle_zip): a single .zip with the framework-
-  dependent Service + Tray builds, plus a pre-keyed installer that runs everything
-  through the trusted `dotnet` host. Handles locked-down corporate machines
-  (ASR unsigned-exe block, missing .NET runtime, DNS that can't reach the backend).
-  Copy to any number of PCs; the enrollment token is already baked in.
+A second, older shape used to exist: a small .ps1 that downloaded a *self-contained* agent
+build (~34 MB, the whole .NET runtime inlined) from the backend at install time. It was
+removed because the architecture moved to the framework-dependent + trusted-dotnet-host
+approach precisely to get past antivirus blocking, the portal never surfaced it, and
+shipping that 34 MB blob in every container image cost far more than the path was worth —
+on a fleet rollout it would also have pulled ~34 MB per machine over the customer's link.
 
 Placeholders are substituted with str.replace (not str.format) so PowerShell's
 own braces need no escaping.
@@ -20,8 +23,6 @@ import zipfile
 from pathlib import Path
 
 _DOWNLOADS = Path(__file__).resolve().parents[2] / "downloads"
-# Self-contained single build served to the online self-download installer.
-AGENT_ZIP = _DOWNLOADS / "agent.zip"
 # Framework-dependent Service + Tray builds for the portable bundle.
 PORTABLE_ZIP = _DOWNLOADS / "agent-portable.zip"
 # Org-agnostic uninstaller (Uninstall-AstraAgent.bat + .ps1), offered as a separate download.
@@ -32,72 +33,6 @@ UNINSTALLER_ZIP = _DOWNLOADS / "agent-uninstaller.zip"
 # custom domain that resolves publicly. Configure via ASTRA_AGENT_BACKEND_IP only as a
 # temporary workaround: a hosts pin overrides DNS, so a stale one blackholes the agent.
 DEFAULT_BACKEND_IP = ""
-
-
-# ── Online installer: downloads the agent from the backend at install time ──────
-_INSTALL_TEMPLATE = r"""#Requires -RunAsAdministrator
-<#
-    ASTRA Windows Agent installer  —  pre-configured for your organization.
-
-    Right-click this file -> "Run with PowerShell" (approve the admin prompt), or:
-        powershell -ExecutionPolicy Bypass -File .\Install-AstraAgent.ps1
-
-    Downloads the agent from your ASTRA server, installs it as a Windows service,
-    and enrolls this machine automatically.
-#>
-param(
-    [string]$ServerUrl       = "@@SERVER_URL@@",
-    [string]$EnrollmentToken = "@@TOKEN@@",
-    [string]$ProxyUrl        = "",
-    [string]$InstallDir      = "$env:ProgramFiles\Astra\Agent"
-)
-
-$ErrorActionPreference = "Stop"
-$ServiceName = "AstraAgent"
-$Exe         = "AstraAgent.Service.exe"
-
-if ([string]::IsNullOrWhiteSpace($ServerUrl))       { throw "ServerUrl is required." }
-if ([string]::IsNullOrWhiteSpace($EnrollmentToken)) { throw "EnrollmentToken is required." }
-$ServerUrl = $ServerUrl.TrimEnd('/')
-
-Write-Host "ASTRA agent -> $ServerUrl" -ForegroundColor Cyan
-
-if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
-    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-    sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
-}
-# Wipe any previous install first. Expand-Archive -Force only OVERWRITES files that
-# exist in the new zip - it never deletes stray files left behind by an older version
-# (e.g. an old build's extra DLLs). A leftover file with the same name but a mismatched
-# version can make the .NET host load the wrong assembly and crash on start, which
-# Windows then reports only as a generic "cannot start service" - so always start clean.
-if (Test-Path $InstallDir) {
-    Remove-Item "$InstallDir\*" -Recurse -Force -ErrorAction SilentlyContinue
-}
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-
-$zipPath = Join-Path $env:TEMP "astra-agent.zip"
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-try {
-    Invoke-WebRequest -Uri "$ServerUrl/api/v1/downloads/agent" -OutFile $zipPath -UseBasicParsing
-} catch {
-    throw "Could not download the agent from $ServerUrl. $($_.Exception.Message)"
-}
-Expand-Archive -Path $zipPath -DestinationPath $InstallDir -Force
-Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-
-$exePath = Join-Path $InstallDir $Exe
-if (-not (Test-Path $exePath)) { throw "Expected $Exe in $InstallDir." }
-
-@{ Astra = @{ ServerUrl = $ServerUrl; EnrollmentToken = $EnrollmentToken; HeartbeatIntervalSeconds = 60; ProxyUrl = $ProxyUrl } } |
-    ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $InstallDir "appsettings.json") -Encoding UTF8
-
-sc.exe create $ServiceName binPath= "`"$exePath`"" start= auto | Out-Null
-sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
-Start-Service -Name $ServiceName
-Write-Host "ASTRA agent installed and started." -ForegroundColor Green
-"""
 
 
 # ── Portable bundle installer: runs via the trusted dotnet host ─────────────────
@@ -337,14 +272,6 @@ if not "%rc%"=="0" (
     pause
 )
 """
-
-
-def build_install_script(*, server_url: str, enrollment_token: str) -> str:
-    return (
-        _INSTALL_TEMPLATE
-        .replace("@@SERVER_URL@@", server_url.rstrip("/"))
-        .replace("@@TOKEN@@", enrollment_token)
-    )
 
 
 def build_portable_install_script(

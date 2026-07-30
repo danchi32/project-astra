@@ -151,7 +151,6 @@ async def test_global_knowledge_reaches_every_org(client, session_factory):
     # to all orgs, even one that authored nothing itself).
     from app.services.ai.knowledge import KnowledgeBaseService
     from app.models import Organization
-    from sqlalchemy import select as _select
 
     async with session_factory() as s:
         other = Organization(name="Some Other Co")

@@ -18,7 +18,7 @@ from app.schemas.devices import (
     HeartbeatRequest,
     InstallerRead,
 )
-from app.services.agent_installer import build_install_script, build_offline_bundle_zip
+from app.services.agent_installer import build_offline_bundle_zip
 from app.services.audit import AuditService
 from app.services.exceptions import AuthenticationError, NotFoundError, ValidationError
 from app.services.settings import SettingsService
@@ -79,16 +79,16 @@ class DeviceService:
         return org
 
     async def get_installer(self, *, actor: User) -> InstallerRead:
-        """The org's ready-to-run installer — the permanent enrollment key is already
-        baked in, so an admin just downloads and runs it. No token, no expiry."""
+        """The org's enrollment details — the permanent key is reusable across machines,
+        with no token step and no expiry. The runnable artefact itself is the portable
+        bundle from generate_offline_bundle(); this just surfaces the key and URL the
+        portal displays alongside it."""
         org = await self._ensure_enrollment_key(actor.org_id)
         server_url = get_settings().public_api_url.rstrip("/")
-        script = build_install_script(server_url=server_url, enrollment_token=org.agent_enrollment_key)
         return InstallerRead(
             enrollment_key=org.agent_enrollment_key,
             server_url=server_url,
             filename="Install-AstraAgent.ps1",
-            script=script,
         )
 
     async def rotate_enrollment_key(self, *, actor: User) -> InstallerRead:

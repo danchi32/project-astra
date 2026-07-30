@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import DateTime, Enum, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import GUID, Base, TimestampMixin, utcnow
+from app.models.base import GUID, Base, TimestampMixin
 
 
 class RemediationStatus(str, enum.Enum):

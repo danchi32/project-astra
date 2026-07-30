@@ -1,6 +1,8 @@
 # What NOT to upload to Cloud Build. Keep this tight — the build context is uploaded on
-# every deploy. Note: downloads/*.zip ARE needed (the backend serves the agent bundles),
-# so they are deliberately not excluded.
+# every deploy. Note: downloads/*.zip ARE needed and deliberately not excluded — the
+# backend serves the portable agent bundle and the uninstaller from there. (The ~34 MB
+# self-contained agent.zip that used to sit alongside them was removed with the online
+# installer path.)
 .venv/
 venv/
 __pycache__/

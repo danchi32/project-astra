@@ -2,17 +2,17 @@
 permanent per-org enrollment key (no token step, no expiry)."""
 
 
-async def test_installer_returns_prefilled_script(client, admin_headers):
+async def test_installer_returns_enrollment_details(client, admin_headers):
     resp = await client.get("/api/v1/devices/installer", headers=admin_headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["filename"] == "Install-AstraAgent.ps1"
     # Falls back to the server-configured public URL (no per-request override).
     assert body["server_url"] == "http://localhost:8000"
-    # The script has the server URL and the exact enrollment key baked in.
-    assert "http://localhost:8000" in body["script"]
-    assert body["enrollment_key"] in body["script"]
-    assert "AstraAgent" in body["script"]
+    assert body["enrollment_key"]
+    # The runnable artefact is the portable bundle; this endpoint no longer returns a
+    # script (the online self-download installer was removed).
+    assert "script" not in body
 
 
 async def test_installer_key_can_enroll(client, admin_headers):

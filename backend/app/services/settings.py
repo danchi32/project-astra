@@ -12,7 +12,7 @@ from app.schemas.settings import (
     RolePermissions,
 )
 from app.services.audit import AuditService
-from app.services.exceptions import ConflictError, NotFoundError
+from app.services.exceptions import ConflictError
 
 # The capability matrix rendered in Settings → Permissions. Keys map to the RBAC
 # actually enforced across the API; labels are the column headers in the UI.

@@ -36,12 +36,11 @@ class EnrollmentTokenRead(BaseModel):
 
 
 class InstallerRead(BaseModel):
-    """The org's ready-to-run installer. The permanent enrollment key is already
-    baked into the script — the admin just downloads and runs it."""
+    """The org's enrollment details, shown next to the portable-bundle download. The
+    permanent key is reusable across machines — no token step, no expiry."""
     enrollment_key: str
     server_url: str
     filename: str
-    script: str
 
 
 class EnrollRequest(BaseModel):
