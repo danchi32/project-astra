@@ -1,0 +1,104 @@
+name: Deploy Staging (Cloud Run)
+
+# Deploys to the staging backend so a change can be exercised against a real Cloud Run
+# service and a real Postgres before it reaches production.
+#
+# Triggers on pushes to any branch EXCEPT main, and on manual dispatch. That fits the way
+# this repo is worked: branch -> staging -> verify -> merge to main -> production. It
+# deliberately does NOT run on main, so it never competes with the production deploy.
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-staging.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: astra-prod-503923
+  REGION: asia-southeast1
+  SERVICE: astra-backend-staging
+  REPO: astra
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1041631804427/locations/global/workloadIdentityPools/github/providers/github
+          service_account: gh-deploy@astra-prod-503923.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Async + poll: the synchronous form of `builds submit` exits non-zero on a SUCCESSFUL
+      # build here, because it streams from a Google-managed logs bucket outside this project.
+      - name: Build image via Cloud Build
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${GITHUB_SHA::7}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          BUILD_ID=$(gcloud builds submit --async --tag "$IMAGE" --region "$REGION" --format='value(id)' .)
+          echo "logs: https://console.cloud.google.com/cloud-build/builds;region=${REGION}/${BUILD_ID}?project=${PROJECT_ID}"
+          for i in $(seq 1 120); do
+            STATUS=$(gcloud builds describe "$BUILD_ID" --region "$REGION" --format='value(status)')
+            case "$STATUS" in
+              SUCCESS) echo "build succeeded"; exit 0 ;;
+              FAILURE|TIMEOUT|CANCELLED|EXPIRED|INTERNAL_ERROR) echo "build ended as $STATUS"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "build did not finish in 20 minutes"; exit 1
+
+      - name: Run staging migrations
+        run: |
+          gcloud run jobs deploy astra-migrate-staging \
+            --image "$IMAGE" --region "$REGION" \
+            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL_STAGING:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY_STAGING:latest \
+            --command alembic --args upgrade,head --quiet
+          gcloud run jobs execute astra-migrate-staging --region "$REGION" --wait
+
+      # Staging gets ONLY the database and JWT secrets. The email, AI and PayPal keys are
+      # deliberately omitted so staging cannot mail a real customer, burn AI credits, or touch
+      # live billing — the app stays inert without them. Its JWT key also differs from
+      # production's, so a token minted here is not valid there.
+      - name: Deploy to Cloud Run (staging)
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" --region "$REGION" \
+            --min-instances 0 --max-instances 3 --concurrency 80 --port 8000 \
+            --cpu 1 --memory 512Mi --timeout 60s \
+            --allow-unauthenticated \
+            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL_STAGING:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY_STAGING:latest \
+            --set-env-vars RUN_MIGRATIONS_ON_START=false,ASTRA_ENVIRONMENT=staging,ASTRA_AGENT_BACKEND_IP= \
+            --quiet
+
+      - name: Verify staging is healthy
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "staging: $URL"
+          for i in $(seq 1 12); do
+            BODY=$(curl -s -m 20 "$URL/health" || true)
+            case "$BODY" in *'"status":"ok"'*) echo "healthy: $BODY";
+              # Guard the boundary: if a live key ever leaks into staging, fail loudly.
+              case "$BODY" in *'"email_enabled":true'*|*'"ai_enabled":true'*)
+                echo "::error::staging has live email/AI keys wired — it must stay inert"; exit 1 ;;
+              esac
+              exit 0 ;;
+            esac
+            echo "attempt $i…"; sleep 10
+          done
+          echo "staging did not become healthy"; exit 1

@@ -6,8 +6,10 @@
 FROM postgres:18-alpine
 
 COPY copy.sh /copy.sh
-# Read-only verification, run with `--command /check.sh` on the same job image.
+# Read-only verification, run with `--command sh --args /check.sh` on the same job image.
 COPY check.sh /check.sh
-RUN chmod +x /copy.sh /check.sh
+# Creates a database (used to provision the staging environment).
+COPY mkdb.sh /mkdb.sh
+RUN chmod +x /copy.sh /check.sh /mkdb.sh
 
 ENTRYPOINT ["/copy.sh"]

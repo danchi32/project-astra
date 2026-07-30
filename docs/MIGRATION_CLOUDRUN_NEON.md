@@ -233,6 +233,54 @@ Devices / Compliance / Fleet Issues render the migrated data.
 
 ---
 
+## 8b. Monitoring, budget, and staging
+
+**Alerting** (set up 2026-07-30; there was none before, so an outage would have been noticed
+only when a customer complained). Notification channel: `danish@technomateai.com`.
+
+- Uptime check on **`api.astra.technomateai.com/health`** every 60 s from Asia/Europe/US.
+  Deliberately the custom domain, not the `*.run.app` URL — that is what agents and the
+  portal actually resolve, so it also catches DNS and certificate failures, and it validates
+  SSL so an expired cert trips it.
+- Four policies only, because alert fatigue is how monitoring dies. Each means "look now":
+  **backend DOWN** (majority of probes failing), **elevated 5xx** (serving but erroring —
+  catches a bad revision or a DB problem that `/health` sails past, since it touches no
+  tables), **p95 > 3 s** (normally well under a second, so 3 s is a real problem), and
+  **instances ≥ 15 of 20** (capacity warning — request the quota increase *before* requests
+  queue).
+- Recreate with `backend/deploy/monitoring/create_alerts.ps1`. It uses the Monitoring v3 REST
+  API because `gcloud alpha monitoring` needs the alpha component, which will not install
+  non-interactively on this machine.
+
+**Budget**: ₹12,000/month with alerts at 50/90/100 % of actual and 100 % of forecast. It is
+an *alert threshold, not a cap* — it never stops the service. Note the billing account is in
+**INR**; a budget submitted in USD fails with a bare `INVALID_ARGUMENT` and no field detail.
+
+**Staging**: `astra-backend-staging` (`min-instances 0`, so ~free when idle) against a
+separate **`astra_staging` database on the same Neon project**.
+
+A separate database rather than a Neon *branch* on purpose: a branch is a copy-on-write clone
+of production, which would put real customer data somewhere more people can reach and deploy
+to. An empty database that migrations run against is safer, and it shares the existing compute
+so it costs storage only.
+
+Staging gets **only** the DB and JWT secrets. Email, AI and PayPal keys are omitted, so it
+cannot mail a real customer, burn AI credits, or touch live billing — the app stays inert
+without them, and `/health` reports `email_enabled: false, ai_enabled: false`. Its JWT key
+also **differs from production's**, so a token minted in staging is not valid against prod.
+`deploy-staging.yml` asserts that inertness on every deploy and fails if a live key appears.
+
+Deploys on pushes to any branch except `main`, plus manual dispatch — so the flow is
+branch → staging → verify → merge to `main` → production.
+
+> ⚠️ When writing secrets, do **not** pipe a string to `gcloud secrets ... --data-file=-` from
+> PowerShell: it appends CRLF *inside the secret*. That put `require\r\n` in a connection
+> string and asyncpg rejected it with a confusing "sslmode must be one of …" error. Write via
+> `[IO.File]::WriteAllText` to a temp file, or use Python (`input=value`), and verify the
+> stored length matches.
+
+---
+
 ## 9. Cost
 
 - **Cloud Run** `min-instances 1`: a few $/mo idle + usage.
