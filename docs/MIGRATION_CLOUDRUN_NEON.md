@@ -1,17 +1,29 @@
 # ASTRA Backend Migration Runbook — Railway → Google Cloud Run + Neon
 
-Status: **the warm standby is BUILT and RUNNING.** Railway still serves production; the
-standby is a full parallel copy waiting on a DNS flip.
+Status: **CUTOVER COMPLETE (2026-07-30).** `api.astra.technomateai.com` is served by Cloud
+Run against Neon. Railway is retained, idle, as rollback insurance for one week.
 
 | | |
 |---|---|
 | GCP project | `astra-prod-503923` |
 | Region | `asia-southeast1` (Singapore) |
-| Standby service | `astra-backend` → https://astra-backend-fmuizr4sda-as.a.run.app |
-| Database | Neon Postgres 18, `ap-southeast-1`, pooled endpoint |
-| Live production | still Railway, via `https://api.astra.technomateai.com` |
+| Live service | `astra-backend` — `https://api.astra.technomateai.com` (also `*.run.app`) |
+| Database | **Neon Postgres 18**, `ap-southeast-1`, pooled endpoint, 7-day history window |
+| Certificate | Google Trust Services, auto-renewing (issued 2026-07-30) |
+| Auto-deploy | `.github/workflows/deploy-backend.yml` — push to `main` touching `backend/**` |
+| Railway | idle, retained until ~2026-08-06 for rollback |
 
-> The portal stays on **Vercel** — nothing to migrate there.
+> The portal stays on **Vercel**. Its `NEXT_PUBLIC_API_URL` must be
+> `https://api.astra.technomateai.com` — it pointed straight at a Railway URL before the
+> cutover, which would have left the portal reading the old database while agents wrote to
+> Neon.
+
+## ⚠️ Post-cutover: never run `astra-dbcopy` again
+
+It does a **full replace** of the destination. That was right while Neon was a standby; now
+Neon is live, so a re-run would destroy production and restore stale Railway data. The Cloud
+Run job was **deleted** at cutover, and `deploy/dbcopy/copy.sh` now refuses to run unless
+`I_UNDERSTAND_THIS_REPLACES_THE_DESTINATION=yes` is set. `astra-dbcheck` (read-only) stays.
 
 ---
 

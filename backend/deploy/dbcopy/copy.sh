@@ -15,6 +15,25 @@ set -eu
 : "${MIGRATE_SRC_URL:?MIGRATE_SRC_URL is required}"
 : "${MIGRATE_DST_URL:?MIGRATE_DST_URL is required}"
 
+# DANGER GUARD — read before removing.
+#
+# This script REPLACES the destination database. That was correct while Neon was a standby
+# being seeded from Railway. Since the cutover (2026-07-30) Neon is the LIVE database, so
+# running this again would wipe production and restore stale Railway data.
+#
+# It is therefore refused unless the caller states the intent explicitly. The Cloud Run job
+# was deleted at cutover; recreating it is deliberate, and so is this.
+if [ "${I_UNDERSTAND_THIS_REPLACES_THE_DESTINATION:-}" != "yes" ]; then
+  echo "REFUSING TO RUN."
+  echo
+  echo "This replaces everything in MIGRATE_DST_URL. Neon has been the live database since"
+  echo "the 2026-07-30 cutover — running this against it destroys production data."
+  echo
+  echo "If you genuinely intend a full replace (e.g. seeding a NEW standby), set:"
+  echo "  I_UNDERSTAND_THIS_REPLACES_THE_DESTINATION=yes"
+  exit 1
+fi
+
 case "$MIGRATE_DST_URL" in
   *-pooler.*)
     echo "ERROR: MIGRATE_DST_URL points at Neon's pooled endpoint."
