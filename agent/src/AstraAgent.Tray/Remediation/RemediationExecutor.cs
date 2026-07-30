@@ -126,12 +126,14 @@ public sealed class RemediationExecutor
         var deleted = 0;
         var inUse = 0;
         var seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var cleaned = new System.Collections.Generic.List<string>();
 
         foreach (var target in targets)
         {
             if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(target)) continue;
             var full = Path.GetFullPath(target);
             if (!seen.Add(full)) continue;   // de-dupe (TMP/TEMP usually point to the same path)
+            cleaned.Add(full);
 
             // Delete files individually and recursively, so a single locked file no
             // longer causes an entire subtree to be skipped (the previous bug).
@@ -164,7 +166,18 @@ public sealed class RemediationExecutor
         }
 
         var mb = freed / 1024d / 1024d;
-        var msg = $"Cleared temporary files — freed {mb:0.#} MB across {deleted} file(s).";
+
+        // Name the folder and the account. %TEMP% is per-user, so "freed 332 MB" is
+        // unverifiable — and actively misleading — unless you can see WHOSE temp was
+        // emptied. If this process isn't running as the signed-in user (for example it was
+        // started by an installer running under an admin account, before the first logon
+        // hands it to the real user), it cleans that account's temp and the user sees no
+        // change at all. Saying which path and which identity makes that self-evident
+        // instead of a mystery.
+        var who = Environment.UserName;
+        var where = cleaned.Count > 0 ? string.Join(", ", cleaned) : "(no temp folder found)";
+        var msg = $"Cleared temporary files for {who} — freed {mb:0.#} MB across {deleted} file(s) "
+                + $"in {where}.";
         if (inUse > 0)
             msg += $" {inUse} file(s) were in use by running apps and were skipped "
                  + "(close those apps and run it again to remove the rest).";

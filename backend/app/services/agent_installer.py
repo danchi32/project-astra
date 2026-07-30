@@ -205,8 +205,31 @@ $vbs = "$trayDir\launch-tray.vbs"
 CreateObject("WScript.Shell").Run """$dotnet"" ""$trayDir\AstraAgent.Tray.dll""", 0, False
 "@ | Set-Content $vbs -Encoding ASCII
 Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AstraAssistant" -Value ("wscript.exe `"$vbs`"")
-Start-Process wscript.exe -ArgumentList "`"$vbs`""
-Write-Host "Tray chat installed and launched." -ForegroundColor Green
+
+# Start the tray in the SIGNED-IN USER'S session, not this installer's.
+#
+# This script is elevated (#Requires -RunAsAdministrator), and in a managed rollout it is
+# usually run by IT's admin account or by Intune as SYSTEM — not by the person using the
+# machine. A plain Start-Process here inherits that identity, and the tray then resolves
+# per-user paths against the WRONG profile: "clear temporary files" reported freeing
+# hundreds of MB while the user's own %TEMP% was untouched, because it had emptied the
+# installing admin's. It would also draw its window in a session the user can't see.
+#
+# A scheduled task with /ru INTERACTIVE runs as whoever is logged on at the console, which
+# is the account the tray must act for. Run once, then remove the task — the Run key above
+# is what starts it at every subsequent logon.
+$trayTask = "AstraTrayFirstRun"
+try {
+    schtasks /create /tn $trayTask /tr "wscript.exe `"$vbs`"" /sc ONCE /st 00:00 /ru INTERACTIVE /f | Out-Null
+    schtasks /run /tn $trayTask | Out-Null
+    Start-Sleep -Seconds 2
+    schtasks /delete /tn $trayTask /f | Out-Null
+    Write-Host "Tray chat installed and started in the signed-in user's session." -ForegroundColor Green
+} catch {
+    # Nobody logged on (a provisioning-time install), or the task API refused. Not fatal:
+    # the Run key starts it correctly at the next sign-in, which is the common case anyway.
+    Write-Host "Tray chat installed; it will start at the next sign-in." -ForegroundColor Yellow
+}
 
 Start-Sleep -Seconds 4
 Get-Service $svcName | Select-Object Name, Status, StartType | Format-Table -AutoSize

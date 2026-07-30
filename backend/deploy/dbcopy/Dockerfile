@@ -12,6 +12,8 @@ COPY check.sh /check.sh
 COPY mkdb.sh /mkdb.sh
 # Disaster-recovery drill: dump production, restore to a throwaway db, verify, drop.
 COPY drill.sh /drill.sh
-RUN chmod +x /copy.sh /check.sh /mkdb.sh /drill.sh
+# Read-only: where are a device's remediation tasks stuck?
+COPY taskdiag.sh /taskdiag.sh
+RUN chmod +x /copy.sh /check.sh /mkdb.sh /drill.sh /taskdiag.sh
 
 ENTRYPOINT ["/copy.sh"]
