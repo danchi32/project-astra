@@ -8,7 +8,16 @@ namespace AstraAgent.Service.Remediation;
 /// It lives on its own rather than inside the worker so the safety rules below exist in
 /// exactly one place — duplicating them into a second caller is how one copy quietly drifts
 /// and stops enforcing the allowlist.</summary>
-public sealed class SystemTaskRunner(ILogger<SystemTaskRunner> logger)
+public interface ISystemTaskRunner
+{
+    Task RunAsync(
+        string deviceToken,
+        IReadOnlyList<AgentRemediationTask> tasks,
+        IAstraApiClient api,
+        CancellationToken ct);
+}
+
+public sealed class SystemTaskRunner(ILogger<SystemTaskRunner> logger) : ISystemTaskRunner
 {
     // Hard ceiling for a single action. A Windows Update install can legitimately run for
     // minutes, but a wedged WUA call must never block the caller forever — that would

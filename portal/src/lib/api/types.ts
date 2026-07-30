@@ -367,6 +367,9 @@ export interface RemediationTask {
   device_hostname: string | null;
   action_id: string;
   action_label: string | null;
+  // Needed to tell one job from another: "install KB5094126" and "install KB5100998" are
+  // the same action_id. Without params the UI would treat the second as already running.
+  params: Record<string, string> | null;
   tier: RemediationTier;
   status: RemediationStatus;
   reason: string;

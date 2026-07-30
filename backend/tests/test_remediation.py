@@ -134,25 +134,32 @@ async def test_fleet_circuit_breaker_and_hard_cap(client, admin_headers, monkeyp
     monkeypatch.setattr(rem.settings, "remediation_auto_approve_burst", 2)
     monkeypatch.setattr(rem.settings, "remediation_hard_burst", 4)
 
-    await _enroll(client, admin_headers)
-    device_id = await _device_id(client, admin_headers)
+    # One fix pushed across many machines — the breaker counts per ORG, so this is the
+    # blast radius it exists to limit. It used to be tested by firing the same action at
+    # one device five times, which duplicate suppression now (correctly) refuses; that was
+    # never what a runaway push looks like anyway.
+    devices = []
+    for i in range(5):
+        await _enroll(client, admin_headers, hostname=f"RMD-{i}", machine=f"rmd-machine-{i}")
+        devices.append((await client.get("/api/v1/devices", headers=admin_headers)).json())
+    device_ids = [d["id"] for d in devices[-1]]
 
-    async def make():
+    async def make(device_id):
         return await client.post(
             "/api/v1/remediations", headers=admin_headers,
             json={"device_id": device_id, "action_id": "flush_dns", "reason": "x"},
         )
 
     statuses = []
-    for _ in range(4):
-        r = await make()
+    for device_id in device_ids[:4]:
+        r = await make(device_id)
         assert r.status_code == 201, r.text
         statuses.append(r.json()["status"])
     # First two auto-approve; the breaker then forces human approval.
     assert statuses == ["approved", "approved", "pending_approval", "pending_approval"]
 
     # Beyond the hard burst, new remediations are refused.
-    blocked = await make()
+    blocked = await make(device_ids[4])
     assert blocked.status_code == 400
     assert "safety limit" in blocked.text.lower()
 
@@ -377,3 +384,95 @@ async def test_inline_approval_still_enforces_the_tier(client, user_headers, adm
 
     tasks = (await client.get("/api/v1/remediations", headers=admin_headers)).json()
     assert not any(t["action_id"] == "office_repair" for t in tasks), "a refused push must create nothing"
+
+
+# ── Duplicate suppression ─────────────────────────────────────────────────
+
+
+async def test_same_action_cannot_be_queued_twice_on_one_device(client, admin_headers):
+    """A long action shows no progress while it runs, so an operator who sees nothing
+    happen presses the button again. Three identical Windows Update installs were queued
+    on one machine that way; the agent runs them one after another, so the device stays
+    tied up for three times as long doing work it was asked to do once."""
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+    body = {"device_id": device_id, "action_id": "flush_dns", "reason": "site won't load"}
+
+    first = await client.post("/api/v1/remediations", json=body, headers=admin_headers)
+    assert first.status_code == 201
+
+    second = await client.post("/api/v1/remediations", json=body, headers=admin_headers)
+    # 409, not 400: the request was fine and the work is already under way.
+    assert second.status_code == 409, second.text
+    assert "already" in second.json()["detail"].lower()
+
+    tasks = await client.get("/api/v1/remediations", headers=admin_headers)
+    assert len([t for t in tasks.json() if t["action_id"] == "flush_dns"]) == 1
+
+
+async def test_a_different_parameter_is_different_work(client, admin_headers):
+    """Pushing two specific updates is two jobs, not a duplicate. The guard keys on
+    params as well as the action, or 'fix all' per KB would only ever push the first KB."""
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+
+    a = await client.post(
+        "/api/v1/remediations",
+        json={"device_id": device_id, "action_id": "restart_service",
+              "params": {"service_name": "Spooler"}, "reason": "printing stuck"},
+        headers=admin_headers,
+    )
+    b = await client.post(
+        "/api/v1/remediations",
+        json={"device_id": device_id, "action_id": "restart_service",
+              "params": {"service_name": "WSearch"}, "reason": "search broken"},
+        headers=admin_headers,
+    )
+    assert a.status_code == 201, a.text
+    assert b.status_code == 201, b.text
+
+
+async def test_the_same_action_is_allowed_again_once_it_has_finished(client, admin_headers):
+    """The guard covers work in flight only. A fix that already ran must be repeatable —
+    flushing DNS twice in a day is normal, and refusing it would be worse than the bug."""
+    enroll = await _enroll(client, admin_headers)
+    device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
+    device_id = await _device_id(client, admin_headers)
+    body = {"device_id": device_id, "action_id": "flush_dns", "reason": "site won't load"}
+
+    first = await client.post("/api/v1/remediations", json=body, headers=admin_headers)
+    task_id = first.json()["id"]
+
+    await client.get("/api/v1/agent/tasks", headers=device_headers)
+    done = await client.post(
+        f"/api/v1/agent/tasks/{task_id}/result",
+        json={"success": True, "output": "flushed"},
+        headers=device_headers,
+    )
+    assert done.status_code == 204
+
+    again = await client.post("/api/v1/remediations", json=body, headers=admin_headers)
+    assert again.status_code == 201, again.text
+
+
+async def test_bulk_push_reports_already_running_apart_from_failures(client, admin_headers):
+    """'Fix all' must not call an already-running device a failure — that reads as
+    'the push didn't work' and invites a second press, which is what creates duplicates."""
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+    await client.post(
+        "/api/v1/remediations",
+        json={"device_id": device_id, "action_id": "clear_system_temp", "reason": "low disk"},
+        headers=admin_headers,
+    )
+
+    bulk = await client.post(
+        "/api/v1/fleet/remediate",
+        json={"device_ids": [device_id], "action_id": "clear_system_temp", "reason": "low disk"},
+        headers=admin_headers,
+    )
+    assert bulk.status_code == 200, bulk.text
+    body = bulk.json()
+    assert body["already_running"] == 1
+    assert body["queued"] == 0
+    assert body["failed"] == 0

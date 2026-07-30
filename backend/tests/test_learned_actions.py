@@ -3,7 +3,7 @@ the fix is remembered so the same kind of issue is handled for free next time.""
 from sqlalchemy import select
 
 from app.core.security import hash_opaque_token
-from app.models import Device, LearnedAction, RemediationTask
+from app.models import Device, LearnedAction, RemediationStatus, RemediationTask
 from app.services.ai.provider import LLMResponse, StubProvider, ToolCall
 from app.services.conversations import ConversationService
 
@@ -55,6 +55,14 @@ async def test_llm_fix_is_learned_then_reused_for_free(session_factory, admin_us
         assert learned[0].action_id == "restart_service"
         assert learned[0].params == {"service_name": "Spooler"}
 
+    # The first fix runs and finishes. Without this the second turn would be refused as a
+    # duplicate — correctly: someone reporting the same problem while the fix is still
+    # queued should be told it's already under way, not have it queued a second time.
+    async with session_factory() as session:
+        first = (await session.execute(select(RemediationTask))).scalar_one()
+        first.status = RemediationStatus.SUCCEEDED
+        await session.commit()
+
     # 2. A fresh service with NO LLM provider sees the same issue -> handled for free
     #    from the learned store (no LLM call), and it applies the same fix.
     async with session_factory() as session:
@@ -69,6 +77,28 @@ async def test_llm_fix_is_learned_then_reused_for_free(session_factory, admin_us
         tasks = (await session.execute(select(RemediationTask))).scalars().all()
         assert len(tasks) == 2
         assert all(t.action_id == "restart_service" for t in tasks)
+
+
+async def test_a_repeat_report_does_not_queue_the_fix_twice(session_factory, admin_user):
+    """Reporting the same problem again while the fix is still queued must not queue it
+    again. The user hasn't seen it work yet — that's precisely why they're asking again —
+    and a second identical action only ties the device up for longer."""
+    async with session_factory() as session:
+        device = await _make_device(session, admin_user.org_id)
+        svc = ConversationService(session, provider=_FakeLLM())
+        await svc.device_chat(device=device, content=_QUERY, conversation_id=None)
+
+    async with session_factory() as session:
+        device = (
+            await session.execute(select(Device).where(Device.hostname == "PRINT-PC"))
+        ).scalar_one()
+        svc = ConversationService(session)
+        _, msg, _ = await svc.device_chat(device=device, content=_QUERY, conversation_id=None)
+
+        tasks = (await session.execute(select(RemediationTask))).scalars().all()
+        assert len(tasks) == 1, "the same fix must not be queued twice while it's in flight"
+        # And the user is told why, rather than being left thinking nothing happened.
+        assert "already" in msg.content.lower()
 
 
 async def test_global_fix_auto_applies_for_any_org(session_factory, admin_user):

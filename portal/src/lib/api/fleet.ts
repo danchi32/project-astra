@@ -20,6 +20,8 @@ export interface FleetIssue {
 
 export interface BulkRemediateResult {
   queued: number;
+  /** Devices that already had this exact fix queued or running. Not a failure. */
+  already_running: number;
   failed: number;
   error: string | null;
 }

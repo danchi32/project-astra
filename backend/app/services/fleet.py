@@ -20,7 +20,11 @@ from app.models import (
 from app.repositories.devices import DeviceRepository
 from app.schemas.fleet import BulkRemediateResult, FleetAffected, FleetIssue
 from app.services.compliance import ComplianceService
-from app.services.remediation.service import RemediationError, RemediationService
+from app.services.remediation.service import (
+    AlreadyQueuedError,
+    RemediationError,
+    RemediationService,
+)
 
 # Compliance checks surfaced as fleet issues (patch is covered by the per-KB breakdown).
 # key -> (title, severity, fix_action_id, note_when_no_fix)
@@ -116,7 +120,7 @@ class FleetService:
         create+approve path, so tiers and the org's fleet circuit-breaker still apply."""
         repo = DeviceRepository(self.session)
         svc = RemediationService(self.session)
-        queued = failed = 0
+        queued = failed = already_running = 0
         error: str | None = None
         for did in device_ids:
             device = await repo.get(did)
@@ -134,6 +138,11 @@ class FleetService:
                     actor_user_id=actor.id, approver=actor,
                 )
                 queued += 1
+            except AlreadyQueuedError:
+                # Not a failure: this device is already doing the thing being asked for.
+                # Counting it as failed would read as "the push didn't work" and invite the
+                # operator to press Fix all again, which is exactly how duplicates pile up.
+                already_running += 1
             except RemediationError as exc:
                 failed += 1
                 error = str(exc)
@@ -143,4 +152,6 @@ class FleetService:
             except Exception as exc:  # unknown action, param error, etc.
                 failed += 1
                 error = str(exc)
-        return BulkRemediateResult(queued=queued, failed=failed, error=error)
+        return BulkRemediateResult(
+            queued=queued, failed=failed, already_running=already_running, error=error
+        )

@@ -16,16 +16,30 @@ namespace AstraAgent.Service.Workers;
 /// The cost is latency: a system fix now arrives within one heartbeat (60s) instead of 30s.
 /// That is an acceptable trade for elevated actions like cleaning C:\Windows\Temp or resetting
 /// the network stack, which take longer to run than to arrive. User-context fixes are
-/// unaffected — the Tray still claims those itself.</summary>
+/// unaffected — the Tray still claims those itself.
+///
+/// Execution runs OFF the beat loop. It was originally awaited inline, which meant a device
+/// installing Windows updates — tens of minutes of synchronous download and install — sent no
+/// heartbeat for the whole run and was shown as offline three minutes in, while it was doing
+/// exactly what it had been asked to do. Worse, the operator saw an idle-looking device and
+/// pressed the button again.
+///
+/// One action still runs at a time; that part was right. It is enforced by not ASKING for work
+/// while busy, rather than by blocking the loop — so the beat keeps going out, the device stays
+/// visibly online, and the backend never marks a task dispatched that this agent cannot yet
+/// start.</summary>
 public sealed class HeartbeatWorker(
     IEnrollmentService enrollment,
     IAstraApiClient api,
     IDeviceIdentityProvider identity,
-    SystemTaskRunner taskRunner,
+    ISystemTaskRunner taskRunner,
     IOptions<AgentOptions> options,
     ILogger<HeartbeatWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(15);
+
+    // 1 while an action is executing. Read on the beat loop, cleared on the worker task.
+    private int _executing;
 
     // Resolved once per process, not per beat: reading it costs a WMI query, and the OS name
     // can only change across a reboot — which restarts this service anyway.
@@ -73,9 +87,15 @@ public sealed class HeartbeatWorker(
         if (token is null)
             return false;
 
+        // Don't ask for work we can't start yet. Claiming marks a task dispatched on the
+        // backend, so pulling one down while an action is already running would show it as
+        // being executed when it is really sitting in this process waiting its turn.
+        var busy = Volatile.Read(ref _executing) == 1;
+
         var request = new HeartbeatRequest(
             AgentVersion.Current,
             LoggedInUserResolver.GetConsoleUser(),
+            IncludeTasks: !busy,
             OsVersion: _osVersion.Value);
         var result = await api.HeartbeatAsync(token, request, ct);
 
@@ -92,13 +112,33 @@ public sealed class HeartbeatWorker(
         if (result.Status != HeartbeatStatus.Ok)
             return false;
 
-        // Execution is awaited inline: the next beat is 60s away, and running tasks
-        // sequentially keeps two long actions from overlapping on the same machine. A wedged
-        // action can't stall the loop indefinitely — SystemTaskRunner caps each one.
-        if (result.Tasks.Count > 0)
+        if (result.Tasks.Count > 0 && Interlocked.CompareExchange(ref _executing, 1, 0) == 0)
         {
             logger.LogInformation("Heartbeat returned {Count} system task(s)", result.Tasks.Count);
-            await taskRunner.RunAsync(token, result.Tasks, api, ct);
+            var claimed = result.Tasks;
+            var claimToken = token;
+            // Deliberately not awaited: the beat must keep going while this runs. The flag is
+            // cleared in the finally, so a throw here can never wedge the agent into a state
+            // where it stops asking for work.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await taskRunner.RunAsync(claimToken, claimed, api, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    // Service is stopping — the backend times the task out on its own.
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "System task execution failed");
+                }
+                finally
+                {
+                    Volatile.Write(ref _executing, 0);
+                }
+            }, ct);
         }
 
         return true;

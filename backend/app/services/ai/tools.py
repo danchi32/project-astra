@@ -16,7 +16,11 @@ from app.repositories.telemetry import TelemetryRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
 from app.services.remediation.actions import ACTIONS, RemediationTier
-from app.services.remediation.service import RemediationError, RemediationService
+from app.services.remediation.service import (
+    AlreadyQueuedError,
+    RemediationError,
+    RemediationService,
+)
 
 # The assistant may only ever PROPOSE non-admin-only fixes. Admin-only actions (registry,
 # WU-component reset, and account offboarding) are deliberately withheld from the model so
@@ -251,6 +255,16 @@ async def _propose_remediation(
             conversation_id=conversation_id,
             actor_user_id=None,
         )
+    except AlreadyQueuedError as exc:
+        # Not an error the assistant should apologise for: the fix it wants is already
+        # under way. Saying "that failed" here would push the user to ask again, which is
+        # how the same action ends up queued three times on one machine.
+        return json.dumps({
+            "already_running": True,
+            "task_id": str(exc.existing.id),
+            "outcome": f"{exc} Tell the user it's already under way and no second attempt "
+                       f"is needed, rather than queuing another.",
+        })
     except RemediationError as exc:
         return json.dumps({"error": str(exc)})
 

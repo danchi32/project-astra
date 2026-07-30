@@ -41,11 +41,19 @@ export default function FleetPage() {
         params: issue.fix_params ?? undefined,
         reason: `Fleet fix: ${issue.title} (${n} devices)`,
       });
+      // Devices already running this fix are reported separately from failures. Rolling
+      // them into "failed" would read as "the push didn't work" and invite a second press,
+      // which is exactly how the same fix ends up queued several times on one machine.
+      const already = res.already_running
+        ? ` ${res.already_running} already had it under way.`
+        : "";
       setMsg({
         ok: res.failed === 0,
         text: res.failed === 0
-          ? `Queued on ${res.queued} device${res.queued === 1 ? "" : "s"}. Track progress under Self-Healing.`
-          : `Queued on ${res.queued}, ${res.failed} failed${res.error ? ` — ${res.error}` : ""}.`,
+          ? (res.queued === 0 && res.already_running
+              ? `Nothing new to push —${already.trimEnd()} Track progress under Self-Healing.`
+              : `Queued on ${res.queued} device${res.queued === 1 ? "" : "s"}.${already} Track progress under Self-Healing.`)
+          : `Queued on ${res.queued}, ${res.failed} failed${res.error ? ` — ${res.error}` : ""}.${already}`,
       });
       await qc.invalidateQueries({ queryKey: ["fleet-issues"] });
     } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't push the fleet fix.") }); }

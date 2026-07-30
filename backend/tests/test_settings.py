@@ -121,7 +121,11 @@ async def test_auto_approve_kill_switch_forces_pending(client, admin_headers):
     )
     gated = await client.post(
         "/api/v1/remediations",
-        json={"device_id": enrolled["device_id"], "action_id": "flush_dns", "reason": "dns again"},
+        # A different action: the first flush_dns is still queued, and pushing the same fix
+        # again while it's in flight is refused. The kill-switch is about what happens to the
+        # NEXT action, so use one.
+        json={"device_id": enrolled["device_id"], "action_id": "restart_explorer",
+              "reason": "shell frozen"},
         headers=admin_headers,
     )
     assert gated.json()["status"] == "pending_approval"

@@ -11,12 +11,12 @@ import { getDeviceCompliance } from "@/lib/api/compliance";
 import { listUsers } from "@/lib/api/users";
 import { listLocations } from "@/lib/api/locations";
 import { getMe } from "@/lib/api/auth";
-import { createRemediation, approveRemediation } from "@/lib/api/remediation";
+import { createRemediation, approveRemediation, listRemediations } from "@/lib/api/remediation";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { SearchableSelect } from "@/components/searchable-select";
 import { formatRam, formatStorage, apiErrorMessage } from "@/lib/utils";
 import { ASSET_STATUS_LABELS, ASSET_STATUS_COLORS } from "@/lib/chart-colors";
-import type { AssetInput, AssetCategory, AssetStatus } from "@/lib/api/types";
+import type { AssetInput, AssetCategory, AssetStatus, RemediationStatus } from "@/lib/api/types";
 
 const CATEGORIES: AssetCategory[] = [
   "laptop", "desktop", "server", "monitor", "phone", "tablet",
@@ -55,6 +55,33 @@ const TIER_COLOR: Record<FixTier, string> = { automatic: "#10b981", approval_req
 // A fix's stable tag — encodes the service name for restart_service so the three
 // spooler/search/audio variants stay distinct.
 const fixTag = (f: Fix) => (f.id === "restart_service" ? `restart_service:${f.params?.service_name}` : f.id);
+
+// Statuses that mean "this work is already happening", matching the backend's own guard.
+const IN_FLIGHT = new Set<RemediationStatus>(["pending_approval", "approved", "dispatched"]);
+
+// Identifies one unit of work. Keyed on params as well as the action because two pushes of
+// windows_update_install for different KBs are two different jobs — keying on action_id
+// alone would report the second as already running when it hasn't started.
+function jobKey(actionId: string, params?: Record<string, string> | null): string {
+  const p = params && Object.keys(params).length
+    ? JSON.stringify(Object.fromEntries(Object.entries(params).sort()))
+    : "";
+  return `${actionId}|${p}`;
+}
+
+// The backend answers a duplicate push with 409 — the request was valid and the work is
+// already happening. Distinguished from a real error so it is never shown in red.
+function isAlreadyRunning(e: unknown): boolean {
+  return (e as { response?: { status?: number } })?.response?.status === 409;
+}
+
+// What to tell the operator, per state. "Waiting for approval" and "running on the device
+// right now" call for opposite responses, so the UI never collapses them into "in progress".
+const RUNNING_WORD: Record<string, string> = {
+  pending_approval: "Waiting for approval",
+  approved: "Queued — the device picks it up on its next check-in",
+  dispatched: "Running on the device now",
+};
 
 // Map what the event log is showing (its source names) to the fixes most likely to help.
 function suggestFixes(sources: string[]): Fix[] {
@@ -186,6 +213,20 @@ export default function DeviceDetailPage() {
   const disk = latest?.disks?.[0];
   const diskPct = disk && disk.total_gb ? (disk.used_gb / disk.total_gb) * 100 : 0;
 
+  // What this device is already doing. A Windows Update install runs for tens of minutes
+  // and used to show nothing at all while it did — so an operator saw no progress, pressed
+  // Run again, and queued the same install three times on one machine. Polling is cheap and
+  // only while something is actually in flight.
+  const { data: allTasks } = useQuery({
+    queryKey: ["dev-remediations", id], queryFn: listRemediations,
+    refetchInterval: (q) =>
+      (q.state.data ?? []).some((t) => t.device_id === id && IN_FLIGHT.has(t.status)) ? 15_000 : false,
+  });
+  const inFlight = (allTasks ?? []).filter((t) => t.device_id === id && IN_FLIGHT.has(t.status));
+  const inFlightKeys = new Set(inFlight.map((t) => jobKey(t.action_id, t.params)));
+  const runningJob = (actionId: string, params?: Record<string, string>) =>
+    inFlight.find((t) => jobKey(t.action_id, t.params) === jobKey(actionId, params)) ?? null;
+
   async function pushUpdate(kb?: string) {
     if (!device) return;
     const what = kb ?? "all pending Windows updates";
@@ -199,7 +240,17 @@ export default function DeviceDetailPage() {
         approve: true,   // the person clicking IS the approver
       });
       setMsg({ ok: true, text: `Queued: ${what} will install shortly. Track it under Self-Healing.` });
-    } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't queue the update.") }); }
+      await qc.invalidateQueries({ queryKey: ["dev-remediations", id] });
+    } catch (e) {
+      if (isAlreadyRunning(e)) {
+        // The server refused a duplicate. That is the system working, not a failure —
+        // showing it in red would read as "the push didn't go through" and invite a retry.
+        setMsg({ ok: true, text: apiErrorMessage(e, "That update is already under way.") });
+        await qc.invalidateQueries({ queryKey: ["dev-remediations", id] });
+      } else {
+        setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't queue the update.") });
+      }
+    }
     finally { setBusy(false); }
   }
 
@@ -216,7 +267,15 @@ export default function DeviceDetailPage() {
         approve: true,   // the person clicking IS the approver
       });
       setMsg({ ok: true, text: `Queued "${fix.label}" on ${device.hostname}. Track it under Self-Healing.` });
-    } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't push the fix. The device may be offline, or you may lack permission.") }); }
+      await qc.invalidateQueries({ queryKey: ["dev-remediations", id] });
+    } catch (e) {
+      if (isAlreadyRunning(e)) {
+        setMsg({ ok: true, text: apiErrorMessage(e, "That fix is already under way.") });
+        await qc.invalidateQueries({ queryKey: ["dev-remediations", id] });
+      } else {
+        setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't push the fix. The device may be offline, or you may lack permission.") });
+      }
+    }
     finally { setBusy(false); }
   }
 
@@ -499,17 +558,51 @@ export default function DeviceDetailPage() {
                         <Wrench size={15} /> Run a fix…
                       </button>
                     </div>
+
+                    {/* What's already under way. Without this the page looked idle during a
+                        Windows Update install that runs for tens of minutes, so the fix got
+                        pushed again — and again. */}
+                    {inFlight.length > 0 && (
+                      <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+                          Already under way on this device
+                        </p>
+                        <div className="flex flex-col gap-1.5">
+                          {inFlight.map((t) => (
+                            <div key={t.id} className="flex items-center gap-2 text-xs">
+                              <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                                style={{ background: t.status === "dispatched" ? "#10b981" : "#f59e0b" }} />
+                              <span className="font-medium" style={{ color: "var(--text-primary)" }}>
+                                {t.action_label ?? t.action_id}
+                              </span>
+                              <span style={{ color: "var(--text-secondary)" }}>
+                                — {RUNNING_WORD[t.status] ?? t.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
+                          Some fixes — installing Windows updates in particular — take tens of
+                          minutes. Pushing again won&apos;t speed it up.
+                        </p>
+                      </div>
+                    )}
+
                     {suggested.length > 0 && (
                       <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
                         <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Suggested for what we&apos;re seeing</p>
                         <div className="flex gap-2 flex-wrap">
-                          {suggested.map((f) => (
-                            <button key={fixTag(f)} onClick={() => runFix(f)} disabled={busy}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
-                              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--accent)" }}>
-                              <Wrench size={12} /> {f.label}
-                            </button>
-                          ))}
+                          {suggested.map((f) => {
+                            const running = runningJob(f.id, f.params);
+                            return (
+                              <button key={fixTag(f)} onClick={() => runFix(f)} disabled={busy || !!running}
+                                title={running ? RUNNING_WORD[running.status] : undefined}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+                                style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--accent)" }}>
+                                <Wrench size={12} /> {f.label}{running ? " — already running" : ""}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -567,10 +660,11 @@ export default function DeviceDetailPage() {
                       </div>
                     </div>
                     {isStaff && c.status === "fail" && c.fix_action_id && (
-                      <button onClick={() => runFix({ id: c.fix_action_id!, label: c.label, tier: "approval_required" })} disabled={busy}
+                      <button onClick={() => runFix({ id: c.fix_action_id!, label: c.label, tier: "approval_required" })}
+                        disabled={busy || !!runningJob(c.fix_action_id)}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 shrink-0"
                         style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--accent)" }}>
-                        <Wrench size={12} /> Fix
+                        <Wrench size={12} /> {runningJob(c.fix_action_id) ? "Running" : "Fix"}
                       </button>
                     )}
                   </div>
@@ -612,8 +706,9 @@ export default function DeviceDetailPage() {
                     Push Windows Updates to this device. The agent installs everything pending in the background and won&apos;t reboot.
                     {(() => { const n = updates?.filter((u) => !u.is_installed).length ?? 0; return n > 0 ? ` ${n} pending in the last scan.` : ""; })()}
                   </p>
-                  <button onClick={() => pushUpdate()} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
-                    <DownloadCloud size={15} /> Install all pending
+                  <button onClick={() => pushUpdate()} disabled={busy || !!runningJob("windows_update_install")}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
+                    <DownloadCloud size={15} /> {runningJob("windows_update_install") ? "Installing…" : "Install all pending"}
                   </button>
                 </div>
               )}
@@ -626,7 +721,11 @@ export default function DeviceDetailPage() {
                   <td className="py-2 max-w-md truncate" style={{ color: "var(--text-secondary)" }} title={u.title}>{u.title}</td>
                   <td className="py-2 text-xs font-medium" style={{ color: u.is_installed ? "#10b981" : "#f59e0b" }}>{u.is_installed ? "Installed" : "Pending"}</td>
                   {isAdmin && <td className="py-2 text-right">{!u.is_installed && u.kb_article_id && (
-                    <button onClick={() => pushUpdate(u.kb_article_id)} disabled={busy} className="text-xs px-2 py-1 rounded-lg" style={{ border: "1px solid var(--border)", color: "var(--accent)" }}>Install</button>
+                    <button onClick={() => pushUpdate(u.kb_article_id)}
+                      disabled={busy || !!runningJob("windows_update_install", { kb_article_id: u.kb_article_id })}
+                      className="text-xs px-2 py-1 rounded-lg disabled:opacity-50" style={{ border: "1px solid var(--border)", color: "var(--accent)" }}>
+                      {runningJob("windows_update_install", { kb_article_id: u.kb_article_id }) ? "Installing…" : "Install"}
+                    </button>
                   )}</td>}
                 </tr>)}
                 {!updates?.length && <tr><td colSpan={4} className="py-6 text-center" style={{ color: "var(--text-secondary)" }}>No updates collected yet.</td></tr>}
@@ -692,18 +791,30 @@ export default function DeviceDetailPage() {
             </div>
 
             <div className="mt-3 space-y-1.5">
-              {FIXES.filter((f) => f.tier !== "admin_only" || isAdmin).map((f) => (
-                <button key={fixTag(f)} onClick={() => runFix(f)} disabled={busy}
-                  className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-brand-500/5 disabled:opacity-50"
-                  style={{ border: "1px solid var(--border)", background: "var(--bg)" }}>
-                  <span className="flex items-center gap-2 min-w-0">
-                    <Wrench size={14} style={{ color: "var(--accent)" }} className="shrink-0" />
-                    <span className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{f.label}</span>
-                  </span>
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0"
-                    style={{ color: TIER_COLOR[f.tier], background: `${TIER_COLOR[f.tier]}1a` }}>{TIER_LABEL[f.tier]}</span>
-                </button>
-              ))}
+              {FIXES.filter((f) => f.tier !== "admin_only" || isAdmin).map((f) => {
+                const running = runningJob(f.id, f.params);
+                return (
+                  <button key={fixTag(f)} onClick={() => runFix(f)} disabled={busy || !!running}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-brand-500/5 disabled:opacity-50"
+                    style={{ border: "1px solid var(--border)", background: "var(--bg)" }}>
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Wrench size={14} style={{ color: "var(--accent)" }} className="shrink-0" />
+                      <span className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{f.label}</span>
+                    </span>
+                    {/* A fix already under way says so where the tier badge would be: the tier
+                        is what you need before pushing, and this one can't be pushed. */}
+                    {running ? (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0"
+                        style={{ color: "#10b981", background: "rgba(16,185,129,0.1)" }}>
+                        {running.status === "dispatched" ? "Running now" : "Queued"}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0"
+                        style={{ color: TIER_COLOR[f.tier], background: `${TIER_COLOR[f.tier]}1a` }}>{TIER_LABEL[f.tier]}</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

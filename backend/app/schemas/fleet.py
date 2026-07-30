@@ -39,4 +39,8 @@ class BulkRemediateRequest(BaseModel):
 class BulkRemediateResult(BaseModel):
     queued: int
     failed: int
+    # Devices that were already queued or running this exact fix. Reported apart from
+    # `failed` because nothing went wrong on them — the work is already under way, and
+    # calling that a failure invites a second push that would only duplicate it.
+    already_running: int = 0
     error: str | None = None

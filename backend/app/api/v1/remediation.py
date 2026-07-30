@@ -13,7 +13,11 @@ from app.schemas.remediation import (
 )
 from app.services.exceptions import NotFoundError
 from app.services.remediation.actions import ACTIONS
-from app.services.remediation.service import RemediationError, RemediationService
+from app.services.remediation.service import (
+    AlreadyQueuedError,
+    RemediationError,
+    RemediationService,
+)
 
 router = APIRouter(prefix="/remediations", tags=["remediation"])
 
@@ -75,6 +79,11 @@ async def create_task(
             # so it clears in the same call. Role checks still apply inside the service.
             approver=actor if body.approve else None,
         )
+    except AlreadyQueuedError as exc:
+        from fastapi import HTTPException
+        # 409, not 400: the request was well-formed and the caller wants something that is
+        # already happening. The portal shows this as "already running", not as an error.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except RemediationError as exc:
         from fastapi import HTTPException
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

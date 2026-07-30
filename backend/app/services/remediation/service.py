@@ -39,7 +39,34 @@ class RemediationError(ServiceError):
     pass
 
 
+class AlreadyQueuedError(RemediationError):
+    """The same action is already queued or running on this device.
+
+    Its own type, rather than a plain RemediationError, because this is not a failure —
+    the work the caller wants is already happening. Callers report it as such: a bulk push
+    counts these separately from real failures, and the portal tells the operator the fix
+    is already running instead of showing an error.
+    """
+
+    def __init__(self, message: str, existing: "RemediationTask") -> None:
+        super().__init__(message)
+        self.existing = existing
+
+
 import re  # noqa: E402
+
+# How long a queued-or-running task blocks an identical one. Matches the agent's own
+# per-action execution cap, so a device whose agent died mid-action is not locked out of
+# retrying that exact action forever — the one case where retrying matters most.
+_IN_FLIGHT_WINDOW = timedelta(minutes=60)
+
+# How each blocking state is described to the operator. "Waiting for approval" and "running
+# on the device right now" call for completely different responses, so the message says which.
+_STATE_WORDS = {
+    RemediationStatus.PENDING_APPROVAL: "waiting for approval",
+    RemediationStatus.APPROVED: "queued",
+    RemediationStatus.DISPATCHED: "already running",
+}
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Mailbox folder name: letters/digits/space and a few safe punctuation marks only —
@@ -207,6 +234,23 @@ class RemediationService:
         # half-finished task behind.
         if approver is not None:
             await self._assert_may_approve(approver, action.tier)
+
+        # Don't queue the same work twice on one device. A long action (a Windows Update
+        # install runs for tens of minutes) shows no progress while it runs, so an operator
+        # who sees nothing happen clicks again — three identical update installs were queued
+        # on one machine this way, and the agent runs them one after another, tripling how
+        # long the device is tied up doing work it had already been asked to do once.
+        existing = await self.repo.find_in_flight(
+            device_id=device.id,
+            action_id=action_id,
+            params=params,
+            not_before=utcnow() - _IN_FLIGHT_WINDOW,
+        )
+        if existing is not None:
+            raise AlreadyQueuedError(
+                f"{action.label} is already {_STATE_WORDS[existing.status]} on {device.hostname}.",
+                existing,
+            )
 
         # Blast-radius / fleet circuit breaker: count recent remediations for the org.
         window_start = utcnow() - timedelta(seconds=settings.remediation_burst_window_seconds)
