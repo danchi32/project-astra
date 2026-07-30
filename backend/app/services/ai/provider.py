@@ -401,19 +401,37 @@ class StubProvider:
                             },
                         )],
                     )
+                # Clean BOTH temp locations. clear_temp only reaches the signed-in user's
+                # %TEMP%; the machine-wide C:\Windows\Temp needs the elevated service via
+                # clear_system_temp, and on a long-lived device that is usually where the
+                # bulk of the reclaimable space sits. Both are AUTOMATIC-tier and
+                # self-rebuilding, so proposing them together is safe.
+                # The ids must differ — identical ids would collapse into one dispatch.
                 return LLMResponse(
                     text=(
                         f"Your system is at {cpu}% CPU and {ram}% memory right now. "
-                        "I'll clear out temporary files to free up space and help it run "
-                        "smoother — doing that now."
+                        "I'll clear out temporary files — both yours and the machine-wide "
+                        "ones — to free up space and help it run smoother."
                     ),
-                    tool_calls=[ToolCall(
-                        id="stub-cleanup", name="propose_remediation",
-                        input={
-                            "action_id": "clear_temp",
-                            "reason": "User reports the device is slow; clearing temp files.",
-                        },
-                    )],
+                    tool_calls=[
+                        ToolCall(
+                            id="stub-cleanup-user", name="propose_remediation",
+                            input={
+                                "action_id": "clear_temp",
+                                "reason": "User reports the device is slow; clearing temp files.",
+                            },
+                        ),
+                        ToolCall(
+                            id="stub-cleanup-system", name="propose_remediation",
+                            input={
+                                "action_id": "clear_system_temp",
+                                "reason": (
+                                    "User reports the device is slow; clearing the machine-wide "
+                                    "Windows temp folder."
+                                ),
+                            },
+                        ),
+                    ],
                 )
         return None
 

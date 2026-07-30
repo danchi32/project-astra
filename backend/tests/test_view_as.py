@@ -36,8 +36,8 @@ async def _enroll(client, headers, hostname, machine_id):
 
 async def test_platform_overview_aggregates_all_orgs(client, session_factory):
     reg = await _register(client, session_factory, "Ov Op", "op@ov.com")
-    await _register(client, session_factory, "Ov A", "a@ov.com")
-    await _register(client, session_factory, "Ov B", "b@ov.com")
+    await _register(client, session_factory, "Ov A", "a@ovalpha.com")
+    await _register(client, session_factory, "Ov B", "b@ovbeta.com")
     await _promote(session_factory, "op@ov.com")
     h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
@@ -62,7 +62,7 @@ async def test_view_as_scopes_to_target_and_is_read_only(client, session_factory
     ha = {"Authorization": f"Bearer {admin.json()['access_token']}"}
     await _enroll(client, ha, "H-PC", "h1")  # Home Co's own device
 
-    b = await _register(client, session_factory, "Target Co", "t@co.com")
+    b = await _register(client, session_factory, "Target Co", "t@targetco.com")
     hb = {"Authorization": f"Bearer {b.json()['access_token']}"}
     await _enroll(client, hb, "T-PC", "t1")  # Target Co's device
     bid = await _org_id(session_factory, "Target Co")
@@ -95,7 +95,7 @@ async def test_view_token_requires_platform_admin(client, session_factory):
 
 async def test_overview_includes_business_metrics(client, session_factory):
     reg = await _register(client, session_factory, "Biz Op", "biz@co.com")
-    await _register(client, session_factory, "Biz Cust", "bizcust@co.com")
+    await _register(client, session_factory, "Biz Cust", "bizcust@bizcustomer.com")
     await _promote(session_factory, "biz@co.com")
     h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
     body = (await client.get("/api/v1/platform/overview", headers=h)).json()

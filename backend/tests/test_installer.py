@@ -57,8 +57,8 @@ async def test_each_org_gets_a_distinct_key(client, session_factory):
             "admin_email": email, "admin_password": "Password12345"})
         return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
-    ha = await reg("Org One", "one@x.com")
-    hb = await reg("Org Two", "two@x.com")
+    ha = await reg("Org One", "one@orgone.com")
+    hb = await reg("Org Two", "two@orgtwo.com")
     ka = (await client.get("/api/v1/devices/installer", headers=ha)).json()["enrollment_key"]
     kb = (await client.get("/api/v1/devices/installer", headers=hb)).json()["enrollment_key"]
     assert ka and kb and ka != kb

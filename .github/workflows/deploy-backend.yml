@@ -49,20 +49,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
-      # Gate the deploy on the suite the new work added (retention, rate limiting,
-      # compliance, fleet). Six unrelated tests currently fail when the whole suite runs
-      # together — tracked separately — so the gate is scoped rather than green-washed.
+      # Full suite — it is green (320 passing), so there is no reason to gate on a subset.
+      # Random ordering is left ON (pytest-randomly's default) so cross-test state leaks
+      # surface here rather than in production.
       - name: Run tests
-        run: |
-          python -m pytest -q -p no:randomly \
-            tests/test_telemetry_retention.py \
-            tests/test_rate_limit.py \
-            tests/test_telemetry.py \
-            tests/test_compliance.py \
-            tests/test_fleet.py \
-            tests/test_devices.py \
-            tests/test_remediation.py \
-            tests/test_auth.py
+        run: python -m pytest -q
 
   deploy:
     needs: test
