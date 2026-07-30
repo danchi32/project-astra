@@ -9,7 +9,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>AstraAgent.Service</RootNamespace>
     <AssemblyName>AstraAgent.Service</AssemblyName>
-    <Version>0.6.4</Version>
+    <Version>0.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

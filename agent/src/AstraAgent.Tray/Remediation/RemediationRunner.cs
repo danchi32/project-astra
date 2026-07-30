@@ -16,7 +16,11 @@ namespace AstraAgent.Tray.Remediation;
 /// Writes a diagnostic log to %LocalAppData%\Astra\agent-remediation.log.</summary>
 public sealed class RemediationRunner : IDisposable
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
+    // 30s, not 10s: this poll is the single largest source of agent traffic (6 of the
+    // ~10 requests/minute a device makes) and almost always returns nothing. The chat
+    // now posts "Working on it" the moment a task is claimed, so the user sees progress
+    // rather than silence while waiting for the next tick.
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
 
     private readonly HttpClient _http;
     private readonly ITokenStore _store;

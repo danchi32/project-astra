@@ -47,9 +47,9 @@ builder.Services.AddSingleton<IHardwareCollector, HardwareCollector>();
 
 builder.Services.AddSingleton<AstraAgent.Service.Update.UpdateInstaller>();
 
+builder.Services.AddSingleton<AstraAgent.Service.Remediation.SystemTaskRunner>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
 builder.Services.AddHostedService<UpdateWorker>();
-builder.Services.AddHostedService<RemediationWorker>();
 
 builder.Build().Run();

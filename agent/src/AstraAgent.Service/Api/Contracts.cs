@@ -16,7 +16,14 @@ public sealed record EnrollResponse(
 
 public sealed record HeartbeatRequest(
     [property: JsonPropertyName("agent_version")] string AgentVersion,
-    [property: JsonPropertyName("logged_in_user")] string? LoggedInUser);
+    [property: JsonPropertyName("logged_in_user")] string? LoggedInUser,
+    // Ask the backend to return this device's approved system-context tasks on the beat
+    // itself, so the Service needs no separate poll. Older backends ignore the field.
+    [property: JsonPropertyName("include_tasks")] bool IncludeTasks = true);
+
+public sealed record HeartbeatResponse(
+    [property: JsonPropertyName("status")] string Status,
+    [property: JsonPropertyName("tasks")] IReadOnlyList<AgentRemediationTask>? Tasks);
 
 // ── Remediation (elevated / system-context tasks the Service executes) ───────
 

@@ -12,10 +12,20 @@ public enum HeartbeatStatus
     Failed,
 }
 
+/// <summary>Outcome of a heartbeat: its status, plus any system-context remediation the
+/// backend handed back on the same call. Tasks are empty against a backend that predates
+/// this, which is exactly the old behaviour — the Service simply gets nothing to run.</summary>
+public sealed record HeartbeatResult(
+    HeartbeatStatus Status,
+    IReadOnlyList<AgentRemediationTask> Tasks)
+{
+    public static HeartbeatResult From(HeartbeatStatus status) => new(status, []);
+}
+
 public interface IAstraApiClient
 {
     Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct);
-    Task<HeartbeatStatus> HeartbeatAsync(string deviceToken, HeartbeatRequest request, CancellationToken ct);
+    Task<HeartbeatResult> HeartbeatAsync(string deviceToken, HeartbeatRequest request, CancellationToken ct);
     Task<bool> PushTelemetryAsync(string deviceToken, TelemetryPush payload, CancellationToken ct);
 
     /// <summary>Ask the backend for the current signed update manifest. Returns null on any
@@ -116,7 +126,7 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         return response.IsSuccessStatusCode;
     }
 
-    public async Task<HeartbeatStatus> HeartbeatAsync(
+    public async Task<HeartbeatResult> HeartbeatAsync(
         string deviceToken, HeartbeatRequest request, CancellationToken ct)
     {
         // The device token is attached per request, never on the shared client,
@@ -129,12 +139,24 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
 
         var response = await http.SendAsync(message, ct);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
-            return HeartbeatStatus.Unauthorized;
+            return HeartbeatResult.From(HeartbeatStatus.Unauthorized);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Heartbeat failed with status {Status}", response.StatusCode);
-            return HeartbeatStatus.Failed;
+            return HeartbeatResult.From(HeartbeatStatus.Failed);
         }
-        return HeartbeatStatus.Ok;
+
+        // A body that can't be read must not fail the beat: liveness was already recorded
+        // server-side, and treating it as a failure would trigger a pointless re-enrollment.
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<HeartbeatResponse>(ct);
+            return new HeartbeatResult(HeartbeatStatus.Ok, body?.Tasks ?? []);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Heartbeat succeeded but its body could not be parsed");
+            return HeartbeatResult.From(HeartbeatStatus.Ok);
+        }
     }
 }

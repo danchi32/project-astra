@@ -1,12 +1,26 @@
 using AstraAgent.Service.Api;
 using AstraAgent.Service.Enrollment;
+using AstraAgent.Service.Remediation;
 using Microsoft.Extensions.Options;
 
 namespace AstraAgent.Service.Workers;
 
+/// <summary>Reports liveness every interval, and executes any system-context remediation the
+/// backend hands back on the same call.
+///
+/// Task delivery used to be a separate 30s poll (RemediationWorker) that almost always
+/// returned nothing — roughly a fifth of all traffic this agent generated, on a device that
+/// was already calling home every 60s anyway. Folding it into the beat removes those requests
+/// entirely rather than making them cheaper.
+///
+/// The cost is latency: a system fix now arrives within one heartbeat (60s) instead of 30s.
+/// That is an acceptable trade for elevated actions like cleaning C:\Windows\Temp or resetting
+/// the network stack, which take longer to run than to arrive. User-context fixes are
+/// unaffected — the Tray still claims those itself.</summary>
 public sealed class HeartbeatWorker(
     IEnrollmentService enrollment,
     IAstraApiClient api,
+    SystemTaskRunner taskRunner,
     IOptions<AgentOptions> options,
     ILogger<HeartbeatWorker> logger) : BackgroundService
 {
@@ -51,18 +65,30 @@ public sealed class HeartbeatWorker(
             return false;
 
         var request = new HeartbeatRequest(AgentVersion.Current, LoggedInUserResolver.GetConsoleUser());
-        var status = await api.HeartbeatAsync(token, request, ct);
+        var result = await api.HeartbeatAsync(token, request, ct);
 
-        if (status == HeartbeatStatus.Unauthorized)
+        if (result.Status == HeartbeatStatus.Unauthorized)
         {
             // Credential was rotated or the device was decommissioned; one re-enroll attempt.
             logger.LogWarning("Device credential rejected; attempting re-enrollment");
             token = await enrollment.ReEnrollAsync(ct);
             if (token is null)
                 return false;
-            status = await api.HeartbeatAsync(token, request, ct);
+            result = await api.HeartbeatAsync(token, request, ct);
         }
 
-        return status == HeartbeatStatus.Ok;
+        if (result.Status != HeartbeatStatus.Ok)
+            return false;
+
+        // Execution is awaited inline: the next beat is 60s away, and running tasks
+        // sequentially keeps two long actions from overlapping on the same machine. A wedged
+        // action can't stall the loop indefinitely — SystemTaskRunner caps each one.
+        if (result.Tasks.Count > 0)
+        {
+            logger.LogInformation("Heartbeat returned {Count} system task(s)", result.Tasks.Count);
+            await taskRunner.RunAsync(token, result.Tasks, api, ct);
+        }
+
+        return true;
     }
 }
