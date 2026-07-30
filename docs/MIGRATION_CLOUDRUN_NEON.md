@@ -1,309 +1,237 @@
 # ASTRA Backend Migration Runbook — Railway → Google Cloud Run + Neon
 
-Move the FastAPI backend off Railway to **Cloud Run** (compute) + **Neon** (Postgres) +
-**Upstash** (Redis) + **Qdrant Cloud** (vectors), in the **Mumbai** region (`asia-south1`),
-with **near‑zero impact** on already‑enrolled agents.
+Status: **the warm standby is BUILT and RUNNING.** Railway still serves production; the
+standby is a full parallel copy waiting on a DNS flip.
 
-> The portal stays on **Vercel** — nothing to migrate there. Only its
-> `NEXT_PUBLIC_API_URL` may change (and even that is avoidable, see the Golden Rule).
+| | |
+|---|---|
+| GCP project | `astra-prod-503923` |
+| Region | `asia-southeast1` (Singapore) |
+| Standby service | `astra-backend` → https://astra-backend-fmuizr4sda-as.a.run.app |
+| Database | Neon Postgres 18, `ap-southeast-1`, pooled endpoint |
+| Live production | still Railway, via `https://api.astra.technomateai.com` |
+
+> The portal stays on **Vercel** — nothing to migrate there.
 
 ---
 
 ## 0. Golden rule — keep the domain, and the agents never notice
 
-Every installed agent (and every installer we ever handed out) has the backend URL
-**baked in** (`public_api_url`, e.g. `https://api.technomateai.com`). The auto‑update
-manifest and enrollment all resolve through that host.
+Every installed agent (and every installer already handed out) has the backend URL baked
+in: **`https://api.astra.technomateai.com`**. Enrollment and the auto-update manifest all
+resolve through that host.
 
-**So: keep the same custom domain.** We point `api.technomateai.com` at Cloud Run instead
-of Railway. The agents keep calling the exact same URL — **no re‑install, no config push,
-no agent release**. Migration becomes "swap what's behind the domain."
-
-If you do *not* keep the domain, every device must be re‑pointed (a reinstall) — avoid this.
+**So: keep the same domain.** We repoint it at Cloud Run instead of Railway. Agents keep
+calling the identical URL — **no re-install, no config push, no agent release**. Migration
+becomes "swap what's behind the domain," and rollback is one DNS change.
 
 ---
 
-## 1. Target architecture
+## 1. Architecture (as actually deployed)
 
 ```
 Windows Agents ─┐
-                ├─ https://api.technomateai.com ─→ Cloud Run (FastAPI, asia-south1, min=1)
-Vercel Portal ──┘                                    │
-                                                     ├─→ Neon Postgres   (asia-south1, PITR on)
-                                                     ├─→ Upstash Redis   (Mumbai/global)
-                                                     └─→ Qdrant Cloud    (or self-host)
-Secrets ─→ Google Secret Manager
-Container image ─→ Google Artifact Registry
+                ├─ https://api.astra.technomateai.com ─→ [today: Railway]
+Vercel Portal ──┘                                        [after flip: Cloud Run]
+
+Cloud Run  astra-backend   asia-southeast1, min=1, max=10, concurrency 80
+    │
+    └─→ Neon Postgres 18   ap-southeast-1 (Singapore), POOLED endpoint
+Secrets   → Google Secret Manager   (11 secrets, ASTRA_ prefixed)
+Images    → Artifact Registry       asia-southeast1/astra
+Jobs      → astra-migrate (alembic) · astra-dbcopy (Railway→Neon data copy)
 ```
+
+**Why Singapore, not Mumbai:** Cloud Run is co-located with Neon. Cross-region compute→DB
+would add ~40 ms to *every query*, and a single API request makes several. India→Singapore
+adds ~40 ms once per request; DB round-trips stay ~1–2 ms. Co-location wins.
+
+**Not used by this backend** (verified in code, so no accounts needed):
+- **Redis** — no redis client anywhere; the semantic cache is a DB table.
+- **Qdrant** — only named in a comment in `semantic_cache.py`; knowledge search doesn't use it.
 
 ---
 
-## 2. Prerequisites (one-time)
+## 2. Environment variables — note the `ASTRA_` prefix
 
-- A **Google Cloud** project with billing enabled; `gcloud` CLI installed + `gcloud init`.
-- A **Neon** account, an **Upstash** account, a **Qdrant Cloud** account.
-- Access to the **DNS** for `technomateai.com` (to repoint the API host).
-- The current **Railway env vars** (copy them out — you'll re-enter the secret values
-  yourself into Secret Manager; do not paste secrets into this doc or into git).
+`config.py` sets `env_prefix="ASTRA_"`, so every setting is read as `ASTRA_<FIELD>`.
+Getting this wrong makes the service start and then fail validation.
 
-Enable the Google APIs:
+**Secrets in Secret Manager** (11): `ASTRA_DATABASE_URL`, `ASTRA_JWT_SECRET_KEY`,
+`ASTRA_ANTHROPIC_API_KEY`, `ASTRA_RESEND_API_KEY`, `ASTRA_EMAIL_FROM`,
+`ASTRA_PAYPAL_CLIENT_ID`, `ASTRA_PAYPAL_CLIENT_SECRET`, `ASTRA_PAYPAL_PLAN_ID`,
+`ASTRA_PAYPAL_WEBHOOK_ID`, `ASTRA_BOOTSTRAP_ADMIN_EMAIL`, `ASTRA_BOOTSTRAP_ADMIN_PASSWORD`.
+
+Billing is **PayPal** on this deployment (no Razorpay/Paddle values are set).
+
+**Non-secret env** — see `backend/deploy/env.cloudrun.example`; the deploy script sets them.
+
+`ASTRA_JWT_SECRET_KEY` is the **same value as Railway** — reusing it means existing
+sessions survive the flip. A new value would sign everyone out.
+
+**CORS** is unset here just as on Railway: the portal calls the API through its own
+Next.js rewrite (same-origin), so no CORS entry is needed.
+
+---
+
+## 3. What's already done (one-time setup)
+
+- [x] APIs enabled: run, artifactregistry, secretmanager, cloudbuild
+- [x] 11 secrets copied Railway → Secret Manager via `deploy/migrate-secrets.py`
+      (values piped on stdin — never printed, logged, or written to disk)
+- [x] Runtime SA `…-compute@developer.gserviceaccount.com` granted
+      `roles/secretmanager.secretAccessor` on every secret
+- [x] Artifact Registry repo `astra` (asia-southeast1)
+- [x] Neon project (Postgres 18, Singapore), pooled + direct endpoints
+- [x] `astra-migrate` job → `alembic upgrade head` ⇒ schema at **0034**
+- [x] `astra-backend` service deployed and smoke-tested
+- [x] Production data copied in (see §5)
+
+---
+
+## 4. Redeploying the standby
+
+From `backend/`:
 ```bash
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com \
-  secretmanager.googleapis.com cloudbuild.googleapis.com
-gcloud config set run/region asia-south1
+./deploy/cloudrun-deploy.sh
+# gcloud not on PATH? →  GCLOUD='C:\Users\…\gcloud.cmd' ./deploy/cloudrun-deploy.sh
 ```
+It builds via **Cloud Build** (no local Docker daemon needed), runs the migration **Job**,
+then deploys the service. It never touches DNS.
+
+Two things the script encodes that are easy to get wrong:
+1. `RUN_MIGRATIONS_ON_START=false` — `entrypoint.sh` would otherwise run `alembic upgrade`
+   on every instance, and parallel cold starts race. Migrations run once, in the Job.
+2. The migrate Job needs **both** `ASTRA_DATABASE_URL` *and* `ASTRA_JWT_SECRET_KEY`.
+   `alembic/env.py` calls `get_settings()`, which validates the whole Settings model — with
+   only the URL it fails with `jwt_secret_key: Field required`.
+
+`.gcloudignore` keeps `.venv/`, tests and caches out of the build context — but deliberately
+**keeps `downloads/*.zip`**, which the backend serves as the agent bundles.
 
 ---
 
-## 3. Environment variable inventory (from `app/core/config.py`)
+## 5. Data copy — Railway → Neon (`astra-dbcopy` job)
 
-Move **all** of these. Values you set yourself in Secret Manager / Cloud Run — never in git.
+No local `pg_dump` needed: the copy runs as a Cloud Run Job from a `postgres:18-alpine`
+image, so both URLs stay in Secret Manager and never touch a workstation.
 
-**Required**
-- `DATABASE_URL` → the Neon connection string (see Step 4). Must be an **async** URL:
-  `postgresql+asyncpg://USER:PASSWORD@HOST/DB?ssl=require`
-- `JWT_SECRET_KEY` → reuse the SAME value as Railway (so existing refresh tokens stay valid;
-  a new value logs everyone out — acceptable, but reuse to avoid it).
-- `PUBLIC_API_URL` → `https://api.technomateai.com` (unchanged).
-- `PUBLIC_APP_URL` → `https://astra.technomateai.com` (unchanged).
-- `CORS_ORIGINS` → include the portal origin.
-
-**Infra**
-- Redis (Upstash) — whatever your config key is (`REDIS_URL`).
-- Qdrant — host/api key (`QDRANT_URL`, `QDRANT_API_KEY`).
-- `AGENT_BACKEND_IP` → keep **empty** (custom domain resolves; no host-pin needed).
-
-**Auto-update (unchanged — served through the same domain)**
-- `AGENT_UPDATE_MANIFEST_URL`, `AGENT_UPDATE_SIGNATURE_URL`
-  (the RSA **signing private key** lives only in GitHub Actions — nothing to migrate here).
-
-**Email** — `RESEND_API_KEY` or `SMTP_HOST/PORT/USER/PASSWORD`, `EMAIL_FROM`.
-
-**Billing** — `RAZORPAY_KEY_ID/SECRET/PLAN_ID/WEBHOOK_SECRET`, `PADDLE_*` (and update the
-webhook URLs in the Razorpay/Paddle dashboards to the new domain — but since the domain is
-unchanged, **webhooks keep working**).
-
-**AI** — the model provider key(s).
-
----
-
-## 4. Neon — the Postgres (do this first; it's the highest-stakes piece)
-
-1. Create a Neon **project** in **`asia-south1` (Mumbai)**.
-2. Create a database (e.g. `astra`).
-3. **Enable Point-in-Time Recovery / history retention** on the paid tier (this is the
-   whole reason we're moving — tested, restorable backups).
-4. Copy the connection string; convert the driver to async for ASTRA:
-   `postgresql+asyncpg://…?ssl=require`.
-5. Keep it — it becomes `DATABASE_URL`.
-
----
-
-## 5. Upstash (Redis) + Qdrant Cloud
-
-- **Upstash**: create a Redis database in Mumbai/global → copy the URL → set as the Redis env.
-- **Qdrant Cloud**: create the smallest cluster (or self-host on the Cloud Run image later) →
-  copy host + API key. You'll re-index the knowledge base (small) after cutover, or snapshot
-  (Step 8).
-
----
-
-## 6. Secret Manager (so secrets never sit in the service config)
-
-For each secret value:
-```bash
-printf '%s' 'THE_VALUE' | gcloud secrets create JWT_SECRET_KEY --data-file=-
-# repeat for DATABASE_URL, REDIS_URL, QDRANT_API_KEY, RAZORPAY_*, RESEND_API_KEY, ...
-```
-Grant the Cloud Run runtime service account access:
-```bash
-gcloud secrets add-iam-policy-binding JWT_SECRET_KEY \
-  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
-  --role="roles/secretmanager.secretAccessor"
-```
-
----
-
-## 7. Build & push the image (Artifact Registry)
-
-The backend is already Dockerized — no code changes needed.
-```bash
-gcloud artifacts repositories create astra --repository-format=docker --location=asia-south1
-gcloud auth configure-docker asia-south1-docker.pkg.dev
-
-# from backend/
-IMAGE=asia-south1-docker.pkg.dev/PROJECT_ID/astra/backend:$(git rev-parse --short HEAD)
-docker build -t "$IMAGE" .
-docker push "$IMAGE"
-```
-
----
-
-## 8. Migrations — run them as a JOB, not per-instance
-
-`entrypoint.sh` currently runs `alembic upgrade head` on start. On Cloud Run several
-instances can cold‑start at once and race on the migration. **Run migrations once, as a
-separate step, before routing traffic:**
+- `MIGRATE_SRC_URL` — Railway's **public proxy** URL (`…proxy.rlwy.net`). Only ever READ.
+  Railway's `.railway.internal` host is unreachable from GCP; the script asserts against it.
+- `MIGRATE_DST_URL` — Neon's **DIRECT** endpoint (no `-pooler`). `pg_restore` needs
+  session-level operations that PgBouncer's transaction pooling doesn't support; `copy.sh`
+  refuses a pooled URL outright.
 
 ```bash
-gcloud run jobs create astra-migrate --image "$IMAGE" --region asia-south1 \
-  --set-secrets DATABASE_URL=DATABASE_URL:latest \
-  --command alembic --args upgrade,head
-gcloud run jobs execute astra-migrate --wait
+gcloud run jobs execute astra-dbcopy --region asia-southeast1 --wait
 ```
-(For the long term, drop the `alembic upgrade head` line from `entrypoint.sh` and always
-migrate via this job in the deploy pipeline.)
+
+The job dumps, restores with `--clean --if-exists` (full replace of the destination), then
+prints row counts. First run result:
+
+```
+alembic_version=0034   organizations=11  users=13  devices=16
+assets=5  remediation_tasks=49  audit_logs=557  telemetry_snapshots=25229   (dump 1.6M)
+```
+
+**Keeping the standby fresh:** Railway keeps taking writes, so Neon drifts. Re-run this job
+whenever you want to refresh (it's a full, idempotent replace). At cutover, run it once more
+so nothing is lost. For a truly seconds-long window, set up logical replication instead —
+only worth it once the dump takes more than a minute or two.
 
 ---
 
-## 9. Data migration (Railway Postgres → Neon)
-
-Small DB ⇒ a short dump/restore. Do the **final** dump inside the maintenance window (Step 10).
+## 6. Verifying the standby
 
 ```bash
-# Dump from Railway (get the Railway PG URL from its dashboard)
-pg_dump --no-owner --no-privileges --format=custom \
-  "postgresql://USER:PASS@RAILWAY_HOST:PORT/railway" -f astra.dump
+URL=https://astra-backend-fmuizr4sda-as.a.run.app
+curl $URL/health
+# → {"status":"ok","email_enabled":true,"ai_enabled":true}   ← proves Resend + Anthropic secrets
 
-# Restore into Neon (plain psql URL, not the +asyncpg one)
-pg_restore --no-owner --no-privileges --clean --if-exists \
-  -d "postgresql://USER:PASS@NEON_HOST/astra?sslmode=require" astra.dump
+curl -o /dev/null -w '%{http_code}\n' $URL/api/v1/devices/paged        # 401 = auth gate live
+curl -X POST $URL/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"probe@gmail.com","password":"wrong"}'                   # 401 = DB readable
 ```
-Enrollment keys, users, devices, telemetry, audit logs — all travel with this dump.
+A 401 on the login probe (not a 500) is the real signal: the app reached Neon through the
+pooled connection and queried `users`. Measured ~0.5 s.
 
-**Qdrant**: either re-index the knowledge base from the DB after cutover (it's rebuildable),
-or take a Qdrant snapshot and restore into Qdrant Cloud.
+Also worth a look before flipping: log in to the standby with a real admin and check
+Devices / Compliance / Fleet Issues render the migrated data.
 
 ---
 
-## 10. Cutover (the only window with any disruption)
+## 7. The flip (cutover)
 
-Keep it short (minutes). Do it in low-traffic hours.
-
-1. **Deploy the Cloud Run service** (pointing at Neon/Upstash/Qdrant), but don't send the
-   domain yet:
-   ```bash
-   gcloud run deploy astra-backend --image "$IMAGE" --region asia-south1 \
-     --min-instances 1 --max-instances 10 --concurrency 80 --port 8000 \
-     --allow-unauthenticated \
-     --set-secrets DATABASE_URL=DATABASE_URL:latest,JWT_SECRET_KEY=JWT_SECRET_KEY:latest,REDIS_URL=REDIS_URL:latest \
-     --set-env-vars PUBLIC_API_URL=https://api.technomateai.com,PUBLIC_APP_URL=https://astra.technomateai.com
-   ```
-   `--min-instances 1` = no cold starts and any background loop stays alive.
-2. **Freeze writes briefly** on Railway (or just accept a few minutes where the last
-   writes are re-dumped): run the **final** `pg_dump`/`pg_restore` (Step 9) so Neon is current.
-3. **Smoke-test Cloud Run** on its `*.run.app` URL: `/health`, admin login, one device call.
-4. **Repoint DNS**: map `api.technomateai.com` to Cloud Run:
+1. A day before: **lower the DNS TTL** on `api.astra.technomateai.com` to 60 s.
+2. `./deploy/cloudrun-deploy.sh` — standby on the latest image.
+3. `gcloud run jobs execute astra-dbcopy --region asia-southeast1 --wait` — final data sync.
+4. Map the domain and switch DNS as instructed:
    ```bash
    gcloud run domain-mappings create --service astra-backend \
-     --domain api.technomateai.com --region asia-south1
+     --domain api.astra.technomateai.com --region asia-southeast1
    ```
-   Update the DNS record as instructed. **Lower the DNS TTL to 60s a day before** so the
-   switch propagates fast.
-5. Once DNS points to Cloud Run and health is green, **decommission Railway** (keep it
-   stopped-but-recoverable for a week as rollback insurance).
+5. Watch agents come back Online; verify portal, auto-update, and a PayPal webhook.
+6. Leave Railway **stopped-but-recoverable for a week** as rollback insurance.
+
+**Rollback:** repoint the DNS record back at Railway. Nothing on any device changes.
 
 ---
 
-## 11. Verify
-
-- `curl https://api.technomateai.com/health` → ok, and it's hitting Cloud Run (check logs).
-- Portal: login, Devices list, Compliance, Fleet Issues, push a fix.
-- An **agent**: within ~1–2 min a heartbeat lands (device flips back to Online).
-- Auto-update manifest still served: an agent update check succeeds.
-- A billing webhook test fires (same domain → still valid).
-
----
-
-## 12. Rollback
-
-Because the domain is the switch: if anything is wrong, **repoint `api.technomateai.com`
-back to Railway** (DNS) and Railway (still running, DB intact) serves again. That's why we
-keep Railway stopped-but-recoverable for a week. No agent touch needed either way.
-
----
-
-## 13. Impact on the running environment — "kya effect padega"
+## 8. Impact on the running environment
 
 | Area | Impact | Why / mitigation |
 |---|---|---|
-| **Installed agents** | **None** (if domain kept) | Same `api.technomateai.com`; agents don't know the backend moved. |
-| **Agent heartbeats during cutover** | ~1–5 min gap → devices briefly show **Offline**, then auto-recover | Agents have an **offline queue** — buffered telemetry resyncs. No data loss. |
-| **Windows Update / remediation pushes** | Any pending task waits during the window, then delivers | Pull model — agents re-poll after cutover. |
-| **Portal (Vercel)** | Only if `NEXT_PUBLIC_API_URL` changed | Keep the domain ⇒ no portal change. Else update the env var + redeploy. |
-| **Logged-in users' sessions** | **None** if `JWT_SECRET_KEY` reused; else everyone re-logs-in | Reuse the same secret. |
-| **Enrollment keys / installers already distributed** | **None** | Keys live in the DB (migrated); domain unchanged. |
-| **Auto-update** | **None** | Manifest served from the same domain; signing key is in GitHub, untouched. |
-| **Billing webhooks (Razorpay/Paddle)** | **None** | Same webhook URL (domain unchanged) ⇒ providers keep delivering. |
-| **In-flight data at the exact switch** | The last few seconds of writes could be missed if not in the final dump | Freeze writes for the final dump, or run in low-traffic window. |
-| **Total user-visible downtime** | **A few minutes** (DNS + final sync), scoped to the cutover | Low-TTL DNS + small DB keep it short. |
-
-**Net:** with the domain kept, this is a low-drama migration — a short cutover window,
-agents self-heal via their offline queue, and rollback is a single DNS flip.
+| **Installed agents** | **None** | Same domain; they can't tell the backend moved. |
+| **Heartbeats during cutover** | ~1–5 min gap → briefly **Offline**, then auto-recover | Agents have an offline queue; buffered telemetry resyncs. No data loss. |
+| **Pending remediations** | Wait during the window, then deliver | Pull model — agents re-poll after cutover. |
+| **Portal (Vercel)** | **None** | Domain unchanged ⇒ `NEXT_PUBLIC_API_URL` unchanged. |
+| **Logged-in sessions** | **None** | `ASTRA_JWT_SECRET_KEY` is reused. |
+| **Enrollment keys / distributed installers** | **None** | Keys live in the DB (copied); domain unchanged. |
+| **Auto-update** | **None** | Manifest is served from GitHub releases; signing key stays in GitHub Actions. |
+| **PayPal webhooks** | **None** | Same webhook URL. |
+| **Writes in the final seconds** | Could be missed | Run the final `astra-dbcopy` in a low-traffic window. |
+| **Total user-visible downtime** | **A few minutes** | Low DNS TTL + a 1.6 MB dump keep it short. |
 
 ---
 
-## 13b. Warm standby — keep the parallel env ready for an *instant* flip
+## 9. Cost
 
-Instead of building everything at cutover time, **stand the new stack up now and keep it
-running in parallel** (DNS still on Railway). When the trigger comes, migration is just a
-tiny final sync + a DNS flip → **downtime in seconds**.
+- **Cloud Run** `min-instances 1`: a few $/mo idle + usage.
+- **Neon**: free tier today; ~$19+/mo for PITR/production retention — **enable this before
+  the flip**, since PITR is the main data-safety reason for moving.
+- No Redis or Qdrant spend (unused).
 
-**Repo is already prepared for this:**
-- `entrypoint.sh` honours `RUN_MIGRATIONS_ON_START` (default `true` = Railway unchanged;
-  Cloud Run sets `false` and migrates via a Job — no multi-instance race).
-- `deploy/cloudrun-deploy.sh` — one command to build → push → migrate-job → deploy the
-  standby (does **not** touch DNS).
-- `deploy/env.cloudrun.example` — the full env inventory to fill into Secret Manager.
-
-**Set up the standby (one time, ~30–45 min):**
-1. Create Neon (Mumbai, PITR), Upstash, Qdrant Cloud.
-2. Put all secret values into Secret Manager (`env.cloudrun.example` is the checklist).
-3. `PROJECT_ID=… REGION=asia-south1 ./deploy/cloudrun-deploy.sh`
-4. Smoke-test on the `*.run.app` URL (`/health`, a login). **Leave DNS on Railway.**
-
-**Keep Neon fresh (pick one):**
-- **Simple / cheap:** a nightly `pg_dump | pg_restore` Railway→Neon (a cron). At flip time
-  the final incremental is tiny ⇒ a ~1–2 min window.
-- **Near‑zero downtime:** **logical replication** Railway (publisher, `wal_level=logical`) →
-  Neon (subscriber). Neon stays continuously current; the flip is only DNS ⇒ seconds.
-  (Verify Railway allows `wal_level=logical`; otherwise use the nightly-dump option.)
-
-**The flip (when you decide to migrate):**
-1. Re-run `cloudrun-deploy.sh` so the standby is on the latest image.
-2. Final sync (tiny, if replicating) / final dump (if not).
-3. `gcloud run domain-mappings create --service astra-backend --domain api.technomateai.com`
-   and switch the DNS record (TTL was pre-lowered to 60s).
-4. Watch agents flip back Online; verify portal + auto-update + a webhook.
-5. Keep Railway stopped-but-recoverable for a week (rollback = flip DNS back).
-
-**Standby running cost:** `min-instances 1` + a small Neon tier ≈ a few $/mo to keep warm —
-cheap insurance for an on-demand, low-downtime migration.
+Ballpark **~$25–50/mo** at current scale.
 
 ---
 
-## 14. Rough monthly cost (low → growing scale)
+## 10. Before the flip — recommended hardening
 
-- Cloud Run: pay-per-use; `min-instances 1` ≈ a few $/mo idle + usage.
-- Neon: free tier for early, ~$19+/mo for PITR/production.
-- Upstash: pay-per-request (often ~$0–5 early).
-- Qdrant Cloud: smallest tier or self-host free.
+Deferred deliberately, but wanted before a large rollout (see the scale discussion):
 
-Ballpark **~$25–50/mo** early — comparable to Railway, but with real PITR data safety and
-autoscaling headroom.
+1. **Telemetry retention/rollup.** `telemetry_snapshots` is insert-only and never pruned —
+   already 25 k rows for 16 devices. Nothing reads snapshots older than the latest 60
+   (verified: no `since=` query anywhere), so pruning is safe. Rollups keep history for
+   future trend charts.
+2. **Connection pool sizing.** `create_async_engine()` uses SQLAlchemy defaults (5 + 10
+   overflow). Make it env-driven so Railway and Cloud Run can differ.
+3. **Rate limiting** on agent endpoints — start in log-only mode; note that without Redis
+   it's per-instance, so on Cloud Run the effective limit scales with instance count.
 
 ---
 
-## 15. Cutover checklist
+## 11. Cutover checklist
 
-- [ ] Neon created (Mumbai, PITR on), `DATABASE_URL` (asyncpg) ready
-- [ ] Upstash + Qdrant Cloud created
-- [ ] Secrets in Secret Manager; runtime SA granted access
-- [ ] Image built + pushed to Artifact Registry
-- [ ] `astra-migrate` job run against Neon → `alembic head`
-- [ ] Cloud Run deployed, smoke-tested on `*.run.app`
-- [ ] DNS TTL lowered to 60s (day before)
-- [ ] Final `pg_dump`/`pg_restore` in the window
-- [ ] Domain mapped → `api.technomateai.com` → Cloud Run
+- [x] Neon created (Singapore), pooled + direct URLs
+- [x] 11 secrets in Secret Manager; runtime SA granted access
+- [x] Artifact Registry repo + image built via Cloud Build
+- [x] `astra-migrate` run against Neon → `alembic head` (0034)
+- [x] Cloud Run deployed and smoke-tested on `*.run.app`
+- [x] `astra-dbcopy` run → production data in Neon
+- [ ] Neon paid tier / PITR enabled
+- [ ] Hardening (§10)
+- [ ] DNS TTL lowered to 60 s
+- [ ] Final `astra-dbcopy` in the cutover window
+- [ ] Domain mapped → `api.astra.technomateai.com` → Cloud Run
 - [ ] Verified: health, portal, agent heartbeat, auto-update, webhook
-- [ ] Railway left stopped-but-recoverable for 1 week (rollback)
+- [ ] Railway left stopped-but-recoverable for 1 week

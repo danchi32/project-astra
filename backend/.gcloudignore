@@ -1,0 +1,19 @@
+# What NOT to upload to Cloud Build. Keep this tight — the build context is uploaded on
+# every deploy. Note: downloads/*.zip ARE needed (the backend serves the agent bundles),
+# so they are deliberately not excluded.
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+.git/
+.gitignore
