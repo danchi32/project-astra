@@ -281,6 +281,52 @@ branch → staging → verify → merge to `main` → production.
 
 ---
 
+## 8c. Disaster recovery — drilled 2026-07-30
+
+Two independent recovery paths, both exercised. Re-run them when the data grows materially,
+or after any change to the database topology.
+
+### Path A — logical dump/restore (`astra-restore-drill`)
+
+Recovers data *anywhere*: a new Neon project, a different provider, a local copy. This is the
+path that matters if the problem is Neon itself.
+
+```bash
+gcloud run jobs execute astra-restore-drill --region asia-southeast1 --wait
+gcloud logging read 'resource.labels.job_name="astra-restore-drill"' --limit 40 \
+  --format='value(textPayload)' --freshness=10m
+```
+
+It dumps production **read-only**, restores into a throwaway database, compares row counts
+table by table, then drops it. Production is never written to; a `trap` drops the scratch
+database even when the run fails.
+
+First result: **dump 1s (1.5 MB), restore 2s**, every table identical — 11 organizations,
+13 users, 16 devices, 5 assets, 49 remediation tasks, 563 audit logs, 23,926 telemetry
+snapshots, 54 rollups — `alembic_version 0036`. So full data recovery is a **~3 second**
+operation at this size. That is the RTO to quote mid-incident.
+
+> Two traps this drill exposed, both now guarded in `drill.sh`: deriving the scratch URL with
+> `sed s#/neondb#…#` also rewrote the **username** (the URL contains `://neondb_owner:`), and
+> string-matching the URL was too weak a safety check — it now asks the server
+> `select current_database()` and refuses unless the answer is the throwaway database.
+
+### Path B — Neon point-in-time restore (console)
+
+Rewinds to a moment *before* a bad write — the path for "someone ran a destructive query".
+The retention window is **7 days** (see §8b).
+
+Neon console → project **Astra** → **Branches** → **New branch** → *Create from: point in
+time* → pick the timestamp → **Create**. Connect with the branch's own connection string and
+verify the data.
+
+> **Delete the branch when finished.** A Neon branch is a copy-on-write clone of its parent,
+> so it holds a full copy of production customer data — including `neondb` — regardless of
+> which database its connection string names. Leaving one around means live customer data
+> sitting in an extra place, and it accrues storage.
+
+---
+
 ## 9. Cost
 
 - **Cloud Run** `min-instances 1`: a few $/mo idle + usage.
