@@ -170,6 +170,43 @@ async def test_heartbeat_marks_device_online(client, admin_headers):
     assert body["last_seen_at"] is not None
 
 
+async def test_heartbeat_refreshes_os_version(client, admin_headers):
+    """A device that feature-updates — or whose agent learns to name the OS correctly —
+    must not keep showing whatever it reported on enrolment day."""
+    token = await create_enrollment_token(client, admin_headers)
+    enrolled = await enroll_device(client, token["token"])
+
+    beat = await client.post(
+        "/api/v1/agent/heartbeat",
+        json={
+            "agent_version": "0.7.2",
+            "os_version": "Windows 11 Enterprise 25H2 (build 26200.8893)",
+        },
+        headers={"Authorization": f"Bearer {enrolled['device_token']}"},
+    )
+    assert beat.status_code == 200
+
+    after = await client.get(f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)
+    assert after.json()["os_version"] == "Windows 11 Enterprise 25H2 (build 26200.8893)"
+
+
+async def test_heartbeat_without_os_version_keeps_the_enrolled_one(client, admin_headers):
+    """Agents released before this field existed omit it. Treating that silence as "unknown"
+    would blank out a value the device did report, so the omission must change nothing."""
+    token = await create_enrollment_token(client, admin_headers)
+    enrolled = await enroll_device(client, token["token"])
+
+    beat = await client.post(
+        "/api/v1/agent/heartbeat",
+        json={"agent_version": "0.6.0"},
+        headers={"Authorization": f"Bearer {enrolled['device_token']}"},
+    )
+    assert beat.status_code == 200
+
+    after = await client.get(f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)
+    assert after.json()["os_version"] == ENROLL_INFO["os_version"]
+
+
 async def test_heartbeat_with_invalid_token_rejected(client):
     response = await client.post(
         "/api/v1/agent/heartbeat",

@@ -61,6 +61,10 @@ class EnrollResponse(BaseModel):
 class HeartbeatRequest(BaseModel):
     agent_version: str = Field(min_length=1, max_length=20)
     logged_in_user: str | None = Field(default=None, max_length=100)
+    # Sent by agents that know how to report it. Optional because os_version was previously
+    # written only at enrollment, so a device that feature-updates (or an agent that fixes
+    # how it names the OS) would otherwise show the enrolment-day string forever.
+    os_version: str | None = Field(default=None, min_length=1, max_length=100)
     # Opt-in: when true, the heartbeat response carries this device's approved
     # system-context tasks, so the elevated Service needs no separate poll.
     #

@@ -19,7 +19,11 @@ public sealed record HeartbeatRequest(
     [property: JsonPropertyName("logged_in_user")] string? LoggedInUser,
     // Ask the backend to return this device's approved system-context tasks on the beat
     // itself, so the Service needs no separate poll. Older backends ignore the field.
-    [property: JsonPropertyName("include_tasks")] bool IncludeTasks = true);
+    [property: JsonPropertyName("include_tasks")] bool IncludeTasks = true,
+    // Reported on every beat, not just at enrollment: a device that feature-updates
+    // (23H2 -> 25H2) would otherwise keep its enrolment-day OS string forever. It is also
+    // how already-enrolled devices pick up the corrected OS name without re-enrolling.
+    [property: JsonPropertyName("os_version")] string? OsVersion = null);
 
 public sealed record HeartbeatResponse(
     [property: JsonPropertyName("status")] string Status,

@@ -210,6 +210,10 @@ class DeviceService:
         device.last_seen_at = utcnow()
         device.agent_version = data.agent_version
         device.logged_in_user = data.logged_in_user
+        # Only when the agent actually reports it: older agents omit the field, and treating
+        # that as "unknown" would blank out the value they set at enrollment.
+        if data.os_version:
+            device.os_version = data.os_version
         await self.session.commit()
 
     # -- Portal-facing (staff/admin) -------------------------------------------

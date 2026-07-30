@@ -20,11 +20,20 @@ namespace AstraAgent.Service.Workers;
 public sealed class HeartbeatWorker(
     IEnrollmentService enrollment,
     IAstraApiClient api,
+    IDeviceIdentityProvider identity,
     SystemTaskRunner taskRunner,
     IOptions<AgentOptions> options,
     ILogger<HeartbeatWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(15);
+
+    // Resolved once per process, not per beat: reading it costs a WMI query, and the OS name
+    // can only change across a reboot — which restarts this service anyway.
+    private readonly Lazy<string?> _osVersion = new(() =>
+    {
+        try { return identity.Collect().OsVersion; }
+        catch { return null; }   // never let naming the OS stop the device reporting in
+    });
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -64,7 +73,10 @@ public sealed class HeartbeatWorker(
         if (token is null)
             return false;
 
-        var request = new HeartbeatRequest(AgentVersion.Current, LoggedInUserResolver.GetConsoleUser());
+        var request = new HeartbeatRequest(
+            AgentVersion.Current,
+            LoggedInUserResolver.GetConsoleUser(),
+            OsVersion: _osVersion.Value);
         var result = await api.HeartbeatAsync(token, request, ct);
 
         if (result.Status == HeartbeatStatus.Unauthorized)
