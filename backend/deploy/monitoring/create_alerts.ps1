@@ -100,7 +100,27 @@ New-Policy @{
   documentation = @{ content = "Latency is degraded. Most likely the database: check Neon compute utilisation and whether autoscale has hit its ceiling."; mimeType = "text/markdown" }
 }
 
-# 4. Capacity warning, not an outage. max-instances is 20 (bounded by the regional CPU
+# 4. A single logged exception. The 5xx policy above is rate-based and only fires above
+#    ~1 error/second, so a bug that breaks ONE customer every time — a remediation that always
+#    fails for one org, say — never moves that number and would go unseen. This fires on one
+#    ERROR line, rate-limited to a notification an hour so a storm can't spam. It is the gap
+#    people usually buy an error-tracking SaaS to cover; Cloud Error Reporting already groups
+#    the stack traces for free, so this just makes sure someone is told.
+New-Policy @{
+  displayName = "ASTRA: any application error logged"
+  combiner = "OR"
+  conditions = @(@{
+    displayName = "ERROR or worse in astra-backend logs"
+    conditionMatchedLog = @{
+      filter = 'resource.type="cloud_run_revision" AND resource.labels.service_name="' + $Service + '" AND severity>=ERROR'
+    }
+  })
+  alertStrategy = @{ notificationRateLimit = @{ period = "3600s" }; autoClose = "1800s" }
+  notificationChannels = $ch
+  documentation = @{ content = "An exception was logged. Open Error Reporting for the grouped stack trace: https://console.cloud.google.com/errors?project=astra-prod-503923"; mimeType = "text/markdown" }
+}
+
+# 5. Capacity warning, not an outage. max-instances is 20 (bounded by the regional CPU
 #    quota), so sustained 15+ means the fleet has outgrown the current ceiling and the quota
 #    increase needs requesting BEFORE requests start being queued.
 New-Policy @{
