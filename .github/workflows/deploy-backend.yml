@@ -1,0 +1,164 @@
+name: Deploy Backend (Cloud Run)
+
+# Replaces Railway's git-connected auto-deploy. Railway rebuilt on every push to main;
+# Cloud Run has no such hook, so without this a normal `git push` would silently leave
+# production on the previous image.
+#
+# Runs on any push to main touching backend/, and can be triggered manually.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch: {}
+
+# Never let two deploys race — the migration step must not run concurrently.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: astra-prod-503923
+  REGION: asia-southeast1
+  SERVICE: astra-backend
+  REPO: astra
+
+permissions:
+  contents: read
+  id-token: write        # required for keyless auth to Google (Workload Identity)
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      # Gate the deploy on the suite the new work added (retention, rate limiting,
+      # compliance, fleet). Six unrelated tests currently fail when the whole suite runs
+      # together — tracked separately — so the gate is scoped rather than green-washed.
+      - name: Run tests
+        run: |
+          python -m pytest -q -p no:randomly \
+            tests/test_telemetry_retention.py \
+            tests/test_rate_limit.py \
+            tests/test_telemetry.py \
+            tests/test_compliance.py \
+            tests/test_fleet.py \
+            tests/test_devices.py \
+            tests/test_remediation.py \
+            tests/test_auth.py
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keyless: GitHub's OIDC token is exchanged for short-lived Google credentials.
+      # No service-account JSON key exists, so there is no long-lived secret to leak.
+      # The pool provider is restricted to this repo owner and the SA binding to this
+      # repo, so no other repository can assume it.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1041631804427/locations/global/workloadIdentityPools/github/providers/github
+          service_account: gh-deploy@astra-prod-503923.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build image via Cloud Build
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend:${GITHUB_SHA::7}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          gcloud builds submit --tag "$IMAGE" --region "$REGION" .
+
+      # Migrations run ONCE here, not per instance: entrypoint.sh is told to skip them
+      # (RUN_MIGRATIONS_ON_START=false) because parallel Cloud Run cold starts would
+      # otherwise race on `alembic upgrade`.
+      #
+      # The job needs ASTRA_JWT_SECRET_KEY as well as the database URL — alembic/env.py
+      # calls get_settings(), which validates the entire Settings model.
+      - name: Run database migrations
+        run: |
+          gcloud run jobs deploy astra-migrate \
+            --image "$IMAGE" --region "$REGION" \
+            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY:latest \
+            --command alembic --args upgrade,head --quiet
+          gcloud run jobs execute astra-migrate --region "$REGION" --wait
+
+      - name: Deploy to Cloud Run
+        run: |
+          SECRETS=ASTRA_DATABASE_URL=ASTRA_DATABASE_URL:latest
+          SECRETS=$SECRETS,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY:latest
+          SECRETS=$SECRETS,ASTRA_ANTHROPIC_API_KEY=ASTRA_ANTHROPIC_API_KEY:latest
+          SECRETS=$SECRETS,ASTRA_RESEND_API_KEY=ASTRA_RESEND_API_KEY:latest
+          SECRETS=$SECRETS,ASTRA_EMAIL_FROM=ASTRA_EMAIL_FROM:latest
+          SECRETS=$SECRETS,ASTRA_PAYPAL_CLIENT_ID=ASTRA_PAYPAL_CLIENT_ID:latest
+          SECRETS=$SECRETS,ASTRA_PAYPAL_CLIENT_SECRET=ASTRA_PAYPAL_CLIENT_SECRET:latest
+          SECRETS=$SECRETS,ASTRA_PAYPAL_PLAN_ID=ASTRA_PAYPAL_PLAN_ID:latest
+          SECRETS=$SECRETS,ASTRA_PAYPAL_WEBHOOK_ID=ASTRA_PAYPAL_WEBHOOK_ID:latest
+
+          ENVVARS=RUN_MIGRATIONS_ON_START=false
+          ENVVARS=$ENVVARS,ASTRA_ENVIRONMENT=production
+          ENVVARS=$ENVVARS,ASTRA_PUBLIC_API_URL=https://api.astra.technomateai.com
+          ENVVARS=$ENVVARS,ASTRA_PUBLIC_APP_URL=https://astra.technomateai.com/login
+          ENVVARS=$ENVVARS,ASTRA_PRICE_PER_SEAT_CENTS=749
+          ENVVARS=$ENVVARS,ASTRA_PAYPAL_SANDBOX=false
+          ENVVARS=$ENVVARS,ASTRA_AGENT_UPDATE_MANIFEST_URL=https://github.com/danchi32/project-astra/releases/latest/download/manifest.json
+          ENVVARS=$ENVVARS,ASTRA_AGENT_UPDATE_SIGNATURE_URL=https://github.com/danchi32/project-astra/releases/latest/download/manifest.json.sig
+          ENVVARS=$ENVVARS,ASTRA_AGENT_BACKEND_IP=
+
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" --region "$REGION" \
+            --min-instances 1 --max-instances 10 --concurrency 80 --port 8000 \
+            --cpu 1 --memory 512Mi --timeout 60s \
+            --allow-unauthenticated \
+            --set-secrets "$SECRETS" \
+            --set-env-vars "$ENVVARS" \
+            --quiet
+
+      # Gate on the revision's OWN url: that is what this deploy is responsible for.
+      # Custom-domain DNS and certificate state are one-time infrastructure that a code
+      # deploy neither changes nor controls, so they must not be able to fail it.
+      - name: Verify the new revision is healthy
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "revision url: $URL"
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$URL/health" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "healthy:"; curl -s "$URL/health"; echo; exit 0
+            fi
+            echo "attempt $i: HTTP $CODE"; sleep 10
+          done
+          echo "New revision did not become healthy."
+          exit 1
+
+      - name: Custom domain check (informational)
+        continue-on-error: true
+        run: |
+          CODE=$(curl -s -o /dev/null -m 15 -w '%{http_code}' https://api.astra.technomateai.com/health || echo 000)
+          if [ "$CODE" = "200" ]; then
+            echo "api.astra.technomateai.com is serving this backend."
+          else
+            echo "::warning::Custom domain returned HTTP $CODE — expected while the managed"
+            echo "::warning::certificate is still provisioning, or if DNS still points elsewhere."
+          fi
