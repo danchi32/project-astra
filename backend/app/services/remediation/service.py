@@ -98,24 +98,43 @@ def _validate_kb_article_id(value: Any) -> str:
 
 # Friendly, outcome-focused lines the assistant shows the user after a fix runs — the point is
 # reassurance ("it's fixed"), not the mechanics ("I restarted the service").
-_FRIENDLY_OUTCOME: dict[str, str] = {
-    "restart_explorer": "Your desktop and taskbar should be back to normal.",
-    "restart_outlook": "Outlook should be working smoothly again.",
-    "restart_teams": "Microsoft Teams should be working again.",
-    "restart_zoom": "Zoom should be working again.",
-    "restart_chrome": "Chrome should be running smoothly again.",
-    "restart_edge": "Microsoft Edge should be running smoothly again.",
-    "restart_application": "That app should be working again.",
-    "flush_dns": "Your connection to websites should be sorted now.",
-    "clear_temp": "I've cleared out the clutter and freed up some space.",
-    "clear_system_temp": "I've deep-cleaned the system files and freed up space.",
-    "clear_browser_cache": "Your browser will load pages fresh now.",
-    "restart_network_adapter": "Your network connection has been refreshed.",
-    "restart_service": "That's back up and running.",
-    "create_outlook_rule": "Your Outlook rule is all set.",
-    "office_repair": "Microsoft Office has been repaired.",
-    "network_reset": "Your network settings have been refreshed.",
-    "windows_update_install": "Your Windows updates are sorted.",
+# What was actually done, in one line the user can follow.
+#
+# These used to say things like "That's back up and running", which tells the user nothing
+# they didn't already know and reads like an evasion. Naming the mechanism — the process, the
+# folder, the cache — is what makes the fix legible: the user learns what changed on their
+# machine, and a technical colleague can sanity-check it. Kept to a single sentence; the
+# agent's own output (e.g. "Freed 2.1 GB") is appended separately when it has something
+# concrete to add.
+_TECHNICAL_OUTCOME: dict[str, str] = {
+    "restart_explorer":
+        "Restarted explorer.exe — the Windows shell that draws your desktop, taskbar and File Explorer.",
+    "restart_outlook":
+        "Restarted Outlook's process, which rebuilds its Exchange connection and clears its in-memory state.",
+    "restart_teams": "Restarted the Teams process, clearing the cached session state it was stuck on.",
+    "restart_zoom": "Restarted the Zoom process, clearing the cached session state it was stuck on.",
+    "restart_chrome": "Restarted Chrome, releasing the memory its tabs and extensions were holding.",
+    "restart_edge": "Restarted Edge, releasing the memory its tabs and extensions were holding.",
+    "restart_application": "Restarted the application's process, clearing whatever state it was stuck in.",
+    "flush_dns":
+        "Flushed the DNS resolver cache, so your PC re-queries the DNS server instead of reusing stale records.",
+    "clear_temp":
+        "Emptied your user temp folder (%TEMP%) — Windows and your apps recreate whatever they still need.",
+    "clear_system_temp":
+        "Cleared C:\\Windows\\Temp, the machine-wide temp folder only an elevated process can reach.",
+    "clear_browser_cache":
+        "Deleted the browser's cached files, so pages are fetched fresh instead of served from disk.",
+    "restart_network_adapter":
+        "Disabled and re-enabled the network adapter, renewing its DHCP lease and resetting the link.",
+    "restart_service": "Stopped and restarted the Windows service, clearing its in-memory state.",
+    "create_outlook_rule":
+        "Created the rule server-side on your mailbox, so it applies wherever you read your mail.",
+    "office_repair":
+        "Ran Office's built-in repair, which re-registers its components and replaces damaged files.",
+    "network_reset":
+        "Reset the TCP/IP stack and Winsock catalog, clearing the corrupted network configuration.",
+    "windows_update_install":
+        "Installed the pending updates through the Windows Update service.",
 }
 
 
@@ -315,6 +334,25 @@ class RemediationService:
                 continue
             task.status = RemediationStatus.DISPATCHED
             claimed.append(task)
+
+            # Tell the user their fix has actually STARTED, if it came from a device chat.
+            #
+            # This is not filler: "approved and queued" and "running on your PC right now" are
+            # genuinely different states, and until now only the second one was ever visible —
+            # the chat went quiet between "I'll do that now" and "✅ All done". That gap is the
+            # agent's poll interval, so it grows as polling is made less frequent to cut
+            # traffic. Posting on dispatch keeps the user informed without adding a request:
+            # the tray refreshes history every few seconds and picks this up on its own.
+            if task.conversation_id is not None:
+                action_label = action.label.lower() if action else "that"
+                self.session.add(
+                    Message(
+                        conversation_id=task.conversation_id,
+                        role=MessageRole.ASSISTANT,
+                        content=f"🔧 Working on it now — running {action_label} on your PC. "
+                                "This usually takes a few moments.",
+                    )
+                )
         await self.session.commit()
         return claimed
 
@@ -354,11 +392,15 @@ class RemediationService:
         if task.conversation_id is not None:
             snippet = (output or "").strip()
             if success:
-                outcome = _FRIENDLY_OUTCOME.get(task.action_id)
-                text = "✅ All done — I've taken care of that for you."
-                if outcome:
-                    text += f" {outcome}"
-                text += " Let me know if anything still isn't right."
+                # State what was done, then the agent's own measurement if it reported one
+                # ("Freed 2.1 GB"). That number was previously computed, sent, and thrown
+                # away — it is the most concrete evidence the fix did anything, and the
+                # difference between a claim and a result.
+                text = f"✅ Done. {_TECHNICAL_OUTCOME.get(task.action_id, '')}".rstrip()
+                detail = snippet.splitlines()[0].strip() if snippet else ""
+                if detail and detail.lower() not in text.lower():
+                    text += f"\n\n{detail[:200]}"
+                text += "\n\nTell me if it's still not right and I'll dig further."
             else:
                 text = "⚠️ I wasn't able to finish that one automatically."
                 if snippet:
