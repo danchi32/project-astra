@@ -18,6 +18,10 @@ class FleetIssue(BaseModel):
     severity: str          # "high" | "medium" | "low"
     fix_action_id: str | None = None
     fix_params: dict[str, str] | None = None
+    # Why there's no one-click fix, and what to do instead. Present exactly when
+    # fix_action_id is None: silently hiding the button reads as a broken feature, and
+    # "we can't push this" has a different remedy depending on the reason.
+    fix_note: str | None = None
     affected: list[FleetAffected]
 
 

@@ -24,14 +24,38 @@ from app.services.compliance import ComplianceService
 from app.services.remediation.service import RemediationError, RemediationService
 
 # Compliance checks surfaced as fleet issues (patch is covered by the per-KB breakdown).
-# key -> (title, severity, fix_action_id)
-_CHECK_ISSUES: dict[str, tuple[str, str, str | None]] = {
-    "disk": ("Low disk space", "medium", "clear_system_temp"),
-    "defender": ("Microsoft Defender not running", "high", None),
-    "firewall": ("Windows Firewall not running", "high", None),
-    "no_critical_events": ("Critical system errors", "high", None),
-    "no_banned_software": ("Restricted software installed", "high", None),
-    "agent_reporting": ("Agent not reporting", "low", None),
+# key -> (title, severity, fix_action_id, note_when_no_fix)
+#
+# Every entry without a fix carries a reason. Most fleet issues genuinely cannot be pushed —
+# the device is offline, or the remedy depends on what specifically failed — and a page that
+# just omits the button for those looks broken rather than honest.
+_CHECK_ISSUES: dict[str, tuple[str, str, str | None, str | None]] = {
+    "disk": ("Low disk space", "medium", "clear_system_temp", None),
+    "defender": (
+        "Microsoft Defender not running", "high", None,
+        "Starting a security service needs the elevated agent, which doesn't expose that "
+        "action yet. Start WinDefend on the device, or push it through Intune/GPO.",
+    ),
+    "firewall": (
+        "Windows Firewall not running", "high", None,
+        "Starting a security service needs the elevated agent, which doesn't expose that "
+        "action yet. Start MpsSvc on the device, or push it through Intune/GPO.",
+    ),
+    "no_critical_events": (
+        "Critical system errors", "high", None,
+        "There's no single fix — the right action depends on what's failing. Open a device "
+        "to see its errors; the Health tab suggests a fix per error source.",
+    ),
+    "no_banned_software": (
+        "Restricted software installed", "high", None,
+        "Detection only for now — removal isn't automated. Uninstall on the device, or "
+        "block it centrally.",
+    ),
+    "agent_reporting": (
+        "Agent not reporting", "low", None,
+        "Nothing can be pushed to a device that isn't checking in. Confirm it's powered on "
+        "and reaching the backend — a quarantined agent is the usual cause.",
+    ),
 }
 
 
@@ -49,7 +73,7 @@ class FleetService:
             for c in d.checks:
                 if c.key in _CHECK_ISSUES and c.status == "fail":
                     by_check[c.key].append((d.device_id, d.hostname, c.detail))
-        for key, (title, severity, fix) in _CHECK_ISSUES.items():
+        for key, (title, severity, fix, note) in _CHECK_ISSUES.items():
             devs = by_check.get(key)
             if not devs:
                 continue
@@ -57,7 +81,7 @@ class FleetService:
             detail = devs[0][2] if len({x[2] for x in devs}) == 1 else f"{len(devs)} devices"
             issues.append(FleetIssue(
                 key=key, category="compliance", title=title, detail=detail, severity=severity,
-                fix_action_id=fix, fix_params=None,
+                fix_action_id=fix, fix_params=None, fix_note=None if fix else note,
                 affected=[FleetAffected(device_id=x[0], hostname=x[1]) for x in devs],
             ))
 

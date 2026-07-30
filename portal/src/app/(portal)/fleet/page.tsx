@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Radar, Wrench, ChevronDown, ChevronRight, ShieldCheck } from "lucide-react";
+import { Radar, Wrench, ChevronDown, ChevronRight, ShieldCheck, Info } from "lucide-react";
 import { getFleetIssues, bulkRemediate } from "@/lib/api/fleet";
 import type { FleetIssue } from "@/lib/api/fleet";
 import { getMe } from "@/lib/api/auth";
@@ -96,11 +96,22 @@ export default function FleetPage() {
                   </div>
                   {issue.detail && <p className="text-xs mt-0.5 truncate" style={{ color: "var(--text-secondary)" }}>{issue.detail}</p>}
                 </div>
-                {isStaff && issue.fix_action_id && (
-                  <button onClick={() => fixAll(issue)} disabled={busyKey !== null}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
-                    <Wrench size={14} /> {busyKey === issue.key ? "Queuing…" : `Fix all ${n}`}
-                  </button>
+                {/* Where a fix exists, offer it. Where it doesn't, say so in the same spot —
+                    an empty gap where the button would be reads as a broken page, and the
+                    reason is different for each issue (offline device vs. no single remedy). */}
+                {issue.fix_action_id ? (
+                  isStaff && (
+                    <button onClick={() => fixAll(issue)} disabled={busyKey !== null}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
+                      <Wrench size={14} /> {busyKey === issue.key ? "Queuing…" : `Fix all ${n}`}
+                    </button>
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-2 rounded-lg shrink-0"
+                    style={{ color: "var(--text-secondary)", border: "1px dashed var(--border)" }}
+                    title={issue.fix_note ?? undefined}>
+                    <Info size={13} /> No one-click fix
+                  </span>
                 )}
                 <button onClick={() => toggle(issue.key)} className="p-1.5 rounded-lg shrink-0" style={{ color: "var(--text-secondary)" }} title="Show devices">
                   {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -116,9 +127,9 @@ export default function FleetPage() {
                       </Link>
                     ))}
                   </div>
-                  {!issue.fix_action_id && (
-                    <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
-                      No automatic fix for this one — open a device to investigate or remediate manually.
+                  {issue.fix_note && (
+                    <p className="text-xs mt-3 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                      {issue.fix_note}
                     </p>
                   )}
                 </div>

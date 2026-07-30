@@ -13,6 +13,8 @@ export interface FleetIssue {
   severity: string; // "high" | "medium" | "low"
   fix_action_id: string | null;
   fix_params: Record<string, string> | null;
+  /** Why there's no one-click fix, and what to do instead. Set only when fix_action_id is null. */
+  fix_note: string | null;
   affected: FleetAffected[];
 }
 
