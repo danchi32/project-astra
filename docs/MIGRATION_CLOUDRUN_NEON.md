@@ -139,6 +139,33 @@ whenever you want to refresh (it's a full, idempotent replace). At cutover, run 
 so nothing is lost. For a truly seconds-long window, set up logical replication instead —
 only worth it once the dump takes more than a minute or two.
 
+### Verifying the destination (`astra-dbcheck`)
+
+The same image carries `check.sh`, a read-only report (schema version, row counts, rollup
+coverage):
+```bash
+gcloud run jobs execute astra-dbcheck --region asia-southeast1 --wait
+# then read the output:
+gcloud logging read 'resource.labels.job_name="astra-dbcheck"' --limit 40 \
+  --format='value(textPayload)' --freshness=10m
+```
+
+⚠️ **Run these `gcloud` commands from PowerShell, not Git Bash.** Git Bash (MSYS) rewrites
+POSIX-looking arguments into Windows paths — `--args /check.sh` silently became
+`C:/Program Files/Git/check.sh`, which is what "Application exec likely failed" meant.
+`MSYS_NO_PATHCONV=1` is not a fix here: it breaks gcloud's own launcher. Also note gcloud
+splits `--args` on commas, so SQL with commas can't be passed inline — that's why the query
+lives in `check.sh` rather than on the command line.
+
+After the hardening deploy, this confirmed the 0035 backfill preserved everything:
+```
+alembic_version = 0035
+telemetry_snapshots = 25229 | telemetry_rollups = 48
+rollup_rows 48 | devices_covered 13 | 2026-07-11 → 2026-07-30 | snapshots_aggregated 25229
+```
+All 25 229 existing snapshots are represented in the rollups, so pruning can now only drop
+rows whose history has already been captured.
+
 ---
 
 ## 6. Verifying the standby

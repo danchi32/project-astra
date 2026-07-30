@@ -6,6 +6,8 @@
 FROM postgres:18-alpine
 
 COPY copy.sh /copy.sh
-RUN chmod +x /copy.sh
+# Read-only verification, run with `--command /check.sh` on the same job image.
+COPY check.sh /check.sh
+RUN chmod +x /copy.sh /check.sh
 
 ENTRYPOINT ["/copy.sh"]
