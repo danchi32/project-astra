@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, CheckCheck, AlertTriangle, AlertOctagon, Info } from "lucide-react";
 import { listNotifications, markNotificationRead, markAllNotificationsRead } from "@/lib/api/notifications";
 import type { Notification, NotificationSeverity } from "@/lib/api/types";
+import { ScrollPanel, pageShell } from "@/components/scroll-panel";
 
 const SEVERITY_STYLE: Record<NotificationSeverity, { color: string; icon: typeof Info }> = {
   info: { color: "#b246d4", icon: Info },
@@ -92,7 +93,7 @@ export default function NotificationsPage() {
   const unreadTotal = data?.filter((n) => !n.is_read).length ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
@@ -127,7 +128,7 @@ export default function NotificationsPage() {
         </button>
       </div>
 
-      <div className="rounded-xl overflow-hidden divide-y" style={{ border: "1px solid var(--border)", background: "var(--surface)" }}>
+      <ScrollPanel className="divide-y">
         {isLoading && <p className="px-4 py-10 text-center text-sm" style={{ color: "var(--text-secondary)" }}>Loading…</p>}
         {!isLoading && !data?.length && (
           <p className="px-4 py-10 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -139,7 +140,7 @@ export default function NotificationsPage() {
             <NotificationRow n={n} onRead={handleRead} />
           </div>
         ))}
-      </div>
+      </ScrollPanel>
     </div>
   );
 }

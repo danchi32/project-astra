@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { listAuditLogs } from "@/lib/api/audit";
+import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
 
 function actionColor(action: string): string {
   if (action.includes("delete") || action.includes("reject")) return "#ef4444";
@@ -18,7 +19,7 @@ export default function AuditPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
       <div className="flex items-center gap-2">
         <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <Shield size={18} />
@@ -31,14 +32,13 @@ export default function AuditPage() {
         </div>
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+      <ScrollPanel>
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr>
                 {["When", "Actor", "Action", "Target", "Details"].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
-                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+                    style={stickyHeadCell}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -68,8 +68,7 @@ export default function AuditPage() {
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
+      </ScrollPanel>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Monitor, Download, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listDevicesPaged } from "@/lib/api/devices";
 import { listAssets } from "@/lib/api/assets";
+import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import { ASSET_STATUS_LABELS, ASSET_STATUS_COLORS } from "@/lib/chart-colors";
@@ -134,7 +135,7 @@ export default function DevicesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
       <div className="flex items-center gap-2">
         <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <Monitor size={18} />
@@ -181,14 +182,36 @@ export default function DevicesPage() {
         </div>
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+      <ScrollPanel
+        footer={
+          total > 0 && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap" style={{ borderTop: "1px solid var(--border)", background: "var(--surface)" }}>
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                Showing {from}–{to} of {total}{isFetching ? " · updating…" : ""}
+              </p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                  <ChevronLeft size={15} /> Prev
+                </button>
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Page {page} of {pages}</span>
+                <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                  Next <ChevronRight size={15} />
+                </button>
+              </div>
+            </div>
+          )
+        }
+      >
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr>
                 {["Hostname", "Serial", "User", "Asset state", "Location", "Status"].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
-                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+                    style={stickyHeadCell}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -226,30 +249,7 @@ export default function DevicesPage() {
               })}
             </tbody>
           </table>
-        </div>
-
-        {/* Pagination footer */}
-        {total > 0 && (
-          <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap" style={{ borderTop: "1px solid var(--border)", background: "var(--surface)" }}>
-            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              Showing {from}–{to} of {total}{isFetching ? " · updating…" : ""}
-            </p>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-                <ChevronLeft size={15} /> Prev
-              </button>
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Page {page} of {pages}</span>
-              <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40"
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-                Next <ChevronRight size={15} />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      </ScrollPanel>
 
       {/* Export report — choose which details to include */}
       {exporting && (
