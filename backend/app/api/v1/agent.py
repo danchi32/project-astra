@@ -42,7 +42,21 @@ async def heartbeat(
     session: AsyncSession = Depends(get_db),
 ) -> HeartbeatResponse:
     await DeviceService(session).heartbeat(device=device, data=body)
-    return HeartbeatResponse()
+
+    # Piggyback the elevated Service's work on the beat it already sends, so it needs no
+    # separate 30s poll — roughly a fifth of all agent traffic. Strictly opt-in: claiming
+    # marks a task dispatched, so handing tasks to an agent that doesn't read them would take
+    # the work away from the poller it still depends on and self-healing would stop.
+    #
+    # Only "system" context here. The user-context Tray is a different process and claims its
+    # own tasks; returning those here would steal them from it.
+    if not body.include_tasks:
+        return HeartbeatResponse()
+
+    tasks = await RemediationService(session).claim_for_device(device=device, context="system")
+    return HeartbeatResponse(
+        tasks=[AgentRemediationTask(id=t.id, action_id=t.action_id, params=t.params) for t in tasks]
+    )
 
 
 @router.get(

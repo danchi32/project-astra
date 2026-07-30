@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import Device
 from app.models.base import as_utc, utcnow
+from app.schemas.remediation import AgentRemediationTask
 
 # A device is online if it has reported within 3 heartbeat intervals (60s each).
 ONLINE_THRESHOLD = timedelta(seconds=180)
@@ -60,10 +61,20 @@ class EnrollResponse(BaseModel):
 class HeartbeatRequest(BaseModel):
     agent_version: str = Field(min_length=1, max_length=20)
     logged_in_user: str | None = Field(default=None, max_length=100)
+    # Opt-in: when true, the heartbeat response carries this device's approved
+    # system-context tasks, so the elevated Service needs no separate poll.
+    #
+    # It MUST default to false. Claiming marks a task dispatched, so returning tasks to an
+    # agent that doesn't know to read them would take the work away from the separate poller
+    # it still relies on — silently breaking self-healing on every agent released before this.
+    include_tasks: bool = False
 
 
 class HeartbeatResponse(BaseModel):
     status: str = "ok"
+    # Populated only when the request set include_tasks. Older agents don't read the
+    # heartbeat body at all, so this is invisible to them.
+    tasks: list[AgentRemediationTask] = Field(default_factory=list)
 
 
 class AgentUpdateEnvelope(BaseModel):
