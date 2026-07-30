@@ -71,6 +71,9 @@ async def create_task(
             org_id=actor.org_id, device=device, action_id=body.action_id,
             params=body.params, reason=body.reason,
             source=RemediationSource.USER, actor_user_id=actor.id,
+            # The portal's "Run a fix" is a deliberate choice by someone who may approve it,
+            # so it clears in the same call. Role checks still apply inside the service.
+            approver=actor if body.approve else None,
         )
     except RemediationError as exc:
         from fastapi import HTTPException

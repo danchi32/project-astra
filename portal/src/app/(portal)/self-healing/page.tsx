@@ -80,6 +80,13 @@ export default function SelfHealingPage() {
                 {pending.length === 0 && (
                   <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
                     Nothing waiting for approval.
+                    {/* An empty queue is the normal state, and saying so stops it reading as
+                        a broken page. Fixes you push yourself are approved as you push them —
+                        what lands here is work proposed on your behalf. */}
+                    <span className="block text-xs mt-1.5">
+                      Fixes you push from a device are approved as you send them. This queue is for
+                      higher-risk actions the assistant proposes from a device chat.
+                    </span>
                   </td></tr>
                 )}
                 {pending.map((t) => (

@@ -40,6 +40,13 @@ class RemediationCreate(BaseModel):
     action_id: str
     params: dict[str, Any] | None = None
     reason: str = Field(min_length=1, max_length=1000)
+    # For flows where the caller IS the approver — someone who picked this exact action in
+    # the portal and clicked Run. Creating and approving in one step avoids a task that
+    # briefly sits pending, which raised an "Approval needed" notification for something
+    # approved milliseconds later and left the approval queue perpetually empty.
+    # The same role checks still apply: a caller who may not approve at this tier is
+    # rejected outright rather than leaving the task stranded.
+    approve: bool = False
 
 
 # ── Agent-facing (device) ──────────────────────────────────────────────────

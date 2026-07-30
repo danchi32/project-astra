@@ -327,3 +327,53 @@ async def test_actions_catalogue_lists_tiers(client, user_headers):
     assert by_id["flush_dns"]["tier"] == "automatic"
     assert by_id["office_repair"]["tier"] == "approval_required"
     assert by_id["registry_fix"]["tier"] == "admin_only"
+
+
+async def test_inline_approval_skips_the_pending_state_and_its_notification(
+    client, admin_headers, session_factory
+):
+    """The reported bug: pushing a fix from the portal always raised an "Approval needed"
+    notification for something approved milliseconds later, and the approval queue was
+    therefore always empty by the time anyone looked."""
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+
+    r = await client.post("/api/v1/remediations", headers=admin_headers, json={
+        "device_id": device_id, "action_id": "office_repair",   # approval_required tier
+        "reason": "portal push", "approve": True,
+    })
+    assert r.status_code == 201, r.text
+    assert r.json()["status"] == "approved"          # never sat pending
+
+    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()
+    assert not any("Approval needed" in (n.get("title") or "") for n in notes), notes
+
+
+async def test_without_approve_the_task_waits_and_notifies(client, admin_headers, session_factory):
+    """The queue must still work for everything that genuinely needs a human."""
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+
+    r = await client.post("/api/v1/remediations", headers=admin_headers, json={
+        "device_id": device_id, "action_id": "office_repair", "reason": "needs a human",
+    })
+    assert r.json()["status"] == "pending_approval"
+
+    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()
+    assert any("Approval needed" in (n.get("title") or "") for n in notes)
+
+
+async def test_inline_approval_still_enforces_the_tier(client, user_headers, admin_headers):
+    """approve=true is not a way around the trust tiers — a plain user may approve nothing,
+    and the refusal must leave no half-created task behind."""
+    await _enroll(client, admin_headers)
+    device_id = await _device_id(client, admin_headers)
+
+    r = await client.post("/api/v1/remediations", headers=user_headers, json={
+        "device_id": device_id, "action_id": "office_repair",
+        "reason": "should be refused", "approve": True,
+    })
+    assert r.status_code in (400, 403), r.text
+
+    tasks = (await client.get("/api/v1/remediations", headers=admin_headers)).json()
+    assert not any(t["action_id"] == "office_repair" for t in tasks), "a refused push must create nothing"

@@ -192,12 +192,12 @@ export default function DeviceDetailPage() {
     if (!confirm(`Install ${what} on ${device.hostname}? The agent installs in the background and won't reboot.`)) return;
     setBusy(true); setMsg(null);
     try {
-      const task = await createRemediation({
+      await createRemediation({
         device_id: device.id, action_id: "windows_update_install",
         params: kb ? { kb_article_id: kb } : undefined,
         reason: kb ? `Install ${kb} from portal` : "Install all pending Windows updates from portal",
+        approve: true,   // the person clicking IS the approver
       });
-      await approveRemediation(task.id);
       setMsg({ ok: true, text: `Queued: ${what} will install shortly. Track it under Self-Healing.` });
     } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't queue the update.") }); }
     finally { setBusy(false); }
@@ -210,11 +210,11 @@ export default function DeviceDetailPage() {
     if (!confirm(`Push "${fix.label}" to ${device.hostname}?\n\nASTRA sends this fix to the endpoint and runs it in the background. Only online devices pick it up immediately.`)) return;
     setBusy(true); setMsg(null); setFixMenu(false);
     try {
-      const task = await createRemediation({
+      await createRemediation({
         device_id: device.id, action_id: fix.id, params: fix.params,
         reason: `Push "${fix.label}" from device Health (portal)`,
+        approve: true,   // the person clicking IS the approver
       });
-      await approveRemediation(task.id);
       setMsg({ ok: true, text: `Queued "${fix.label}" on ${device.hostname}. Track it under Self-Healing.` });
     } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't push the fix. The device may be offline, or you may lack permission.") }); }
     finally { setBusy(false); }
@@ -305,15 +305,15 @@ export default function DeviceDetailPage() {
     }
     setBusy(true); setLockMsg(null);
     try {
-      const task = await createRemediation({
+      await createRemediation({
         device_id: device.id,
         action_id: enable ? "enable_local_account" : "disable_local_account",
         params: { username: user },
         reason: enable
           ? `Re-enable local account "${user}" (offboarding)`
           : `Disable local account "${user}" and sign out (offboarding)`,
+        approve: true,   // the person clicking IS the approver
       });
-      await approveRemediation(task.id);
       setLockMsg({ ok: true, text: enable
         ? `Re-enabling "${user}" on ${device.hostname} — they can sign in again shortly.`
         : `Disabling "${user}" on ${device.hostname} and signing them out. Track it under Self-Healing.` });

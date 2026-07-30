@@ -154,6 +154,23 @@ class RemediationService:
         self.notifications = NotificationService(session)
         self.settings = SettingsService(session)
 
+    async def _assert_may_approve(self, actor: User, tier: RemediationTier) -> None:
+        """Raise unless this user may clear an action at this trust tier.
+
+        Shared by approve_task and by inline approval on create, so the rule is defined once.
+        AUTOMATIC never reaches approval, so it has no entry and nobody can "approve" it into
+        existence at a higher trust level than it was granted.
+        """
+        allowed = _APPROVER_ROLES.get(tier, set())
+        # Org policy can tighten the standard tier to admin-only approval.
+        if tier is RemediationTier.APPROVAL_REQUIRED:
+            org_settings = await self.settings.ensure(actor.org_id)
+            if org_settings.require_admin_for_approval_tier:
+                allowed = {UserRole.ADMIN}
+        if tier is not RemediationTier.AUTOMATIC and actor.role not in allowed:
+            # A technician cannot approve an admin-only action; a user cannot approve anything.
+            raise RemediationError("Your role cannot approve a task at this trust tier.")
+
     # -- Creation --------------------------------------------------------------
 
     async def create_task(
@@ -167,11 +184,29 @@ class RemediationService:
         source: RemediationSource,
         actor_user_id: uuid.UUID | None,
         conversation_id: uuid.UUID | None = None,
+        approver: User | None = None,
     ) -> RemediationTask:
+        """Queue a remediation.
+
+        ``approver`` is for flows where the caller IS the approver — someone who chose this
+        exact action in the portal and clicked Run. The task is approved in the same step, so
+        it never sits pending: previously the portal created and then approved in two calls,
+        which raised an "Approval needed" notification for something approved milliseconds
+        later, left the approval queue permanently empty, and stranded the task as pending
+        forever if the second call was refused.
+
+        Passing an approver does NOT bypass the tier rules — they are checked here, and a
+        caller who may not approve at this tier is rejected before anything is created.
+        """
         action = get_action(action_id)
         if action is None:
             raise RemediationError(f"Unknown remediation action '{action_id}'.")
         params = self._validate_params(action_id, params)
+
+        # Check the approver's authority BEFORE creating anything, so a refusal leaves no
+        # half-finished task behind.
+        if approver is not None:
+            await self._assert_may_approve(approver, action.tier)
 
         # Blast-radius / fleet circuit breaker: count recent remediations for the org.
         window_start = utcnow() - timedelta(seconds=settings.remediation_burst_window_seconds)
@@ -193,7 +228,13 @@ class RemediationService:
             and org_settings.auto_approve_automatic
             and not breaker_tripped
         )
-        status = RemediationStatus.APPROVED if auto_ok else RemediationStatus.PENDING_APPROVAL
+        # An explicit approver clears it immediately — they have already made the decision
+        # this status exists to wait for. The circuit breaker still wins: if the fleet limit
+        # tripped, a human deciding one action shouldn't unleash the rest.
+        if approver is not None and not breaker_tripped:
+            status = RemediationStatus.APPROVED
+        else:
+            status = RemediationStatus.APPROVED if auto_ok else RemediationStatus.PENDING_APPROVAL
 
         task = await self.repo.add(
             RemediationTask(
@@ -207,6 +248,7 @@ class RemediationService:
                 source=source,
                 requested_by_user_id=actor_user_id,
                 conversation_id=conversation_id,
+                approved_by_user_id=approver.id if approver is not None else None,
             )
         )
         await self.audit.record(
@@ -218,14 +260,25 @@ class RemediationService:
             detail={"action": action_id, "tier": action.tier.value, "status": status.value,
                     "device": device.hostname, "source": source.value},
         )
+        # Record the approval as its own audit entry so "who cleared this" is answerable
+        # from the log alone, exactly as it is when someone approves from the queue.
+        if approver is not None and status is RemediationStatus.APPROVED:
+            await self.audit.record(
+                org_id=org_id,
+                actor_id=approver.id,
+                action="remediation.approve",
+                target_type="remediation_task",
+                target_id=str(task.id),
+                detail={"action": action_id, "tier": action.tier.value, "inline": True},
+            )
         if status is RemediationStatus.PENDING_APPROVAL:
-            approver = "an admin" if action.tier is RemediationTier.ADMIN_ONLY else "a technician or admin"
+            approver_label = "an admin" if action.tier is RemediationTier.ADMIN_ONLY else "a technician or admin"
             await self.notifications.notify(
                 org_id=org_id,
                 category=NotificationCategory.REMEDIATION,
                 severity=NotificationSeverity.WARNING,
                 title="Approval needed",
-                message=f"{action.label} on {device.hostname} needs approval from {approver}.",
+                message=f"{action.label} on {device.hostname} needs approval from {approver_label}.",
                 link="/self-healing",
             )
         await self.session.commit()
@@ -270,16 +323,7 @@ class RemediationService:
         if task.status is not RemediationStatus.PENDING_APPROVAL:
             raise ConflictError("Only a pending task can be approved.")
 
-        tier = RemediationTier(task.tier)
-        allowed = _APPROVER_ROLES.get(tier, set())
-        # Org policy can tighten the standard tier to admin-only approval.
-        if tier is RemediationTier.APPROVAL_REQUIRED:
-            org_settings = await self.settings.ensure(actor.org_id)
-            if org_settings.require_admin_for_approval_tier:
-                allowed = {UserRole.ADMIN}
-        if actor.role not in allowed:
-            # A technician cannot approve an admin-only action; a user cannot approve anything.
-            raise RemediationError("Your role cannot approve a task at this trust tier.")
+        await self._assert_may_approve(actor, RemediationTier(task.tier))
 
         task.status = RemediationStatus.APPROVED
         task.approved_by_user_id = actor.id

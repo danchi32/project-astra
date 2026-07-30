@@ -15,7 +15,6 @@ from app.models import (
     Device,
     DeviceWindowsUpdate,
     RemediationSource,
-    RemediationStatus,
     User,
 )
 from app.repositories.devices import DeviceRepository
@@ -125,13 +124,15 @@ class FleetService:
                 failed += 1
                 continue
             try:
-                task = await svc.create_task(
+                # Approve inline: the operator picked this action and pressed Fix all, so
+                # creating then approving would raise an "Approval needed" notification per
+                # device for something cleared milliseconds later — and leave every task
+                # stranded as pending if the approve half were refused.
+                await svc.create_task(
                     org_id=actor.org_id, device=device, action_id=action_id,
                     params=params, reason=reason, source=RemediationSource.USER,
-                    actor_user_id=actor.id,
+                    actor_user_id=actor.id, approver=actor,
                 )
-                if task.status is RemediationStatus.PENDING_APPROVAL:
-                    await svc.approve_task(actor=actor, task_id=task.id)
                 queued += 1
             except RemediationError as exc:
                 failed += 1

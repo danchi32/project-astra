@@ -11,6 +11,14 @@ export const createRemediation = (data: {
   action_id: string;
   params?: Record<string, string>;
   reason: string;   // required by the backend — an audit-visible justification
+  /**
+   * Approve in the same call. Use it wherever the person clicking IS the approver — they
+   * picked this exact action and pressed Run. Creating then approving in two calls left the
+   * task briefly pending, which fired an "Approval needed" notification for something
+   * approved milliseconds later and kept the approval queue permanently empty. Role checks
+   * are still enforced server-side.
+   */
+  approve?: boolean;
 }) => apiClient.post<RemediationTask>("/remediations", data).then((r) => r.data);
 
 export const approveRemediation = (id: string) =>
