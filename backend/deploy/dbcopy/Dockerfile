@@ -10,6 +10,8 @@ COPY copy.sh /copy.sh
 COPY check.sh /check.sh
 # Creates a database (used to provision the staging environment).
 COPY mkdb.sh /mkdb.sh
-RUN chmod +x /copy.sh /check.sh /mkdb.sh
+# Disaster-recovery drill: dump production, restore to a throwaway db, verify, drop.
+COPY drill.sh /drill.sh
+RUN chmod +x /copy.sh /check.sh /mkdb.sh /drill.sh
 
 ENTRYPOINT ["/copy.sh"]
