@@ -41,12 +41,13 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements-dev.txt
 
+      # requirements-dev.txt pulls in requirements.txt plus the test stack. It is not
+      # optional: the suite runs against an in-memory SQLite database, so without
+      # aiosqlite every test errors on engine creation.
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio
+        run: pip install -r requirements-dev.txt
 
       # Gate the deploy on the suite the new work added (retention, rate limiting,
       # compliance, fleet). Six unrelated tests currently fail when the whole suite runs
