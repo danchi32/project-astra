@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, X, Zap } from "lucide-react";
 import { listRemediations, approveRemediation, rejectRemediation } from "@/lib/api/remediation";
 import { Pagination } from "@/components/pagination";
+import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
 import type { RemediationStatus, RemediationTier, RemediationTask } from "@/lib/api/types";
 
 // The two tables are two queries, filtered in the database. Splitting one page of results
@@ -64,7 +65,7 @@ export default function SelfHealingPage() {
   const history = historyData?.items ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
       <div className="flex items-center gap-2">
         <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
           <Zap size={18} />
@@ -77,19 +78,22 @@ export default function SelfHealingPage() {
         </div>
       </div>
 
-      {/* Pending approvals */}
-      <div>
+      {/* Both sections are flex-1, so they split the leftover height and each scrolls inside
+          itself. Pinning one panel to the viewport instead would push the other below the
+          fold, on a page whose whole point is showing both at once. */}
+      <div className="flex-1 min-h-0 flex flex-col">
         <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
           Awaiting approval {(pendingData?.total ?? 0) > 0 && <span style={{ color: "var(--accent)" }}>({pendingData?.total})</span>}
         </h2>
-        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-          <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+        <ScrollPanel
+          footer={<Pagination page={pendingPage} onPage={setPendingPage} data={pendingData} noun="fix" busy={pendingBusy} />}
+        >
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <tr>
                   {["Fix", "Device", "Tier", "Reason", "Source", ""].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
-                      style={{ color: "var(--text-secondary)" }}>{h}</th>
+                      style={stickyHeadCell}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -131,22 +135,20 @@ export default function SelfHealingPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-          <Pagination page={pendingPage} onPage={setPendingPage} data={pendingData} noun="fix" busy={pendingBusy} />
-        </div>
+        </ScrollPanel>
       </div>
 
-      {/* History */}
-      <div>
+      <div className="flex-1 min-h-0 flex flex-col">
         <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Remediation history</h2>
-        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-          <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+        <ScrollPanel
+          footer={<Pagination page={historyPage} onPage={setHistoryPage} data={historyData} noun="fix" busy={historyBusy} />}
+        >
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <tr>
                   {["Fix", "Device", "Tier", "Status", "Result", "When"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
-                      style={{ color: "var(--text-secondary)" }}>{h}</th>
+                      style={stickyHeadCell}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -169,9 +171,7 @@ export default function SelfHealingPage() {
                 ))}
               </tbody>
             </table>
-          </div>
-          <Pagination page={historyPage} onPage={setHistoryPage} data={historyData} noun="fix" busy={historyBusy} />
-        </div>
+        </ScrollPanel>
       </div>
     </div>
   );

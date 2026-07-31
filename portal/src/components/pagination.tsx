@@ -9,6 +9,18 @@ import type { Page } from "@/lib/api/types";
  * where you are but not how much there is, and the total is usually the number someone came
  * to the screen for.
  */
+/** Enough English to keep the footer from saying "14 fixs".
+ *
+ *  It said exactly that, twice, because the component appended a bare "s" and left the
+ *  caller to remember the exceptions — which is a thing you remember until you don't. The
+ *  rule handles the regular cases so a new list can't get it wrong by default; `plural`
+ *  stays for genuine irregulars. */
+function pluralise(noun: string): string {
+  if (/(s|x|z|ch|sh)$/i.test(noun)) return `${noun}es`;
+  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
+  return `${noun}s`;
+}
+
 export function Pagination<T>({
   page,
   onPage,
@@ -21,7 +33,7 @@ export function Pagination<T>({
   onPage: (next: number) => void;
   data: Page<T> | undefined;
   noun?: string;
-  /** Given explicitly where "+s" would be wrong — "entry" is the one that catches people. */
+  /** Only for irregulars that `pluralise` can't get right. */
   plural?: string;
   busy?: boolean;
 }) {
@@ -39,7 +51,7 @@ export function Pagination<T>({
     >
       <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
         Showing {from}–{to} of {data.total}{" "}
-        {data.total === 1 ? noun : plural ?? `${noun}s`}
+        {data.total === 1 ? noun : plural ?? pluralise(noun)}
         {busy ? " · updating…" : ""}
       </p>
       {data.pages > 1 && (

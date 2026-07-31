@@ -40,7 +40,7 @@ export default function AuditPage() {
       </div>
 
       <ScrollPanel
-        footer={<Pagination page={page} onPage={setPage} data={data} noun="entry" plural="entries" busy={isFetching} />}
+        footer={<Pagination page={page} onPage={setPage} data={data} noun="entry" busy={isFetching} />}
       >
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
