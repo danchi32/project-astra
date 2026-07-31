@@ -6,12 +6,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench, Check, Minus } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
-import { listAssets, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
+import { getAssetForDevice, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
 import { getDeviceCompliance } from "@/lib/api/compliance";
-import { listUsers } from "@/lib/api/users";
+import { listAllUsers } from "@/lib/api/users";
 import { listLocations } from "@/lib/api/locations";
 import { getMe } from "@/lib/api/auth";
-import { createRemediation, approveRemediation, listRemediations } from "@/lib/api/remediation";
+import { createRemediation, approveRemediation, listRemediationsForDevice } from "@/lib/api/remediation";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { SearchableSelect } from "@/components/searchable-select";
 import { formatRam, formatStorage, apiErrorMessage } from "@/lib/utils";
@@ -207,11 +207,14 @@ export default function DeviceDetailPage() {
   const { data: apps } = useQuery({ queryKey: ["dev-apps", id], queryFn: () => getDeviceApps(id), enabled: tab === "software" });
   const { data: services } = useQuery({ queryKey: ["dev-services", id], queryFn: () => getDeviceServices(id), enabled: tab === "services" });
   const { data: updates } = useQuery({ queryKey: ["dev-updates", id], queryFn: () => getDeviceUpdates(id), enabled: tab === "updates" });
-  const { data: assets } = useQuery({ queryKey: ["assets"], queryFn: () => listAssets() });
-  const { data: users } = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  // This device's asset, resolved server-side. Scanning a page of the register for it
+  // would find nothing once an org has more assets than fit on one page.
+  const { data: asset = null } = useQuery({
+    queryKey: ["asset-for-device", id], queryFn: () => getAssetForDevice(id),
+  });
+  const { data: users } = useQuery({ queryKey: ["users", "all"], queryFn: listAllUsers });
   const { data: managedLocations } = useQuery({ queryKey: ["locations"], queryFn: listLocations });
 
-  const asset = assets?.find((a) => a.device_id === id) ?? null;
   const { data: passport } = useQuery({
     queryKey: ["asset-passport", asset?.id], queryFn: () => getAssetPassport(asset!.id),
     enabled: tab === "history" && !!asset,
@@ -227,11 +230,12 @@ export default function DeviceDetailPage() {
   // Run again, and queued the same install three times on one machine. Polling is cheap and
   // only while something is actually in flight.
   const { data: allTasks } = useQuery({
-    queryKey: ["dev-remediations", id], queryFn: listRemediations,
+    queryKey: ["dev-remediations", id], queryFn: () => listRemediationsForDevice(id),
     refetchInterval: (q) =>
-      (q.state.data ?? []).some((t) => t.device_id === id && IN_FLIGHT.has(t.status)) ? 15_000 : false,
+      (q.state.data ?? []).some((t) => IN_FLIGHT.has(t.status)) ? 15_000 : false,
   });
-  const inFlight = (allTasks ?? []).filter((t) => t.device_id === id && IN_FLIGHT.has(t.status));
+  // Already scoped to this device by the query, so only the status filter is left.
+  const inFlight = (allTasks ?? []).filter((t) => IN_FLIGHT.has(t.status));
   const inFlightKeys = new Set(inFlight.map((t) => jobKey(t.action_id, t.params)));
   const runningJob = (actionId: string, params?: Record<string, string>) =>
     inFlight.find((t) => jobKey(t.action_id, t.params) === jobKey(actionId, params)) ?? null;

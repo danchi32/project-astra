@@ -32,7 +32,7 @@ async def test_staff_can_add_and_list_articles(client, admin_headers):
                        "Go to portal.acme.com, click 'Forgot password', follow the email link.")
     listing = await client.get("/api/v1/knowledge", headers=admin_headers)
     assert listing.status_code == 200
-    titles = [a["title"] for a in listing.json()]
+    titles = [a["title"] for a in listing.json()["items"]]
     assert "Reset your password" in titles
 
 
@@ -47,7 +47,7 @@ async def test_regular_user_can_read_articles(client, admin_headers, user_header
     await _add_article(client, admin_headers, "VPN setup", "Install GlobalConnect and sign in.")
     resp = await client.get("/api/v1/knowledge", headers=user_headers)
     assert resp.status_code == 200
-    assert len(resp.json()) == 1
+    assert len(resp.json()["items"]) == 1
 
 
 async def test_delete_article(client, admin_headers):
@@ -55,7 +55,7 @@ async def test_delete_article(client, admin_headers):
     resp = await client.delete(f"/api/v1/knowledge/{article['id']}", headers=admin_headers)
     assert resp.status_code == 204
     listing = await client.get("/api/v1/knowledge", headers=admin_headers)
-    assert listing.json() == []
+    assert listing.json()["items"] == []
 
 
 async def test_semantic_search_finds_relevant_article(session_factory, admin_user):

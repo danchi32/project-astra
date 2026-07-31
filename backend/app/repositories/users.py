@@ -23,6 +23,34 @@ class UserRepository:
         )
         return list(result.scalars().all())
 
+    async def list_page(
+        self, org_id: uuid.UUID, *, offset: int = 0, limit: int = 50
+    ) -> tuple[list[User], int]:
+        from app.schemas.pagination import paginate
+
+        stmt = select(User).where(User.org_id == org_id).order_by(User.created_at)
+        rows, total, _, _ = await paginate(
+            self.session, stmt, page=offset // max(1, limit) + 1, page_size=limit
+        )
+        return rows, total
+
+    async def emails_for(
+        self, org_id: uuid.UUID, user_ids: set[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """Emails for just the users referenced by the rows being rendered.
+
+        Labelling one page of audit entries used to load every user in the org — fine at ten
+        users, a second table scan per page view at two thousand.
+        """
+        if not user_ids:
+            return {}
+        result = await self.session.execute(
+            select(User.id, User.email).where(
+                User.org_id == org_id, User.id.in_(user_ids)
+            )
+        )
+        return {row[0]: row[1] for row in result.all()}
+
     async def add(self, user: User) -> User:
         self.session.add(user)
         await self.session.flush()

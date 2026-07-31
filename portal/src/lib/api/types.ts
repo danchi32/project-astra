@@ -1,3 +1,19 @@
+/** One page of a list endpoint. Every paginated endpoint returns this shape, so the portal
+ *  has one contract to code against rather than one per endpoint. */
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
+/** Params every paginated endpoint accepts. */
+export interface PageParams {
+  page?: number;
+  page_size?: number;
+}
+
 export type UserRole = "admin" | "technician" | "user";
 
 export interface User {

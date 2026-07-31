@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Users as UsersIcon, Plus, Trash2, Upload } from "lucide-react";
 import { listUsers, createUser, updateUser, deleteUser } from "@/lib/api/users";
+import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
+import { Pagination } from "@/components/pagination";
 import { getMe } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
 import type { UserRole } from "@/lib/api/types";
@@ -45,7 +47,13 @@ export default function UsersPage() {
   const [importResult, setImportResult] = useState<{ created: number; errors: string[] } | null>(null);
 
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const { data: users, isLoading } = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const [page, setPage] = useState(1);
+  const { data: usersPage, isLoading, isFetching } = useQuery({
+    queryKey: ["users", page],
+    queryFn: () => listUsers({ page }),
+    placeholderData: keepPreviousData,
+  });
+  const users = usersPage?.items;
   const isAdmin = me?.role === "admin";
 
   async function save(e: React.FormEvent) {
@@ -118,7 +126,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
@@ -214,14 +222,15 @@ export default function UsersPage() {
         </form>
       )}
 
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+      <ScrollPanel
+        footer={<Pagination page={page} onPage={setPage} data={usersPage} noun="user" busy={isFetching} />}
+      >
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr>
                 {["Name", "Email", "Role", "Status", "Joined", ""].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
-                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+                    style={stickyHeadCell}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -268,8 +277,7 @@ export default function UsersPage() {
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
+      </ScrollPanel>
     </div>
   );
 }

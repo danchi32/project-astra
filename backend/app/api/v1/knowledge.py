@@ -7,6 +7,7 @@ from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.knowledge import KnowledgeArticleCreate, KnowledgeArticleRead
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
 from app.services.ai.knowledge import KnowledgeBaseService
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -14,13 +15,18 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 
 
-@router.get("", response_model=list[KnowledgeArticleRead], summary="List knowledge articles")
+@router.get("", response_model=Page[KnowledgeArticleRead], summary="List knowledge articles")
 async def list_articles(
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
     actor: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-) -> list[KnowledgeArticleRead]:
-    rows = await KnowledgeBaseService(session).list_for_org(org_id=actor.org_id)
-    return [KnowledgeArticleRead.model_validate(a) for a in rows]
+) -> Page[KnowledgeArticleRead]:
+    page, page_size = clamp(page, page_size)
+    rows, total = await KnowledgeBaseService(session).list_page(
+        org_id=actor.org_id, offset=(page - 1) * page_size, limit=page_size
+    )
+    return build([KnowledgeArticleRead.model_validate(a) for a in rows], total, page, page_size)
 
 
 @router.post(

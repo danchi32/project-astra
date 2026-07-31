@@ -1,8 +1,8 @@
 import { apiClient } from "./client";
-import type { KnowledgeArticle } from "./types";
+import type { KnowledgeArticle, Page, PageParams } from "./types";
 
-export const listArticles = () =>
-  apiClient.get<KnowledgeArticle[]>("/knowledge").then((r) => r.data);
+export const listArticles = (params: PageParams = {}) =>
+  apiClient.get<Page<KnowledgeArticle>>("/knowledge", { params }).then((r) => r.data);
 
 export const createArticle = (title: string, content: string) =>
   apiClient.post<KnowledgeArticle>("/knowledge", { title, content }).then((r) => r.data);

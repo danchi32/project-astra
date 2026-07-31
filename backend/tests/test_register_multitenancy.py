@@ -87,7 +87,7 @@ async def test_two_registered_orgs_are_isolated(client, session_factory):
         "email": "u2@bravo.com", "full_name": "U2", "password": _PW, "role": "user"})
 
     # Alpha sees only Alpha users; Bravo's are invisible.
-    emails_a = {u["email"] for u in (await client.get("/api/v1/users", headers=ha)).json()}
+    emails_a = {u["email"] for u in (await client.get("/api/v1/users", headers=ha)).json()["items"]}
     assert "u1@alpha.com" in emails_a
     assert "admin@alpha.com" in emails_a
     assert "u2@bravo.com" not in emails_a

@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { AuditLog } from "./types";
+import type { AuditLog, Page, PageParams } from "./types";
 
-export const listAuditLogs = () =>
-  apiClient.get<AuditLog[]>("/audit-logs").then((r) => r.data);
+export const listAuditLogs = (params: PageParams = {}) =>
+  apiClient.get<Page<AuditLog>>("/audit-logs", { params }).then((r) => r.data);

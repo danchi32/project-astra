@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
 from app.schemas.compliance import (
     BannedSoftwareCreate,
     BannedSoftwareRead,
@@ -29,12 +30,20 @@ async def compliance_summary(
     return await ComplianceService(session).summary(org_id=actor.org_id)
 
 
-@router.get("/devices", response_model=list[DeviceCompliance], summary="Per-device compliance")
+@router.get("/devices", response_model=Page[DeviceCompliance], summary="Per-device compliance")
 async def compliance_devices(
+    needs_attention: bool = False,
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
-) -> list[DeviceCompliance]:
-    return await ComplianceService(session).list_devices(org_id=actor.org_id)
+) -> Page[DeviceCompliance]:
+    page, page_size = clamp(page, page_size)
+    items, total = await ComplianceService(session).list_devices_page(
+        org_id=actor.org_id, needs_attention=needs_attention,
+        offset=(page - 1) * page_size, limit=page_size
+    )
+    return build(items, total, page, page_size)
 
 
 @router.get(

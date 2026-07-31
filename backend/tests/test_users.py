@@ -80,7 +80,7 @@ async def test_list_users_requires_auth(client):
 async def test_list_users_is_org_scoped(client, admin_headers, regular_user, other_org_user):
     response = await client.get("/api/v1/users", headers=admin_headers)
     assert response.status_code == 200
-    emails = {u["email"] for u in response.json()}
+    emails = {u["email"] for u in response.json()["items"]}
     assert regular_user.email in emails
     assert other_org_user.email not in emails
 

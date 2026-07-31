@@ -11,9 +11,9 @@ async def test_audit_log_records_actions(client, admin_headers):
     )
     resp = await client.get("/api/v1/audit-logs", headers=admin_headers)
     assert resp.status_code == 200
-    actions = [e["action"] for e in resp.json()]
+    actions = [e["action"] for e in resp.json()["items"]]
     assert "user.create" in actions
-    entry = next(e for e in resp.json() if e["action"] == "user.create")
+    entry = next(e for e in resp.json()["items"] if e["action"] == "user.create")
     assert entry["actor_email"] == "admin@acme.com"
 
 
@@ -38,4 +38,4 @@ async def test_audit_logs_are_org_scoped(client, admin_headers, other_org_user):
     # other_org_user is a plain user; make them staff is out of scope — just assert the
     # admin's own org sees its entries.
     resp = await client.get("/api/v1/audit-logs", headers=admin_headers)
-    assert any(e["action"] == "user.create" for e in resp.json())
+    assert any(e["action"] == "user.create" for e in resp.json()["items"])

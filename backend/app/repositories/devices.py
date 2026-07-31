@@ -30,6 +30,20 @@ class DeviceRepository:
         )
         return list(result.scalars().all())
 
+    async def hostnames_for(
+        self, org_id: uuid.UUID, device_ids: set[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """Hostnames for just the devices on the page being rendered. Labelling one page of
+        tasks used to load the org's entire device table — 2,000 rows to name 50."""
+        if not device_ids:
+            return {}
+        result = await self.session.execute(
+            select(Device.id, Device.hostname).where(
+                Device.org_id == org_id, Device.id.in_(device_ids)
+            )
+        )
+        return {row[0]: row[1] for row in result.all()}
+
     async def list_page(
         self,
         org_id: uuid.UUID,

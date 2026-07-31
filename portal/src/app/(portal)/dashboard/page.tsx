@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { getDashboardSummary, getDevices } from "@/lib/api/dashboard";
 import { getAssetSummary } from "@/lib/api/assets";
-import { listRemediations } from "@/lib/api/remediation";
+import { listRemediations, getRemediationSummary } from "@/lib/api/remediation";
 import { listNotifications } from "@/lib/api/notifications";
 import { listAuditLogs } from "@/lib/api/audit";
 import { StatCard } from "@/components/stat-card";
@@ -95,28 +95,31 @@ export default function DashboardPage() {
   });
 
   const { data: remediations, isLoading: remediationsLoading, isError: remediationsError } = useQuery({
-    queryKey: ["remediations"],
-    queryFn: listRemediations,
+    queryKey: ["remediations", "dashboard"],
+    // A dashboard card shows the most recent few; ask for a few. Previously this pulled the
+    // org's whole remediation history to render five rows.
+    queryFn: () => listRemediations({ page_size: 10 }).then((p) => p.items),
     refetchInterval: REFETCH,
   });
 
   const { data: unreadNotifications, isLoading: notificationsLoading, isError: notificationsError } = useQuery({
     queryKey: ["unread-notifications-list"],
-    queryFn: () => listNotifications(true),
+    queryFn: () => listNotifications({ unread_only: true, page_size: 10 }).then((p) => p.items),
     refetchInterval: REFETCH,
   });
 
   const { data: auditLogs, isLoading: auditLoading, isError: auditError } = useQuery({
-    queryKey: ["audit-logs"],
-    queryFn: listAuditLogs,
+    queryKey: ["audit-logs", "dashboard"],
+    queryFn: () => listAuditLogs({ page_size: 8 }).then((p) => p.items),
     refetchInterval: REFETCH,
   });
 
-  // Remediation status breakdown for the bar chart.
-  const remediationStatusCounts = (remediations ?? []).reduce<Record<string, number>>((acc, t) => {
-    acc[t.status] = (acc[t.status] ?? 0) + 1;
-    return acc;
-  }, {});
+  // Remediation status breakdown for the bar chart — counted org-wide by the server.
+  const { data: remediationStatusCounts = {} } = useQuery({
+    queryKey: ["remediation-summary"],
+    queryFn: getRemediationSummary,
+    refetchInterval: REFETCH,
+  });
   const remediationChartData: BarDatum[] = Object.entries(remediationStatusCounts).map(([status, count]) => ({
     name: REMEDIATION_STATUS_LABELS[status as keyof typeof REMEDIATION_STATUS_LABELS] ?? status.replace(/_/g, " "),
     value: count,

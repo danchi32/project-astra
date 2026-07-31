@@ -1,11 +1,12 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.models import RemediationSource, User, UserRole
+from app.models import RemediationSource, RemediationStatus, User, UserRole
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
 from app.schemas.remediation import (
     RemediationActionRead,
     RemediationCreate,
@@ -43,17 +44,42 @@ async def list_actions(_: User = Depends(get_current_user)) -> list[RemediationA
     ]
 
 
-@router.get("", response_model=list[RemediationTaskRead], summary="List remediation tasks")
+@router.get("", response_model=Page[RemediationTaskRead], summary="List remediation tasks")
 async def list_tasks(
+    device_id: uuid.UUID | None = None,
+    status: list[RemediationStatus] | None = Query(default=None),
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
-) -> list[RemediationTaskRead]:
+) -> Page[RemediationTaskRead]:
+    """`device_id` narrows to one machine in the database.
+
+    `status` is repeatable so a screen showing "awaiting approval" and "history" as separate
+    tables asks for each separately. Splitting one page of results in the browser would make
+    "Awaiting approval (3)" mean "3 on this page", which is not what anyone reads it as.
+    """
     from app.repositories.devices import DeviceRepository
 
-    rows = await RemediationService(session).list_for_org(actor=actor)
-    devices = await DeviceRepository(session).list_by_org(actor.org_id)
-    hostname_by_id = {d.id: d.hostname for d in devices}
-    return [_enrich(t, hostname_by_id) for t in rows]
+    page, page_size = clamp(page, page_size)
+    rows, total = await RemediationService(session).list_page(
+        actor=actor, device_id=device_id, status=status,
+        offset=(page - 1) * page_size, limit=page_size,
+    )
+    hostname_by_id = await DeviceRepository(session).hostnames_for(
+        actor.org_id, {r.device_id for r in rows}
+    )
+    return build([_enrich(t, hostname_by_id) for t in rows], total, page, page_size)
+
+
+@router.get("/summary", response_model=dict[str, int], summary="Task counts by status")
+async def remediation_summary(
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    from app.repositories.remediation import RemediationRepository
+
+    return await RemediationRepository(session).count_by_status(actor.org_id)
 
 
 @router.post(

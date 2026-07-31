@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { Page, PageParams } from "./types";
 
 export type CheckStatus = "pass" | "fail" | "unknown";
 export type DeviceComplianceStatus = "compliant" | "at_risk" | "non_compliant" | "unknown";
@@ -49,8 +50,10 @@ export interface BannedSoftware {
 export const getComplianceSummary = () =>
   apiClient.get<ComplianceSummary>("/compliance/summary").then((r) => r.data);
 
-export const getComplianceDevices = () =>
-  apiClient.get<DeviceCompliance[]>("/compliance/devices").then((r) => r.data);
+export const getComplianceDevices = (
+  params: PageParams & { needs_attention?: boolean } = {},
+) =>
+  apiClient.get<Page<DeviceCompliance>>("/compliance/devices", { params }).then((r) => r.data);
 
 export const getDeviceCompliance = (deviceId: string) =>
   apiClient.get<DeviceCompliance>(`/compliance/devices/${deviceId}`).then((r) => r.data);

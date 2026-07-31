@@ -52,7 +52,7 @@ async def test_delete_blocked_while_in_use(client, admin_headers):
     assert "reassign" in blocked.json()["detail"].lower()
 
     # After clearing the location, delete succeeds.
-    listing = (await client.get("/api/v1/assets", headers=admin_headers)).json()
+    listing = (await client.get("/api/v1/assets", headers=admin_headers)).json()["items"]
     router_asset = next(x for x in listing if x["name"] == "Router")
     await client.patch(f"/api/v1/assets/{router_asset['id']}", json={"location": ""}, headers=admin_headers)
     ok = await client.delete(f"/api/v1/locations/{loc['id']}", headers=admin_headers)

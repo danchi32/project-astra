@@ -36,6 +36,23 @@ class KnowledgeBaseService:
     async def list_for_org(self, *, org_id: uuid.UUID) -> list[KnowledgeArticle]:
         return await self.repo.list_by_org(org_id)
 
+    async def list_page(
+        self, *, org_id: uuid.UUID, offset: int = 0, limit: int = 50
+    ) -> tuple[list[KnowledgeArticle], int]:
+        from sqlalchemy import select
+
+        from app.schemas.pagination import paginate
+
+        stmt = (
+            select(KnowledgeArticle)
+            .where(KnowledgeArticle.org_id == org_id)
+            .order_by(KnowledgeArticle.created_at.desc())
+        )
+        rows, total, _, _ = await paginate(
+            self.session, stmt, page=offset // max(1, limit) + 1, page_size=limit
+        )
+        return rows, total
+
     async def delete(self, *, actor: User, article_id: uuid.UUID) -> None:
         article = await self.repo.get(article_id)
         if article is None or article.org_id != actor.org_id:

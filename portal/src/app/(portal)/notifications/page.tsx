@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import Link from "next/link";
 import { Bell, CheckCheck, AlertTriangle, AlertOctagon, Info } from "lucide-react";
-import { listNotifications, markNotificationRead, markAllNotificationsRead } from "@/lib/api/notifications";
+import { listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount } from "@/lib/api/notifications";
 import type { Notification, NotificationSeverity } from "@/lib/api/types";
 import { ScrollPanel, pageShell } from "@/components/scroll-panel";
+import { Pagination } from "@/components/pagination";
 
 const SEVERITY_STYLE: Record<NotificationSeverity, { color: string; icon: typeof Info }> = {
   info: { color: "#b246d4", icon: Info },
@@ -67,11 +68,14 @@ function NotificationRow({ n, onRead }: { n: Notification; onRead: (id: string) 
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["notifications", unreadOnly],
-    queryFn: () => listNotifications(unreadOnly),
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["notifications", unreadOnly, page],
+    queryFn: () => listNotifications({ unread_only: unreadOnly, page }),
+    placeholderData: keepPreviousData,
   });
+  const rows = data?.items;
 
   async function refresh() {
     await Promise.all([
@@ -90,7 +94,12 @@ export default function NotificationsPage() {
     await refresh();
   }
 
-  const unreadTotal = data?.filter((n) => !n.is_read).length ?? 0;
+  // The unread count comes from its own endpoint, not from this page's rows: counting the
+  // visible ones would report "3 unread" on page 1 of a hundred.
+  const { data: unreadTotal = 0 } = useQuery({
+    queryKey: ["unread-notifications"],
+    queryFn: getUnreadCount,
+  });
 
   return (
     <div className={pageShell}>
@@ -128,14 +137,17 @@ export default function NotificationsPage() {
         </button>
       </div>
 
-      <ScrollPanel className="divide-y">
+      <ScrollPanel
+        className="divide-y"
+        footer={<Pagination page={page} onPage={setPage} data={data} noun="notification" busy={isFetching} />}
+      >
         {isLoading && <p className="px-4 py-10 text-center text-sm" style={{ color: "var(--text-secondary)" }}>Loading…</p>}
-        {!isLoading && !data?.length && (
+        {!isLoading && !rows?.length && (
           <p className="px-4 py-10 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
             {unreadOnly ? "No unread notifications." : "No notifications yet."}
           </p>
         )}
-        {data?.map((n) => (
+        {rows?.map((n) => (
           <div key={n.id} style={{ borderColor: "var(--border)" }}>
             <NotificationRow n={n} onRead={handleRead} />
           </div>

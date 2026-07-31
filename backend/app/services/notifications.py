@@ -45,6 +45,14 @@ class NotificationService:
         entries = await self.repo.list_by_org(actor.org_id, unread_only=unread_only, limit=limit)
         return [NotificationRead.from_model(e) for e in entries]
 
+    async def list_page(
+        self, *, actor: User, unread_only: bool = False, offset: int = 0, limit: int = 50
+    ) -> tuple[list[NotificationRead], int]:
+        entries, total = await self.repo.list_page(
+            actor.org_id, unread_only=unread_only, offset=offset, limit=limit
+        )
+        return [NotificationRead.from_model(e) for e in entries], total
+
     async def unread_count(self, *, actor: User) -> int:
         return await self.repo.count_unread(actor.org_id)
 

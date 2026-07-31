@@ -1,14 +1,15 @@
 "use client";
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import Link from "next/link";
 import { Package, Plus, Archive, Pencil, X, MailCheck, Mail, Clock, History } from "lucide-react";
-import { assetLocation } from "@/lib/asset-filters";
 import {
-  listAssets, getAssetSummary, createAsset, updateAsset, archiveAsset, resendAcknowledgement,
+  listAssets, getAssetSummary, getAssetLocations, createAsset, updateAsset, archiveAsset,
+  resendAcknowledgement,
 } from "@/lib/api/assets";
 import { AssetPassportDrawer } from "@/components/asset-passport-drawer";
-import { listUsers } from "@/lib/api/users";
+import { Pagination } from "@/components/pagination";
+import { listAllUsers } from "@/lib/api/users";
 import { getDevices } from "@/lib/api/dashboard";
 import { getMe } from "@/lib/api/auth";
 import { listLocations } from "@/lib/api/locations";
@@ -53,26 +54,32 @@ export default function AssetsPage() {
   const [error, setError] = useState("");
 
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const { data: assets, isLoading } = useQuery({ queryKey: ["assets"], queryFn: () => listAssets() });
+  const [page, setPage] = useState(1);
+  const [locFilter, setLocFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | AssetStatus>("all");
+  // Filters go to the database. Filtering a page in the browser would quietly mean
+  // "the in-repair assets that happen to be on page 1".
+  const { data: assetPage, isLoading, isFetching } = useQuery({
+    queryKey: ["assets", page, locFilter, statusFilter],
+    queryFn: () => listAssets({
+      page,
+      status: statusFilter === "all" ? undefined : statusFilter,
+      location: locFilter === "all" ? undefined : locFilter,
+    }),
+    placeholderData: keepPreviousData,
+  });
+  const assets = assetPage?.items;
   const { data: summary } = useQuery({ queryKey: ["asset-summary"], queryFn: getAssetSummary });
-  const { data: users } = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const { data: users } = useQuery({ queryKey: ["users", "all"], queryFn: listAllUsers });
   const { data: devices } = useQuery({ queryKey: ["devices"], queryFn: getDevices });
   const { data: managedLocations } = useQuery({ queryKey: ["locations"], queryFn: listLocations });
   const isStaff = me?.role === "admin" || me?.role === "technician";
 
-  const [locFilter, setLocFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | AssetStatus>("all");
-  const locations = useMemo(
-    () => Array.from(new Set((assets ?? []).map(assetLocation))).sort((a, b) => a.localeCompare(b)),
-    [assets],
-  );
-  const visible = useMemo(
-    () => (assets ?? []).filter(
-      (a) => (locFilter === "all" || assetLocation(a) === locFilter)
-        && (statusFilter === "all" || a.status === statusFilter),
-    ),
-    [assets, locFilter, statusFilter],
-  );
+  const { data: locations = [] } = useQuery({
+    queryKey: ["asset-locations"], queryFn: getAssetLocations,
+  });
+  // Already filtered by the server.
+  const visible = assets ?? [];
 
   function openNew() { setForm(EMPTY); setError(""); setEditing("new"); }
   function openEdit(a: Asset) {
@@ -298,6 +305,7 @@ export default function AssetsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} onPage={setPage} data={assetPage} noun="asset" busy={isFetching} />
       </div>
 
       {/* Create / edit drawer */}

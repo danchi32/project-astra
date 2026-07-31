@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, Download, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listDevicesPaged } from "@/lib/api/devices";
-import { listAssets } from "@/lib/api/assets";
+import { assetsForDevices } from "@/lib/api/assets";
 import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
@@ -79,15 +79,17 @@ export default function DevicesPage() {
     refetchInterval: 30_000,
   });
 
-  // Assets are joined client-side for the state + location columns of the visible page.
-  const { data: assets } = useQuery({ queryKey: ["assets"], queryFn: () => listAssets() });
-  const assetByDevice = useMemo(() => {
-    const m = new Map<string, Asset>();
-    for (const a of assets ?? []) if (a.device_id) m.set(a.device_id, a);
-    return m;
-  }, [assets]);
-
   const devices = data?.items;
+
+  // Asset records for exactly the devices on screen, joined in the database rather than by
+  // pulling the whole register — which read 2,000 rows to annotate 50, and once the register
+  // is paged would annotate the wrong ones.
+  const deviceIds = useMemo(() => (devices ?? []).map((d) => d.id), [devices]);
+  const { data: assetByDevice } = useQuery({
+    queryKey: ["assets-for-devices", deviceIds],
+    queryFn: () => assetsForDevices(deviceIds),
+    enabled: deviceIds.length > 0,
+  });
   const total = data?.total ?? 0;
   const pages = data?.pages ?? 1;
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
@@ -115,7 +117,7 @@ export default function DevicesPage() {
       });
       const headers = cols.map((c) => c.label);
       const rows = all.items.map((d) => {
-        const a = assetByDevice.get(d.id);
+        const a = assetByDevice?.get(d.id);
         return cols.map((c) => c.get(d, a));
       });
       const csv = [headers, ...rows].map((r) => r.map(csvCell).join(",")).join("\r\n");
@@ -225,7 +227,7 @@ export default function DevicesPage() {
                 </td></tr>
               )}
               {devices?.map((d) => {
-                const a = assetByDevice.get(d.id);
+                const a = assetByDevice?.get(d.id);
                 const state = assetState(a);
                 return (
                   <tr key={d.id} className="hover:bg-brand-500/5 transition-colors" style={{ borderBottom: "1px solid var(--border)" }}>

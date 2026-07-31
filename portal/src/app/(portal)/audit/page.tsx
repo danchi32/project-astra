@@ -1,8 +1,10 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { listAuditLogs } from "@/lib/api/audit";
 import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
+import { Pagination } from "@/components/pagination";
 
 function actionColor(action: string): string {
   if (action.includes("delete") || action.includes("reject")) return "#ef4444";
@@ -12,11 +14,16 @@ function actionColor(action: string): string {
 }
 
 export default function AuditPage() {
-  const { data: logs, isLoading } = useQuery({
-    queryKey: ["audit-logs"],
-    queryFn: listAuditLogs,
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["audit-logs", page],
+    queryFn: () => listAuditLogs({ page }),
     refetchInterval: 30_000,
+    // Keep the previous page on screen while the next loads, so paging doesn't flash an
+    // empty table and shove the footer up under the cursor.
+    placeholderData: keepPreviousData,
   });
+  const logs = data?.items;
 
   return (
     <div className={pageShell}>
@@ -32,7 +39,9 @@ export default function AuditPage() {
         </div>
       </div>
 
-      <ScrollPanel>
+      <ScrollPanel
+        footer={<Pagination page={page} onPage={setPage} data={data} noun="entry" plural="entries" busy={isFetching} />}
+      >
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr>

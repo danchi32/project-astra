@@ -43,7 +43,7 @@ async def test_device_fails_patch_check(client, admin_headers, admin_user, sessi
     await _make_device(session_factory, _Org(admin_user.org_id))
     resp = await client.get("/api/v1/compliance/devices", headers=admin_headers)
     assert resp.status_code == 200, resp.text
-    rows = resp.json()
+    rows = resp.json()["items"]
     assert len(rows) == 1
     patch = next(c for c in rows[0]["checks"] if c["key"] == "patch")
     assert patch["status"] == "fail"
@@ -62,7 +62,7 @@ async def test_banned_software_crud_and_detection(client, admin_headers, admin_u
         "/api/v1/compliance/banned-software", json={"name": "utorrent"}, headers=admin_headers)
     assert dup.status_code == 409
 
-    rows = (await client.get("/api/v1/compliance/devices", headers=admin_headers)).json()
+    rows = (await client.get("/api/v1/compliance/devices", headers=admin_headers)).json()["items"]
     chk = next(c for c in rows[0]["checks"] if c["key"] == "no_banned_software")
     assert chk["status"] == "fail"
     assert "uTorrent" in chk["detail"]
@@ -70,7 +70,7 @@ async def test_banned_software_crud_and_detection(client, admin_headers, admin_u
     rm = await client.delete(
         f"/api/v1/compliance/banned-software/{banned_id}", headers=admin_headers)
     assert rm.status_code == 204
-    rows = (await client.get("/api/v1/compliance/devices", headers=admin_headers)).json()
+    rows = (await client.get("/api/v1/compliance/devices", headers=admin_headers)).json()["items"]
     assert all(c["key"] != "no_banned_software" for c in rows[0]["checks"])
 
 
@@ -126,7 +126,7 @@ async def test_awaiting_restart_is_not_reported_as_unpatched(
         [("KB5094126", "pending_restart", None), ("KB5100998", "pending_restart", None)],
     )
     resp = await client.get("/api/v1/compliance/devices", headers=admin_headers)
-    device = next(d for d in resp.json() if d["hostname"] == "REBOOT-PC")
+    device = next(d for d in resp.json()["items"] if d["hostname"] == "REBOOT-PC")
     patch = next(c for c in device["checks"] if c["key"] == "patch")
 
     assert patch["status"] == "fail"          # not applied yet, so still not compliant
@@ -144,7 +144,7 @@ async def test_a_failed_update_reports_its_error_code(
         [("KB5007651", "failed", "0x80244018")],
     )
     resp = await client.get("/api/v1/compliance/devices", headers=admin_headers)
-    device = next(d for d in resp.json() if d["hostname"] == "FAIL-PC")
+    device = next(d for d in resp.json()["items"] if d["hostname"] == "FAIL-PC")
     patch = next(c for c in device["checks"] if c["key"] == "patch")
 
     assert patch["status"] == "fail"

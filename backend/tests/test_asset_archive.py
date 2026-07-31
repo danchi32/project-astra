@@ -16,10 +16,10 @@ async def test_archive_hides_from_active_but_kept_in_archived(client, admin_head
     assert r.status_code == 200, r.text
     assert r.json()["archived_at"] is not None
 
-    active = (await client.get("/api/v1/assets", headers=admin_headers)).json()
+    active = (await client.get("/api/v1/assets", headers=admin_headers)).json()["items"]
     assert all(x["id"] != aid for x in active)
 
-    archived = (await client.get("/api/v1/assets?archived=true", headers=admin_headers)).json()
+    archived = (await client.get("/api/v1/assets?archived=true", headers=admin_headers)).json()["items"]
     assert any(x["id"] == aid for x in archived)
 
 
@@ -41,7 +41,7 @@ async def test_restore_returns_to_active(client, admin_headers):
     r = await client.post(f"/api/v1/assets/{aid}/restore", headers=admin_headers)
     assert r.status_code == 200, r.text
     assert r.json()["archived_at"] is None
-    active = (await client.get("/api/v1/assets", headers=admin_headers)).json()
+    active = (await client.get("/api/v1/assets", headers=admin_headers)).json()["items"]
     assert any(x["id"] == aid for x in active)
     # ...and a 'restored' event is on the passport.
     p = (await client.get(f"/api/v1/assets/{aid}/passport", headers=admin_headers)).json()

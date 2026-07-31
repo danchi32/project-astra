@@ -401,6 +401,19 @@ class RemediationService:
     async def list_for_org(self, *, actor: User) -> list[RemediationTask]:
         return await self.repo.list_by_org(actor.org_id)
 
+    async def list_page(
+        self,
+        *,
+        actor: User,
+        device_id: uuid.UUID | None = None,
+        status: list[RemediationStatus] | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[RemediationTask], int]:
+        return await self.repo.list_page(
+            actor.org_id, device_id=device_id, status=status, offset=offset, limit=limit
+        )
+
     # -- Agent-facing (device executes approved work) --------------------------
 
     async def claim_for_device(

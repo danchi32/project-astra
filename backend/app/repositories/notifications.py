@@ -27,6 +27,20 @@ class NotificationRepository:
         stmt = stmt.order_by(Notification.created_at.desc()).limit(limit)
         return list((await self.session.execute(stmt)).scalars().all())
 
+    async def list_page(
+        self, org_id: uuid.UUID, *, unread_only: bool = False, offset: int = 0, limit: int = 50
+    ) -> tuple[list[Notification], int]:
+        from app.schemas.pagination import paginate
+
+        stmt = select(Notification).where(Notification.org_id == org_id)
+        if unread_only:
+            stmt = stmt.where(Notification.read_at.is_(None))
+        stmt = stmt.order_by(Notification.created_at.desc())
+        rows, total, _, _ = await paginate(
+            self.session, stmt, page=offset // max(1, limit) + 1, page_size=limit
+        )
+        return rows, total
+
     async def count_unread(self, org_id: uuid.UUID) -> int:
         result = await self.session.execute(
             select(func.count()).where(

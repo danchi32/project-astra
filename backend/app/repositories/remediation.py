@@ -28,6 +28,49 @@ class RemediationRepository:
         )
         return list(result.scalars().all())
 
+    async def list_page(
+        self,
+        org_id: uuid.UUID,
+        *,
+        device_id: uuid.UUID | None = None,
+        status: list[RemediationStatus] | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[RemediationTask], int]:
+        """One page of the org's remediation tasks, newest first.
+
+        `device_id` exists so a caller that only cares about one machine asks for one
+        machine. The device page used to pull the org's entire task list and filter it in
+        the browser, which silently becomes "the most recent page of tasks, filtered" the
+        moment this endpoint is paged — showing a device as idle while work is queued on it.
+        """
+        from app.schemas.pagination import paginate
+
+        stmt = select(RemediationTask).where(RemediationTask.org_id == org_id)
+        if device_id is not None:
+            stmt = stmt.where(RemediationTask.device_id == device_id)
+        if status:
+            stmt = stmt.where(RemediationTask.status.in_(status))
+        stmt = stmt.order_by(RemediationTask.created_at.desc())
+        rows, total, _, _ = await paginate(
+            self.session, stmt, page=offset // max(1, limit) + 1, page_size=limit
+        )
+        return rows, total
+
+    async def count_by_status(self, org_id: uuid.UUID) -> dict[str, int]:
+        """Org-wide task counts per status, for the dashboard's breakdown chart.
+
+        Its own query rather than tallying a fetched list: once the list is paged, counting
+        the rows on screen would chart "the last 50 tasks" while looking exactly like a
+        chart of everything.
+        """
+        rows = (await self.session.execute(
+            select(RemediationTask.status, func.count())
+            .where(RemediationTask.org_id == org_id)
+            .group_by(RemediationTask.status)
+        )).all()
+        return {r[0].value if hasattr(r[0], "value") else str(r[0]): int(r[1]) for r in rows}
+
     async def count_recent_for_org(self, org_id: uuid.UUID, since: datetime) -> int:
         result = await self.session.execute(
             select(func.count())

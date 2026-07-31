@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { ShieldCheck, ShieldAlert, Ban, Plus, X } from "lucide-react";
 import {
   getComplianceSummary, getComplianceDevices,
@@ -10,6 +10,7 @@ import {
 import type { DeviceComplianceStatus } from "@/lib/api/compliance";
 import { getMe } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
+import { Pagination } from "@/components/pagination";
 
 const STATUS_STYLE: Record<DeviceComplianceStatus, { label: string; color: string }> = {
   compliant: { label: "Compliant", color: "#10b981" },
@@ -41,7 +42,16 @@ export default function CompliancePage() {
   const isAdmin = me?.role === "admin";
 
   const { data: summary } = useQuery({ queryKey: ["compliance-summary"], queryFn: getComplianceSummary, refetchInterval: 60_000 });
-  const { data: devices } = useQuery({ queryKey: ["compliance-devices"], queryFn: getComplianceDevices, refetchInterval: 60_000 });
+  // Asked for as "needs attention" rather than fetched-and-filtered: the status is derived
+  // from telemetry, so filtering a page in the browser would only ever surface the
+  // at-risk devices that happened to land on it.
+  const [page, setPage] = useState(1);
+  const { data: devices, isFetching } = useQuery({
+    queryKey: ["compliance-devices", page],
+    queryFn: () => getComplianceDevices({ needs_attention: true, page }),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+  });
   const { data: banned } = useQuery({ queryKey: ["banned-software"], queryFn: listBannedSoftware });
 
   const [newBan, setNewBan] = useState("");
@@ -74,8 +84,8 @@ export default function CompliancePage() {
     ]);
   }
 
-  const attention = (devices ?? []).filter((d) => d.status === "non_compliant" || d.status === "at_risk")
-    .sort((a, b) => a.score - b.score);
+  // Already filtered and ordered by the server.
+  const attention = devices?.items ?? [];
 
   return (
     <div className="space-y-6">
@@ -210,12 +220,13 @@ export default function CompliancePage() {
               ))}
               {attention.length === 0 && (
                 <tr><td colSpan={4} className="px-5 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
-                  {devices?.length ? "Everything looks compliant. 🎉" : "No devices to evaluate yet."}
+                  {(summary?.total_devices ?? 0) > 0 ? "Everything looks compliant. 🎉" : "No devices to evaluate yet."}
                 </td></tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination page={page} onPage={setPage} data={devices} noun="device" busy={isFetching} />
       </div>
     </div>
   );

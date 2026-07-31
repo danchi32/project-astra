@@ -78,7 +78,7 @@ async def test_create_outlook_rule_is_an_automatic_action_with_params(client, ad
     assert body["status"] == "approved"  # action, not a queued suggestion
 
     # The sender + folder are stored on the task, so the agent receives them to build the rule.
-    tasks = (await client.get("/api/v1/remediations", headers=admin_headers)).json()
+    tasks = (await client.get("/api/v1/remediations", headers=admin_headers)).json()["items"]
     rule_task = next(t for t in tasks if t["action_id"] == "create_outlook_rule")
     assert rule_task["params"] == {"from_address": "chishtydanish@gmail.com", "folder_name": "Danish"}
 
@@ -279,7 +279,7 @@ async def test_agent_claims_and_reports_result(client, admin_headers):
 
     # Portal sees it succeeded
     tasks = await client.get("/api/v1/remediations", headers=admin_headers)
-    row = next(t for t in tasks.json() if t["id"] == task["id"])
+    row = next(t for t in tasks.json()["items"] if t["id"] == task["id"])
     assert row["status"] == "succeeded"
     assert row["result"]["output"] == "Outlook restarted."
 
@@ -352,7 +352,7 @@ async def test_inline_approval_skips_the_pending_state_and_its_notification(
     assert r.status_code == 201, r.text
     assert r.json()["status"] == "approved"          # never sat pending
 
-    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()
+    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()["items"]
     assert not any("Approval needed" in (n.get("title") or "") for n in notes), notes
 
 
@@ -366,7 +366,7 @@ async def test_without_approve_the_task_waits_and_notifies(client, admin_headers
     })
     assert r.json()["status"] == "pending_approval"
 
-    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()
+    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()["items"]
     assert any("Approval needed" in (n.get("title") or "") for n in notes)
 
 
@@ -382,7 +382,7 @@ async def test_inline_approval_still_enforces_the_tier(client, user_headers, adm
     })
     assert r.status_code in (400, 403), r.text
 
-    tasks = (await client.get("/api/v1/remediations", headers=admin_headers)).json()
+    tasks = (await client.get("/api/v1/remediations", headers=admin_headers)).json()["items"]
     assert not any(t["action_id"] == "office_repair" for t in tasks), "a refused push must create nothing"
 
 
@@ -407,7 +407,7 @@ async def test_same_action_cannot_be_queued_twice_on_one_device(client, admin_he
     assert "already" in second.json()["detail"].lower()
 
     tasks = await client.get("/api/v1/remediations", headers=admin_headers)
-    assert len([t for t in tasks.json() if t["action_id"] == "flush_dns"]) == 1
+    assert len([t for t in tasks.json()["items"] if t["action_id"] == "flush_dns"]) == 1
 
 
 async def test_a_different_parameter_is_different_work(client, admin_headers):

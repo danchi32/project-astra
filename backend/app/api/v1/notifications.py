@@ -7,21 +7,25 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models import User
 from app.schemas.notification import MarkAllReadResponse, NotificationRead, UnreadCount
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
 from app.services.notifications import NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
-@router.get("", response_model=list[NotificationRead], summary="List notifications")
+@router.get("", response_model=Page[NotificationRead], summary="List notifications")
 async def list_notifications(
     unread_only: bool = Query(default=False),
-    limit: int = Query(default=100, ge=1, le=500),
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
     actor: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-) -> list[NotificationRead]:
-    return await NotificationService(session).list_for_org(
-        actor=actor, unread_only=unread_only, limit=limit
+) -> Page[NotificationRead]:
+    page, page_size = clamp(page, page_size)
+    items, total = await NotificationService(session).list_page(
+        actor=actor, unread_only=unread_only, offset=(page - 1) * page_size, limit=page_size
     )
+    return build(items, total, page, page_size)
 
 
 @router.get("/unread-count", response_model=UnreadCount, summary="Unread notification count")

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.asset import AssetCreate, AssetRead, AssetSummary, AssetUpdate
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
 from app.schemas.asset_event import AssetPassport
 from app.services.assets import AssetService
 
@@ -54,13 +55,39 @@ async def acknowledge_asset(
     )
 
 
-@router.get("", response_model=list[AssetRead], summary="List assets in your organization")
+@router.get("", response_model=Page[AssetRead], summary="List assets in your organization")
 async def list_assets(
     archived: bool = False,
+    q: str | None = None,
+    status: str | None = None,
+    location: str | None = None,
+    device_id: uuid.UUID | None = None,
+    device_ids: list[uuid.UUID] | None = Query(default=None),
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
     actor: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-) -> list[AssetRead]:
-    return await AssetService(session).list_for_org(org_id=actor.org_id, archived=archived)
+) -> Page[AssetRead]:
+    """`device_id` narrows to one device's asset record, so a caller that wants one row asks
+    for one row rather than paging the whole register hoping to find it."""
+    page, page_size = clamp(page, page_size)
+    items, total = await AssetService(session).list_page(
+        org_id=actor.org_id, archived=archived, q=(q.strip() or None) if q else None,
+        status=status, location=location,
+        device_id=device_id, device_ids=device_ids,
+        offset=(page - 1) * page_size, limit=page_size,
+    )
+    return build(items, total, page, page_size)
+
+
+@router.get("/locations", response_model=list[str], summary="Locations in use on assets")
+async def asset_locations(
+    actor: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[str]:
+    from app.repositories.assets import AssetRepository
+
+    return await AssetRepository(session).distinct_locations(actor.org_id)
 
 
 @router.get("/summary", response_model=AssetSummary, summary="Asset register summary")

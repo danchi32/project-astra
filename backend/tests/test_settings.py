@@ -66,7 +66,7 @@ async def test_update_settings_persists_and_audits(client, admin_headers):
     assert again.json()["org_name"] == "Acme Global"
 
     logs = await client.get("/api/v1/audit-logs", headers=admin_headers)
-    assert "settings.update" in [e["action"] for e in logs.json()]
+    assert "settings.update" in [e["action"] for e in logs.json()["items"]]
 
 
 async def test_settings_require_auth(client):

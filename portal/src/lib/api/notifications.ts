@@ -1,10 +1,9 @@
 import { apiClient } from "./client";
-import type { Notification } from "./types";
+import type { Notification, Page, PageParams } from "./types";
 
-export const listNotifications = (unreadOnly = false) =>
-  apiClient
-    .get<Notification[]>("/notifications", { params: { unread_only: unreadOnly } })
-    .then((r) => r.data);
+export const listNotifications = (
+  params: PageParams & { unread_only?: boolean } = {},
+) => apiClient.get<Page<Notification>>("/notifications", { params }).then((r) => r.data);
 
 export const getUnreadCount = () =>
   apiClient.get<{ unread_count: number }>("/notifications/unread-count").then((r) => r.data.unread_count);

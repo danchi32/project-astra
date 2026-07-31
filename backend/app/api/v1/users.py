@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
+from app.repositories.users import UserRepository
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
 from app.schemas.users import UserCreate, UserRead, UserUpdate
 from app.services.users import UserService
 
@@ -15,12 +17,21 @@ staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 admin_required = require_roles(UserRole.ADMIN)
 
 
-@router.get("", response_model=list[UserRead], summary="List users in your organization")
+@router.get("", response_model=Page[UserRead], summary="List users in your organization")
 async def list_users(
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
-) -> list[User]:
-    return await UserService(session).list_users(actor=actor)
+) -> Page[UserRead]:
+    page, page_size = clamp(page, page_size)
+    rows, total = await UserRepository(session).list_page(
+        actor.org_id, offset=(page - 1) * page_size, limit=page_size
+    )
+    # Converted here rather than leaning on FastAPI's response_model coercion:
+    # a generic Page[...] is built before that step, so a SQLAlchemy row would
+    # reach pydantic unvalidated and fail at import time.
+    return build([UserRead.model_validate(u) for u in rows], total, page, page_size)
 
 
 @router.post(

@@ -1,9 +1,16 @@
 "use client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useState } from "react";
 import { Check, X, Zap } from "lucide-react";
 import { listRemediations, approveRemediation, rejectRemediation } from "@/lib/api/remediation";
+import { Pagination } from "@/components/pagination";
 import type { RemediationStatus, RemediationTier, RemediationTask } from "@/lib/api/types";
+
+// The two tables are two queries, filtered in the database. Splitting one page of results
+// client-side would make "Awaiting approval (3)" mean "3 on the page you happen to be on".
+const HISTORY_STATUSES: RemediationStatus[] = [
+  "approved", "dispatched", "succeeded", "failed", "rejected",
+];
 
 const TIER_STYLE: Record<RemediationTier, { label: string; color: string; bg: string }> = {
   automatic: { label: "Automatic", color: "#10b981", bg: "rgba(16,185,129,0.1)" },
@@ -24,10 +31,20 @@ export default function SelfHealingPage() {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
 
-  const { data: tasks, isLoading } = useQuery({
-    queryKey: ["remediations"],
-    queryFn: listRemediations,
+  const [pendingPage, setPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+
+  const { data: pendingData, isFetching: pendingBusy } = useQuery({
+    queryKey: ["remediations", "pending", pendingPage],
+    queryFn: () => listRemediations({ status: ["pending_approval"], page: pendingPage }),
     refetchInterval: 10_000,
+    placeholderData: keepPreviousData,
+  });
+  const { data: historyData, isLoading, isFetching: historyBusy } = useQuery({
+    queryKey: ["remediations", "history", historyPage],
+    queryFn: () => listRemediations({ status: HISTORY_STATUSES, page: historyPage }),
+    refetchInterval: 10_000,
+    placeholderData: keepPreviousData,
   });
 
   async function act(id: string, action: "approve" | "reject") {
@@ -43,8 +60,8 @@ export default function SelfHealingPage() {
     }
   }
 
-  const pending = tasks?.filter((t) => t.status === "pending_approval") ?? [];
-  const history = tasks?.filter((t) => t.status !== "pending_approval") ?? [];
+  const pending = pendingData?.items ?? [];
+  const history = historyData?.items ?? [];
 
   return (
     <div className="space-y-6">
@@ -63,7 +80,7 @@ export default function SelfHealingPage() {
       {/* Pending approvals */}
       <div>
         <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-          Awaiting approval {pending.length > 0 && <span style={{ color: "var(--accent)" }}>({pending.length})</span>}
+          Awaiting approval {(pendingData?.total ?? 0) > 0 && <span style={{ color: "var(--accent)" }}>({pendingData?.total})</span>}
         </h2>
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
           <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
@@ -115,6 +132,7 @@ export default function SelfHealingPage() {
               </tbody>
             </table>
           </div>
+          <Pagination page={pendingPage} onPage={setPendingPage} data={pendingData} noun="fix" busy={pendingBusy} />
         </div>
       </div>
 
@@ -152,6 +170,7 @@ export default function SelfHealingPage() {
               </tbody>
             </table>
           </div>
+          <Pagination page={historyPage} onPage={setHistoryPage} data={historyData} noun="fix" busy={historyBusy} />
         </div>
       </div>
     </div>

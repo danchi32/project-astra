@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Archive, ArrowLeft, History, RotateCcw, Trash2 } from "lucide-react";
 import { listAssets, restoreAsset, deleteAsset } from "@/lib/api/assets";
 import { getMe } from "@/lib/api/auth";
 import { AssetPassportDrawer } from "@/components/asset-passport-drawer";
+import { Pagination } from "@/components/pagination";
 import type { Asset, AssetStatus } from "@/lib/api/types";
 
 const STATUS_STYLE: Record<AssetStatus, { label: string; color: string }> = {
@@ -19,10 +20,13 @@ const STATUS_STYLE: Record<AssetStatus, { label: string; color: string }> = {
 export default function ArchivedAssetsPage() {
   const queryClient = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const { data: assets, isLoading } = useQuery({
-    queryKey: ["assets", "archived"],
-    queryFn: () => listAssets(true),
+  const [page, setPage] = useState(1);
+  const { data: assetPage, isLoading, isFetching } = useQuery({
+    queryKey: ["assets", "archived", page],
+    queryFn: () => listAssets({ archived: true, page }),
+    placeholderData: keepPreviousData,
   });
+  const assets = assetPage?.items;
   const [passportFor, setPassportFor] = useState<Asset | null>(null);
   const isStaff = me?.role === "admin" || me?.role === "technician";
   const isAdmin = me?.role === "admin";
@@ -117,6 +121,7 @@ export default function ArchivedAssetsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={page} onPage={setPage} data={assetPage} noun="archived asset" busy={isFetching} />
       </div>
 
       {passportFor && <AssetPassportDrawer asset={passportFor} onClose={() => setPassportFor(null)} />}

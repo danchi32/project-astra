@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { BookOpen, Plus, Trash2, Sparkles } from "lucide-react";
 import { listArticles, createArticle, deleteArticle } from "@/lib/api/knowledge";
+import { Pagination } from "@/components/pagination";
 
 export default function KnowledgePage() {
   const queryClient = useQueryClient();
@@ -11,10 +12,13 @@ export default function KnowledgePage() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const { data: articles, isLoading } = useQuery({
-    queryKey: ["knowledge"],
-    queryFn: listArticles,
+  const [page, setPage] = useState(1);
+  const { data: articlePage, isLoading, isFetching } = useQuery({
+    queryKey: ["knowledge", page],
+    queryFn: () => listArticles({ page }),
+    placeholderData: keepPreviousData,
   });
+  const articles = articlePage?.items;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -114,6 +118,9 @@ export default function KnowledgePage() {
             </div>
           </div>
         ))}
+        {/* Cards, not a table — so the control sits under the list rather than in a panel
+            footer. Same component, so the wording and behaviour match every other page. */}
+        <Pagination page={page} onPage={setPage} data={articlePage} noun="article" busy={isFetching} />
       </div>
     </div>
   );

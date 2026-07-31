@@ -26,7 +26,7 @@ async def test_pending_approval_creates_notification(client, admin_headers):
 
     notes = await client.get("/api/v1/notifications", headers=admin_headers)
     assert notes.status_code == 200
-    body = notes.json()
+    body = notes.json()["items"]
     assert len(body) == 1
     assert body[0]["category"] == "remediation"
     assert body[0]["severity"] == "warning"
@@ -45,7 +45,7 @@ async def test_automatic_action_does_not_notify(client, admin_headers):
     assert resp.status_code == 201
 
     notes = await client.get("/api/v1/notifications", headers=admin_headers)
-    assert notes.json() == []
+    assert notes.json()["items"] == []
 
 
 async def test_failed_remediation_creates_notification(client, admin_headers):
@@ -69,7 +69,7 @@ async def test_failed_remediation_creates_notification(client, admin_headers):
     assert result.status_code == 204
 
     notes = await client.get("/api/v1/notifications", headers=admin_headers)
-    body = notes.json()
+    body = notes.json()["items"]
     assert len(body) == 1
     assert body[0]["severity"] == "critical"
     assert body[0]["title"] == "Remediation failed"
@@ -92,7 +92,7 @@ async def test_unread_count_and_mark_read(client, admin_headers):
     unread = await client.get("/api/v1/notifications/unread-count", headers=admin_headers)
     assert unread.json()["unread_count"] == 2
 
-    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()
+    notes = (await client.get("/api/v1/notifications", headers=admin_headers)).json()["items"]
     first_id = notes[0]["id"]
     marked = await client.post(f"/api/v1/notifications/{first_id}/read", headers=admin_headers)
     assert marked.status_code == 200
@@ -104,7 +104,8 @@ async def test_unread_count_and_mark_read(client, admin_headers):
     unread_only = await client.get(
         "/api/v1/notifications", params={"unread_only": True}, headers=admin_headers
     )
-    assert len(unread_only.json()) == 1
+    assert len(unread_only.json()["items"]) == 1
+    assert unread_only.json()["total"] == 1
 
 
 async def test_mark_all_read(client, admin_headers):
@@ -142,4 +143,4 @@ async def test_notifications_are_org_scoped(client, admin_headers, other_org_use
     other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
     resp = await client.get("/api/v1/notifications", headers=other_headers)
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json()["items"] == []

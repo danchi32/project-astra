@@ -49,6 +49,28 @@ class AssetService:
         user_names, device_hosts = await self._lookup_maps(org_id)
         return [self._to_read(a, user_names, device_hosts) for a in assets]
 
+    async def list_page(
+        self,
+        *,
+        org_id: uuid.UUID,
+        archived: bool = False,
+        q: str | None = None,
+        status: str | None = None,
+        location: str | None = None,
+        device_id: uuid.UUID | None = None,
+        device_ids: list[uuid.UUID] | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[AssetRead], int]:
+        assets, total = await self.repo.list_page(
+            org_id, archived=archived, q=q, status=status, location=location,
+            device_id=device_id,
+            device_ids=device_ids,
+            offset=offset, limit=limit
+        )
+        user_names, device_hosts = await self._lookup_maps(org_id)
+        return [self._to_read(a, user_names, device_hosts) for a in assets], total
+
     async def get(self, *, actor: User, asset_id: uuid.UUID) -> AssetRead:
         asset = await self._get_owned(actor.org_id, asset_id)
         user_names, device_hosts = await self._lookup_maps(actor.org_id)

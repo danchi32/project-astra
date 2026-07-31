@@ -17,8 +17,8 @@ async def test_create_and_list_asset(client, admin_headers):
 
     listed = await client.get("/api/v1/assets", headers=admin_headers)
     assert listed.status_code == 200
-    assert len(listed.json()) == 1
-    assert listed.json()[0]["serial_number"] == "SN123"
+    assert len(listed.json()["items"]) == 1
+    assert listed.json()["items"][0]["serial_number"] == "SN123"
 
 
 async def test_asset_summary(client, admin_headers):
@@ -54,7 +54,7 @@ async def test_delete_asset(client, admin_headers):
     resp = await client.delete(f"/api/v1/assets/{asset_id}", headers=admin_headers)
     assert resp.status_code == 204
     listed = await client.get("/api/v1/assets", headers=admin_headers)
-    assert listed.json() == []
+    assert listed.json()["items"] == []
 
 
 async def test_assigned_user_name_is_enriched(client, admin_headers, admin_user):
@@ -70,7 +70,7 @@ async def test_regular_user_can_read_but_not_write(client, admin_headers, user_h
     # read allowed
     listed = await client.get("/api/v1/assets", headers=user_headers)
     assert listed.status_code == 200
-    assert len(listed.json()) == 1
+    assert len(listed.json()["items"]) == 1
     # write forbidden
     forbidden = await _create(client, user_headers, name="Sneaky asset")
     assert forbidden.status_code == 403
@@ -91,7 +91,7 @@ async def test_assets_are_org_scoped(client, admin_headers, other_org_user):
     other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
 
     # other org sees none, and cannot fetch the asset by id
-    assert (await client.get("/api/v1/assets", headers=other_headers)).json() == []
+    assert (await client.get("/api/v1/assets", headers=other_headers)).json()["items"] == []
     assert (await client.get(f"/api/v1/assets/{asset_id}", headers=other_headers)).status_code == 404
 
 
@@ -99,5 +99,5 @@ async def test_create_records_audit_log(client, admin_headers):
     await _create(client, admin_headers)
     logs = await client.get("/api/v1/audit-logs", headers=admin_headers)
     assert logs.status_code == 200
-    actions = [entry["action"] for entry in logs.json()]
+    actions = [entry["action"] for entry in logs.json()["items"]]
     assert "asset.create" in actions

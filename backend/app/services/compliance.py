@@ -101,12 +101,25 @@ class ComplianceService:
 
     # ── Evaluation ────────────────────────────────────────────────────────────
 
-    async def _evaluate(self, *, org_id: uuid.UUID) -> list[DeviceCompliance]:
-        devices = list((await self.session.execute(
-            select(Device).where(Device.org_id == org_id).order_by(Device.hostname)
-        )).scalars().all())
+    async def _evaluate(
+        self, *, org_id: uuid.UUID, offset: int | None = None, limit: int | None = None
+    ) -> tuple[list[DeviceCompliance], int]:
+        """Score the org's devices. With offset/limit only that slice is scored — the fleet
+        summary still needs every device, but the per-device table does not, and evaluating
+        two thousand of them to render fifty is the whole reason this page was slow.
+
+        Returns (rows, total_devices_in_org).
+        """
+        base = select(Device).where(Device.org_id == org_id).order_by(Device.hostname)
+        total = int(await self.session.scalar(
+            select(func.count()).select_from(base.order_by(None).subquery())
+        ) or 0)
+        stmt = base
+        if offset is not None and limit is not None:
+            stmt = stmt.offset(offset).limit(limit)
+        devices = list((await self.session.execute(stmt)).scalars().all())
         if not devices:
-            return []
+            return [], total
 
         # Updates still to install, split by why. These are not the same finding: a device
         # that installed its updates and needs a reboot is nearly patched and the fix is a
@@ -262,19 +275,48 @@ class ComplianceService:
                 device_id=d.id, hostname=d.hostname, status=dstatus,
                 score=score, passed=passed, failed=failed, checks=checks,
             ))
-        return results
+        return results, total
 
     async def list_devices(self, *, org_id: uuid.UUID) -> list[DeviceCompliance]:
-        return await self._evaluate(org_id=org_id)
+        rows, _ = await self._evaluate(org_id=org_id)
+        return rows
+
+    async def list_devices_page(
+        self,
+        *,
+        org_id: uuid.UUID,
+        needs_attention: bool = False,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[DeviceCompliance], int]:
+        """One page of scored devices.
+
+        `needs_attention` is applied here rather than in SQL because a device's status is
+        computed from telemetry, updates, services and events — there is no column to filter
+        on. So that view scores the fleet and pages the result: the response stays small,
+        which is the point, even though the work behind it does not shrink.
+
+        The plain list does page in the database, which is the common case.
+        """
+        if not needs_attention:
+            return await self._evaluate(org_id=org_id, offset=offset, limit=limit)
+
+        rows, _ = await self._evaluate(org_id=org_id)
+        rows = [r for r in rows if r.status in ("non_compliant", "at_risk")]
+        rows.sort(key=lambda r: r.score)
+        return rows[offset : offset + limit], len(rows)
 
     async def get_device(self, *, org_id: uuid.UUID, device_id: uuid.UUID) -> DeviceCompliance:
-        for row in await self._evaluate(org_id=org_id):
+        rows, _ = await self._evaluate(org_id=org_id)
+        for row in rows:
             if row.device_id == device_id:
                 return row
         raise NotFoundError("Device not found")
 
     async def summary(self, *, org_id: uuid.UUID) -> ComplianceSummary:
-        rows = await self._evaluate(org_id=org_id)
+        # Deliberately unpaged: a fleet score computed from one page of devices would be a
+        # different number every time you turned the page.
+        rows, _ = await self._evaluate(org_id=org_id)
         total = len(rows)
         compliant = sum(1 for r in rows if r.status == "compliant")
         at_risk = sum(1 for r in rows if r.status == "at_risk")
