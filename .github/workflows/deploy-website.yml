@@ -60,16 +60,16 @@ jobs:
           server-dir: /public_html/
           # Protect server-only mailbox configuration. The versioned PHP handler
           # is deployed with the site so lead-capture fixes are released too.
-          # content.json stays server-editable (site text can be tweaked in
-          # Hostinger File Manager without a rebuild). pricing.json is now
-          # git-controlled — it deploys from source so code is the single source
-          # of truth for prices.
+          # content.json and pricing.json are git-controlled and deploy from
+          # source: keeping content.json server-editable meant a stale copy on
+          # the server silently overrode newly shipped copy at runtime, leaving
+          # the site half-updated. Code is now the single source of truth for
+          # both site text and prices — edit website/public/*.json and push.
           exclude: |
             **/.git*
             **/.git*/**
             **/node_modules/**
             **/mail-config.php
-            **/content.json
 
       # Instant indexing for Bing + Yandex (IndexNow). Reads every URL from the
       # freshly built sitemap and pings the shared IndexNow API, so new/changed
