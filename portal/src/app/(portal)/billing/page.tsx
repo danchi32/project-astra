@@ -1,10 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { CreditCard, Users, Monitor, ExternalLink, AlertTriangle, Tag } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import { getBillingStatus, startCheckout, openBillingPortal, setLicenses, cancelSubscription } from "@/lib/api/billing";
 import type { BillingProvider, BillingStatus, SubscriptionStatus } from "@/lib/api/types";
+import { listInvoices } from "@/lib/api/billing-profile";
+import { BillingDetailsForm } from "@/components/billing-details-form";
+import { InvoiceTable } from "@/components/invoice-table";
 
 const PROVIDER_LABEL: Record<BillingProvider, string> = {
   razorpay: "India — UPI / cards / netbanking",
@@ -34,6 +37,13 @@ export default function BillingPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [qty, setQty] = useState<number>(1);
   const [provider, setProvider] = useState<BillingProvider | "">("");
+
+  const [invoicePage, setInvoicePage] = useState(1);
+  const { data: invoices, isFetching: invoicesBusy } = useQuery({
+    queryKey: ["invoices", invoicePage],
+    queryFn: () => listInvoices({ page: invoicePage }),
+    placeholderData: keepPreviousData,
+  });
 
   const isAdmin = me?.role === "admin";
 
@@ -257,6 +267,17 @@ export default function BillingPage() {
       {status && status.billing_enabled && !isAdmin && (
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Only an organization admin can change billing.</p>
       )}
+
+      {/* Shown regardless of whether a subscription exists: a trial that is about to convert
+          needs these filled in BEFORE the first charge, not after it. */}
+      <BillingDetailsForm canEdit={isAdmin} />
+
+      <div>
+        <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
+          Billing history
+        </h2>
+        <InvoiceTable data={invoices} page={invoicePage} onPage={setInvoicePage} busy={invoicesBusy} />
+      </div>
     </div>
   );
 }

@@ -178,7 +178,11 @@ class BillingService:
             org.provider_customer_id = event.customer_id
         if event.status is not None:
             org.subscription_status = event.status
-            org.plan = "per-seat" if event.status is SubscriptionStatus.ACTIVE else org.plan
+            # `plan` is the FEATURE TIER now, not a billing mode. It used to be set to
+            # "per-seat" on activation, which resolves to Expert — so paying for Essential
+            # would have silently granted the whole product the moment the webhook landed.
+            # Which tier an org is on is a commercial decision, not something a payment
+            # notification gets to overwrite.
         if event.quantity is not None:
             org.license_count = event.quantity
         if event.period_end is not None:
@@ -402,7 +406,8 @@ class BillingService:
                 org.license_count = qty
         else:
             org.subscription_status = SubscriptionStatus.ACTIVE
-        org.plan = "per-seat"
+        # `plan` deliberately untouched — see apply_event. Paying activates the
+        # subscription; which tier was bought is set by the operator, not inferred here.
         await self.session.commit()
 
     async def _on_subscription_event(self, sub: dict) -> None:
@@ -416,7 +421,10 @@ class BillingService:
         if qty is not None and sub.get("status") not in ("canceled", "incomplete_expired"):
             org.license_count = qty
         if sub.get("status") in ("canceled", "incomplete_expired"):
-            org.plan = "trial"
+            # Access is governed by subscription_status, which the read-only gate reads.
+            # Resetting `plan` here would move a cancelled org onto the legacy "trial"
+            # value — which resolves to Expert, i.e. MORE features than they were paying
+            # for — and would also lose which tier to restore if they come back.
             org.license_count = 0  # cancelled → uncapped again (back on trial rules)
         await self.session.commit()
 

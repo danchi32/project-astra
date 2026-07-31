@@ -224,3 +224,36 @@ async def test_expert_still_sees_it_on_the_dashboard(
     await _set_plan(session_factory, admin_user.org_id, EXPERT)
     body = (await client.get("/api/v1/dashboard/overview", headers=admin_headers)).json()
     assert body["compliance"] is not None
+
+
+async def test_paying_does_not_upgrade_the_feature_tier(session_factory, admin_user):
+    """A payment activates the subscription; it does not decide which tier was bought.
+
+    apply_event used to set plan = "per-seat" on activation, and "per-seat" resolves to
+    Expert — so an Essential customer's first successful charge silently handed them the
+    whole product. Which tier an org is on is a commercial decision the operator makes.
+    """
+    from app.models import Organization, SubscriptionStatus
+    from app.services.billing import BillingService
+    from app.services.payments.base import SubscriptionEvent
+
+    async with session_factory() as session:
+        org = await session.get(Organization, admin_user.org_id)
+        org.plan = ESSENTIAL
+        org.provider_subscription_id = "sub_test_1"
+        await session.commit()
+
+    async with session_factory() as session:
+        await BillingService(session).apply_event(SubscriptionEvent(
+            org_id=admin_user.org_id,
+            subscription_id="sub_test_1",
+            status=SubscriptionStatus.ACTIVE,
+            quantity=25,
+        ))
+
+    async with session_factory() as session:
+        org = await session.get(Organization, admin_user.org_id)
+        assert org.plan == ESSENTIAL, "paying silently upgraded the feature tier"
+        # The parts billing IS responsible for still moved.
+        assert org.subscription_status == SubscriptionStatus.ACTIVE
+        assert org.license_count == 25

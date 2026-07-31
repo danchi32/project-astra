@@ -1,15 +1,16 @@
 "use client";
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken,
-  updateOrganization,
+  updateOrganization, getOrgBillingProfile, getPlatformInvoices,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
+import { InvoiceTable } from "@/components/invoice-table";
 import { PLAN_TIERS, FEATURE_LABELS, type PlanTier } from "@/lib/api/types";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
@@ -24,6 +25,15 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const { data: profile } = useQuery({
+    queryKey: ["platform-org-billing-profile", id], queryFn: () => getOrgBillingProfile(id),
+  });
+  const [invoicePage, setInvoicePage] = useState(1);
+  const { data: invoices, isFetching: invoicesBusy } = useQuery({
+    queryKey: ["platform-org-invoices", id, invoicePage],
+    queryFn: () => getPlatformInvoices({ org_id: id, page: invoicePage }),
+    placeholderData: keepPreviousData,
+  });
   const enabled = !!me?.is_platform_admin;
   const { data: org } = useQuery({ queryKey: ["platform-org", id], queryFn: () => getOrganization(id), enabled });
   const { data: users } = useQuery({ queryKey: ["platform-org-users", id], queryFn: () => getOrgUsers(id), enabled });
@@ -167,6 +177,58 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
               : { background: "#7c3aed", color: "#fff" }}>
             <Sparkles size={15} /> {org.ai_pro ? "Downgrade to Basic" : "Enable Pro AI"}
           </button>
+        </div>
+      )}
+
+      {/* Billing identity + this org's invoices. Read-only: the customer owns their own
+          legal and tax details, and an operator editing them silently is how a wrong tax
+          number reaches an invoice with nobody able to say who typed it. */}
+      {org && (
+        <div className="rounded-xl p-5" style={card}>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                Billing &amp; tax details
+              </h2>
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                Set by the organization. Read-only here.
+              </p>
+            </div>
+            {profile && !profile.complete && (
+              <span className="text-xs px-2 py-1 rounded-full"
+                style={{ color: "#f59e0b", background: "rgba(245,158,11,0.10)" }}>
+                Incomplete — an invoice can&apos;t be raised yet
+              </span>
+            )}
+          </div>
+
+          <dl className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            {[
+              ["Legal name", profile?.legal_name],
+              ["Billing contact", profile?.billing_contact_name],
+              ["Billing email", profile?.billing_email],
+              ["Address", [profile?.address_line1, profile?.address_line2].filter(Boolean).join(", ")],
+              ["City / state", [profile?.city, profile?.state].filter(Boolean).join(", ")],
+              ["Postcode", profile?.postal_code],
+              ["Country", profile?.country_code],
+              [profile?.tax_id_label || "Tax number", profile?.tax_id],
+              ["Registration no.", profile?.registration_number],
+            ].map(([k, v]) => (
+              <div key={k as string}>
+                <dt className="text-xs" style={{ color: "var(--text-secondary)" }}>{k}</dt>
+                <dd style={{ color: "var(--text-primary)" }}>{(v as string) || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {org && (
+        <div>
+          <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
+            Billing history
+          </h2>
+          <InvoiceTable data={invoices} page={invoicePage} onPage={setInvoicePage} busy={invoicesBusy} />
         </div>
       )}
 

@@ -1,10 +1,12 @@
 "use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { CreditCard } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
-import { getPlatformBilling } from "@/lib/api/platform";
+import { getPlatformBilling, getPlatformInvoices } from "@/lib/api/platform";
 import type { SubscriptionStatus } from "@/lib/api/types";
+import { InvoiceTable } from "@/components/invoice-table";
 
 const STATUS_COLOR: Record<SubscriptionStatus, string> = {
   trialing: "#b246d4", active: "#10b981", past_due: "#f59e0b", suspended: "#ef4444", canceled: "#64748b",
@@ -18,6 +20,28 @@ function fmtMoney(cents: number | null): string {
 const card = { background: "var(--surface)", border: "1px solid var(--border)" } as const;
 
 export default function PlatformBillingPage() {
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // Debounced, like every other search in the portal — a request per keystroke against
+  // the whole invoice table is load nobody asked for.
+  useEffect(() => {
+    const t = setTimeout(() => { setQ(query.trim()); setInvoicePage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
+  useEffect(() => { setInvoicePage(1); }, [statusFilter]);
+
+  const { data: invoices, isFetching: invoicesBusy } = useQuery({
+    queryKey: ["platform-invoices", q, statusFilter, invoicePage],
+    queryFn: () => getPlatformInvoices({
+      page: invoicePage,
+      q: q || undefined,
+      status: statusFilter === "all" ? undefined : [statusFilter],
+    }),
+    placeholderData: keepPreviousData,
+  });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: billing, isLoading } = useQuery({
     queryKey: ["platform-billing"],
@@ -133,6 +157,47 @@ export default function PlatformBillingPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Invoice history across every organization. The subscription table above answers
+          "what is each org on"; this answers "what actually got charged, and did it work" —
+          which is the question behind a failed payment or a disputed renewal. */}
+      <div>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+            Invoice history
+          </h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Invoice or transaction…"
+              className="px-3 py-1.5 rounded-lg text-xs outline-none focus:ring-2 focus:ring-brand-500 w-52"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+            />
+            {/* Failed and unpaid first in the list, because they are the reason an operator
+                opens this screen at all. */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium outline-none"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+            >
+              <option value="all">All statuses</option>
+              <option value="failed">Failed</option>
+              <option value="open">Unpaid</option>
+              <option value="paid">Paid</option>
+              <option value="refunded">Refunded</option>
+            </select>
+          </div>
+        </div>
+        <InvoiceTable
+          data={invoices}
+          page={invoicePage}
+          onPage={setInvoicePage}
+          busy={invoicesBusy}
+          showOrg
+        />
       </div>
     </div>
   );
