@@ -78,10 +78,12 @@ export default function SelfHealingPage() {
         </div>
       </div>
 
-      {/* Both sections are flex-1, so they split the leftover height and each scrolls inside
-          itself. Pinning one panel to the viewport instead would push the other below the
-          fold, on a page whose whole point is showing both at once. */}
-      <div className="flex-1 min-h-0 flex flex-col">
+      {/* The two panels share the leftover height, but not evenly: approvals are a short
+          action queue — usually a handful of items — while history is the long list you
+          actually scan. An even split gave history about two visible rows. */}
+      {/* Minimums, not just ratios. On a short window a pure ratio gave history two visible
+          rows — the page scrolling a little is a better answer than a list you can't read. */}
+      <div className="flex-[2] min-h-[200px] flex flex-col">
         <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
           Awaiting approval {(pendingData?.total ?? 0) > 0 && <span style={{ color: "var(--accent)" }}>({pendingData?.total})</span>}
         </h2>
@@ -138,7 +140,7 @@ export default function SelfHealingPage() {
         </ScrollPanel>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-[5] min-h-[430px] flex flex-col">
         <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Remediation history</h2>
         <ScrollPanel
           footer={<Pagination page={historyPage} onPage={setHistoryPage} data={historyData} noun="fix" busy={historyBusy} />}
