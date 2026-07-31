@@ -268,8 +268,20 @@ export default function PlatformOrganizationsPage() {
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
               <tr>
-                {["Organization", "Plan", "Users", "Status", "Subscription", "Updated", ""].map((h, i) => (
-                  <th key={h || i} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
+                {/* Users, Subscription and Updated are the ones that fall away first: they
+                    inform, but nobody is scanning this list FOR them, and all three are in
+                    the drawer. */}
+                {[
+                  { h: "Organization", cls: "" },
+                  { h: "Plan", cls: "" },
+                  { h: "Users", cls: "hidden lg:table-cell" },
+                  { h: "Status", cls: "" },
+                  { h: "Subscription", cls: "hidden xl:table-cell" },
+                  { h: "Updated", cls: "hidden lg:table-cell" },
+                  { h: "", cls: "" },
+                ].map(({ h, cls }, i) => (
+                  <th key={h || i}
+                    className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wide ${cls}`}
                     style={stickyHeadCell}>{h}</th>
                 ))}
               </tr>
@@ -294,19 +306,19 @@ export default function PlatformOrganizationsPage() {
                       {o.plan_tier}
                     </span>
                   </td>
-                  <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.user_count}</td>
+                  <td className="px-4 py-3 tabular-nums hidden lg:table-cell" style={{ color: "var(--text-secondary)" }}>{o.user_count}</td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-medium px-2 py-0.5 rounded-full"
                       style={{ color: STATUS_STYLE[o.subscription_status].color, background: `${STATUS_STYLE[o.subscription_status].color}1a` }}>
                       {STATUS_STYLE[o.subscription_status].label}
                     </span>
                   </td>
-                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
+                  <td className="px-4 py-3 hidden xl:table-cell" style={{ color: "var(--text-secondary)" }}>
                     {o.subscription_status === "trialing"
                       ? trialInfo(o)
                       : o.license_count ? `${o.license_count} licence${o.license_count === 1 ? "" : "s"}` : "—"}
                   </td>
-                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
+                  <td className="px-4 py-3 hidden lg:table-cell" style={{ color: "var(--text-secondary)" }}>
                     {new Date(o.updated_at ?? o.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 text-right">

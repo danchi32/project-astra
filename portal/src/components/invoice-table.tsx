@@ -53,9 +53,18 @@ export function InvoiceTable({
   showOrg?: boolean;
 }) {
   const rows = data?.items ?? [];
-  const cols = [
-    "Invoice", ...(showOrg ? ["Organization"] : []),
-    "Issued", "Period", "Plan", "Amount", "Status", "",
+  // Issued, Period and Plan drop away on narrow screens — the amount, whether it was paid,
+  // and the document itself are what someone opens billing history for. All three survive
+  // on the invoice.
+  const cols: { h: string; cls: string }[] = [
+    { h: "Invoice", cls: "" },
+    ...(showOrg ? [{ h: "Organization", cls: "" }] : []),
+    { h: "Issued", cls: "hidden md:table-cell" },
+    { h: "Period", cls: "hidden xl:table-cell" },
+    { h: "Plan", cls: "hidden lg:table-cell" },
+    { h: "Amount", cls: "" },
+    { h: "Status", cls: "" },
+    { h: "", cls: "" },
   ];
 
   return (
@@ -65,8 +74,9 @@ export function InvoiceTable({
       <table className="w-full text-sm whitespace-nowrap">
         <thead>
           <tr>
-            {cols.map((h, i) => (
-              <th key={h || i} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
+            {cols.map(({ h, cls }, i) => (
+              <th key={h || i}
+                className={`px-3 lg:px-4 py-3 text-left text-xs font-medium uppercase tracking-wide ${cls}`}
                 style={stickyHeadCell}>{h}</th>
             ))}
           </tr>
@@ -85,30 +95,30 @@ export function InvoiceTable({
           )}
           {rows.map((i) => (
             <tr key={i.id} style={{ borderBottom: "1px solid var(--border)" }}>
-              <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{i.number}</td>
+              <td className="px-3 lg:px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{i.number}</td>
               {showOrg && (
-                <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{i.org_name ?? "—"}</td>
+                <td className="px-3 lg:px-4 py-3" style={{ color: "var(--text-secondary)" }}>{i.org_name ?? "—"}</td>
               )}
-              <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
+              <td className="px-3 lg:px-4 py-3 hidden md:table-cell" style={{ color: "var(--text-secondary)" }}>
                 {new Date(i.issued_on).toLocaleDateString()}
               </td>
-              <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{period(i)}</td>
-              <td className="px-4 py-3 capitalize" style={{ color: "var(--text-secondary)" }}>{i.plan ?? "—"}</td>
-              <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-primary)" }}>
+              <td className="px-3 lg:px-4 py-3 hidden xl:table-cell" style={{ color: "var(--text-secondary)" }}>{period(i)}</td>
+              <td className="px-3 lg:px-4 py-3 capitalize hidden lg:table-cell" style={{ color: "var(--text-secondary)" }}>{i.plan ?? "—"}</td>
+              <td className="px-3 lg:px-4 py-3 tabular-nums" style={{ color: "var(--text-primary)" }}>
                 {formatMoney(i.total_cents, i.currency)}
                 {i.tax_cents > 0 && (
-                  <span className="text-xs ml-1" style={{ color: "var(--text-secondary)" }}>
+                  <span className="text-xs ml-1 hidden lg:inline" style={{ color: "var(--text-secondary)" }}>
                     incl. {formatMoney(i.tax_cents, i.currency)} tax
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-3 lg:px-4 py-3">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full"
                   style={{ color: STATUS[i.status].color, background: `${STATUS[i.status].color}1a` }}>
                   {STATUS[i.status].label}
                 </span>
               </td>
-              <td className="px-4 py-3 text-right">
+              <td className="px-3 lg:px-4 py-3 text-right">
                 {/* Present only when the payment rail is the seller of record and issues the
                     document itself. Where it's absent ASTRA is the seller and the document
                     is generated — which isn't built yet, so nothing is offered rather than a
