@@ -12,6 +12,8 @@ import {
 import { getDashboardSummary, getDevices } from "@/lib/api/dashboard";
 import { getAssetSummary } from "@/lib/api/assets";
 import { listRemediations, getRemediationSummary } from "@/lib/api/remediation";
+import { getDashboardOverview } from "@/lib/api/dashboard";
+import { NeedsYou, CompliancePatchRow, TopIssues } from "@/components/dashboard-overview";
 import { listNotifications } from "@/lib/api/notifications";
 import { listAuditLogs } from "@/lib/api/audit";
 import { StatCard } from "@/components/stat-card";
@@ -72,6 +74,14 @@ export default function DashboardPage() {
   const router = useRouter();
   // Platform operators have a business-focused home, not this org dashboard.
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+
+  // One call: the server scores the fleet once and derives the summary, the ranked issues
+  // and the decisions from that single pass.
+  const { data: overview } = useQuery({
+    queryKey: ["dashboard-overview"],
+    queryFn: getDashboardOverview,
+    refetchInterval: REFETCH,
+  });
   useEffect(() => {
     if (me?.is_platform_admin) router.replace("/platform");
   }, [me, router]);
@@ -180,6 +190,15 @@ export default function DashboardPage() {
           </Link>
         )}
       </div>
+
+      {/* What needs doing, before any measurement. Someone opens this page to find out
+          whether anything is wrong — the counts underneath answer "how much", which is the
+          second question. */}
+      <NeedsYou actions={overview?.needs_you} />
+
+      <CompliancePatchRow compliance={overview?.compliance} patch={overview?.patch} trend={overview?.trend} />
+
+      <TopIssues issues={overview?.top_issues} />
 
       {/* Hero insight cards: Devices / Assets / Remediation */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

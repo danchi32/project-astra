@@ -317,6 +317,20 @@ class ComplianceService:
         # Deliberately unpaged: a fleet score computed from one page of devices would be a
         # different number every time you turned the page.
         rows, _ = await self._evaluate(org_id=org_id)
+        return self.summarize(rows)
+
+    async def evaluate_all(self, *, org_id: uuid.UUID) -> list[DeviceCompliance]:
+        """Every device, scored. For callers that need the scores for more than one purpose
+        — the dashboard derives both the fleet summary and the ranked issue list from a
+        single pass, because scoring 2,000 devices twice to render one page is not a thing
+        to do quietly."""
+        rows, _ = await self._evaluate(org_id=org_id)
+        return rows
+
+    @staticmethod
+    def summarize(rows: list[DeviceCompliance]) -> ComplianceSummary:
+        """Aggregate already-scored devices. Split out from summary() so the scoring and the
+        counting are separable — the expensive half is the scoring."""
         total = len(rows)
         compliant = sum(1 for r in rows if r.status == "compliant")
         at_risk = sum(1 for r in rows if r.status == "at_risk")

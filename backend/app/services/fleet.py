@@ -71,11 +71,17 @@ class FleetService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def issues(self, *, org_id: uuid.UUID) -> list[FleetIssue]:
+    async def issues(
+        self, *, org_id: uuid.UUID, compliance: list | None = None
+    ) -> list[FleetIssue]:
+        """`compliance` lets a caller that has already scored the fleet hand the scores in.
+        The dashboard needs both these issues and the fleet summary; without this it would
+        score every device twice to render one page."""
         issues: list[FleetIssue] = []
 
         # 1. Compliance-check failures, grouped across devices.
-        compliance = await ComplianceService(self.session).list_devices(org_id=org_id)
+        if compliance is None:
+            compliance = await ComplianceService(self.session).list_devices(org_id=org_id)
         by_check: dict[str, list[tuple[uuid.UUID, str, str]]] = defaultdict(list)
         for d in compliance:
             for c in d.checks:

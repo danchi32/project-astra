@@ -16,6 +16,8 @@ from app.schemas.telemetry import (
     TelemetryPushResponse,
     TelemetrySnapshotRead,
 )
+from app.schemas.dashboard import DashboardOverview
+from app.services.dashboard import DashboardService
 from app.services.telemetry import TelemetryService
 
 router = APIRouter(tags=["telemetry"])
@@ -48,6 +50,21 @@ async def dashboard_summary(
     session: AsyncSession = Depends(get_db),
 ) -> DashboardSummary:
     return await TelemetryService(session).get_dashboard_summary(actor=actor)
+
+
+@router.get(
+    "/dashboard/overview",
+    response_model=DashboardOverview,
+    summary="Everything the dashboard shows, in one call",
+)
+async def dashboard_overview(
+    actor: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> DashboardOverview:
+    """One call rather than several because the fleet is scored once and both the compliance
+    summary and the ranked issue list come from that pass. Asking the compliance and fleet
+    endpoints separately would score every device twice to render one page."""
+    return await DashboardService(session).overview(org_id=actor.org_id)
 
 
 @router.get(

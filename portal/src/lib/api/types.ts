@@ -14,6 +14,43 @@ export interface PageParams {
   page_size?: number;
 }
 
+// ── Dashboard overview ─────────────────────────────────────────────────────
+
+/** One thing worth doing, phrased as the decision rather than the measurement. */
+export interface DashboardAction {
+  key: string;
+  title: string;
+  detail: string;
+  count: number;
+  severity: "high" | "medium" | "low";
+  href: string;
+}
+
+/** Updates split by why they are not in effect — they need different responses, so the
+ *  dashboard never rolls them into one number. */
+export interface PatchState {
+  pending: number;
+  awaiting_restart: number;
+  failed: number;
+  devices_with_pending: number;
+  devices_awaiting_restart: number;
+}
+
+export interface TrendPoint {
+  day: string;
+  devices_reporting: number;
+  cpu_avg: number;
+  disk_free_min_pct: number | null;
+}
+
+export interface DashboardOverview {
+  needs_you: DashboardAction[];
+  compliance: import("./compliance").ComplianceSummary;
+  patch: PatchState;
+  trend: TrendPoint[];
+  top_issues: import("./fleet").FleetIssue[];
+}
+
 export type UserRole = "admin" | "technician" | "user";
 
 export interface User {
