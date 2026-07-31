@@ -13,40 +13,59 @@ type Tier = {
   tagline: string;
   featured?: boolean;
   cta: string;
+  features: string[];
 };
 
-// Every tier lists the SAME features — only the user count and price differ.
-const FEATURES = [
-  "Asset inventory & live telemetry",
-  "Conversational AI assistant",
-  "Self-healing with all approval tiers",
-  "Patch management — push Windows Updates",
-  "Secure offboarding & device lock-down",
-  "Reporting & dashboards",
-  "Role-based access control & audit logs",
-  "Notifications & proactive alerts",
-  "Priority support",
-];
-
-const tiers: Tier[] = [
+/**
+ * Feature-based tiers, priced per device. A line ending in "plus:" renders as
+ * a sub-heading (no tick) so the cumulative structure reads clearly.
+ */
+const TIERS: Tier[] = [
   {
-    id: "upto50",
-    name: "1–50 users",
-    tagline: "For small teams getting started.",
+    id: "essential",
+    name: "Essential",
+    tagline: "Know and control every device you own.",
     cta: "Start free trial",
+    features: [
+      "Device inventory & asset tracking",
+      "Live telemetry — CPU, RAM, disk, events",
+      "Patch management — push Windows Updates",
+      "AI assistant — diagnosis & guidance",
+      "Reporting & dashboards",
+      "Email support",
+    ],
   },
   {
-    id: "over50",
-    name: "51–500 users",
-    tagline: "For growing organizations that scale.",
+    id: "professional",
+    name: "Professional",
+    tagline: "Let the AI fix issues, not just find them.",
     featured: true,
     cta: "Start free trial",
+    features: [
+      "Everything in Essential, plus:",
+      "AI Cognitive Engine — automatic self-healing",
+      "Approval tiers — automatic, approval, admin-only",
+      "Secure offboarding & device lock-down",
+      "Conversational AI resolution for employees",
+      "Notifications & proactive alerts",
+      "Priority support",
+    ],
   },
   {
-    id: "bulk",
-    name: "500+ users",
-    tagline: "For large-scale or custom deployments.",
-    cta: "Contact sales",
+    id: "expert",
+    name: "Expert",
+    tagline: "Compliance and fleet-wide control at scale.",
+    cta: "Start free trial",
+    features: [
+      "Everything in Professional, plus:",
+      "Compliance & security posture dashboard",
+      "Restricted-software detection",
+      "Fleet cross-device correlation",
+      "One-click mass remediation",
+      "Full audit trail & export",
+      "Advanced RBAC & SSO",
+      "Dedicated success manager",
+    ],
   },
 ];
 
@@ -55,14 +74,16 @@ type Prices = Record<string, Price>;
 
 // Defaults — overridden at runtime by /pricing.json (editable on the server).
 const DEFAULT_PRICES: Prices = {
-  upto50: { monthly: 5.99, annual: 60 },
-  over50: { monthly: 4.49, annual: 45 },
-  bulk: { monthly: null, annual: null },
+  essential: { monthly: 4.49, annual: 44.9 },
+  professional: { monthly: 5.99, annual: 59.9 },
+  expert: { monthly: 8.99, annual: 89.9 },
 };
+
+/** 5.99 → "5.99", 45 → "45" (keeps clean whole numbers whole). */
+const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
 export function PricingPlans() {
   const { c, list } = useContent();
-  const features = list<string>("pricing.features", FEATURES);
   const [annual, setAnnual] = useState(false);
   const [prices, setPrices] = useState<Prices>(DEFAULT_PRICES);
 
@@ -85,7 +106,7 @@ export function PricingPlans() {
     prices[id] ?? DEFAULT_PRICES[id] ?? { monthly: null, annual: null };
 
   // Annual savings % for the featured tier (kept accurate even if edited).
-  const feat = priceOf("over50");
+  const feat = priceOf("professional");
   const savePct =
     feat.monthly && feat.annual
       ? Math.round((1 - feat.annual / (feat.monthly * 12)) * 100)
@@ -134,9 +155,13 @@ export function PricingPlans() {
 
       {/* Cards */}
       <div className="mt-12 grid gap-6 lg:grid-cols-3">
-        {tiers.map((tier) => {
+        {TIERS.map((tier) => {
           const p = priceOf(tier.id);
           const amount = annual ? p.annual : p.monthly;
+          const features = list<string>(
+            `pricing.tiers.${tier.id}.features`,
+            tier.features,
+          );
           return (
             <div
               key={tier.id}
@@ -150,7 +175,7 @@ export function PricingPlans() {
               {tier.featured && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">
                   <Sparkles className="mr-1 inline h-3 w-3" />
-                  {c("pricing.featuredLabel", "Best value")}
+                  {c("pricing.featuredLabel", "Most popular")}
                 </span>
               )}
               <h3 className="text-lg font-bold">
@@ -165,23 +190,25 @@ export function PricingPlans() {
                   <div className="text-3xl font-extrabold">Custom</div>
                 ) : (
                   <div className="flex items-baseline gap-1">
-                    <span className="text-4xl font-extrabold">${amount}</span>
+                    <span className="text-4xl font-extrabold">
+                      ${fmt(amount)}
+                    </span>
                     <span className="text-sm text-muted-token">
-                      /user&nbsp;/{annual ? "yr" : "mo"}
+                      /device&nbsp;/{annual ? "yr" : "mo"}
                     </span>
                   </div>
                 )}
                 <p className="mt-1 text-xs text-muted-token">
                   {amount === null
-                    ? "Tailored to your team"
+                    ? "Tailored to your fleet"
                     : annual
-                      ? "billed annually, per user"
-                      : "billed monthly, per user"}
+                      ? "billed annually, per device"
+                      : "billed monthly, per device"}
                 </p>
               </div>
 
               <a
-                href={tier.id === "bulk" ? "/contact" : site.appUrl}
+                href={site.appUrl}
                 className={cn(
                   "mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-all",
                   tier.featured
@@ -194,23 +221,55 @@ export function PricingPlans() {
               </a>
 
               <ul className="mt-7 space-y-3">
-                {features.map((f) => (
-                  <li
-                    key={f}
-                    className="flex items-start gap-2.5 text-sm text-secondary-token"
-                  >
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                    <span>{f}</span>
-                  </li>
-                ))}
+                {features.map((f) => {
+                  const isHeader = f.trim().endsWith("plus:");
+                  return (
+                    <li
+                      key={f}
+                      className={cn(
+                        "flex items-start gap-2.5 text-sm",
+                        isHeader
+                          ? "font-semibold text-primary-token"
+                          : "text-secondary-token",
+                      )}
+                    >
+                      {!isHeader && (
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                      )}
+                      <span className={isHeader ? "pt-1" : ""}>{f}</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           );
         })}
       </div>
 
+      {/* Volume / bulk strip */}
+      <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border border-token bg-surface px-6 py-5 sm:flex-row">
+        <div>
+          <h3 className="text-base font-bold">
+            {c("pricing.bulk.title", "More than 50 devices?")}
+          </h3>
+          <p className="mt-1 text-sm text-secondary-token">
+            {c(
+              "pricing.bulk.desc",
+              "Talk to us about volume pricing, guided rollout and custom requirements.",
+            )}
+          </p>
+        </div>
+        <a
+          href="/contact/"
+          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-token bg-app px-5 py-3 text-sm font-semibold transition-all hover:border-brand-500/50"
+        >
+          {c("pricing.bulk.cta", "Contact sales")}{" "}
+          <ArrowRight className="h-4 w-4" />
+        </a>
+      </div>
+
       <p className="mt-8 text-center text-xs text-muted-token">
-        {c("pricing.note", "All prices are per user. Taxes may apply.")}
+        {c("pricing.note", "All prices are per device. Taxes may apply.")}
       </p>
     </div>
   );

@@ -64,7 +64,7 @@ export const comparisons: Comparison[] = [
       { feature: "Human-in-the-loop safety tiers", astra: "Built in: automatic / approval-required / admin-only", them: "Role-based permissions & script approvals", edge: "astra" },
       { feature: "Instant secure offboarding", astra: "One-click account lock-down + forced sign-out for leavers", them: "Manual scripts or separate IAM tooling", edge: "astra" },
       { feature: "Evidence before action", astra: "Gathers telemetry + knowledge before proposing a fix", them: "Alert-and-respond, technician-led", edge: "astra" },
-      { feature: "Pricing model", astra: "Per user (from $4.49/user/mo) — predictable", them: "Per device + paid add-ons (backup, EDR)", edge: "even" },
+      { feature: "Pricing model", astra: "Per device (from $4.49/device/mo) — all-in tiers", them: "Per device + paid add-ons (backup, EDR)", edge: "even" },
       { feature: "Patch management", astra: "Yes (Windows)", them: "Advanced, multi-OS", edge: "them" },
       { feature: "Cross-platform", astra: "Windows (today)", them: "Windows, macOS, Linux", edge: "them" },
       { feature: "Maturity & scale", astra: "Newer, AI-first", them: "Battle-tested at thousands of endpoints", edge: "them" },
@@ -74,7 +74,7 @@ export const comparisons: Comparison[] = [
       "Evidence before action — Astra collects live telemetry and searches your knowledge base before it ever proposes a fix, so automation is never blind.",
       "Human-in-the-loop by design — every remediation is classed automatic, approval-required, or admin-only, and the tier is enforced in code, not just the prompt.",
       "AI reasoning, not just scripts — Astra figures out the root cause and the right fix, runs it, then verifies the result and learns.",
-      "Simple per-user pricing that stays predictable as your fleet grows — no per-device add-on creep.",
+      "Simple per-device pricing where each tier is all-inclusive — no add-on creep for backup or EDR.",
       "Secure offboarding built in — when someone leaves, lock down their account and force them out of their session in one click, so data can't walk out the door.",
     ],
     whenThem: [
@@ -85,7 +85,7 @@ export const comparisons: Comparison[] = [
     faqs: [
       { q: "Is Astra an RMM like NinjaOne?", a: "Astra overlaps with RMM on monitoring and remediation, but it leads with autonomous AI reasoning and built-in safety tiers rather than being a manual management console. Think of it as an AI System Administrator that acts, not just a dashboard that alerts." },
       { q: "Can Astra replace NinjaOne?", a: "For Windows-first teams that want AI-driven self-healing with approval guardrails, Astra can stand on its own. If you rely on deep multi-OS patching or a large existing NinjaOne integration stack, many teams run Astra alongside their RMM first." },
-      { q: "How is Astra's pricing different?", a: "Astra is priced per user (from $4.49/user/month), while NinjaOne is priced per device with paid add-ons such as backup and EDR. Per-user pricing tends to stay more predictable as device counts grow." },
+      { q: "How is Astra's pricing different?", a: "Both are priced per device, but each Astra tier is all-inclusive — AI self-healing, offboarding and compliance are part of the plan rather than paid add-ons like backup and EDR. Astra starts at $4.49/device/month." },
       { q: "Is autonomous remediation safe?", a: "Yes. Every action is tiered (automatic, approval-required, or admin-only), gathers evidence first, and is fully logged with an audit trail — so nothing risky runs without the right level of human approval." },
     ],
   },
@@ -107,7 +107,7 @@ export const comparisons: Comparison[] = [
       { feature: "Instant secure offboarding", astra: "One-click account lock-down + forced sign-out for leavers", them: "Manual scripts or separate IAM tooling", edge: "astra" },
       { feature: "Evidence before action", astra: "Telemetry + knowledge gathered before any fix", them: "Copilot assists the technician in real time", edge: "astra" },
       { feature: "Built-in PSA (ticketing, billing)", astra: "Focused on automation; integrates with your tools", them: "Yes — full PSA included", edge: "them" },
-      { feature: "Pricing model", astra: "Per user (from $4.49/user/mo)", them: "Per technician (+ AI Copilot add-on)", edge: "even" },
+      { feature: "Pricing model", astra: "Per device (from $4.49/device/mo)", them: "Per technician (+ AI Copilot add-on)", edge: "even" },
       { feature: "Cross-platform", astra: "Windows (today)", them: "Windows, macOS, Linux", edge: "them" },
       { feature: "Best for", astra: "AI-first autonomous IT ops on Windows fleets", them: "MSPs wanting all-in-one RMM+PSA economics", edge: "even" },
       { feature: "Full audit trail on automated actions", astra: "Every action logged & attributable", them: "Ticket & activity history", edge: "even" },
@@ -116,7 +116,7 @@ export const comparisons: Comparison[] = [
       "AI is the core, not an add-on — autonomous, evidence-based self-healing is built into Astra rather than sold as a separate Copilot seat.",
       "Human-in-the-loop by design — remediations are tiered automatic / approval-required / admin-only, enforced in code.",
       "Evidence before action — Astra reasons over live telemetry and your knowledge base before it acts, then verifies the outcome.",
-      "Simple per-user pricing — no separate AI add-on line item to reach autonomous remediation.",
+      "Simple per-device pricing — no separate AI add-on line item to reach autonomous remediation.",
       "Secure offboarding built in — when someone leaves, lock down their account and force them out of their session in one click, so data can't walk out the door.",
     ],
     whenThem: [
@@ -127,7 +127,7 @@ export const comparisons: Comparison[] = [
     faqs: [
       { q: "How is Astra different from Atera's AI Copilot?", a: "Atera's Copilot assists a technician while they work, as a paid add-on. In Astra, AI-driven remediation is the core of the product: it can diagnose and resolve issues autonomously within safety tiers, with a human approving anything above the automatic tier." },
       { q: "Does Astra include a PSA?", a: "No — Astra is focused on AI-driven IT operations and self-healing, and integrates with your existing tools. If you need built-in ticketing, billing and contracts, Atera's all-in-one PSA may suit you better." },
-      { q: "How does pricing compare?", a: "Astra is per user (from $4.49/user/month) with autonomous remediation included. Atera is per technician, with AI Copilot billed as a separate add-on on top of the seat price." },
+      { q: "How does pricing compare?", a: "Astra is priced per device (from $4.49/device/month), with autonomous remediation included from the Professional tier. Atera is priced per technician, with AI Copilot billed as a separate add-on on top of the seat price." },
       { q: "Is autonomous remediation safe?", a: "Yes. Every action is tiered (automatic, approval-required, or admin-only), gathers evidence first, and is fully audited — so risky changes never run without the right human approval." },
     ],
   },

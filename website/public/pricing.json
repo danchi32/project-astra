@@ -1,4 +1,5 @@
 {
-  "upto50": { "monthly": 5.99, "annual": 60 },
-  "over50": { "monthly": 4.49, "annual": 45 }
+  "essential": { "monthly": 4.49, "annual": 44.9 },
+  "professional": { "monthly": 5.99, "annual": 59.9 },
+  "expert": { "monthly": 8.99, "annual": 89.9 }
 }

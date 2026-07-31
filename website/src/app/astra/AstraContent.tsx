@@ -23,6 +23,8 @@ import {
   DownloadCloud,
   UserX,
   LogOut,
+  ClipboardCheck,
+  Ban,
 } from "lucide-react";
 import {
   Container,
@@ -50,6 +52,7 @@ import { site, bookDemo } from "@/lib/site";
 const featureIcons = [
   Boxes, Activity, BrainCircuit, Wrench, DownloadCloud,
   UserX, MessageSquare, ShieldCheck, FileBarChart, Bell, ScrollText,
+  ClipboardCheck, Ban, Network,
 ];
 const featureDefaults = [
   { title: "Asset Inventory", desc: "A live, auto-discovered registry of every device, spec, app and license across your fleet." },
@@ -63,6 +66,9 @@ const featureDefaults = [
   { title: "Reporting", desc: "Fleet health, resolution and compliance reports ready for stakeholders." },
   { title: "Notifications", desc: "Proactive alerts the moment something needs a human decision." },
   { title: "Full Audit Trail", desc: "Every mutation and agent command is logged, attributable and reviewable." },
+  { title: "Compliance & Security Posture", desc: "A live compliance dashboard scores your fleet's security posture and flags the devices that fall short." },
+  { title: "Restricted Software Detection", desc: "Spot unapproved or risky applications across every device, so shadow IT surfaces before it becomes an incident." },
+  { title: "Fleet Correlation & Mass Remediation", desc: "Astra links the same fault across many devices, then fixes the whole affected group in one click instead of one by one." },
 ];
 
 const workflowIcons = [Search, BrainCircuit, Activity, Gauge, Wrench, BadgeCheck];

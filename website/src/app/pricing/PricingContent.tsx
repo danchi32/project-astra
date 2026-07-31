@@ -10,7 +10,11 @@ type Faq = { q: string; a: string };
 const faqDefaults: Faq[] = [
   {
     q: "How is Astra priced?",
-    a: "Astra is priced per user. Current plans start at $5.99/user per month for teams up to 50 users and $4.49/user per month for larger teams, with discounted annual billing. For 500+ users or custom requirements, contact sales.",
+    a: "Per device, per month. Essential covers inventory, telemetry and patching; Professional adds the AI engine and automatic self-healing; Expert adds compliance, fleet-wide remediation and full audit. Annual billing saves about 17%.",
+  },
+  {
+    q: "Which plan should I choose?",
+    a: "Most teams start on Professional — it's where the AI actually fixes issues on its own. Choose Essential if you mainly need visibility and patching, and Expert if you have compliance or audit requirements.",
   },
   {
     q: "Is there a free trial?",
@@ -18,7 +22,11 @@ const faqDefaults: Faq[] = [
   },
   {
     q: "Can I change plans later?",
-    a: "Absolutely. Upgrade or downgrade at any time; billing adjusts on your next cycle based on your active users.",
+    a: "Absolutely. Upgrade or downgrade at any time; billing adjusts on your next cycle based on your active devices.",
+  },
+  {
+    q: "Do you offer volume pricing?",
+    a: "Yes. For fleets above 50 devices, contact sales for volume pricing and a guided rollout.",
   },
   {
     q: "Do you supply the hardware too?",
@@ -48,7 +56,7 @@ export function PricingContent() {
               <p className="mt-5 text-lg text-secondary-token">
                 {c(
                   "pricing.subtitle",
-                  "Pay per user. Start small, grow to thousands — Astra scales with your team.",
+                  "Pay per device. Start with visibility, add AI self-healing, then compliance as you grow.",
                 )}
               </p>
             </Reveal>

@@ -4,7 +4,7 @@ import { PricingContent } from "./PricingContent";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Simple, per-user pricing for Astra — the AI System Administrator. Plans for teams of every size, with bulk pricing on request.",
+    "Simple, per-device pricing for Astra — the AI System Administrator. Essential, Professional and Expert plans, with volume pricing on request.",
   alternates: { canonical: "/pricing/" },
 };
 

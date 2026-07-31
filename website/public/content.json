@@ -24,7 +24,11 @@
       "subtitle": "Technomate IT Solution delivers managed IT services and business hardware — supercharged by **Astra**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
       "cta1": "Explore Astra",
       "cta2": "Sign up free",
-      "checks": ["No manual triage", "Human-in-the-loop", "Least privilege"]
+      "checks": [
+        "No manual triage",
+        "Human-in-the-loop",
+        "Least privilege"
+      ]
     },
     "marquee": [
       "Asset Inventory",
@@ -33,13 +37,32 @@
       "Patch Management",
       "AI Reasoning",
       "Approval Tiers",
-      "Real-time Dashboards"
+      "Real-time Dashboards",
+      "Secure Offboarding",
+      "Compliance"
     ],
     "stats": [
-      { "value": 1204, "suffix": "+", "label": "Issues auto-healed / mo" },
-      { "value": 38, "suffix": "s", "label": "Avg. resolution time" },
-      { "value": 72, "suffix": "%", "label": "Less manual triage" },
-      { "value": 99.9, "decimals": 1, "suffix": "%", "label": "Fleet visibility" }
+      {
+        "value": 1204,
+        "suffix": "+",
+        "label": "Issues auto-healed / mo"
+      },
+      {
+        "value": 38,
+        "suffix": "s",
+        "label": "Avg. resolution time"
+      },
+      {
+        "value": 72,
+        "suffix": "%",
+        "label": "Less manual triage"
+      },
+      {
+        "value": 99.9,
+        "decimals": 1,
+        "suffix": "%",
+        "label": "Fleet visibility"
+      }
     ],
     "pillarsHead": {
       "eyebrow": "What we do",
@@ -99,10 +122,22 @@
     "title": "Your technology partner for [[services, hardware & AI]]",
     "subtitle": "Technomate IT Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **Astra**.",
     "stats": [
-      { "value": "10+", "label": "Years in IT services" },
-      { "value": "500+", "label": "Devices under management" },
-      { "value": "24/7", "label": "Monitoring with Astra" },
-      { "value": "98%", "label": "Client retention" }
+      {
+        "value": "10+",
+        "label": "Years in IT services"
+      },
+      {
+        "value": "500+",
+        "label": "Devices under management"
+      },
+      {
+        "value": "24/7",
+        "label": "Monitoring with Astra"
+      },
+      {
+        "value": "98%",
+        "label": "Client retention"
+      }
     ],
     "whoHead": {
       "eyebrow": "Who we are",
@@ -129,10 +164,22 @@
     "missionBtn1": "Discover Astra",
     "missionBtn2": "Work with us",
     "values": [
-      { "title": "Reliability first", "desc": "Uptime and continuity drive every decision we make." },
-      { "title": "True partnership", "desc": "We act as an extension of your team, not a vendor at arm's length." },
-      { "title": "Security by default", "desc": "Least privilege, auditability and human oversight, always on." },
-      { "title": "Innovation", "desc": "We invest in AI and automation so our clients stay ahead." }
+      {
+        "title": "Reliability first",
+        "desc": "Uptime and continuity drive every decision we make."
+      },
+      {
+        "title": "True partnership",
+        "desc": "We act as an extension of your team, not a vendor at arm's length."
+      },
+      {
+        "title": "Security by default",
+        "desc": "Least privilege, auditability and human oversight, always on."
+      },
+      {
+        "title": "Innovation",
+        "desc": "We invest in AI and automation so our clients stay ahead."
+      }
     ],
     "supportTitle": "Talk to a human — backed by an AI",
     "supportText": "Whether you need a fleet of laptops, managed support, or a demo of Astra, our team is ready to help.",
@@ -150,12 +197,30 @@
       "subtitle": "Each step is a tool the model calls — evidence before action, verification after."
     },
     "workflow": [
-      { "label": "Intent", "desc": "Understand the request" },
-      { "label": "Knowledge", "desc": "Search enterprise KB" },
-      { "label": "Telemetry", "desc": "Collect live evidence" },
-      { "label": "Confidence", "desc": "Score the diagnosis" },
-      { "label": "Self-heal", "desc": "Act within tier" },
-      { "label": "Verify", "desc": "Confirm & learn" }
+      {
+        "label": "Intent",
+        "desc": "Understand the request"
+      },
+      {
+        "label": "Knowledge",
+        "desc": "Search enterprise KB"
+      },
+      {
+        "label": "Telemetry",
+        "desc": "Collect live evidence"
+      },
+      {
+        "label": "Confidence",
+        "desc": "Score the diagnosis"
+      },
+      {
+        "label": "Self-heal",
+        "desc": "Act within tier"
+      },
+      {
+        "label": "Verify",
+        "desc": "Confirm & learn"
+      }
     ],
     "capsHead": {
       "eyebrow": "Capabilities",
@@ -163,16 +228,62 @@
       "subtitle": "A complete AI operations platform for your Windows fleet."
     },
     "features": [
-      { "title": "Asset Inventory", "desc": "A live, auto-discovered registry of every device, spec, app and license across your fleet." },
-      { "title": "Live Telemetry", "desc": "CPU, RAM, disk, event logs, apps, services and Windows updates streamed in real time." },
-      { "title": "AI Cognitive Engine", "desc": "An agentic reasoning loop that recognizes intent, searches knowledge and scores confidence." },
-      { "title": "Self-Healing", "desc": "Allowlisted, tiered remediations that fix issues automatically — or with approval." },
-      { "title": "Patch Management", "desc": "Push Windows Updates to any device — or the whole fleet — from the admin panel and watch rollout live." },
-      { "title": "Conversational AI", "desc": "Users describe problems in plain language; Astra investigates and resolves." },
-      { "title": "Approval Tiers", "desc": "Automatic, approval-required and admin-only — enforced in code, not just prompts." },
-      { "title": "Reporting", "desc": "Fleet health, resolution and compliance reports ready for stakeholders." },
-      { "title": "Notifications", "desc": "Proactive alerts the moment something needs a human decision." },
-      { "title": "Full Audit Trail", "desc": "Every mutation and agent command is logged, attributable and reviewable." }
+      {
+        "title": "Asset Inventory",
+        "desc": "A live, auto-discovered registry of every device, spec, app and license across your fleet."
+      },
+      {
+        "title": "Live Telemetry",
+        "desc": "CPU, RAM, disk, event logs, apps, services and Windows updates streamed in real time."
+      },
+      {
+        "title": "AI Cognitive Engine",
+        "desc": "An agentic reasoning loop that recognizes intent, searches knowledge and scores confidence."
+      },
+      {
+        "title": "Self-Healing",
+        "desc": "Allowlisted, tiered remediations that fix issues automatically — or with approval."
+      },
+      {
+        "title": "Patch Management",
+        "desc": "Push Windows Updates to any device — or the whole fleet — from the admin panel and watch rollout live."
+      },
+      {
+        "title": "Conversational AI",
+        "desc": "Users describe problems in plain language; Astra investigates and resolves."
+      },
+      {
+        "title": "Approval Tiers",
+        "desc": "Automatic, approval-required and admin-only — enforced in code, not just prompts."
+      },
+      {
+        "title": "Reporting",
+        "desc": "Fleet health, resolution and compliance reports ready for stakeholders."
+      },
+      {
+        "title": "Notifications",
+        "desc": "Proactive alerts the moment something needs a human decision."
+      },
+      {
+        "title": "Full Audit Trail",
+        "desc": "Every mutation and agent command is logged, attributable and reviewable."
+      },
+      {
+        "title": "Secure Offboarding",
+        "desc": "When someone leaves, lock down their account and force them out of their session in one click — before data can walk out."
+      },
+      {
+        "title": "Compliance & Security Posture",
+        "desc": "A live compliance dashboard scores your fleet's security posture and flags the devices that fall short."
+      },
+      {
+        "title": "Restricted Software Detection",
+        "desc": "Spot unapproved or risky applications across every device, so shadow IT surfaces before it becomes an incident."
+      },
+      {
+        "title": "Fleet Correlation & Mass Remediation",
+        "desc": "Astra links the same fault across many devices, then fixes the whole affected group in one click instead of one by one."
+      }
     ],
     "inventory": {
       "badge": "Inventory",
@@ -189,7 +300,12 @@
       "badge": "Telemetry",
       "title": "Real-time evidence from every endpoint",
       "desc": "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence Astra reasons over.",
-      "items": ["60-second heartbeat", "Offline-safe queue", "Update tracking", "Event-log insight"]
+      "items": [
+        "60-second heartbeat",
+        "Offline-safe queue",
+        "Update tracking",
+        "Event-log insight"
+      ]
     },
     "healingHead": {
       "eyebrow": "Self-healing",
@@ -219,10 +335,22 @@
       "subtitle": "Least privilege, full auditability and human oversight are foundational — not add-ons."
     },
     "security": [
-      { "title": "JWT + RBAC", "desc": "Short-lived tokens and role-based access on every endpoint." },
-      { "title": "Encrypted everywhere", "desc": "Encryption in transit and at rest, HTTPS-only." },
-      { "title": "Device certificates", "desc": "Certificate-based enrollment for every agent." },
-      { "title": "Audit logs", "desc": "Immutable records for all mutations and commands." }
+      {
+        "title": "JWT + RBAC",
+        "desc": "Short-lived tokens and role-based access on every endpoint."
+      },
+      {
+        "title": "Encrypted everywhere",
+        "desc": "Encryption in transit and at rest, HTTPS-only."
+      },
+      {
+        "title": "Device certificates",
+        "desc": "Certificate-based enrollment for every agent."
+      },
+      {
+        "title": "Audit logs",
+        "desc": "Immutable records for all mutations and commands."
+      }
     ],
     "cta": {
       "title": "Deploy Astra across your fleet",
@@ -234,31 +362,67 @@
   "pricing": {
     "badge": "Pricing",
     "title": "Simple pricing that [[scales with you]]",
-    "subtitle": "Pay per user. Start small, grow to thousands — Astra scales with your team.",
+    "subtitle": "Pay per device. Start with visibility, add AI self-healing, then compliance as you grow.",
     "tiers": {
-      "upto50": { "name": "Up to 50 users", "tagline": "For teams of up to 50 users.", "cta": "Start free trial" },
-      "over50": { "name": "Over 50 users", "tagline": "For growing teams above 50 users.", "cta": "Start free trial" },
-      "bulk": { "name": "Bulk", "tagline": "For large-scale or custom deployments.", "cta": "Contact sales" }
+      "essential": {
+        "name": "Essential",
+        "tagline": "Know and control every device you own.",
+        "cta": "Start free trial",
+        "features": [
+          "Device inventory & asset tracking",
+          "Live telemetry — CPU, RAM, disk, events",
+          "Patch management — push Windows Updates",
+          "AI assistant — diagnosis & guidance",
+          "Reporting & dashboards",
+          "Email support"
+        ]
+      },
+      "professional": {
+        "name": "Professional",
+        "tagline": "Let the AI fix issues, not just find them.",
+        "cta": "Start free trial",
+        "features": [
+          "Everything in Essential, plus:",
+          "AI Cognitive Engine — automatic self-healing",
+          "Approval tiers — automatic, approval, admin-only",
+          "Secure offboarding & device lock-down",
+          "Conversational AI resolution for employees",
+          "Notifications & proactive alerts",
+          "Priority support"
+        ]
+      },
+      "expert": {
+        "name": "Expert",
+        "tagline": "Compliance and fleet-wide control at scale.",
+        "cta": "Start free trial",
+        "features": [
+          "Everything in Professional, plus:",
+          "Compliance & security posture dashboard",
+          "Restricted-software detection",
+          "Fleet cross-device correlation",
+          "One-click mass remediation",
+          "Full audit trail & export",
+          "Advanced RBAC & SSO",
+          "Dedicated success manager"
+        ]
+      }
     },
-    "features": [
-      "Asset inventory & live telemetry",
-      "Conversational AI assistant",
-      "Self-healing with all approval tiers",
-      "Patch management — push Windows Updates",
-      "Reporting & dashboards",
-      "Role-based access control & audit logs",
-      "Notifications & proactive alerts",
-      "Priority support"
-    ],
     "toggleMonthly": "Monthly",
     "toggleAnnual": "Annual",
-    "featuredLabel": "Best value",
-    "note": "All prices are per user. Taxes may apply.",
-    "faqHead": { "eyebrow": "FAQ", "title": "Questions, answered" },
+    "featuredLabel": "Most popular",
+    "note": "All prices are per device. Taxes may apply.",
+    "faqHead": {
+      "eyebrow": "FAQ",
+      "title": "Questions, answered"
+    },
     "faqs": [
       {
         "q": "How is Astra priced?",
-        "a": "Per user. Up to 50 users is $10/user per month; above 50 users it's $8/user per month, with discounted annual billing. For bulk or custom needs, contact sales."
+        "a": "Per device, per month. Essential covers inventory, telemetry and patching; Professional adds the AI engine and automatic self-healing; Expert adds compliance, fleet-wide remediation and full audit. Annual billing saves about 17%."
+      },
+      {
+        "q": "Which plan should I choose?",
+        "a": "Most teams start on Professional — it's where the AI actually fixes issues on its own. Choose Essential if you mainly need visibility and patching, and Expert if you have compliance or audit requirements."
       },
       {
         "q": "Is there a free trial?",
@@ -266,13 +430,22 @@
       },
       {
         "q": "Can I change plans later?",
-        "a": "Absolutely. Upgrade or downgrade at any time; billing adjusts on your next cycle based on your active users."
+        "a": "Absolutely. Upgrade or downgrade at any time; billing adjusts on your next cycle based on your active devices."
+      },
+      {
+        "q": "Do you offer volume pricing?",
+        "a": "Yes. For fleets above 50 devices, contact sales for volume pricing and a guided rollout."
       },
       {
         "q": "Do you supply the hardware too?",
         "a": "Yes — Technomate is also a laptop and hardware supplier. Bundle devices with Astra for a fully managed rollout."
       }
-    ]
+    ],
+    "bulk": {
+      "title": "More than 50 devices?",
+      "desc": "Talk to us about volume pricing, guided rollout and custom requirements.",
+      "cta": "Contact sales"
+    }
   },
   "contact": {
     "badge": "Contact us",
@@ -288,7 +461,13 @@
       "company": "Company",
       "phone": "Phone",
       "interestLabel": "I'm interested in",
-      "interests": ["Astra AI", "Managed IT Services", "Laptops & Hardware", "Partnership", "Something else"],
+      "interests": [
+        "Astra AI",
+        "Managed IT Services",
+        "Laptops & Hardware",
+        "Partnership",
+        "Something else"
+      ],
       "message": "Message *",
       "messagePlaceholder": "Tell us about your requirements…",
       "submit": "Send inquiry",
