@@ -69,7 +69,7 @@ async def test_audit_feed_records_operator_actions(client, session_factory):
     headers = await _operator(client, session_factory, org="Aud Co", email="op@aud.com")
     await _register_org(client, session_factory, "Aud Cust", "a@audcust.com")
     # Do an audited platform action: mint a view-as token for a customer org.
-    orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()
+    orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()["items"]
     org_id = next(o["id"] for o in orgs if o["name"] == "Aud Cust")
     assert (await client.post(
         f"/api/v1/platform/organizations/{org_id}/view-token", headers=headers
@@ -99,7 +99,7 @@ async def test_me_reports_view_as_mode(client, session_factory):
     me = (await client.get("/api/v1/auth/me", headers=headers)).json()
     assert me["view_as"] is False
 
-    orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()
+    orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()["items"]
     org_id = next(o["id"] for o in orgs if o["name"] == "Me Cust")
     token = (await client.post(
         f"/api/v1/platform/organizations/{org_id}/view-token", headers=headers

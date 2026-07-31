@@ -1,8 +1,8 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Building2, Eye, Plus, Search, X, Sparkles } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
@@ -11,6 +11,9 @@ import {
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
 import type { OrganizationAdmin, SubscriptionStatus } from "@/lib/api/types";
+import { PLAN_TIERS } from "@/lib/api/types";
+import { Pagination } from "@/components/pagination";
+import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
 
 const emptyOrgForm = { organization_name: "", admin_name: "", admin_email: "", admin_password: "" };
 
@@ -34,27 +37,47 @@ export default function PlatformOrganizationsPage() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const { data: orgs, isLoading } = useQuery({
-    queryKey: ["platform-orgs"],
-    queryFn: listOrganizations,
-    enabled: !!me?.is_platform_admin,
-  });
-
   const [query, setQuery] = useState("");
+  const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof FILTERS)[number]>("all");
+  const [planFilter, setPlanFilter] = useState<string>("all");
+  const [sort, setSort] = useState("created_at");
+  const [desc, setDesc] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Debounced: a request per keystroke against a table of ten thousand organizations is
+  // load nobody asked for, and the answer to "acm" is never the one anyone wanted.
+  useEffect(() => {
+    const t = setTimeout(() => { setQ(query.trim()); setPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
+  useEffect(() => { setPage(1); }, [statusFilter, planFilter, sort, desc, pageSize]);
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["platform-orgs", q, statusFilter, planFilter, sort, desc, page, pageSize],
+    queryFn: () => listOrganizations({
+      q: q || undefined,
+      subscription_status: statusFilter === "all" ? undefined : statusFilter,
+      plan: planFilter === "all" ? undefined : planFilter,
+      sort, desc, page, page_size: pageSize,
+    }),
+    enabled: !!me?.is_platform_admin,
+    // Keeps the current page on screen while the next loads, so paging and typing don't
+    // flash an empty table under the cursor.
+    placeholderData: keepPreviousData,
+  });
+  const orgs = data?.items;
+  const [drawerOrg, setDrawerOrg] = useState<OrganizationAdmin | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [orgForm, setOrgForm] = useState(emptyOrgForm);
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState("");
   const [createdNote, setCreatedNote] = useState("");
 
-  const filtered = useMemo(() => {
-    let rows = orgs ?? [];
-    if (statusFilter !== "all") rows = rows.filter((o) => o.subscription_status === statusFilter);
-    const q = query.trim().toLowerCase();
-    if (q) rows = rows.filter((o) => o.name.toLowerCase().includes(q));
-    return rows;
-  }, [orgs, query, statusFilter]);
+  // Searched, filtered and sorted by the database — the browser no longer sees the rows it
+  // isn't showing.
+  const filtered = orgs ?? [];
 
   async function viewAs(o: OrganizationAdmin) {
     const { access_token } = await createViewToken(o.id);
@@ -124,7 +147,7 @@ export default function PlatformOrganizationsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={pageShell}>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
@@ -169,9 +192,31 @@ export default function PlatformOrganizationsPage() {
             </button>
           ))}
         </div>
-        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
-          {filtered.length} of {orgs?.length ?? 0}
-        </span>
+        {/* Plan filter — the tier decides what the org can use, so it is the second thing
+            an operator narrows by after status. */}
+        <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}
+          className="px-2.5 py-1.5 rounded-lg text-xs font-medium outline-none"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+          <option value="all">All plans</option>
+          {PLAN_TIERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+
+        <select value={`${sort}:${desc ? "d" : "a"}`}
+          onChange={(e) => { const [s, d] = e.target.value.split(":"); setSort(s); setDesc(d === "d"); }}
+          className="px-2.5 py-1.5 rounded-lg text-xs font-medium outline-none"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+          <option value="created_at:d">Newest first</option>
+          <option value="created_at:a">Oldest first</option>
+          <option value="name:a">Name A–Z</option>
+          <option value="name:d">Name Z–A</option>
+          <option value="updated_at:d">Recently updated</option>
+        </select>
+
+        <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}
+          className="px-2.5 py-1.5 rounded-lg text-xs font-medium outline-none"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+          {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n} per page</option>)}
+        </select>
       </div>
 
       {showCreate && (
@@ -214,80 +259,139 @@ export default function PlatformOrganizationsPage() {
         </div>
       )}
 
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+      {/* Seven columns, not ten. The rest moved into the drawer: an operator scanning the
+          list is trying to FIND an account, and every extra column pushes the actions off
+          the right edge and makes finding one harder, not easier. */}
+      <ScrollPanel
+        footer={<Pagination page={page} onPage={setPage} data={data} noun="organization" busy={isFetching} />}
+      >
           <table className="w-full text-sm whitespace-nowrap">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Organization", "Plan", "Status", "Trial", "Licenses", "Discount", "Users", "Devices", "Created", "Actions"].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
-                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+              <tr>
+                {["Organization", "Plan", "Users", "Status", "Subscription", "Updated", ""].map((h, i) => (
+                  <th key={h || i} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
+                    style={stickyHeadCell}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={10} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>}
+              {isLoading && <tr><td colSpan={7} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>}
               {!isLoading && !filtered.length && (
-                <tr><td colSpan={10} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>
-                  {orgs?.length ? "No organizations match." : "No organizations yet."}
+                <tr><td colSpan={7} className="px-4 py-10 text-center" style={{ color: "var(--text-secondary)" }}>
+                  {q || statusFilter !== "all" || planFilter !== "all"
+                    ? "No organizations match these filters."
+                    : "No organizations yet."}
                 </td></tr>
               )}
               {filtered.map((o) => (
-                <tr key={o.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                <tr key={o.id} className="hover:bg-brand-500/5 transition-colors" style={{ borderBottom: "1px solid var(--border)" }}>
                   <td className="px-4 py-3 font-medium">
                     <Link href={`/platform/${o.id}`} className="hover:underline" style={{ color: "var(--accent)" }}>{o.name}</Link>
                   </td>
-                  <td className="px-4 py-3 capitalize" style={{ color: "var(--text-secondary)" }}>{o.plan}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize"
+                      style={{ color: "var(--accent)", background: "rgba(154,47,187,0.10)" }}>
+                      {o.plan_tier}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.user_count}</td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-medium px-2 py-0.5 rounded-full"
                       style={{ color: STATUS_STYLE[o.subscription_status].color, background: `${STATUS_STYLE[o.subscription_status].color}1a` }}>
                       {STATUS_STYLE[o.subscription_status].label}
                     </span>
                   </td>
-                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{trialInfo(o)}</td>
-                  <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.license_count || "—"}</td>
-                  <td className="px-4 py-3 tabular-nums" style={{ color: o.discount_percent ? "#10b981" : "var(--text-secondary)" }}>
-                    {o.discount_percent ? `${o.discount_percent}%` : "—"}
+                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
+                    {o.subscription_status === "trialing"
+                      ? trialInfo(o)
+                      : o.license_count ? `${o.license_count} licence${o.license_count === 1 ? "" : "s"}` : "—"}
                   </td>
-                  <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.user_count}</td>
-                  <td className="px-4 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{o.device_count}</td>
-                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{new Date(o.created_at).toLocaleDateString()}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      <button onClick={() => viewAs(o)} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
-                        style={{ background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }}>
-                        <Eye size={12} /> View
-                      </button>
-                      <button onClick={() => toggleAiPro(o)} title={o.ai_pro ? "Pro AI enabled — click to downgrade" : "Enable Pro AI (real Claude)"}
-                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg"
-                        style={o.ai_pro
-                          ? { background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }
-                          : { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
-                        <Sparkles size={12} /> {o.ai_pro ? "Pro AI" : "Basic AI"}
-                      </button>
-                      <button onClick={() => extendTrial(o.id, 14)} className="text-xs px-2 py-1 rounded-lg"
-                        style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>+14d trial</button>
-                      <button onClick={() => setStatus(o.id, "active")} className="text-xs px-2 py-1 rounded-lg"
-                        style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#10b981" }}>Activate</button>
-                      <button onClick={() => editDiscount(o)} className="text-xs px-2 py-1 rounded-lg"
-                        style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>Discount</button>
-                      {o.subscription_status === "suspended" ? (
-                        <button onClick={() => setStatus(o.id, "active")} className="text-xs px-2 py-1 rounded-lg"
-                          style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Unsuspend</button>
-                      ) : (
-                        <button onClick={() => setStatus(o.id, "suspended")} className="text-xs px-2 py-1 rounded-lg"
-                          style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#f59e0b" }}>Suspend</button>
-                      )}
-                      <button onClick={() => removeOrg(o.id, o.name)} className="text-xs px-2 py-1 rounded-lg hover:bg-red-500/10"
-                        style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#ef4444" }}>Delete</button>
-                    </div>
+                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
+                    {new Date(o.updated_at ?? o.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => setDrawerOrg(o)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg"
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                      Manage
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+      </ScrollPanel>
+
+      {/* Everything that used to be a column, plus every action. A drawer rather than a
+          modal because an operator working down a list keeps their place behind it. */}
+      {drawerOrg && (
+        <div className="fixed inset-0 z-50 flex justify-end" style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setDrawerOrg(null)}>
+          <div className="w-full max-w-md h-full overflow-y-auto p-5"
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{drawerOrg.name}</h2>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                  Created {new Date(drawerOrg.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <button onClick={() => setDrawerOrg(null)} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>
+            </div>
+
+            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              {[
+                ["Plan", drawerOrg.plan_tier],
+                ["Status", STATUS_STYLE[drawerOrg.subscription_status].label],
+                ["Users", String(drawerOrg.user_count)],
+                ["Devices", String(drawerOrg.device_count)],
+                ["Licences", drawerOrg.license_count ? String(drawerOrg.license_count) : "—"],
+                ["Discount", drawerOrg.discount_percent ? `${drawerOrg.discount_percent}%` : "—"],
+                ["Trial", trialInfo(drawerOrg)],
+                ["Billing rail", drawerOrg.billing_provider ?? "—"],
+              ].map(([k, v]) => (
+                <div key={k}>
+                  <dt className="text-xs" style={{ color: "var(--text-secondary)" }}>{k}</dt>
+                  <dd className="capitalize" style={{ color: "var(--text-primary)" }}>{v}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-5 pt-4 border-t flex flex-wrap gap-2" style={{ borderColor: "var(--border)" }}>
+              <button onClick={() => viewAs(drawerOrg)} className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
+                style={{ background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }}>
+                <Eye size={12} /> View as
+              </button>
+              <button onClick={() => toggleAiPro(drawerOrg)} className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg"
+                style={drawerOrg.ai_pro
+                  ? { background: "rgba(124,58,237,0.1)", border: "1px solid #7c3aed", color: "#7c3aed" }
+                  : { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                <Sparkles size={12} /> {drawerOrg.ai_pro ? "Pro AI" : "Basic AI"}
+              </button>
+              <button onClick={() => extendTrial(drawerOrg.id, 14)} className="text-xs px-2.5 py-1.5 rounded-lg"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>+14d trial</button>
+              <button onClick={() => setStatus(drawerOrg.id, "active")} className="text-xs px-2.5 py-1.5 rounded-lg"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#10b981" }}>Activate</button>
+              <button onClick={() => editDiscount(drawerOrg)} className="text-xs px-2.5 py-1.5 rounded-lg"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>Discount</button>
+              {drawerOrg.subscription_status === "suspended" ? (
+                <button onClick={() => setStatus(drawerOrg.id, "active")} className="text-xs px-2.5 py-1.5 rounded-lg"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Unsuspend</button>
+              ) : (
+                <button onClick={() => setStatus(drawerOrg.id, "suspended")} className="text-xs px-2.5 py-1.5 rounded-lg"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#f59e0b" }}>Suspend</button>
+              )}
+              <Link href={`/platform/${drawerOrg.id}`} className="text-xs px-2.5 py-1.5 rounded-lg"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--accent)" }}>Full details →</Link>
+              <button onClick={() => { removeOrg(drawerOrg.id, drawerOrg.name); setDrawerOrg(null); }}
+                className="text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-500/10"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#ef4444" }}>Delete</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 }

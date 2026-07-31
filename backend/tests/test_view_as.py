@@ -125,7 +125,7 @@ async def test_operator_creates_organization(client, session_factory):
         headers={"Authorization": f"Bearer {login.json()['access_token']}"})
     assert me.json()["role"] == "admin"
 
-    orgs = (await client.get("/api/v1/platform/organizations", headers=h)).json()
+    orgs = (await client.get("/api/v1/platform/organizations", headers=h)).json()["items"]
     assert any(o["name"] == "Provisioned Co" for o in orgs)
 
 

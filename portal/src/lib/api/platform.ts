@@ -3,6 +3,7 @@ import type {
   Asset, Device, GlobalFix, KnowledgeArticle, OrganizationAdmin, PlatformAuditEntry,
   PlatformBilling, PlatformOverview, PlatformReports,
   RemediationActionOption, RemediationTask, SubscriptionStatus, User,
+  Page, PageParams, Invoice, BillingProfile,
 } from "./types";
 
 export const getPlatformOverview = () =>
@@ -34,8 +35,32 @@ export const createViewToken = (id: string) =>
     .post<{ access_token: string; org_id: string; org_name: string }>(`/platform/organizations/${id}/view-token`)
     .then((r) => r.data);
 
-export const listOrganizations = () =>
-  apiClient.get<OrganizationAdmin[]>("/platform/organizations").then((r) => r.data);
+export const listOrganizations = (
+  params: PageParams & {
+    q?: string; plan?: string; subscription_status?: string; country?: string;
+    sort?: string; desc?: boolean;
+  } = {},
+) =>
+  apiClient
+    .get<Page<OrganizationAdmin>>("/platform/organizations", { params })
+    .then((r) => r.data);
+
+/** Billing history across every organization, for the operator console. */
+export const getPlatformInvoices = (
+  params: PageParams & {
+    org_id?: string; q?: string; status?: string[];
+    issued_from?: string; issued_to?: string; sort?: string; desc?: boolean;
+  } = {},
+) =>
+  apiClient
+    .get<Page<Invoice>>("/platform/invoices", { params, paramsSerializer: { indexes: null } })
+    .then((r) => r.data);
+
+/** An organization's billing and tax details — read-only for the operator. The customer
+ *  owns their own legal identity; an operator editing it silently is how a wrong tax number
+ *  reaches an invoice with nobody able to say who typed it. */
+export const getOrgBillingProfile = (id: string) =>
+  apiClient.get<BillingProfile>(`/platform/organizations/${id}/billing-profile`).then((r) => r.data);
 
 export const getOrganization = (id: string) =>
   apiClient.get<OrganizationAdmin>(`/platform/organizations/${id}`).then((r) => r.data);

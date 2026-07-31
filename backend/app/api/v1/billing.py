@@ -5,7 +5,10 @@ the card/plan via the Stripe Billing Portal; webhooks drive subscription state a
 the license count. These routes are exempt from the read-only gate so an expired
 org can still pay to reactivate.
 """
-from fastapi import APIRouter, Depends, Request, status
+import uuid
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
@@ -19,7 +22,16 @@ from app.schemas.billing import (
     LicenseUpdate,
     PortalSession,
 )
+from app.models.invoice import InvoiceStatus
+from app.schemas.billing_profile import (
+    BillingProfileRead,
+    BillingProfileUpdate,
+    InvoiceRead,
+)
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build
 from app.services.billing import BillingService
+from app.services.billing_profile import BillingProfileService
+from app.services.exceptions import NotFoundError
 from app.services.exceptions import NotFoundError, ValidationError
 from app.services.payments import PaddleProvider, PayPalProvider, RazorpayProvider
 
@@ -145,3 +157,84 @@ async def razorpay_webhook(request: Request, session: AsyncSession = Depends(get
     headers = {k.lower(): v for k, v in request.headers.items()}
     event = await RazorpayProvider().parse_webhook(payload=payload, headers=headers)
     return await BillingService(session).apply_event(event)
+
+
+# ── Billing identity + invoice history (org-scoped) ─────────────────────────
+#
+# Added to the existing billing router rather than a new one, so the exemptions and role
+# rules already declared here keep applying — an org whose subscription lapsed still needs
+# to read its own invoices and correct its VAT number.
+
+
+@router.get(
+    "/profile",
+    response_model=BillingProfileRead,
+    summary="This organization's billing and tax details",
+)
+async def get_billing_profile(
+    actor: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> BillingProfileRead:
+    return await BillingProfileService(session).get_profile(org_id=actor.org_id)
+
+
+@router.patch(
+    "/profile",
+    response_model=BillingProfileRead,
+    summary="Update this organization's billing and tax details (admin)",
+)
+async def update_billing_profile(
+    body: BillingProfileUpdate,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> BillingProfileRead:
+    """Admin-only, and scoped to the caller's own org by construction — the org id comes
+    from the token, never from the request, so there is no id to tamper with."""
+    return await BillingProfileService(session).update_profile(
+        actor=actor, org_id=actor.org_id, data=body
+    )
+
+
+@router.get(
+    "/invoices",
+    response_model=Page[InvoiceRead],
+    summary="This organization's billing history",
+)
+async def list_invoices(
+    q: str | None = None,
+    status_in: list[InvoiceStatus] | None = Query(default=None, alias="status"),
+    issued_from: date | None = None,
+    issued_to: date | None = None,
+    sort: str = "issued_on",
+    desc: bool = True,
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    actor: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> Page[InvoiceRead]:
+    items, total, page, page_size = await BillingProfileService(session).list_invoices(
+        org_id=actor.org_id, q=q, status=status_in,
+        issued_from=issued_from, issued_to=issued_to,
+        sort=sort, desc=desc, page=page, page_size=page_size,
+    )
+    return build(items, total, page, page_size)
+
+
+@router.get(
+    "/invoices/{invoice_id}",
+    response_model=InvoiceRead,
+    summary="One invoice from this organization's history",
+)
+async def get_invoice(
+    invoice_id: uuid.UUID,
+    actor: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> InvoiceRead:
+    # Scoped by org in the query: an id belonging to another organization resolves to
+    # nothing, rather than to a 403 that would confirm the id is real.
+    invoice = await BillingProfileService(session).get_invoice(
+        invoice_id=invoice_id, org_id=actor.org_id
+    )
+    if invoice is None:
+        raise NotFoundError("Invoice not found")
+    return InvoiceRead.model_validate(invoice)

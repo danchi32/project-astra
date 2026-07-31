@@ -53,11 +53,11 @@ async def test_platform_console_requires_super_admin(client, session_factory):
     await _promote(session_factory, "ops@ops.com")
     listing = await client.get("/api/v1/platform/organizations", headers=headers)
     assert listing.status_code == 200
-    names = {o["name"] for o in listing.json()}
+    names = {o["name"] for o in listing.json()["items"]}
     # Customers are listed; the operator's OWN org (it holds a platform admin) is not.
     assert "Customer Co" in names
     assert "Ops Co" not in names
-    cust = next(o for o in listing.json() if o["name"] == "Customer Co")
+    cust = next(o for o in listing.json()["items"] if o["name"] == "Customer Co")
     assert cust["user_count"] >= 1
 
 

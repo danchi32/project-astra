@@ -16,6 +16,8 @@ from app.models.knowledge import KnowledgeArticle, KnowledgeSource
 from app.models.learned_action import LearnedAction
 from app.models.location import Location
 from app.models.notification import Notification, NotificationCategory, NotificationSeverity
+from app.models.billing_profile import OrganizationBillingProfile
+from app.models.invoice import Invoice, InvoiceStatus
 from app.models.organization import Organization, SubscriptionStatus
 from app.models.organization_settings import OrganizationSettings
 from app.models.password_reset_token import PasswordResetToken
@@ -64,6 +66,9 @@ __all__ = [
     "NotificationCategory",
     "NotificationSeverity",
     "Organization",
+    "OrganizationBillingProfile",
+    "Invoice",
+    "InvoiceStatus",
     "OrganizationSettings",
     "PasswordResetToken",
     "PendingRegistration",

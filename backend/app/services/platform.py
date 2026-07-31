@@ -6,12 +6,13 @@ mutation is audited under the target org.
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import create_view_as_token, generate_opaque_token, hash_password
 from app.models import (
+    OrganizationBillingProfile,
     AuditLog,
     Conversation,
     Device,
@@ -78,6 +79,81 @@ class PlatformService:
         return set((await self.session.execute(
             select(User.org_id).where(User.is_platform_admin.is_(True)).distinct()
         )).scalars().all())
+
+    _ORG_SORTS = {
+        "name": Organization.name,
+        "created_at": Organization.created_at,
+        "plan": Organization.plan,
+        "subscription_status": Organization.subscription_status,
+        "updated_at": Organization.updated_at,
+    }
+
+    async def list_organizations_page(
+        self,
+        *,
+        q: str | None = None,
+        plan: str | None = None,
+        subscription_status=None,
+        country: str | None = None,
+        sort: str = "created_at",
+        desc: bool = True,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[OrganizationAdminRead], int, int, int]:
+        """One page of organizations, searched and sorted in the database.
+
+        The counts are the part worth noticing: they are fetched for the PAGE, not for the
+        whole table. `list_organizations` below aggregates every user and every device in the
+        system to label its rows, which is exactly the pattern that stops working somewhere
+        between a demo and a real customer list.
+        """
+        from app.schemas.pagination import paginate
+
+        platform_ids = await self._platform_org_ids()
+        stmt = select(Organization)
+        if platform_ids:
+            # The operator's own internal org is not a customer and never appears here.
+            stmt = stmt.where(Organization.id.not_in(platform_ids))
+        if q:
+            like = f"%{q.lower()}%"
+            stmt = stmt.where(or_(
+                func.lower(Organization.name).like(like),
+                func.lower(Organization.email_domain).like(like),
+            ))
+        if plan:
+            stmt = stmt.where(Organization.plan == plan)
+        if subscription_status is not None:
+            stmt = stmt.where(Organization.subscription_status == subscription_status)
+        if country:
+            # Country lives on the billing profile, so this is a scoped subquery rather than
+            # a join — the org row itself has no address.
+            stmt = stmt.where(Organization.id.in_(
+                select(OrganizationBillingProfile.org_id).where(
+                    OrganizationBillingProfile.country_code == country
+                )
+            ))
+
+        column = self._ORG_SORTS.get(sort, Organization.created_at)
+        stmt = stmt.order_by(column.desc() if desc else column.asc())
+
+        orgs, total, page, page_size = await paginate(
+            self.session, stmt, page=page, page_size=page_size
+        )
+        ids = [o.id for o in orgs]
+        user_counts = dict((await self.session.execute(
+            select(User.org_id, func.count()).where(User.org_id.in_(ids)).group_by(User.org_id)
+        )).all()) if ids else {}
+        device_counts = dict((await self.session.execute(
+            select(Device.org_id, func.count()).where(Device.org_id.in_(ids)).group_by(Device.org_id)
+        )).all()) if ids else {}
+
+        items = []
+        for org in orgs:
+            read = _with_entitlements(org)
+            read.user_count = user_counts.get(org.id, 0)
+            read.device_count = device_counts.get(org.id, 0)
+            items.append(read)
+        return items, total, page, page_size
 
     async def list_organizations(self) -> list[OrganizationAdminRead]:
         platform_ids = await self._platform_org_ids()

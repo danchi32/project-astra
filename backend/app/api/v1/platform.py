@@ -1,19 +1,24 @@
 """Platform-operator (super-admin) API — manage ALL organizations. Every route
 requires a platform admin."""
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_platform_admin
 from app.core.database import get_db
 from app.models import User
+from app.models.invoice import InvoiceStatus
+from app.models.organization import SubscriptionStatus
 from app.repositories.devices import DeviceRepository
 from app.repositories.remediation import RemediationRepository
 from app.repositories.telemetry import TelemetryRepository
 from app.repositories.users import UserRepository
 from app.schemas.asset import AssetRead
+from app.schemas.billing_profile import BillingProfileRead, InvoiceRead
 from app.schemas.devices import DeviceRead
+from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build
 from app.schemas.knowledge import KnowledgeArticleCreate, KnowledgeArticleRead
 from app.schemas.platform import (
     DiscountRequest,
@@ -34,6 +39,7 @@ from app.schemas.users import UserRead
 from app.services.ai.knowledge import KnowledgeBaseService
 from app.services.ai.learned import LearnedFixStore
 from app.services.assets import AssetService
+from app.services.billing_profile import BillingProfileService
 from app.services.exceptions import NotFoundError
 from app.services.platform import PlatformService
 from app.services.remediation.actions import ACTIONS
@@ -136,14 +142,78 @@ async def create_organization(
 
 @router.get(
     "/organizations",
-    response_model=list[OrganizationAdminRead],
-    summary="List all organizations with status and usage (platform admin)",
+    response_model=Page[OrganizationAdminRead],
+    summary="Search + paginate organizations (platform admin)",
 )
 async def list_organizations(
+    q: str | None = None,
+    plan: str | None = None,
+    subscription_status: SubscriptionStatus | None = None,
+    country: str | None = None,
+    sort: str = "created_at",
+    desc: bool = True,
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
     _: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_db),
-) -> list[OrganizationAdminRead]:
-    return await PlatformService(session).list_organizations()
+) -> Page[OrganizationAdminRead]:
+    """Searched, filtered and sorted in the database.
+
+    This used to return every organization with a per-org user and device count attached —
+    fine at eleven, a full scan plus two aggregate queries at ten thousand, on a page that
+    shows fifty rows.
+    """
+    items, total, page, page_size = await PlatformService(session).list_organizations_page(
+        q=(q.strip() or None) if q else None,
+        plan=plan, subscription_status=subscription_status,
+        country=(country.strip().upper() or None) if country else None,
+        sort=sort, desc=desc, page=page, page_size=page_size,
+    )
+    return build(items, total, page, page_size)
+
+
+@router.get(
+    "/invoices",
+    response_model=Page[InvoiceRead],
+    summary="Billing history across every organization (platform admin)",
+)
+async def platform_invoices(
+    org_id: uuid.UUID | None = None,
+    q: str | None = None,
+    status_in: list[InvoiceStatus] | None = Query(default=None, alias="status"),
+    issued_from: date | None = None,
+    issued_to: date | None = None,
+    sort: str = "issued_on",
+    desc: bool = True,
+    page: int = 1,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> Page[InvoiceRead]:
+    items, total, page, page_size = await BillingProfileService(session).list_invoices(
+        org_id=org_id, q=q, status=status_in,
+        issued_from=issued_from, issued_to=issued_to,
+        sort=sort, desc=desc, page=page, page_size=page_size,
+        # The operator's list has an organization column; resolved for the page only.
+        with_org_names=True,
+    )
+    return build(items, total, page, page_size)
+
+
+@router.get(
+    "/organizations/{org_id}/billing-profile",
+    response_model=BillingProfileRead,
+    summary="An organization's billing and tax details (platform admin, read-only)",
+)
+async def platform_billing_profile(
+    org_id: uuid.UUID,
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> BillingProfileRead:
+    """Read-only on purpose. The customer owns their own legal and tax identity; an operator
+    editing it silently is how a wrong tax number ends up on an invoice with nobody able to
+    say who typed it."""
+    return await BillingProfileService(session).get_profile(org_id=org_id)
 
 
 @router.get(

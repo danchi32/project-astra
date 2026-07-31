@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import JSON, Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import GUID, Base, TimestampMixin
+from app.models.base import GUID, Base, TimestampMixin, utcnow
 
 
 class SubscriptionStatus(str, enum.Enum):
@@ -28,6 +28,13 @@ class Organization(TimestampMixin, Base):
     email_domain: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     # -- Subscription / lifecycle (managed by the platform operator + billing) --
+    # Touched whenever the row changes, so the operator console can sort by recent activity.
+    # TimestampMixin only carries created_at, and adding updated_at there would rewrite every
+    # table in the schema for the sake of one screen.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
     plan: Mapped[str] = mapped_column(String(40), nullable=False, default="trial")
     subscription_status: Mapped[SubscriptionStatus] = mapped_column(
         Enum(SubscriptionStatus, native_enum=False, length=20,

@@ -51,6 +51,55 @@ export interface DashboardOverview {
   top_issues: import("./fleet").FleetIssue[];
 }
 
+// ── Billing identity + invoices ────────────────────────────────────────────
+
+export type InvoiceStatus = "draft" | "open" | "paid" | "failed" | "refunded" | "void";
+
+/** Money is in minor units, as integers, exactly as the API stores it. Formatting happens
+ *  at the edge; a float here would reintroduce the rounding the backend avoids. */
+export interface Invoice {
+  id: string;
+  org_id: string;
+  number: string;
+  issued_on: string;
+  period_start: string | null;
+  period_end: string | null;
+  plan: string | null;
+  seats: number | null;
+  currency: string;
+  subtotal_cents: number;
+  discount_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  status: InvoiceStatus;
+  paid_at: string | null;
+  renews_on: string | null;
+  provider: string | null;
+  transaction_id: string | null;
+  payment_method: string | null;
+  /** Set when the payment rail is the seller of record (Paddle) and issues the document
+   *  itself. Null means ASTRA is the seller and renders its own. */
+  provider_invoice_url: string | null;
+  org_name?: string | null;
+}
+
+export interface BillingProfile {
+  legal_name: string | null;
+  billing_contact_name: string | null;
+  billing_email: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country_code: string | null;
+  tax_id_label: string | null;
+  tax_id: string | null;
+  registration_number: string | null;
+  /** False until the fields an invoice actually needs are present. */
+  complete: boolean;
+}
+
 export type UserRole = "admin" | "technician" | "user";
 
 export interface User {
@@ -131,6 +180,8 @@ export interface OrganizationAdmin {
   discount_percent: number | null;
   billing_provider: string | null;
   ai_pro: boolean;
+  /** Touched whenever the row changes, so the console can sort by recent activity. */
+  updated_at: string | null;
   user_count: number;
   device_count: number;
   plan_tier: PlanTier;

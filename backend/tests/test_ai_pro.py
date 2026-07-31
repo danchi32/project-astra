@@ -44,7 +44,7 @@ async def test_no_key_means_no_real_llm_even_for_pro(session_factory, monkeypatc
 async def test_operator_toggles_ai_pro(client, session_factory):
     headers = await _operator(client, session_factory, org="AIPro Ops", email="op@aipro.com")
     await _register_org(client, session_factory, "AIPro Cust", "a@aiprocust.com")
-    orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()
+    orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()["items"]
     org = next(o for o in orgs if o["name"] == "AIPro Cust")
     assert org["ai_pro"] is False  # Basic by default
 

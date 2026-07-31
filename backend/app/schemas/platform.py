@@ -17,6 +17,7 @@ class OrganizationAdminRead(BaseModel):
     trial_ends_at: datetime | None
     current_period_end: datetime | None
     created_at: datetime
+    updated_at: datetime | None = None
     license_count: int = 0
     discount_percent: int | None = None
     billing_provider: str | None = None
