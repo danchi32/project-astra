@@ -16,6 +16,20 @@ import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import type { SubscriptionStatus } from "@/lib/api/types";
 
+type OrgTab = "overview" | "billing" | "users" | "devices" | "healing" | "assets";
+
+/** Grouped by what an operator is actually doing: checking what an account is entitled to,
+ *  chasing money, or looking at what the customer has. Nine stacked sections made all three
+ *  a scroll. */
+const ORG_TABS: { key: OrgTab; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "billing", label: "Billing" },
+  { key: "users", label: "Users" },
+  { key: "devices", label: "Devices" },
+  { key: "healing", label: "Self-healing" },
+  { key: "assets", label: "Assets" },
+];
+
 const STATUS_LABEL: Record<SubscriptionStatus, string> = {
   trialing: "Trial", active: "Active", past_due: "Past due", suspended: "Suspended", canceled: "Canceled",
 };
@@ -24,6 +38,7 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   const { id } = use(params);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<OrgTab>("overview");
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: profile } = useQuery({
     queryKey: ["platform-org-billing-profile", id], queryFn: () => getOrgBillingProfile(id),
@@ -70,7 +85,7 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   const card = { background: "var(--surface)", border: "1px solid var(--border)" } as const;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5 h-full min-h-0">
       <Link href="/platform/organizations" className="inline-flex items-center gap-1.5 text-sm" style={{ color: "var(--text-secondary)" }}>
         <ArrowLeft size={15} /> All organizations
       </Link>
@@ -96,286 +111,358 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
         </button>
       </div>
 
-      {/* Plan — what this org may actually use. The entitlement list underneath is the
-          server's own answer, resolved on every read, so the console can't drift from what
-          the API enforces. */}
-      {org && (
-        <div className="rounded-xl p-5" style={card}>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Plan</h2>
-              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                Decides which features this organization can use. Changes take effect immediately.
-              </p>
+      {/* One section at a time, the same idea as the device page in the customer portal.
+          A vertical rail on wide screens — nine sections is too many for a horizontal strip
+          without it scrolling — and a horizontal strip below lg, where a side rail would eat
+          width the content needs more. */}
+      <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
+        <nav className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible lg:w-52 shrink-0
+                        border-b lg:border-b-0 lg:border-r lg:pr-2"
+          style={{ borderColor: "var(--border)" }}>
+          {ORG_TABS.map((t) => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className="px-3 py-2 text-sm font-medium whitespace-nowrap rounded-lg text-left transition-colors"
+              style={tab === t.key
+                ? { background: "rgba(154,47,187,0.10)", color: "var(--accent)" }
+                : { color: "var(--text-secondary)" }}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex-1 min-w-0 space-y-5">
+          {tab === "overview" && (
+            <>
+        {/* Plan — what this org may actually use. The entitlement list underneath is the
+            server's own answer, resolved on every read, so the console can't drift from what
+            the API enforces. */}
+        {org && (
+          <div className="rounded-xl p-5" style={card}>
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Plan</h2>
+                <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                  Decides which features this organization can use. Changes take effect immediately.
+                </p>
+              </div>
+              <div className="flex gap-1 p-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                {PLAN_TIERS.map((t) => (
+                  <button key={t.value} onClick={() => setPlan(t.value)} title={t.blurb}
+                    className="px-3 py-1.5 rounded-md text-sm font-medium"
+                    style={org.plan_tier === t.value
+                      ? { background: "var(--accent)", color: "#fff" }
+                      : { color: "var(--text-secondary)" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-1 p-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-              {PLAN_TIERS.map((t) => (
-                <button key={t.value} onClick={() => setPlan(t.value)} title={t.blurb}
-                  className="px-3 py-1.5 rounded-md text-sm font-medium"
-                  style={org.plan_tier === t.value
-                    ? { background: "var(--accent)", color: "#fff" }
-                    : { color: "var(--text-secondary)" }}>
-                  {t.label}
-                </button>
-              ))}
+
+            <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+                Included on this plan
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.keys(FEATURE_LABELS).map((key) => {
+                  const on = org.entitlements.includes(key);
+                  const overridden = org.entitlement_overrides?.[key] !== undefined;
+                  return (
+                    <span key={key} className="text-xs px-2 py-0.5 rounded-full"
+                      style={on
+                        ? { color: "#10b981", background: "rgba(16,185,129,0.10)" }
+                        : { color: "var(--text-secondary)", background: "var(--bg)", opacity: 0.6 }}>
+                      {FEATURE_LABELS[key]}
+                      {/* Marked so an unexpected capability is traceable to a deliberate
+                          exception rather than looking like the plan table is wrong. */}
+                      {overridden ? " ·  override" : ""}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           </div>
-
-          <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-              Included on this plan
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.keys(FEATURE_LABELS).map((key) => {
-                const on = org.entitlements.includes(key);
-                const overridden = org.entitlement_overrides?.[key] !== undefined;
-                return (
-                  <span key={key} className="text-xs px-2 py-0.5 rounded-full"
-                    style={on
-                      ? { color: "#10b981", background: "rgba(16,185,129,0.10)" }
-                      : { color: "var(--text-secondary)", background: "var(--bg)", opacity: 0.6 }}>
-                    {FEATURE_LABELS[key]}
-                    {/* Marked so an unexpected capability is traceable to a deliberate
-                        exception rather than looking like the plan table is wrong. */}
-                    {overridden ? " ·  override" : ""}
+        )}
+        {/* AI plan — Pro unlocks the real Claude engine */}
+        {org && (
+          <div className="rounded-xl p-5 flex items-start justify-between gap-4" style={card}>
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg shrink-0" style={{ background: org.ai_pro ? "rgba(124,58,237,0.12)" : "rgba(100,116,139,0.12)", color: org.ai_pro ? "#7c3aed" : "var(--text-secondary)" }}>
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>AI plan</h2>
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    style={org.ai_pro
+                      ? { color: "#7c3aed", background: "rgba(124,58,237,0.12)" }
+                      : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
+                    {org.ai_pro ? "Pro — real AI" : "Basic"}
                   </span>
-                );
-              })}
+                </div>
+                <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-secondary)" }}>
+                  {org.ai_pro
+                    ? "The assistant uses the real Claude engine — full AI IT agent."
+                    : "The assistant answers only from its built-in engine/memory. Enable Pro to unlock the real Claude AI."}
+                </p>
+              </div>
+            </div>
+            <button onClick={toggleAiPro}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+              style={org.ai_pro
+                ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
+                : { background: "#7c3aed", color: "#fff" }}>
+              <Sparkles size={15} /> {org.ai_pro ? "Downgrade to Basic" : "Enable Pro AI"}
+            </button>
+          </div>
+        )}
+            </>
+          )}
+
+          {tab === "billing" && (
+            <>
+        {/* Subscription & billing */}
+        {org && (
+          <div className="rounded-xl p-5" style={card}>
+            <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Subscription &amp; billing</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-sm">
+              {[
+                { label: "Plan", value: org.plan, cap: true },
+                { label: "Status", value: STATUS_LABEL[org.subscription_status] },
+                { label: "Payment provider", value: org.billing_provider ?? "—", cap: true },
+                { label: "Licenses", value: org.license_count || "—" },
+                { label: "Discount", value: org.discount_percent ? `${org.discount_percent}%` : "—" },
+                {
+                  label: org.subscription_status === "trialing" ? "Trial ends" : "Renews",
+                  value: org.subscription_status === "trialing"
+                    ? (org.trial_ends_at ? new Date(org.trial_ends_at).toLocaleDateString() : "—")
+                    : (org.current_period_end ? new Date(org.current_period_end).toLocaleDateString() : "—"),
+                },
+              ].map(({ label, value, cap }) => (
+                <div key={label}>
+                  <p className="text-xs uppercase tracking-wide mb-0.5" style={{ color: "var(--text-secondary)" }}>{label}</p>
+                  <p className={`font-medium ${cap ? "capitalize" : ""}`} style={{ color: "var(--text-primary)" }}>{value}</p>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* AI plan — Pro unlocks the real Claude engine */}
-      {org && (
-        <div className="rounded-xl p-5 flex items-start justify-between gap-4" style={card}>
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg shrink-0" style={{ background: org.ai_pro ? "rgba(124,58,237,0.12)" : "rgba(100,116,139,0.12)", color: org.ai_pro ? "#7c3aed" : "var(--text-secondary)" }}>
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>AI plan</h2>
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full"
-                  style={org.ai_pro
-                    ? { color: "#7c3aed", background: "rgba(124,58,237,0.12)" }
-                    : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
-                  {org.ai_pro ? "Pro — real AI" : "Basic"}
+        )}
+        {/* Billing identity + this org's invoices. Read-only: the customer owns their own
+            legal and tax details, and an operator editing them silently is how a wrong tax
+            number reaches an invoice with nobody able to say who typed it. */}
+        {org && (
+          <div className="rounded-xl p-5" style={card}>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Billing &amp; tax details
+                </h2>
+                <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                  Set by the organization. Read-only here.
+                </p>
+              </div>
+              {profile && !profile.complete && (
+                <span className="text-xs px-2 py-1 rounded-full"
+                  style={{ color: "#f59e0b", background: "rgba(245,158,11,0.10)" }}>
+                  Incomplete — an invoice can&apos;t be raised yet
                 </span>
-              </div>
-              <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-secondary)" }}>
-                {org.ai_pro
-                  ? "The assistant uses the real Claude engine — full AI IT agent."
-                  : "The assistant answers only from its built-in engine/memory. Enable Pro to unlock the real Claude AI."}
-              </p>
+              )}
             </div>
+
+            <dl className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              {[
+                ["Legal name", profile?.legal_name],
+                ["Billing contact", profile?.billing_contact_name],
+                ["Billing email", profile?.billing_email],
+                ["Address", [profile?.address_line1, profile?.address_line2].filter(Boolean).join(", ")],
+                ["City / state", [profile?.city, profile?.state].filter(Boolean).join(", ")],
+                ["Postcode", profile?.postal_code],
+                ["Country", profile?.country_code],
+                [profile?.tax_id_label || "Tax number", profile?.tax_id],
+                ["Registration no.", profile?.registration_number],
+              ].map(([k, v]) => (
+                <div key={k as string}>
+                  <dt className="text-xs" style={{ color: "var(--text-secondary)" }}>{k}</dt>
+                  <dd style={{ color: "var(--text-primary)" }}>{(v as string) || "—"}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
-          <button onClick={toggleAiPro}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
-            style={org.ai_pro
-              ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
-              : { background: "#7c3aed", color: "#fff" }}>
-            <Sparkles size={15} /> {org.ai_pro ? "Downgrade to Basic" : "Enable Pro AI"}
-          </button>
-        </div>
-      )}
-
-      {/* Billing identity + this org's invoices. Read-only: the customer owns their own
-          legal and tax details, and an operator editing them silently is how a wrong tax
-          number reaches an invoice with nobody able to say who typed it. */}
-      {org && (
-        <div className="rounded-xl p-5" style={card}>
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                Billing &amp; tax details
-              </h2>
-              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                Set by the organization. Read-only here.
-              </p>
-            </div>
-            {profile && !profile.complete && (
-              <span className="text-xs px-2 py-1 rounded-full"
-                style={{ color: "#f59e0b", background: "rgba(245,158,11,0.10)" }}>
-                Incomplete — an invoice can&apos;t be raised yet
-              </span>
-            )}
+        )}
+        {org && (
+          <div>
+            <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
+              Billing history
+            </h2>
+            <InvoiceTable data={invoices} page={invoicePage} onPage={setInvoicePage} busy={invoicesBusy} />
           </div>
+        )}
+            </>
+          )}
 
-          <dl className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            {[
-              ["Legal name", profile?.legal_name],
-              ["Billing contact", profile?.billing_contact_name],
-              ["Billing email", profile?.billing_email],
-              ["Address", [profile?.address_line1, profile?.address_line2].filter(Boolean).join(", ")],
-              ["City / state", [profile?.city, profile?.state].filter(Boolean).join(", ")],
-              ["Postcode", profile?.postal_code],
-              ["Country", profile?.country_code],
-              [profile?.tax_id_label || "Tax number", profile?.tax_id],
-              ["Registration no.", profile?.registration_number],
-            ].map(([k, v]) => (
-              <div key={k as string}>
-                <dt className="text-xs" style={{ color: "var(--text-secondary)" }}>{k}</dt>
-                <dd style={{ color: "var(--text-primary)" }}>{(v as string) || "—"}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
-
-      {org && (
-        <div>
-          <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-            Billing history
-          </h2>
-          <InvoiceTable data={invoices} page={invoicePage} onPage={setInvoicePage} busy={invoicesBusy} />
-        </div>
-      )}
-
-      {/* Subscription & billing */}
-      {org && (
-        <div className="rounded-xl p-5" style={card}>
-          <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Subscription &amp; billing</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-sm">
-            {[
-              { label: "Plan", value: org.plan, cap: true },
-              { label: "Status", value: STATUS_LABEL[org.subscription_status] },
-              { label: "Payment provider", value: org.billing_provider ?? "—", cap: true },
-              { label: "Licenses", value: org.license_count || "—" },
-              { label: "Discount", value: org.discount_percent ? `${org.discount_percent}%` : "—" },
-              {
-                label: org.subscription_status === "trialing" ? "Trial ends" : "Renews",
-                value: org.subscription_status === "trialing"
-                  ? (org.trial_ends_at ? new Date(org.trial_ends_at).toLocaleDateString() : "—")
-                  : (org.current_period_end ? new Date(org.current_period_end).toLocaleDateString() : "—"),
-              },
-            ].map(({ label, value, cap }) => (
-              <div key={label}>
-                <p className="text-xs uppercase tracking-wide mb-0.5" style={{ color: "var(--text-secondary)" }}>{label}</p>
-                <p className={`font-medium ${cap ? "capitalize" : ""}`} style={{ color: "var(--text-primary)" }}>{value}</p>
-              </div>
-            ))}
+          {tab === "users" && (
+            <>
+        {/* Users */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
+            <UsersIcon size={14} style={{ color: "var(--text-secondary)" }} />
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Users ({users?.length ?? 0})</h2>
+          </div>
+          <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {[
+                  { h: "Name", cls: "" },
+                  { h: "Email", cls: "" },
+                  { h: "Role", cls: "" },
+                  { h: "Status", cls: "" },
+                ].map(({ h, cls }) => (
+                  <th key={h} className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wide ${cls}`}
+                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {users?.map((u) => (
+                  <tr key={u.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{u.full_name}</td>
+                    <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{u.email}</td>
+                    <td className="px-4 py-2.5 capitalize" style={{ color: "var(--text-secondary)" }}>{u.role}</td>
+                    <td className="px-4 py-2.5" style={{ color: u.is_active ? "#10b981" : "#64748b" }}>{u.is_active ? "Active" : "Disabled"}</td>
+                  </tr>
+                ))}
+                {users && users.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No users.</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
+            </>
+          )}
 
-      {/* Users */}
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
-          <UsersIcon size={14} style={{ color: "var(--text-secondary)" }} />
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Users ({users?.length ?? 0})</h2>
+          {tab === "devices" && (
+            <>
+        {/* Devices */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
+            <Monitor size={14} style={{ color: "var(--text-secondary)" }} />
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Devices ({devices?.length ?? 0})</h2>
+          </div>
+          <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {[
+                  { h: "Hostname", cls: "" },
+                  { h: "Brand / Model", cls: "hidden lg:table-cell" },
+                  { h: "CPU", cls: "hidden xl:table-cell" },
+                  { h: "RAM", cls: "hidden xl:table-cell" },
+                  { h: "Storage", cls: "hidden xl:table-cell" },
+                  { h: "User", cls: "hidden md:table-cell" },
+                  { h: "Status", cls: "" },
+                ].map(({ h, cls }) => (
+                  <th key={h} className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wide ${cls}`}
+                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {devices?.map((d) => (
+                  <tr key={d.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>
+                      {d.hostname}
+                      <div className="text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{d.os_version}</div>
+                    </td>
+                    <td className="px-4 py-2.5 hidden lg:table-cell" style={{ color: "var(--text-secondary)" }}>{d.manufacturer ?? "—"} {d.model ?? ""}</td>
+                    <td className="px-4 py-2.5 max-w-[180px] truncate text-xs hidden xl:table-cell" style={{ color: "var(--text-secondary)" }} title={d.cpu_name ?? ""}>{d.cpu_name ?? "—"}</td>
+                    <td className="px-4 py-2.5 hidden xl:table-cell" style={{ color: "var(--text-secondary)" }}>{formatRam(d.total_ram_mb)}</td>
+                    <td className="px-4 py-2.5 hidden xl:table-cell" style={{ color: "var(--text-secondary)" }}>{formatStorage(d.total_storage_gb)}</td>
+                    <td className="px-4 py-2.5 hidden md:table-cell" style={{ color: "var(--text-secondary)" }}>{d.logged_in_user ?? "—"}</td>
+                    <td className="px-4 py-2.5"><DeviceStatusBadge status={d.status} /></td>
+                  </tr>
+                ))}
+                {devices && devices.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No devices enrolled.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Name", "Email", "Role", "Status"].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {users?.map((u) => (
-                <tr key={u.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{u.full_name}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{u.email}</td>
-                  <td className="px-4 py-2.5 capitalize" style={{ color: "var(--text-secondary)" }}>{u.role}</td>
-                  <td className="px-4 py-2.5" style={{ color: u.is_active ? "#10b981" : "#64748b" }}>{u.is_active ? "Active" : "Disabled"}</td>
-                </tr>
-              ))}
-              {users && users.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No users.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </>
+          )}
 
-      {/* Devices */}
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
-          <Monitor size={14} style={{ color: "var(--text-secondary)" }} />
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Devices ({devices?.length ?? 0})</h2>
+          {tab === "healing" && (
+            <>
+        {/* Self-healing history — what went wrong and what was applied */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
+            <Zap size={14} style={{ color: "var(--text-secondary)" }} />
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Self-healing history ({remediation?.length ?? 0})</h2>
+          </div>
+          <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {[
+                  { h: "Fix", cls: "" },
+                  { h: "Device", cls: "hidden md:table-cell" },
+                  { h: "Status", cls: "" },
+                  { h: "Reason", cls: "hidden xl:table-cell" },
+                  { h: "When", cls: "hidden lg:table-cell" },
+                ].map(({ h, cls }) => (
+                  <th key={h} className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wide ${cls}`}
+                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {remediation?.slice(0, 50).map((t) => (
+                  <tr key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{t.action_label ?? t.action_id}</td>
+                    <td className="px-4 py-2.5 hidden md:table-cell" style={{ color: "var(--text-secondary)" }}>{t.device_hostname ?? "—"}</td>
+                    <td className="px-4 py-2.5 capitalize" style={{ color: "var(--text-secondary)" }}>{t.status.replace(/_/g, " ")}</td>
+                    <td className="px-4 py-2.5 max-w-[280px] truncate hidden xl:table-cell" style={{ color: "var(--text-secondary)" }} title={t.reason}>{t.reason}</td>
+                    <td className="px-4 py-2.5 hidden lg:table-cell" style={{ color: "var(--text-secondary)" }}>{new Date(t.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {remediation && remediation.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No self-healing activity yet.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Hostname", "Brand / Model", "CPU", "RAM", "Storage", "User", "Status"].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {devices?.map((d) => (
-                <tr key={d.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>
-                    {d.hostname}
-                    <div className="text-xs font-normal" style={{ color: "var(--text-secondary)" }}>{d.os_version}</div>
-                  </td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{d.manufacturer ?? "—"} {d.model ?? ""}</td>
-                  <td className="px-4 py-2.5 max-w-[180px] truncate text-xs" style={{ color: "var(--text-secondary)" }} title={d.cpu_name ?? ""}>{d.cpu_name ?? "—"}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{formatRam(d.total_ram_mb)}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{formatStorage(d.total_storage_gb)}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{d.logged_in_user ?? "—"}</td>
-                  <td className="px-4 py-2.5"><DeviceStatusBadge status={d.status} /></td>
-                </tr>
-              ))}
-              {devices && devices.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No devices enrolled.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </>
+          )}
 
-      {/* Self-healing history — what went wrong and what was applied */}
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
-          <Zap size={14} style={{ color: "var(--text-secondary)" }} />
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Self-healing history ({remediation?.length ?? 0})</h2>
+          {tab === "assets" && (
+            <>
+        {/* Assets */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
+            <Package size={14} style={{ color: "var(--text-secondary)" }} />
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Assets ({assets?.length ?? 0})</h2>
+          </div>
+          <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {[
+                  { h: "Name", cls: "" },
+                  { h: "Category", cls: "hidden lg:table-cell" },
+                  { h: "Status", cls: "" },
+                  { h: "Assigned to", cls: "hidden md:table-cell" },
+                  { h: "Serial", cls: "hidden xl:table-cell" },
+                ].map(({ h, cls }) => (
+                  <th key={h} className={`px-4 py-3 text-left text-xs font-medium uppercase tracking-wide ${cls}`}
+                    style={{ color: "var(--text-secondary)" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {assets?.map((a) => (
+                  <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{a.name}</td>
+                    <td className="px-4 py-2.5 capitalize hidden lg:table-cell" style={{ color: "var(--text-secondary)" }}>{a.category}</td>
+                    <td className="px-4 py-2.5 capitalize" style={{ color: "var(--text-secondary)" }}>{a.status.replace(/_/g, " ")}</td>
+                    <td className="px-4 py-2.5 hidden md:table-cell" style={{ color: "var(--text-secondary)" }}>{a.assigned_to_name ?? "—"}</td>
+                    <td className="px-4 py-2.5 hidden xl:table-cell" style={{ color: "var(--text-secondary)" }}>{a.serial_number ?? "—"}</td>
+                  </tr>
+                ))}
+                {assets && assets.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No assets.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Fix", "Device", "Status", "Reason", "When"].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {remediation?.slice(0, 50).map((t) => (
-                <tr key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{t.action_label ?? t.action_id}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{t.device_hostname ?? "—"}</td>
-                  <td className="px-4 py-2.5 capitalize" style={{ color: "var(--text-secondary)" }}>{t.status.replace(/_/g, " ")}</td>
-                  <td className="px-4 py-2.5 max-w-[280px] truncate" style={{ color: "var(--text-secondary)" }} title={t.reason}>{t.reason}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{new Date(t.created_at).toLocaleString()}</td>
-                </tr>
-              ))}
-              {remediation && remediation.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No self-healing activity yet.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Assets */}
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-        <div className="px-5 py-3 flex items-center gap-2" style={{ ...card, borderBottom: "1px solid var(--border)" }}>
-          <Package size={14} style={{ color: "var(--text-secondary)" }} />
-          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Assets ({assets?.length ?? 0})</h2>
-        </div>
-        <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
-          <table className="w-full text-sm whitespace-nowrap">
-            <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Name", "Category", "Status", "Assigned to", "Serial"].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {assets?.map((a) => (
-                <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-4 py-2.5 font-medium" style={{ color: "var(--text-primary)" }}>{a.name}</td>
-                  <td className="px-4 py-2.5 capitalize" style={{ color: "var(--text-secondary)" }}>{a.category}</td>
-                  <td className="px-4 py-2.5 capitalize" style={{ color: "var(--text-secondary)" }}>{a.status.replace(/_/g, " ")}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{a.assigned_to_name ?? "—"}</td>
-                  <td className="px-4 py-2.5" style={{ color: "var(--text-secondary)" }}>{a.serial_number ?? "—"}</td>
-                </tr>
-              ))}
-              {assets && assets.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center" style={{ color: "var(--text-secondary)" }}>No assets.</td></tr>}
-            </tbody>
-          </table>
+            </>
+          )}
         </div>
       </div>
     </div>
