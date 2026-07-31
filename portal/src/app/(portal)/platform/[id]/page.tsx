@@ -111,26 +111,24 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
         </button>
       </div>
 
-      {/* One section at a time, the same idea as the device page in the customer portal.
-          A vertical rail on wide screens — nine sections is too many for a horizontal strip
-          without it scrolling — and a horizontal strip below lg, where a side rail would eat
-          width the content needs more. */}
-      <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
-        <nav className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible lg:w-52 shrink-0
-                        border-b lg:border-b-0 lg:border-r lg:pr-2"
-          style={{ borderColor: "var(--border)" }}>
-          {ORG_TABS.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className="px-3 py-2 text-sm font-medium whitespace-nowrap rounded-lg text-left transition-colors"
-              style={tab === t.key
-                ? { background: "rgba(154,47,187,0.10)", color: "var(--accent)" }
-                : { color: "var(--text-secondary)" }}>
-              {t.label}
-            </button>
-          ))}
-        </nav>
+      {/* One section at a time, the same tab bar the device page in the customer portal uses —
+          an underlined strip across the top, so an operator moving between the two consoles
+          doesn't meet two different navigation idioms for the same job. */}
+      <div className="flex gap-1 border-b overflow-x-auto shrink-0" style={{ borderColor: "var(--border)" }}>
+        {ORG_TABS.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 whitespace-nowrap transition-colors"
+            style={{
+              borderColor: tab === t.key ? "var(--accent)" : "transparent",
+              color: tab === t.key ? "var(--accent)" : "var(--text-secondary)",
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="flex-1 min-w-0 space-y-5">
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 min-w-0 min-h-0 space-y-5">
           {tab === "overview" && (
             <>
         {/* Plan — what this org may actually use. The entitlement list underneath is the
