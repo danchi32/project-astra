@@ -63,7 +63,7 @@ const TIERS: Tier[] = [
       "Fleet cross-device correlation",
       "One-click mass remediation",
       "Full audit trail & export",
-      "Advanced RBAC & SSO",
+      "Advanced RBAC (SSO in progress)",
       "Dedicated success manager",
     ],
   },

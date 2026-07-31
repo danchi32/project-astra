@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -65,6 +65,12 @@ class Organization(TimestampMixin, Base):
     # coupon attached to the subscription + future checkouts.
     discount_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stripe_coupon_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Per-org entitlement exceptions: {"compliance": true, "ai_act": false}. Empty for
+    # almost every org — the plan is the answer. This exists for the cases that genuinely
+    # need one (a pilot, a grandfathered account) and is kept small on purpose: a stored
+    # copy of what a plan grants is a copy that drifts from what the customer pays for.
+    entitlement_overrides: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Pro-AI entitlement (super-admin toggle). When False (Basic plan), the chat agent
     # answers only from its built-in engine/memory; when True (Pro), it may escalate to

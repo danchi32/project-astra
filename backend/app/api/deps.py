@@ -113,6 +113,41 @@ async def require_platform_admin(user: User = Depends(get_current_user)) -> User
     return user
 
 
+def requires(feature: str):
+    """Gate an endpoint on the org's plan.
+
+    A dependency, not a check inside the handler and certainly not a hidden nav item: the
+    portal hiding a link is presentation, and anyone with the API would still reach the
+    feature. This is the same discipline as remediation tiers — the server decides.
+
+    Answers 402 rather than 403 on purpose. The caller has the right role; their plan simply
+    doesn't include this, and "ask your administrator" and "upgrade your plan" are different
+    sentences with different next steps.
+    """
+
+    async def dependency(
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_db),
+    ) -> User:
+        from app.models import Organization
+        from app.services.entitlements import EntitlementError, features_for, normalise_plan
+
+        org = await session.get(Organization, user.org_id)
+        plan = normalise_plan(org.plan if org else None)
+        granted = features_for(org.plan if org else None,
+                               org.entitlement_overrides if org else None)
+        if feature not in granted:
+            err = EntitlementError(feature, plan)
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=str(err),
+                headers={"X-Astra-Required-Feature": feature},
+            )
+        return user
+
+    return dependency
+
+
 def require_roles(*roles: UserRole):
     async def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:

@@ -6,13 +6,21 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, requires
 from app.core.database import get_db
 from app.models import User
 from app.schemas.report import AssetReport, FleetHealthReport, RemediationReport
+from app.services.entitlements import AUDIT_EXPORT
 from app.services.reports import ReportService
 
-router = APIRouter(prefix="/reports", tags=["reports"])
+# Viewing reports is Essential; EXPORTING them is what Expert's "full audit trail &
+# export" is sold as. Reading stays with everyone — for many customers the trail is
+# their own compliance requirement, and removing it would make the cheap tier a
+# liability rather than a smaller product.
+router = APIRouter(
+    prefix="/reports", tags=["reports"],
+    dependencies=[Depends(requires(AUDIT_EXPORT))],
+)
 
 
 def _csv_response(rows: list[dict[str, Any]], fieldnames: list[str], filename: str) -> StreamingResponse:

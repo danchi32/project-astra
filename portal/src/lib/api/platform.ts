@@ -88,6 +88,7 @@ export const updateOrganization = (
     current_period_end: string | null;
     extend_trial_days: number;
     ai_pro: boolean;
+    entitlement_overrides: Record<string, boolean>;
   }>
 ) => apiClient.patch<OrganizationAdmin>(`/platform/organizations/${id}`, data).then((r) => r.data);
 

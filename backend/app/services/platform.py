@@ -49,6 +49,21 @@ from app.services.subscription import TRIAL_DAYS
 from app.services.exceptions import NotFoundError
 
 
+def _with_entitlements(org) -> OrganizationAdminRead:
+    """Attach the tier and the features it grants.
+
+    Resolved on read rather than stored so the console always shows what the server would
+    actually enforce — a console that disagrees with the gate is worse than no console.
+    """
+    from app.services.entitlements import features_for, normalise_plan
+
+    read = OrganizationAdminRead.model_validate(org)
+    read.plan_tier = normalise_plan(org.plan)
+    read.entitlements = sorted(features_for(org.plan, org.entitlement_overrides))
+    read.entitlement_overrides = org.entitlement_overrides or None
+    return read
+
+
 class PlatformService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -80,7 +95,7 @@ class PlatformService:
         )
         result: list[OrganizationAdminRead] = []
         for org in orgs:
-            read = OrganizationAdminRead.model_validate(org)
+            read = _with_entitlements(org)
             read.user_count = user_counts.get(org.id, 0)
             read.device_count = device_counts.get(org.id, 0)
             result.append(read)
@@ -432,7 +447,7 @@ class PlatformService:
         except Exception:
             pass
 
-        read = OrganizationAdminRead.model_validate(org)
+        read = _with_entitlements(org)
         read.user_count = 1
         read.device_count = 0
         return read
@@ -455,7 +470,7 @@ class PlatformService:
         org = await self.orgs.get(org_id)
         if org is None:
             raise NotFoundError("Organization not found")
-        read = OrganizationAdminRead.model_validate(org)
+        read = _with_entitlements(org)
         read.user_count = await self._count(User, org.id)
         read.device_count = await self._count(Device, org.id)
         return read
@@ -487,6 +502,12 @@ class PlatformService:
         if data.ai_pro is not None:
             org.ai_pro = data.ai_pro
             changes["ai_pro"] = str(data.ai_pro)
+        if data.entitlement_overrides is not None:
+            # Recorded in the audit trail like every other operator action — an override is
+            # a commercial decision about one account, and "who granted this and when" has
+            # to be answerable later.
+            org.entitlement_overrides = data.entitlement_overrides or None
+            changes["entitlement_overrides"] = str(data.entitlement_overrides or {})
 
         await self.audit.record(
             org_id=org.id,
@@ -498,7 +519,7 @@ class PlatformService:
         )
         await self.session.commit()
 
-        read = OrganizationAdminRead.model_validate(org)
+        read = _with_entitlements(org)
         read.user_count = await self._count(User, org.id)
         read.device_count = await self._count(Device, org.id)
         return read
@@ -532,7 +553,7 @@ class PlatformService:
         return await self._read(org)
 
     async def _read(self, org: Organization) -> OrganizationAdminRead:
-        read = OrganizationAdminRead.model_validate(org)
+        read = _with_entitlements(org)
         read.user_count = await self._count(User, org.id)
         read.device_count = await self._count(Device, org.id)
         return read

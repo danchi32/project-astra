@@ -23,6 +23,11 @@ class OrganizationAdminRead(BaseModel):
     ai_pro: bool = False
     user_count: int = 0
     device_count: int = 0
+    # The tier this org's stored plan resolves to, and what that grants. Derived, never
+    # stored: a saved copy is a copy that drifts from what the customer pays for.
+    plan_tier: str = "expert"
+    entitlements: list[str] = []
+    entitlement_overrides: dict[str, bool] | None = None
 
 
 class RemediationActionOption(BaseModel):
@@ -178,3 +183,6 @@ class OrganizationUpdate(BaseModel):
     current_period_end: datetime | None = None
     extend_trial_days: int | None = Field(default=None, ge=1, le=365)
     ai_pro: bool | None = None            # Pro-AI entitlement (real Claude access)
+    # Per-feature exceptions for this org. Send {} to clear them; the plan is the answer
+    # for everyone else.
+    entitlement_overrides: dict[str, bool] | None = None

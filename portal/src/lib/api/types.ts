@@ -89,6 +89,36 @@ export interface BillingStatus {
   unit_price_configured: boolean;
 }
 
+/** What a plan grants. Derived by the server on every read, never stored — a console that
+ *  disagrees with the gate is worse than no console. */
+export type PlanTier = "essential" | "professional" | "expert";
+
+export const PLAN_TIERS: { value: PlanTier; label: string; blurb: string }[] = [
+  { value: "essential", label: "Essential", blurb: "Inventory, telemetry, patching and AI diagnosis." },
+  { value: "professional", label: "Professional", blurb: "The AI fixes issues on its own, plus lock-down." },
+  { value: "expert", label: "Expert", blurb: "Compliance, fleet-wide remediation and export." },
+];
+
+/** Feature keys, labelled for the console. Mirrors backend app/services/entitlements.py. */
+export const FEATURE_LABELS: Record<string, string> = {
+  inventory: "Inventory & telemetry",
+  patching: "Patch management",
+  ai_diagnose: "AI diagnosis",
+  reporting: "Reporting & dashboards",
+  notifications: "Notifications",
+  audit_view: "Audit trail",
+  ai_act: "AI fixes unattended",
+  approval_tiers: "Approval tiers",
+  lockdown: "Secure offboarding",
+  employee_chat: "Employee AI chat",
+  compliance: "Compliance dashboard",
+  banned_software: "Restricted software",
+  fleet_correlation: "Fleet correlation",
+  fleet_remediation: "Mass remediation",
+  audit_export: "Audit export & retention",
+  advanced_rbac: "Advanced RBAC & SSO",
+};
+
 export interface OrganizationAdmin {
   id: string;
   name: string;
@@ -103,6 +133,9 @@ export interface OrganizationAdmin {
   ai_pro: boolean;
   user_count: number;
   device_count: number;
+  plan_tier: PlanTier;
+  entitlements: string[];
+  entitlement_overrides: Record<string, boolean> | null;
 }
 
 export interface PlatformOverview {

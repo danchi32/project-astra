@@ -3,7 +3,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.services.entitlements import BANNED_SOFTWARE, COMPLIANCE
+from app.api.deps import get_current_user, require_roles, requires
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
@@ -16,7 +17,12 @@ from app.schemas.compliance import (
 from app.services.compliance import ComplianceService
 from app.services.exceptions import ConflictError, NotFoundError
 
-router = APIRouter(prefix="/compliance", tags=["compliance"])
+# Expert-tier. Applied on the router so a new compliance endpoint is gated by default —
+# remembering to add it per-route is how one quietly ships ungated.
+router = APIRouter(
+    prefix="/compliance", tags=["compliance"],
+    dependencies=[Depends(requires(COMPLIANCE))],
+)
 
 staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 admin_required = require_roles(UserRole.ADMIN)

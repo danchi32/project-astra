@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import require_roles, requires
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.fleet import (
@@ -9,9 +9,14 @@ from app.schemas.fleet import (
     BulkRemediateResult,
     FleetIssuesResponse,
 )
+from app.services.entitlements import FLEET_CORRELATION
 from app.services.fleet import FleetService
 
-router = APIRouter(prefix="/fleet", tags=["fleet"])
+# Expert-tier: cross-device correlation and one-click mass remediation.
+router = APIRouter(
+    prefix="/fleet", tags=["fleet"],
+    dependencies=[Depends(requires(FLEET_CORRELATION))],
+)
 
 staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 

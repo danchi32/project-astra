@@ -10,6 +10,7 @@ import {
   updateOrganization,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
+import { PLAN_TIERS, FEATURE_LABELS, type PlanTier } from "@/lib/api/types";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { formatRam, formatStorage } from "@/lib/utils";
 import type { SubscriptionStatus } from "@/lib/api/types";
@@ -36,6 +37,13 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
     queryClient.clear();
     enterViewAs(access_token, { id, name: org.name });
     router.push("/dashboard");
+  }
+
+  async function setPlan(plan: PlanTier) {
+    if (!org || org.plan_tier === plan) return;
+    const next = await updateOrganization(id, { plan });
+    queryClient.setQueryData(["platform-org", id], next);
+    queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
   }
 
   async function toggleAiPro() {
@@ -77,6 +85,56 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           <Eye size={15} /> View full portal
         </button>
       </div>
+
+      {/* Plan — what this org may actually use. The entitlement list underneath is the
+          server's own answer, resolved on every read, so the console can't drift from what
+          the API enforces. */}
+      {org && (
+        <div className="rounded-xl p-5" style={card}>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Plan</h2>
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                Decides which features this organization can use. Changes take effect immediately.
+              </p>
+            </div>
+            <div className="flex gap-1 p-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+              {PLAN_TIERS.map((t) => (
+                <button key={t.value} onClick={() => setPlan(t.value)} title={t.blurb}
+                  className="px-3 py-1.5 rounded-md text-sm font-medium"
+                  style={org.plan_tier === t.value
+                    ? { background: "var(--accent)", color: "#fff" }
+                    : { color: "var(--text-secondary)" }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+            <p className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+              Included on this plan
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.keys(FEATURE_LABELS).map((key) => {
+                const on = org.entitlements.includes(key);
+                const overridden = org.entitlement_overrides?.[key] !== undefined;
+                return (
+                  <span key={key} className="text-xs px-2 py-0.5 rounded-full"
+                    style={on
+                      ? { color: "#10b981", background: "rgba(16,185,129,0.10)" }
+                      : { color: "var(--text-secondary)", background: "var(--bg)", opacity: 0.6 }}>
+                    {FEATURE_LABELS[key]}
+                    {/* Marked so an unexpected capability is traceable to a deliberate
+                        exception rather than looking like the plan table is wrong. */}
+                    {overridden ? " ·  override" : ""}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI plan — Pro unlocks the real Claude engine */}
       {org && (

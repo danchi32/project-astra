@@ -26,6 +26,7 @@ from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ServiceError
 from app.services.notifications import NotificationService
 from app.services.settings import SettingsService
+from app.services.entitlements import AI_ACT, LOCKDOWN
 from app.services.remediation.actions import (
     ACTIONS,
     SAFE_APP_PROCESSES,
@@ -67,6 +68,9 @@ _STATE_WORDS = {
     RemediationStatus.APPROVED: "queued",
     RemediationStatus.DISPATCHED: "already running",
 }
+
+# Secure offboarding — the pair that disables and re-enables a local Windows account.
+_LOCKDOWN_ACTIONS = frozenset({"disable_local_account", "enable_local_account"})
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Mailbox folder name: letters/digits/space and a few safe punctuation marks only —
@@ -230,6 +234,13 @@ class RemediationService:
             raise RemediationError(f"Unknown remediation action '{action_id}'.")
         params = self._validate_params(action_id, params)
 
+        # Secure offboarding is a Professional feature. Checked here rather than by hiding
+        # the button, because the button is not the security boundary.
+        if action_id in _LOCKDOWN_ACTIONS and not await self._org_has(org_id, LOCKDOWN):
+            raise RemediationError(
+                "Secure offboarding and device lock-down are part of the Professional plan."
+            )
+
         # Check the approver's authority BEFORE creating anything, so a refusal leaves no
         # half-finished task behind.
         if approver is not None:
@@ -267,9 +278,18 @@ class RemediationService:
         # The org-level automation kill-switch — and the circuit breaker above — can
         # force even automatic actions to wait for a human.
         org_settings = await self.settings.ensure(org_id)
+
+        # The Essential / Professional line, and the only place it can honestly be drawn.
+        # Essential is sold as "the AI tells you what's wrong"; Professional as "the AI fixes
+        # it on its own". So an Essential org still gets every action — a human just clears
+        # each one. Nothing is hidden and nothing stops working; the unattended part is what
+        # is being paid for.
+        can_act_unattended = await self._org_has(org_id, AI_ACT)
+
         auto_ok = (
             action.tier is RemediationTier.AUTOMATIC
             and org_settings.auto_approve_automatic
+            and can_act_unattended
             and not breaker_tripped
         )
         # An explicit approver clears it immediately — they have already made the decision
@@ -397,6 +417,15 @@ class RemediationService:
         )
         await self.session.commit()
         return task
+
+    async def _org_has(self, org_id: uuid.UUID, feature: str) -> bool:
+        from app.models import Organization
+        from app.services.entitlements import features_for
+
+        org = await self.session.get(Organization, org_id)
+        if org is None:
+            return True   # unknown org: don't let a lookup miss disable someone's product
+        return feature in features_for(org.plan, org.entitlement_overrides)
 
     async def list_for_org(self, *, actor: User) -> list[RemediationTask]:
         return await self.repo.list_by_org(actor.org_id)
