@@ -7,6 +7,7 @@ import { getFleetIssues, bulkRemediate } from "@/lib/api/fleet";
 import type { FleetIssue } from "@/lib/api/fleet";
 import { getMe } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
+import { UpgradeRequired, isUpgradeRequired, requiredFeature } from "@/components/upgrade-required";
 
 const SEV_COLOR: Record<string, string> = { high: "#ef4444", medium: "#f59e0b", low: "#64748b" };
 
@@ -15,7 +16,10 @@ export default function FleetPage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isStaff = me?.role === "admin" || me?.role === "technician";
 
-  const { data: issues, isLoading } = useQuery({ queryKey: ["fleet-issues"], queryFn: getFleetIssues, refetchInterval: 60_000 });
+  const { data: issues, isLoading, error } = useQuery({
+    queryKey: ["fleet-issues"], queryFn: getFleetIssues, refetchInterval: 60_000,
+    retry: (count, err) => !isUpgradeRequired(err) && count < 2,
+  });
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -58,6 +62,10 @@ export default function FleetPage() {
       await qc.invalidateQueries({ queryKey: ["fleet-issues"] });
     } catch (e) { setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't push the fleet fix.") }); }
     finally { setBusyKey(null); }
+  }
+
+  if (isUpgradeRequired(error)) {
+    return <UpgradeRequired feature={requiredFeature(error)} />;
   }
 
   return (

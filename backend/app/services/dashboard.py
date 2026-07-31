@@ -28,6 +28,7 @@ from app.schemas.dashboard import (
 )
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.services.compliance import ComplianceService
+from app.services.entitlements import COMPLIANCE, FLEET_CORRELATION
 from app.services.fleet import FleetService
 
 TREND_DAYS = 14
@@ -39,16 +40,28 @@ class DashboardService:
         self.session = session
 
     async def overview(self, *, org_id: uuid.UUID) -> DashboardOverview:
-        compliance_rows = await ComplianceService(self.session).evaluate_all(org_id=org_id)
-        summary = ComplianceService.summarize(compliance_rows)
-        issues = await FleetService(self.session).issues(
-            org_id=org_id, compliance=compliance_rows
-        )
+        """The dashboard aggregates compliance and fleet data by calling those services
+        directly, so the routers' entitlement gates don't apply here. Checked explicitly:
+        gating the compliance page while the same numbers arrive on the home screen would
+        have been a gate in name only.
+        """
+        granted = await self._features(org_id)
+        show_compliance = COMPLIANCE in granted
+        show_issues = FLEET_CORRELATION in granted
+
+        summary = None
+        issues: list = []
+        if show_compliance or show_issues:
+            rows = await ComplianceService(self.session).evaluate_all(org_id=org_id)
+            if show_compliance:
+                summary = ComplianceService.summarize(rows)
+            if show_issues:
+                issues = await FleetService(self.session).issues(org_id=org_id, compliance=rows)
+
         patch = await self._patch_state(org_id)
-        actions = await self._needs_you(org_id, summary, patch, issues)
 
         return DashboardOverview(
-            needs_you=actions,
+            needs_you=await self._needs_you(org_id, summary, patch, issues),
             compliance=summary,
             patch=patch,
             trend=await self._trend(org_id),
@@ -56,6 +69,15 @@ class DashboardService:
             # sorted in — the top three are the ones worth a home-screen slot.
             top_issues=issues[:TOP_ISSUES],
         )
+
+    async def _features(self, org_id: uuid.UUID) -> frozenset[str]:
+        from app.models import Organization
+        from app.services.entitlements import features_for
+
+        org = await self.session.get(Organization, org_id)
+        if org is None:
+            return frozenset()
+        return features_for(org.plan, org.entitlement_overrides)
 
     async def _patch_state(self, org_id: uuid.UUID) -> PatchState:
         rows = (await self.session.execute(
@@ -104,7 +126,7 @@ class DashboardService:
     async def _needs_you(
         self,
         org_id: uuid.UUID,
-        summary: ComplianceSummary,
+        summary: ComplianceSummary | None,
         patch: PatchState,
         issues: list,
     ) -> list[DashboardAction]:
@@ -147,7 +169,7 @@ class DashboardService:
                 count=n, severity="medium", href="/compliance",
             ))
 
-        if summary.non_compliant:
+        if summary is not None and summary.non_compliant:
             actions.append(DashboardAction(
                 key="non_compliant",
                 title=f"{summary.non_compliant} device{'s' if summary.non_compliant != 1 else ''} failing more than one check",

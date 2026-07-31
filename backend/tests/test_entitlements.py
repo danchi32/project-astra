@@ -198,3 +198,29 @@ async def test_lockdown_needs_professional(
     )
     assert resp.status_code == 400
     assert "professional" in resp.text.lower()
+
+
+async def test_the_dashboard_does_not_leak_expert_data(
+    client, admin_headers, admin_user, session_factory
+):
+    """The overview endpoint aggregates compliance and fleet data by calling those services
+    directly, so the routers' gates don't apply to it. Gating the compliance page while the
+    same numbers arrive on the home screen would be a gate in name only — and this is the
+    shape of leak that looks completely fine on screen.
+    """
+    await _set_plan(session_factory, admin_user.org_id, ESSENTIAL)
+    body = (await client.get("/api/v1/dashboard/overview", headers=admin_headers)).json()
+
+    assert body["compliance"] is None
+    assert body["top_issues"] == []
+    # The rest of the dashboard is Essential and must still be there.
+    assert body["patch"] is not None
+    assert "trend" in body
+
+
+async def test_expert_still_sees_it_on_the_dashboard(
+    client, admin_headers, admin_user, session_factory
+):
+    await _set_plan(session_factory, admin_user.org_id, EXPERT)
+    body = (await client.get("/api/v1/dashboard/overview", headers=admin_headers)).json()
+    assert body["compliance"] is not None

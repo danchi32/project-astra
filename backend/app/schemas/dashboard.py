@@ -55,7 +55,10 @@ class TrendPoint(BaseModel):
 
 class DashboardOverview(BaseModel):
     needs_you: list[DashboardAction]
-    compliance: ComplianceSummary
+    # Null when the org's plan doesn't include compliance, rather than a zeroed summary —
+    # "0% compliant" is a lie, and an empty card invites a support ticket. The portal simply
+    # doesn't draw the panel.
+    compliance: ComplianceSummary | None = None
     patch: PatchState
     trend: list[TrendPoint]
-    top_issues: list[FleetIssue]
+    top_issues: list[FleetIssue] = []

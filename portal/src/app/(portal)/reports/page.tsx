@@ -22,6 +22,7 @@ import {
   statusByLocation,
 } from "@/lib/asset-filters";
 import type { Asset } from "@/lib/api/types";
+import { UpgradeRequired, isUpgradeRequired, requiredFeature } from "@/components/upgrade-required";
 
 type Tab = "fleet" | "remediation" | "assets";
 
@@ -493,6 +494,21 @@ function ErrorBanner({ text }: { text: string }) {
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>("fleet");
+
+  // The whole /reports router is gated, so one probe answers for every tab — checking per
+  // tab would show the upgrade panel three times over as the user clicked around.
+  //
+  // Its OWN key on purpose. Sharing "report-fleet-health" with the tab below made them one
+  // query, and the tab's default retry policy won: three attempts with backoff, during which
+  // `error` is still undefined and the page renders as though nothing is wrong.
+  const { error } = useQuery({
+    queryKey: ["reports-entitlement-probe"], queryFn: getFleetHealthReport,
+    retry: (count, err) => !isUpgradeRequired(err) && count < 2,
+  });
+  if (isUpgradeRequired(error)) {
+    return <UpgradeRequired feature={requiredFeature(error)} />;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">

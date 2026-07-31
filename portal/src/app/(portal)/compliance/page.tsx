@@ -11,6 +11,7 @@ import type { DeviceComplianceStatus } from "@/lib/api/compliance";
 import { getMe } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
 import { Pagination } from "@/components/pagination";
+import { UpgradeRequired, isUpgradeRequired, requiredFeature } from "@/components/upgrade-required";
 
 const STATUS_STYLE: Record<DeviceComplianceStatus, { label: string; color: string }> = {
   compliant: { label: "Compliant", color: "#10b981" },
@@ -41,7 +42,12 @@ export default function CompliancePage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isAdmin = me?.role === "admin";
 
-  const { data: summary } = useQuery({ queryKey: ["compliance-summary"], queryFn: getComplianceSummary, refetchInterval: 60_000 });
+  const { data: summary, error: summaryError } = useQuery({
+    queryKey: ["compliance-summary"], queryFn: getComplianceSummary, refetchInterval: 60_000,
+    // A plan refusal is a settled answer, not a blip — retrying it just delays the
+    // explanation and hammers the API.
+    retry: (count, err) => !isUpgradeRequired(err) && count < 2,
+  });
   // Asked for as "needs attention" rather than fetched-and-filtered: the status is derived
   // from telemetry, so filtering a page in the browser would only ever surface the
   // at-risk devices that happened to land on it.
@@ -86,6 +92,12 @@ export default function CompliancePage() {
 
   // Already filtered and ordered by the server.
   const attention = devices?.items ?? [];
+
+  // The page stays in the nav and still opens — hiding it would make ASTRA look like it
+  // lacks compliance entirely, which is the opposite of what an upgrade prompt is for.
+  if (isUpgradeRequired(summaryError)) {
+    return <UpgradeRequired feature={requiredFeature(summaryError)} />;
+  }
 
   return (
     <div className="space-y-6">
