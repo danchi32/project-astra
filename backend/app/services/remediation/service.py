@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -34,6 +35,9 @@ from app.services.remediation.actions import (
     RemediationTier,
     get_action,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class RemediationError(ServiceError):
@@ -517,6 +521,13 @@ class RemediationService:
                 link="/self-healing",
             )
 
+        # Fold the outcome into the knowledge base. Only chat-originated fixes carry a
+        # symptom in the user's own words, which is the half of a runbook that can't be
+        # reconstructed later — the action id was always in the task row, the complaint
+        # that led to it was not.
+        if task.conversation_id is not None and task.source is RemediationSource.ASSISTANT:
+            await self._learn_from(task, label, success)
+
         # If this fix was started from a device chat, post the real outcome back into
         # that conversation so the user sees "✅ done" / "⚠️ couldn't" after it runs.
         if task.conversation_id is not None:
@@ -546,6 +557,46 @@ class RemediationService:
             )
         await self.session.commit()
         return task
+
+    async def _learn_from(self, task: RemediationTask, label: str, success: bool) -> None:
+        """Record what this fix taught us, without ever putting the result at risk.
+
+        The agent is reporting an outcome that has already happened on a real machine. If
+        anything here goes wrong — a missing conversation, an embedding that throws — the
+        task result must still be written, so this swallows its own failures rather than
+        propagating them up the agent's request.
+        """
+        from sqlalchemy import select
+
+        from app.services.ai.knowledge import KnowledgeBaseService
+
+        try:
+            # The complaint that led to this fix: the last thing the user said before the
+            # task was created. Not the first message — a chat can wander through several
+            # problems, and the one being fixed is the most recent one raised.
+            result = await self.session.execute(
+                select(Message.content)
+                .where(
+                    Message.conversation_id == task.conversation_id,
+                    Message.role == MessageRole.USER,
+                    Message.created_at <= task.created_at,
+                )
+                .order_by(Message.created_at.desc())
+                .limit(1)
+            )
+            symptom = result.scalar_one_or_none()
+            if not symptom:
+                return
+            await KnowledgeBaseService(self.session).learn_from_fix(
+                org_id=task.org_id,
+                action_id=task.action_id,
+                action_label=label,
+                params=task.params,
+                symptom=symptom[:300],
+                success=success,
+            )
+        except Exception:  # noqa: BLE001 — never fail a real outcome over bookkeeping
+            logger.exception("Could not learn from remediation %s", task.id)
 
     async def _get_owned(self, org_id: uuid.UUID, task_id: uuid.UUID) -> RemediationTask:
         task = await self.repo.get(task_id)

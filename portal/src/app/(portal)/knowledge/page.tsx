@@ -3,7 +3,32 @@ import { useState } from "react";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { BookOpen, Plus, Trash2, Sparkles } from "lucide-react";
 import { listArticles, createArticle, deleteArticle } from "@/lib/api/knowledge";
+import type { KnowledgeArticle } from "@/lib/api/types";
 import { Pagination } from "@/components/pagination";
+
+/** What the platform taught itself, and whether it is being used.
+ *
+ *  Shown rather than hidden: an article ASTRA wrote about a customer's own devices is
+ *  exactly the thing a technician should be able to disagree with. The counts are the
+ *  evidence behind the state, so "paused" doesn't have to be taken on trust. */
+function LearnedBadge({ article }: { article: KnowledgeArticle }) {
+  const attempts = article.successes + article.failures;
+  const style = {
+    learning: { bg: "rgba(100,116,139,0.12)", fg: "var(--text-secondary)",
+                text: `Learning — ${article.successes} of 3 confirmations` },
+    in_use: { bg: "rgba(16,185,129,0.1)", fg: "#10b981",
+              text: `Learned from ${attempts} real fixes — in use` },
+    paused: { bg: "rgba(245,158,11,0.12)", fg: "#f59e0b",
+              text: `Paused — worked ${article.successes} of ${attempts} times, no longer suggested` },
+    authored: null,
+  }[article.learning_status];
+
+  if (!style) return null;
+  return (
+    <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full"
+      style={{ background: style.bg, color: style.fg }}>{style.text}</span>
+  );
+}
 
 export default function KnowledgePage() {
   const queryClient = useQueryClient();
@@ -106,8 +131,7 @@ export default function KnowledgePage() {
                 <h3 className="font-medium" style={{ color: "var(--text-primary)" }}>{a.title}</h3>
                 <p className="mt-1 text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{a.content}</p>
                 {a.source === "resolved_issue" && (
-                  <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full"
-                    style={{ background: "rgba(16,185,129,0.1)", color: "#10b981" }}>learned from a resolved issue</span>
+                  <LearnedBadge article={a} />
                 )}
               </div>
               <button onClick={() => remove(a.id)} title="Delete"

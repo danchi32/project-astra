@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import KnowledgeArticle
+from app.models import KnowledgeArticle, KnowledgeSource
 
 
 class KnowledgeRepository:
@@ -20,6 +20,20 @@ class KnowledgeRepository:
             .order_by(KnowledgeArticle.created_at.desc())
         )
         return list(result.scalars().all())
+
+    async def get_learned(
+        self, *, org_id: uuid.UUID, action_id: str
+    ) -> KnowledgeArticle | None:
+        """The org's learned article for one topic, if it has one. Scoped to learned rows
+        so a hand-written runbook is never silently rewritten by the learning path."""
+        result = await self.session.execute(
+            select(KnowledgeArticle).where(
+                KnowledgeArticle.org_id == org_id,
+                KnowledgeArticle.action_id == action_id,
+                KnowledgeArticle.source == KnowledgeSource.RESOLVED_ISSUE,
+            )
+        )
+        return result.scalars().first()
 
     async def list_global(self) -> list[KnowledgeArticle]:
         """Operator-curated articles (org_id IS NULL) shared with every org."""

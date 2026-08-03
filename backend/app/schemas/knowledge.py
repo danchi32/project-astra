@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,3 +20,12 @@ class KnowledgeArticleRead(BaseModel):
     content: str
     source: KnowledgeSource
     created_at: datetime
+
+    # Learned articles only. Staff see these so that what the platform is teaching itself
+    # is inspectable rather than invisible — including the ones not yet good enough to use.
+    successes: int = 1
+    failures: int = 0
+    published_at: datetime | None = None
+    # authored | learning | in_use | paused — decided server-side so the portal shows the
+    # same judgement the search path acts on.
+    learning_status: Literal["authored", "learning", "in_use", "paused"] = "authored"

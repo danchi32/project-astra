@@ -495,6 +495,13 @@ export interface KnowledgeArticle {
   content: string;
   source: "manual" | "resolved_issue";
   created_at: string;
+  /** Learned articles: how the platform's own evidence for this fix is running. */
+  successes: number;
+  failures: number;
+  /** null on a learned article that hasn't been confirmed enough times to be used yet. */
+  published_at: string | null;
+  /** Decided by the server, so this matches what search actually does. */
+  learning_status: "authored" | "learning" | "in_use" | "paused";
 }
 
 export type RemediationTier = "automatic" | "approval_required" | "admin_only";
