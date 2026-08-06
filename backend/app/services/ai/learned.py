@@ -37,12 +37,17 @@ class LearnedFixStore:
         """Return a fix for a sufficiently-similar prior issue — from this org's own
         learned fixes AND the operator's GLOBAL fixes (so a global fix auto-applies
         for every org)."""
-        query_vec = await self.embed.embed(query)
+        query_vec = await self.embed.embed(query, purpose="query")
         candidates = await self.repo.list_by_org(org_id)
         candidates += await self.repo.list_global()
         best: LearnedAction | None = None
         best_sim = -1.0
         for entry in candidates:
+            # A fix stored against a different vector space can't be scored
+            # here. This one DOES need the backfill: an unmatched learned fix
+            # means the AI stops auto-applying something it already knows.
+            if entry.embedding_model != self.embed.name:
+                continue
             sim = cosine_similarity(query_vec, entry.embedding)
             if sim > best_sim:
                 best_sim, best = sim, entry
@@ -61,10 +66,11 @@ class LearnedFixStore:
         `action_id` applied automatically, no LLM call."""
         if action_id not in ACTIONS:
             raise ValueError(f"Unknown remediation action '{action_id}'")
-        vector = await self.embed.embed(problem)
+        vector = await self.embed.embed(problem, purpose="document")
         entry = await self.repo.add(
             LearnedAction(
                 org_id=None, query_text=problem[:1000], embedding=vector,
+                embedding_model=self.embed.name,
                 action_id=action_id, params=params or None,
             )
         )
@@ -88,9 +94,11 @@ class LearnedFixStore:
         an unknown action, or if a near-identical fix is already stored."""
         if action_id not in ACTIONS:
             return
-        query_vec = await self.embed.embed(query)
+        query_vec = await self.embed.embed(query, purpose="document")
         # Don't pile up duplicates for the same recurring wording + same action.
         for entry in await self.repo.list_by_org(org_id):
+            if entry.embedding_model != self.embed.name:
+                continue
             if entry.action_id == action_id and cosine_similarity(query_vec, entry.embedding) >= self.threshold:
                 return
         await self.repo.add(
@@ -98,6 +106,7 @@ class LearnedFixStore:
                 org_id=org_id,
                 query_text=query[:1000],
                 embedding=query_vec,
+                embedding_model=self.embed.name,
                 action_id=action_id,
                 params=params or None,
             )

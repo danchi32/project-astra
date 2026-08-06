@@ -111,6 +111,17 @@ class Settings(BaseSettings):
     ai_cache_enabled: bool = True
     ai_cache_similarity_threshold: float = 0.85
 
+    # Embeddings — "auto" uses Voyage when a key is present and the offline hashing
+    # provider otherwise; "voyage" refuses to start without a key rather than silently
+    # writing incompatible vectors. Anthropic has no embeddings endpoint, which is why
+    # this is a separate provider from the AI key above.
+    # Switching provider or model changes the vector space: existing rows keep working
+    # (search filters to the current model) but stay unfindable until re-embedded —
+    # scripts/reembed.py does that.
+    embedding_provider: str = "auto"
+    voyage_api_key: str | None = None
+    voyage_model: str = "voyage-4-lite"
+
     # Billing (Stripe) — all optional. When the secret key + price id are unset,
     # billing is INERT: the endpoints report "not configured" and nothing charges.
     # Set these (test keys first) to switch billing on without any code change.

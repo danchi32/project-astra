@@ -39,9 +39,9 @@ def test_ambiguous_queries_fail_open():
 
 async def test_similar_text_has_high_similarity():
     embed = HashingEmbeddingProvider()
-    a = await embed.embed("how do I reset my password")
-    b = await embed.embed("how can I reset my password")
-    c = await embed.embed("the printer is jammed")
+    a = await embed.embed("how do I reset my password", purpose="query")
+    b = await embed.embed("how can I reset my password", purpose="query")
+    c = await embed.embed("the printer is jammed", purpose="query")
     assert cosine_similarity(a, b) > cosine_similarity(a, c)
     assert cosine_similarity(a, a) > 0.99  # identical text
 

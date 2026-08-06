@@ -21,6 +21,13 @@ class LearnedAction(TimestampMixin, Base):
     org_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
     query_text: Mapped[str] = mapped_column(String(1000), nullable=False)
     embedding: Mapped[list[float]] = mapped_column(JSON, nullable=False)
+    # Which vector space this embedding lives in. Vectors from different providers
+    # are not comparable, and cosine similarity reports a mismatch as 0.0 rather
+    # than an error — so search filters on this instead of meeting the problem as
+    # silence.
+    embedding_model: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="hash-256", index=True
+    )
     # The remediation to apply (must be an action in the allowlist) and its params.
     action_id: Mapped[str] = mapped_column(String(64), nullable=False)
     params: Mapped[dict | None] = mapped_column(JSON, nullable=True)

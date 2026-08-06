@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,8 @@ from app.repositories.knowledge import KnowledgeRepository
 from app.services.ai import learning
 from app.services.ai.embeddings import EmbeddingProvider, cosine_similarity, get_embedding_provider
 from app.services.exceptions import NotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeBaseService:
@@ -25,10 +28,11 @@ class KnowledgeBaseService:
         source: KnowledgeSource = KnowledgeSource.MANUAL,
         actor_user_id: uuid.UUID | None = None,
     ) -> KnowledgeArticle:
-        vector = await self.embed.embed(f"{title}\n{content}")
+        vector = await self.embed.embed(f"{title}\n{content}", purpose="document")
         article = await self.repo.add(
             KnowledgeArticle(
                 org_id=org_id, title=title, content=content, embedding=vector,
+                embedding_model=self.embed.name,
                 source=source, created_by_user_id=actor_user_id,
                 # A person wrote this and meant it — it is searchable at once. Only the
                 # learned path has to earn its way in.
@@ -70,10 +74,11 @@ class KnowledgeBaseService:
     async def create_global(
         self, *, title: str, content: str, actor_user_id: uuid.UUID | None = None
     ) -> KnowledgeArticle:
-        vector = await self.embed.embed(f"{title}\n{content}")
+        vector = await self.embed.embed(f"{title}\n{content}", purpose="document")
         article = await self.repo.add(
             KnowledgeArticle(
                 org_id=None, title=title, content=content, embedding=vector,
+                embedding_model=self.embed.name,
                 source=KnowledgeSource.MANUAL, created_by_user_id=actor_user_id,
                 published_at=utcnow(),
             )
@@ -102,14 +107,30 @@ class KnowledgeBaseService:
         has since collapsed, are not returned. They still exist and staff can still see
         them; they are just not presented to a user as an answer.
         """
-        query_vec = await self.embed.embed(query)
+        query_vec = await self.embed.embed(query, purpose="query")
         candidates = await self.repo.list_by_org(org_id)
         candidates += await self.repo.list_global()
         candidates = [
             a for a in candidates
             if a.published_at is not None and learning.is_recommendable(a)
         ]
-        scored = [(cosine_similarity(query_vec, a.embedding), a) for a in candidates]
+
+        # Only score articles from this provider's vector space. A vector from another
+        # model isn't a weak match, it's an incomparable one — and cosine similarity
+        # reports that as 0.0, so without this filter the results would look merely
+        # unlucky rather than wrong.
+        usable = [a for a in candidates if a.embedding_model == self.embed.name]
+        stale = len(candidates) - len(usable)
+        if stale:
+            # Loud, because the symptom otherwise is "the knowledge base seems empty" and
+            # the cause is a provider change nobody connected to it. scripts/reembed.py.
+            logger.warning(
+                "%s knowledge article(s) are embedded with a different model than the "
+                "configured provider (%s) and were skipped — run scripts/reembed.py",
+                stale, self.embed.name,
+            )
+
+        scored = [(cosine_similarity(query_vec, a.embedding), a) for a in usable]
         # Keep only somewhat-relevant matches, best first.
         scored = [pair for pair in scored if pair[0] > 0.2]
         scored.sort(key=lambda pair: pair[0], reverse=True)
@@ -151,7 +172,9 @@ class KnowledgeBaseService:
             return await self.repo.add(
                 KnowledgeArticle(
                     org_id=org_id, title=title, content=content,
-                    embedding=await self.embed.embed(f"{title}\n{content}"),
+                    embedding=await self.embed.embed(f"{title}\n{content}",
+                                                     purpose="document"),
+                    embedding_model=self.embed.name,
                     source=KnowledgeSource.RESOLVED_ISSUE,
                     action_id=key, symptom_samples=[symptom],
                     successes=1, failures=0,
@@ -178,7 +201,9 @@ class KnowledgeBaseService:
         existing.title = title
         existing.content = content
         existing.symptom_samples = samples
-        existing.embedding = await self.embed.embed(f"{title}\n{content}")
+        existing.embedding = await self.embed.embed(f"{title}\n{content}",
+                                                    purpose="document")
+        existing.embedding_model = self.embed.name
 
         if existing.published_at is None and existing.successes >= learning.PUBLISH_AFTER:
             existing.published_at = utcnow()

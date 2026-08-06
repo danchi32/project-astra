@@ -26,6 +26,13 @@ class KnowledgeArticle(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     content: Mapped[str] = mapped_column(String(20000), nullable=False)
     embedding: Mapped[list[float]] = mapped_column(JSON, nullable=False)
+    # Which vector space this embedding lives in. Vectors from different providers
+    # are not comparable, and cosine similarity reports a mismatch as 0.0 rather
+    # than an error — so search filters on this instead of meeting the problem as
+    # silence.
+    embedding_model: Mapped[str] = mapped_column(
+        String(60), nullable=False, default="hash-256", index=True
+    )
     source: Mapped[KnowledgeSource] = mapped_column(
         Enum(KnowledgeSource, native_enum=False, length=20,
              values_callable=lambda e: [m.value for m in e]),

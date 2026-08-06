@@ -18,10 +18,17 @@ class SemanticCache:
     async def lookup(self, *, org_id: uuid.UUID, query: str) -> str | None:
         """Return a cached answer for a sufficiently-similar prior query, else None.
         On a hit the entry's hit counter is bumped (caller commits)."""
-        query_vec = await self.embed.embed(query)
+        query_vec = await self.embed.embed(query, purpose="query")
         best: SemanticCacheEntry | None = None
         best_sim = -1.0
         for entry in await self.repo.list_by_org(org_id):
+            # Entries written by a previous provider live in a different vector
+            # space; scoring them would compare numbers that mean different
+            # things. They stay in the table until re-embedded — a stale cache
+            # entry only costs one extra LLM call, so this needs no backfill to
+            # be correct.
+            if entry.embedding_model != self.embed.name:
+                continue
             sim = cosine_similarity(query_vec, entry.embedding)
             if sim > best_sim:
                 best_sim, best = sim, entry
@@ -32,12 +39,13 @@ class SemanticCache:
         return None
 
     async def store(self, *, org_id: uuid.UUID, query: str, answer: str) -> None:
-        query_vec = await self.embed.embed(query)
+        query_vec = await self.embed.embed(query, purpose="document")
         await self.repo.add(
             SemanticCacheEntry(
                 org_id=org_id,
                 query_text=query[:1000],
                 embedding=query_vec,
+                embedding_model=self.embed.name,
                 answer=answer[:10000],
             )
         )
