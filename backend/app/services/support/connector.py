@@ -53,6 +53,15 @@ class TicketConnector(Protocol):
 
     async def create_ticket(self, request: TicketRequest) -> TicketResult: ...
 
+    async def verify(self) -> None:
+        """Prove the connection works, creating nothing. Raises TicketError if it doesn't.
+
+        Part of the port rather than a Freshservice extra: without it an administrator
+        discovers a wrong domain or a revoked key at the worst possible moment — when a
+        user has already been told a ticket is being raised.
+        """
+        ...
+
 
 class MockConnector:
     """Records what it was asked to file. Used by tests, and by a local run with no
@@ -65,6 +74,10 @@ class MockConnector:
         self.requests: list[TicketRequest] = []
         self._fail_with = fail_with
         self._counter = 0
+
+    async def verify(self) -> None:
+        if self._fail_with:
+            raise TicketError(self._fail_with)
 
     async def create_ticket(self, request: TicketRequest) -> TicketResult:
         if self._fail_with:

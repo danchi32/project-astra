@@ -24,6 +24,12 @@ from app.schemas.settings import (
 from app.services.email_domains import EmailProviderError, provider_configured
 from app.services.email_integration import EmailIntegrationService
 from app.services.settings import SettingsService
+from app.schemas.helpdesk import (
+    HelpdeskSettingsRead,
+    HelpdeskSettingsUpdate,
+    HelpdeskVerifyResult,
+)
+from app.services.support.settings import HelpdeskConfigError, HelpdeskSettingsService
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -148,6 +154,53 @@ async def update_org_settings(
     session: AsyncSession = Depends(get_db),
 ) -> OrganizationSettingsRead:
     return await SettingsService(session).update(actor=actor, data=body)
+
+
+@router.get(
+    "/helpdesk",
+    response_model=HelpdeskSettingsRead,
+    summary="Get the helpdesk connection (admin)",
+)
+async def get_helpdesk_settings(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> HelpdeskSettingsRead:
+    return await HelpdeskSettingsService(session).get(org_id=actor.org_id)
+
+
+@router.patch(
+    "/helpdesk",
+    response_model=HelpdeskSettingsRead,
+    summary="Update the helpdesk connection (admin)",
+)
+async def update_helpdesk_settings(
+    body: HelpdeskSettingsUpdate,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> HelpdeskSettingsRead:
+    try:
+        return await HelpdeskSettingsService(session).update(actor=actor, payload=body)
+    except HelpdeskConfigError as exc:
+        # A deployment problem, not the administrator's mistake — 503 rather than 400, so
+        # they are not left rereading a form that is filled in correctly.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+
+@router.post(
+    "/helpdesk/verify",
+    response_model=HelpdeskVerifyResult,
+    summary="Check the helpdesk connection works (admin)",
+)
+async def verify_helpdesk_settings(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> HelpdeskVerifyResult:
+    """Reads the instance's field schema. Creates nothing — an administrator can press
+    this as often as they like without leaving test tickets in their own queue."""
+    ok, detail = await HelpdeskSettingsService(session).verify(actor=actor)
+    return HelpdeskVerifyResult(ok=ok, detail=detail)
 
 
 @router.get(

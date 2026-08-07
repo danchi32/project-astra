@@ -86,6 +86,26 @@ class FreshserviceConnector:
             payload["sub_category"] = request.sub_category
         return payload
 
+    async def verify(self) -> None:
+        """Prove domain, credential and permission — without creating a ticket.
+
+        Reads the instance's ticket field schema, which is the cheapest authenticated GET
+        that fails for every reason a create would: wrong subdomain (404), bad key (401),
+        insufficient permission (403). An administrator finds out here rather than when a
+        user has already been promised a ticket.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/api/v2/ticket_form_fields",
+                    headers={"Authorization": self._auth_header()},
+                )
+        except httpx.HTTPError as exc:
+            raise TicketError(f"Could not reach Freshservice: {exc}") from exc
+
+        if response.status_code != 200:
+            raise TicketError(self._describe_failure(response))
+
     async def create_ticket(self, request: TicketRequest) -> TicketResult:
         if not request.requester_email:
             # Freshservice would create or guess a requester. A ticket attributed to the
