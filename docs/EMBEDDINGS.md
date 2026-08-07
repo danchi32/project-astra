@@ -10,14 +10,24 @@ Nothing external. With no key set, ASTRA uses `HashingEmbeddingProvider` — det
 feature hashing over tokens, 256 dimensions, no network and no cost. It matches on **shared
 words, not meaning**:
 
+It stems (`printing` → `print`, so it meets `printer`) and drops stopwords — including
+Hinglish filler like `hai` / `nahi` / `raha`, which appears in nearly every complaint and
+therefore separates nothing.
+
 | Query | Article | Matches? |
 |---|---|---|
-| "printer not printing" | "printer is offline" | yes — shared word |
+| "printer not printing" | "printer is offline" | yes |
+| "printers keep failing" | "printer troubleshooting" | yes — stemming |
 | "printer not printing" | "spooler service has stopped" | **no** — no shared word |
 | "my laptop is slow" | "high memory utilization" | **no** |
 
-That last row is the reason to configure a real provider: users type symptoms, runbooks are
-written in technical language, and hashing never bridges the two.
+Those last two rows are what aliases (below) exist to fix, and what a real embedding model
+would fix more generally.
+
+> ⚠️ The tokenizer is part of the vector space. `HashingEmbeddingProvider.VERSION` is in
+> the provider name (`hash-v2-256`) for exactly that reason — change the stemming or the
+> stopword list and you must bump it, or search will compare old vectors against new ones
+> and score every existing article at zero without raising anything.
 
 ## Configuring a real provider
 
@@ -57,9 +67,37 @@ The consequence per store:
 | Semantic cache | skipped silently | one extra LLM call — self-correcting |
 | Learned actions | skipped silently | the AI stops auto-applying fixes it knows |
 
+## Making articles findable: aliases
+
+The provider is only half the answer. Even a perfect embedding can't match words that
+aren't there — and technicians and employees don't use the same words.
+
+So when an article is created, ASTRA asks Claude once for the phrasings a non-technical
+user would actually type (including Hinglish, because they do), and stores them on the
+article. They're matched against but never displayed.
+
+```
+Article : "High memory utilization troubleshooting"
+Aliases : "mera laptop bahut slow hai" · "system hang ho raha hai" · "laptop is slow"
+```
+
+One call per article write — not per search — so the cost sits on the rare side. Inert
+without an Anthropic key, and a failed call never blocks the save: an article with no
+aliases is findable by fewer words, an article that wouldn't save is a technician's work
+thrown away.
+
+Learned articles get this for free from the other direction: `symptom_samples` already
+holds the real user phrasings that preceded a confirmed fix. Both sources fill the same
+column, so vocabulary grows from prediction *and* from evidence.
+
 ## Re-embedding after a change
 
-Any provider **or model** change needs a backfill:
+Any provider, model, **or tokenizer** change needs a backfill. In production, run the
+**Re-embed stored vectors** workflow (manual, `dry_run` on by default) — it executes as a
+Cloud Run job against the image the service is currently running, so prod database
+credentials never touch a laptop.
+
+Locally:
 
 ```bash
 python scripts/reembed.py --dry-run   # how many rows, before you spend anything

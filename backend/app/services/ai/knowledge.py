@@ -7,6 +7,7 @@ from app.models import KnowledgeArticle, KnowledgeSource, User
 from app.models.base import utcnow
 from app.repositories.knowledge import KnowledgeRepository
 from app.services.ai import learning
+from app.services.ai.aliases import AliasGenerator, embedding_text
 from app.services.ai.embeddings import EmbeddingProvider, cosine_similarity, get_embedding_provider
 from app.services.exceptions import NotFoundError
 
@@ -14,10 +15,16 @@ logger = logging.getLogger(__name__)
 
 
 class KnowledgeBaseService:
-    def __init__(self, session: AsyncSession, provider: EmbeddingProvider | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        provider: EmbeddingProvider | None = None,
+        aliases: AliasGenerator | None = None,
+    ) -> None:
         self.session = session
         self.repo = KnowledgeRepository(session)
         self.embed = provider or get_embedding_provider()
+        self.aliases = aliases or AliasGenerator()
 
     async def create(
         self,
@@ -28,11 +35,16 @@ class KnowledgeBaseService:
         source: KnowledgeSource = KnowledgeSource.MANUAL,
         actor_user_id: uuid.UUID | None = None,
     ) -> KnowledgeArticle:
-        vector = await self.embed.embed(f"{title}\n{content}", purpose="document")
+        # The words a user would type for this, so retrieval has something to match on.
+        # Generated once, here, because articles are written rarely and searched constantly.
+        aliases = await self.aliases.for_article(title=title, content=content)
+        vector = await self.embed.embed(
+            embedding_text(title, content, aliases), purpose="document"
+        )
         article = await self.repo.add(
             KnowledgeArticle(
                 org_id=org_id, title=title, content=content, embedding=vector,
-                embedding_model=self.embed.name,
+                embedding_model=self.embed.name, symptom_samples=aliases or None,
                 source=source, created_by_user_id=actor_user_id,
                 # A person wrote this and meant it — it is searchable at once. Only the
                 # learned path has to earn its way in.
@@ -74,11 +86,14 @@ class KnowledgeBaseService:
     async def create_global(
         self, *, title: str, content: str, actor_user_id: uuid.UUID | None = None
     ) -> KnowledgeArticle:
-        vector = await self.embed.embed(f"{title}\n{content}", purpose="document")
+        aliases = await self.aliases.for_article(title=title, content=content)
+        vector = await self.embed.embed(
+            embedding_text(title, content, aliases), purpose="document"
+        )
         article = await self.repo.add(
             KnowledgeArticle(
                 org_id=None, title=title, content=content, embedding=vector,
-                embedding_model=self.embed.name,
+                embedding_model=self.embed.name, symptom_samples=aliases or None,
                 source=KnowledgeSource.MANUAL, created_by_user_id=actor_user_id,
                 published_at=utcnow(),
             )

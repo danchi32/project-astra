@@ -29,6 +29,54 @@ logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
+# Words that appear in almost every support message and therefore separate nothing.
+# The Hinglish entries are deliberate: end users write that way, and "hai"/"nahi"/"raha"
+# turn up in practically every complaint — including "nahi", because a problem report is
+# negative by definition, so the negation carries no discriminating power here.
+_STOPWORDS = frozenset("""
+a an the is are was were be been being am do does did doing have has had having
+i me my mine we our you your yours he she it its they them their this that these those
+of in on at to for with from by about into over after before and or but if then than so
+not no can could will would should shall may might must just very really please help
+hai hain nahi nhi raha rahi rha rhi kar kro karo ho hota hoti gaya gayi ka ki ke ko
+mera meri mere aur bhi kya kyu jo se me mein par bas abhi
+""".split())
+
+
+def _stem(token: str) -> str:
+    """Collapse inflections so a technician's word meets a user's word.
+
+    A crude suffix stripper, not a linguist's stemmer — and that is fine, because both
+    sides of the comparison run through this same function. What matters is that
+    "printing", "printer" and "prints" all land on one string, not that the string is a
+    real word.
+    """
+    if len(token) <= 3 or token.isdigit():
+        return token
+    for suffix in ("ing", "ers", "er", "ies", "ied", "ed", "es", "s"):
+        if token.endswith(suffix) and len(token) - len(suffix) >= 3:
+            token = token[: -len(suffix)]
+            if suffix == "ies":
+                token += "y"
+            break
+    # "freeze" -> "freez" so it meets "freezing" -> "freez".
+    if len(token) > 3 and token.endswith("e"):
+        token = token[:-1]
+    # "running" -> "runn" -> "run", meeting "runs" -> "run".
+    if len(token) > 3 and token[-1] == token[-2] and token[-1] not in "aeiou":
+        token = token[:-1]
+    return token
+
+
+def normalise(text: str) -> list[str]:
+    """Text -> the tokens that actually get hashed. Same on both write and query."""
+    return [
+        stemmed
+        for raw in _TOKEN_RE.findall(text.lower())
+        if raw not in _STOPWORDS and (stemmed := _stem(raw)) not in _STOPWORDS
+    ]
+
+
 Purpose = Literal["document", "query"]
 
 # The name recorded on rows written before providers were named. Every vector in the
@@ -58,21 +106,32 @@ class HashingEmbeddingProvider:
     """Deterministic, dependency-free embeddings via signed feature hashing of tokens.
 
     Matches on shared words, not on meaning: "printer not printing" and "spooler service
-    stopped" score zero against each other despite describing one problem. That is the
-    ceiling of this approach, and the reason a real model is worth configuring — but it
-    needs no key, no network and no cost, so it keeps local demos, tests and unconfigured
-    installs working instead of failing.
+    stopped" still score zero against each other. Stemming and stopword removal widen what
+    counts as a shared word — "printing" now meets "printer", and "the"/"is"/"hai" stop
+    inflating the score between unrelated texts — but they cannot invent a link that no
+    shared vocabulary supports. Closing that gap is what article aliases are for
+    (`app/services/ai/aliases.py`): they put the user's words into the article.
+
+    Needs no key, no network and no cost, so local demos, tests and unconfigured installs
+    keep working instead of failing.
 
     `purpose` is ignored: there is no asymmetry to exploit in a bag of hashed tokens.
+
+    The version in `name` is load-bearing. Changing tokenization changes the vector space
+    just as surely as changing model does, and vectors built by v1 are not comparable with
+    v2's — so the name has to move, or search would compare them and silently score every
+    old article at zero.
     """
+
+    VERSION = 2
 
     def __init__(self, dim: int = 256) -> None:
         self.dim = dim
-        self.name = f"hash-{dim}"
+        self.name = f"hash-v{self.VERSION}-{dim}"
 
     async def embed(self, text: str, *, purpose: Purpose) -> list[float]:
         vec = [0.0] * self.dim
-        for token in _TOKEN_RE.findall(text.lower()):
+        for token in normalise(text):
             digest = int(hashlib.md5(token.encode()).hexdigest(), 16)
             idx = digest % self.dim
             sign = 1.0 if (digest >> 8) & 1 == 0 else -1.0

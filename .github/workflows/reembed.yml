@@ -1,0 +1,71 @@
+name: Re-embed stored vectors
+
+# Run after anything that changes the embedding vector space — a provider switch, a model
+# change, or a tokenizer version bump. Until this runs, rows written by the previous
+# provider are correctly excluded from search (they are not comparable), which shows up as
+# "the knowledge base can't find anything" with no error attached to it.
+#
+# Manual only. This is a data operation, not part of a deploy: it should be a deliberate
+# act with someone watching the output, and --dry-run first.
+#
+# Runs as a Cloud Run job against the image the service is CURRENTLY running, so the
+# re-embed always uses exactly the provider code that is live — not whatever main happens
+# to contain at the time.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would be re-embedded, and stop"
+        type: boolean
+        default: true
+
+concurrency:
+  group: reembed
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: astra-prod-503923
+  REGION: asia-southeast1
+  SERVICE: astra-backend
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  reembed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1041631804427/locations/global/workloadIdentityPools/github/providers/github
+          service_account: gh-deploy@astra-prod-503923.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Whatever the live service is running. Re-embedding with a different build than the
+      # one serving traffic would write vectors the running code cannot read.
+      - name: Resolve the live image
+        run: |
+          IMAGE=$(gcloud run services describe "$SERVICE" --region "$REGION" \
+            --format='value(spec.template.spec.containers[0].image)')
+          echo "live image: $IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # The same secrets the migrate job needs: the database URL, plus the JWT key because
+      # get_settings() validates the whole Settings model on import. ASTRA_ANTHROPIC_API_KEY
+      # is NOT needed — re-embedding reuses each row's existing text and never regenerates
+      # aliases, so no model is called.
+      - name: Re-embed
+        run: |
+          ARGS=scripts/reembed.py
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS,--dry-run"; fi
+          gcloud run jobs deploy astra-reembed \
+            --image "$IMAGE" --region "$REGION" \
+            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY:latest \
+            --command python --args "$ARGS" \
+            --task-timeout 3600s --max-retries 0 --quiet
+          gcloud run jobs execute astra-reembed --region "$REGION" --wait

@@ -171,11 +171,12 @@ async def test_purpose_is_not_optional():
 # ── The offline default ────────────────────────────────────────────────────
 
 
-async def test_the_hashing_provider_names_its_dimension():
-    """The name is the vector space's identity — two hashing providers of different widths
-    are not interchangeable, so the width belongs in the name."""
-    assert HashingEmbeddingProvider().name == "hash-256"
-    assert HashingEmbeddingProvider(dim=64).name == "hash-64"
+async def test_the_hashing_provider_names_its_dimension_and_version():
+    """The name is the vector space's identity. Width matters — two hashing providers of
+    different widths aren't interchangeable — and so does the tokenizer version, since
+    stemming changes the vectors for identical text."""
+    assert HashingEmbeddingProvider().name == "hash-v2-256"
+    assert HashingEmbeddingProvider(dim=64).name == "hash-v2-64"
 
 
 async def test_the_hashing_provider_still_matches_on_shared_words():
