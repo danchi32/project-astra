@@ -25,6 +25,7 @@ from app.models.pending_registration import PendingRegistration
 from app.models.refresh_token import RefreshToken
 from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
 from app.models.semantic_cache import SemanticCacheEntry
+from app.models.support_escalation import EscalationState, SupportEscalation
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
@@ -77,7 +78,9 @@ __all__ = [
     "RemediationSource",
     "RemediationStatus",
     "RemediationTask",
+    "EscalationState",
     "SemanticCacheEntry",
+    "SupportEscalation",
     "TelemetryDailyRollup",
     "TelemetrySnapshot",
     "User",
