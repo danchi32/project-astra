@@ -59,7 +59,11 @@ jobs:
       # get_settings() validates the whole Settings model on import. ASTRA_ANTHROPIC_API_KEY
       # is NOT needed — re-embedding reuses each row's existing text and never regenerates
       # aliases, so no model is called.
+      # `--wait` waits for the job but does NOT stream its stdout, and the counts this
+      # prints are the entire point of a dry run. Capture the execution name so the next
+      # step can pull the output back here instead of sending someone to Cloud Console.
       - name: Re-embed
+        id: run
         run: |
           ARGS=scripts/reembed.py
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS,--dry-run"; fi
@@ -68,4 +72,24 @@ jobs:
             --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY:latest \
             --command python --args "$ARGS" \
             --task-timeout 3600s --max-retries 0 --quiet
-          gcloud run jobs execute astra-reembed --region "$REGION" --wait
+
+          set +e
+          EXEC=$(gcloud run jobs execute astra-reembed --region "$REGION" --wait \
+                   --format='value(metadata.name)')
+          STATUS=$?
+          set -e
+          echo "execution=$EXEC" >> "$GITHUB_OUTPUT"
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+
+      # Always — the output matters more when the job failed than when it succeeded.
+      - name: Show job output
+        if: always() && steps.run.outputs.execution != ''
+        run: |
+          echo "── output of ${{ steps.run.outputs.execution }} ──"
+          gcloud logging read \
+            "resource.type=cloud_run_job AND labels.\"run.googleapis.com/execution_name\"=${{ steps.run.outputs.execution }}" \
+            --limit 200 --order asc --format='value(textPayload)' || true
+
+      - name: Fail if the job failed
+        if: always() && steps.run.outputs.status != '0'
+        run: exit 1
