@@ -11,6 +11,7 @@ from app.models.email_settings import (
     EmailVerificationStatus,
 )
 from app.models.enrollment_token import EnrollmentToken
+from app.models.helpdesk_settings import HelpdeskSettings
 from app.models.invite_code import InviteCode
 from app.models.knowledge import KnowledgeArticle, KnowledgeSource
 from app.models.learned_action import LearnedAction
@@ -79,6 +80,7 @@ __all__ = [
     "RemediationStatus",
     "RemediationTask",
     "EscalationState",
+    "HelpdeskSettings",
     "SemanticCacheEntry",
     "SupportEscalation",
     "TelemetryDailyRollup",

@@ -8,6 +8,8 @@ pydantic-settings>=2.6
 email-validator>=2.2
 bcrypt>=4.2
 PyJWT>=2.10
+# Fernet, for the third-party helpdesk credentials an organization entrusts to us.
+cryptography>=43.0
 anthropic>=0.40
 stripe>=11.0
 httpx>=0.27

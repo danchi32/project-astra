@@ -122,6 +122,13 @@ class Settings(BaseSettings):
     voyage_api_key: str | None = None
     voyage_model: str = "voyage-4-lite"
 
+    # Encrypts third-party credentials organizations give us (helpdesk API keys). A
+    # Fernet key — generate with app.core.crypto.generate_key(). Unset means those
+    # integrations stay off rather than storing secrets in the clear.
+    # Rotating this makes existing stored credentials undecryptable: they must be
+    # re-entered, so treat it as long-lived.
+    secrets_key: str | None = None
+
     # Billing (Stripe) — all optional. When the secret key + price id are unset,
     # billing is INERT: the endpoints report "not configured" and nothing charges.
     # Set these (test keys first) to switch billing on without any code change.
