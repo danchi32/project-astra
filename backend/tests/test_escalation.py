@@ -196,6 +196,97 @@ async def test_another_persons_ticket_does_not_suppress_yours(session_factory, a
     assert len(connector.requests) == 2
 
 
+async def test_a_ticket_raised_while_the_user_was_deciding_wins(session_factory, admin_user):
+    """The gap between asking and being answered is real time — minutes, sometimes longer.
+    A colleague, another chat, or the user's own second device can file the same thing in
+    between, and the eventual "yes" must not turn into a duplicate."""
+    device_id = uuid.uuid4()
+    connector = MockConnector()
+
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=connector)
+        # Offer in one conversation; do not answer it yet.
+        pending_convo = await _conversation(session, admin_user.org_id, device_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=pending_convo.id,
+                        device_id=device_id, user_id=admin_user.id,
+                        dossier=_dossier("my laptop is very slow"))
+
+        # Meanwhile the same problem gets raised elsewhere.
+        other_convo = await _conversation(session, admin_user.org_id, device_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=other_convo.id,
+                        device_id=device_id, user_id=admin_user.id,
+                        dossier=_dossier("laptop very slow"))
+        await _user_says(session, other_convo)
+        first = await svc.raise_ticket(org_id=admin_user.org_id,
+                                       conversation_id=other_convo.id,
+                                       requester_email="p@acme.com")
+
+        # Only now does the user answer the original question.
+        await _user_says(session, pending_convo)
+        late = await svc.raise_ticket(org_id=admin_user.org_id,
+                                      conversation_id=pending_convo.id,
+                                      requester_email="p@acme.com")
+        await session.commit()
+
+    assert first.created
+    assert not late.created, "the late yes must not open a second ticket"
+    assert first.escalation.external_ticket_id in late.message
+    assert len(connector.requests) == 1
+
+
+async def test_dedupe_never_compares_across_vector_spaces(session_factory, admin_user):
+    """Same trap as the knowledge base: a vector from another provider is incomparable,
+    and cosine similarity reports that as 0.0 rather than an error. Scoring it would make
+    dedupe silently stop working after a tokenizer change — and duplicates are exactly
+    what kills this feature."""
+    device_id = uuid.uuid4()
+    connector = MockConnector()
+
+    async with session_factory() as session:
+        convo = await _conversation(session, admin_user.org_id, device_id)
+        svc = EscalationService(session, connector=connector)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=device_id, user_id=admin_user.id,
+                        dossier=_dossier("my laptop is very slow"))
+        await _user_says(session, convo)
+        raised = await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                        requester_email="p@acme.com")
+        # As if it had been written before a tokenizer bump.
+        raised.escalation.embedding_model = "hash-v1-256"
+        await session.commit()
+
+    async with session_factory() as session:
+        convo2 = await _conversation(session, admin_user.org_id, device_id)
+        escalation, _ = await EscalationService(session, connector=connector).offer(
+            org_id=admin_user.org_id, conversation_id=convo2.id, device_id=device_id,
+            user_id=admin_user.id, dossier=_dossier("my laptop is very slow"),
+        )
+        await session.commit()
+
+    # A new offer is made rather than a stale vector being scored at a meaningless zero
+    # and mistaken for "not similar" — which is the same outcome, but by accident.
+    assert escalation is not None
+
+
+async def test_an_escalation_with_no_device_or_user_still_works(session_factory, admin_user):
+    """Dedupe is scoped to a device or a person. With neither there is nothing to scope to,
+    and the right behaviour is to raise the ticket, not to crash and not to suppress it."""
+    async with session_factory() as session:
+        convo = await _conversation(session, admin_user.org_id)
+        svc = EscalationService(session, connector=MockConnector())
+        escalation, _ = await svc.offer(
+            org_id=admin_user.org_id, conversation_id=convo.id,
+            device_id=None, user_id=None, dossier=_dossier(),
+        )
+        await _user_says(session, convo)
+        outcome = await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                         requester_email="p@acme.com")
+        await session.commit()
+
+    assert escalation is not None
+    assert outcome.created
+
+
 # ── Never claim a ticket that doesn't exist ────────────────────────────────
 
 
@@ -288,6 +379,26 @@ def test_the_dossier_carries_the_users_words_and_what_was_tried():
     assert "94% for 3 days" in out
     assert "No matching runbook" in out
     assert "devices/abc" in out
+
+
+def test_a_failed_attempt_is_marked_differently_from_a_successful_one():
+    """"Restarted Outlook" and "tried to restart Outlook and couldn't" send a technician
+    down different paths. Rendering both the same way loses the more useful one."""
+    out = Dossier(problem="x", attempts=[
+        Attempt("Restart Outlook", True, "Restarted"),
+        Attempt("Repair Office", False, "Installer returned 1603"),
+    ]).to_html()
+    assert "&#10003; Restart Outlook" in out
+    assert "&#10007; Repair Office" in out
+    assert "1603" in out
+
+
+def test_the_report_time_is_included_when_known():
+    from datetime import datetime, timezone
+
+    out = Dossier(problem="x",
+                  reported_at=datetime(2026, 8, 7, 14, 32, tzinfo=timezone.utc)).to_html()
+    assert "2026-08-07 14:32 UTC" in out
 
 
 def test_no_applicable_fix_is_stated_rather_than_left_blank():

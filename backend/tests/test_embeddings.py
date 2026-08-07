@@ -239,6 +239,9 @@ async def test_voyage_sorts_by_index(monkeypatch):
     lambda request: httpx.Response(429, json={"detail": "rate limited"}),
     lambda request: httpx.Response(200, json={"data": []}),
     lambda request: httpx.Response(200, text="not json"),
+    # A row that arrives with an empty vector. Storing that would be worse than an error:
+    # the row looks embedded and is permanently unfindable.
+    lambda request: httpx.Response(200, json={"data": [{"embedding": [], "index": 0}]}),
 ])
 async def test_voyage_failures_raise_rather_than_returning_a_bad_vector(monkeypatch, handler):
     """Never return a placeholder vector on failure. A stored row with a junk embedding is
@@ -267,6 +270,41 @@ def test_it_stays_offline_until_a_key_is_set(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "voyage_api_key", None, raising=False)
     monkeypatch.setattr(settings, "embedding_provider", "auto", raising=False)
+    try:
+        assert isinstance(embeddings.get_embedding_provider(), HashingEmbeddingProvider)
+    finally:
+        embeddings.reset_embedding_provider()
+
+
+def test_a_key_switches_it_on_without_any_other_setting(monkeypatch):
+    """"auto" plus a key is the whole activation path — nobody should have to discover a
+    second flag to make a configured provider actually run."""
+    from app.core.config import get_settings
+    from app.services.ai import embeddings
+
+    embeddings.reset_embedding_provider()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "voyage_api_key", "pa-test-key", raising=False)
+    monkeypatch.setattr(settings, "embedding_provider", "auto", raising=False)
+    monkeypatch.setattr(settings, "voyage_model", "voyage-4-lite", raising=False)
+    try:
+        provider = embeddings.get_embedding_provider()
+        assert isinstance(provider, VoyageEmbeddingProvider)
+        assert provider.name == "voyage:voyage-4-lite"
+    finally:
+        embeddings.reset_embedding_provider()
+
+
+def test_hash_can_be_forced_even_with_a_key_present(monkeypatch):
+    """An escape hatch that matters during an incident: turn the external dependency off
+    without deleting the credential."""
+    from app.core.config import get_settings
+    from app.services.ai import embeddings
+
+    embeddings.reset_embedding_provider()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "voyage_api_key", "pa-test-key", raising=False)
+    monkeypatch.setattr(settings, "embedding_provider", "hash", raising=False)
     try:
         assert isinstance(embeddings.get_embedding_provider(), HashingEmbeddingProvider)
     finally:

@@ -128,6 +128,10 @@ async def test_it_is_inert_without_a_key(session_factory, admin_user, monkeypatc
     "{}",
     '["ok"',
     "null",
+    # Valid JSON in a valid fence — but an object where an array was asked for. A very
+    # ordinary way for a model to not quite follow instructions, and one that would
+    # otherwise reach the item loop and iterate over dict keys as if they were phrasings.
+    '```json\n{"aliases": ["laptop slow"]}\n```',
 ])
 def test_junk_replies_yield_no_aliases_rather_than_junk_aliases(reply):
     assert _parse(reply) == []
@@ -174,6 +178,9 @@ async def test_the_prompt_asks_for_hinglish():
     ("freezing", "freeze"),
     ("crashes", "crash"),
     ("restarted", "restart"),
+    # -ies -> y, so a plural query meets a singular runbook title.
+    ("queries", "query"),
+    ("policies", "policy"),
 ])
 def test_inflections_collapse_together(a, b):
     """A technician writes "printer", a user writes "printing". Before stemming those were
