@@ -546,8 +546,14 @@ class RemediationService:
                 text = "⚠️ I wasn't able to finish that one automatically."
                 if snippet:
                     text += f" {snippet[:400]}"
-                else:
-                    text += " I've flagged it for your IT team to take a look."
+                # A failure arrives asynchronously — the user may have closed the chat
+                # minutes ago. So the offer is posted into the conversation rather than
+                # waiting for a turn that may never come, and their reply whenever it
+                # arrives is the consent. Falls back to the old wording when the org has
+                # no helpdesk connected, which is the truth in that case.
+                offer = await self._offer_escalation(task, label)
+                text += f" {offer}" if offer else \
+                    " I've flagged it for your IT team to take a look."
             self.session.add(
                 Message(
                     conversation_id=task.conversation_id,
@@ -557,6 +563,63 @@ class RemediationService:
             )
         await self.session.commit()
         return task
+
+    async def _offer_escalation(self, task: RemediationTask, label: str) -> str | None:
+        """Offer to raise a ticket for a fix that just failed, or None if we can't.
+
+        Never raises: the agent is reporting an outcome that already happened on a real
+        machine, and that record must survive anything going wrong here. Returns None when
+        the org has no helpdesk, when we cannot name a requester, or when a ticket already
+        covers this — the caller then falls back to the plain "flagged for IT" wording.
+        """
+        from sqlalchemy import select
+
+        from app.services.support import factory, requester
+        from app.services.support.dossier import Attempt, Dossier
+        from app.services.support.escalation import EscalationService
+
+        try:
+            connector = await factory.build_connector(self.session, task.org_id)
+            if connector is None:
+                return None
+            who = await requester.resolve(
+                self.session, org_id=task.org_id,
+                conversation_id=task.conversation_id, device_id=task.device_id,
+            )
+            if who is None:
+                return None
+
+            # The complaint that led here, in the user's own words.
+            problem = (await self.session.execute(
+                select(Message.content).where(
+                    Message.conversation_id == task.conversation_id,
+                    Message.role == MessageRole.USER,
+                    Message.created_at <= task.created_at,
+                ).order_by(Message.created_at.desc()).limit(1)
+            )).scalar_one_or_none()
+            if not problem:
+                return None
+
+            device = await self.devices.get(task.device_id)
+            dossier = Dossier(
+                problem=problem[:1000],
+                hostname=device.hostname if device else None,
+                os_version=device.os_version if device else None,
+                attempts=[Attempt(label, succeeded=False,
+                                  outcome=(task.result or {}).get("output", "")[:200] or None,
+                                  at=task.completed_at)],
+            )
+            _, message = await EscalationService(
+                self.session, connector=connector
+            ).offer(
+                org_id=task.org_id, conversation_id=task.conversation_id,
+                device_id=task.device_id, user_id=who.user_id,
+                dossier=dossier, action_id=task.action_id,
+            )
+            return message
+        except Exception:  # noqa: BLE001 — never lose a real outcome over an offer
+            logger.exception("Could not offer escalation for remediation %s", task.id)
+            return None
 
     async def _learn_from(self, task: RemediationTask, label: str, success: bool) -> None:
         """Record what this fix taught us, without ever putting the result at risk.

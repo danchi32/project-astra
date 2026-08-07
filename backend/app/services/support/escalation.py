@@ -167,6 +167,11 @@ class EscalationService:
             "Someone from support will reach out to you shortly."
         ))
 
+    async def pending_offer(self, conversation_id: uuid.UUID) -> SupportEscalation | None:
+        """The outstanding offer in this conversation, if any. Callers need it to know
+        which action was tried, so the ticket can be filed under the right category."""
+        return await self._pending_offer(conversation_id)
+
     async def decline(self, *, conversation_id: uuid.UUID) -> None:
         escalation = await self._pending_offer(conversation_id)
         if escalation is not None:

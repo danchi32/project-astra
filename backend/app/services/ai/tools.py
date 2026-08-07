@@ -136,6 +136,17 @@ async def dispatch_tool(
     devices = DeviceRepository(session)
     telemetry = TelemetryRepository(session)
 
+    # Escalation handles its own two tools. Checked first so the rest of this function
+    # stays about evidence and remediation.
+    from app.services.ai import escalation_tools
+
+    escalated = await escalation_tools.dispatch(
+        session=session, org_id=org_id, name=name, tool_input=tool_input,
+        conversation_id=conversation_id, device_id=acting_device_id,
+    )
+    if escalated is not None:
+        return escalated
+
     if name == "propose_remediation":
         return await _propose_remediation(
             session=session, org_id=org_id, acting_device_id=acting_device_id,

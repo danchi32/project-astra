@@ -76,10 +76,29 @@ class CognitiveEngine:
         messages: list[dict[str, Any]] = [*history, {"role": "user", "content": user_message}]
         trail: list[dict[str, Any]] = []
 
+        # Escalation is only offered to organizations that can actually file a ticket, and
+        # only when we know whose ticket it would be. Withholding the tool is the guard:
+        # a model that cannot see it cannot promise a ticket nobody can raise.
+        from app.services.ai import escalation_tools
+
+        tools = TOOL_SCHEMAS + await escalation_tools.available_for(
+            self.session, org_id=org_id, conversation_id=conversation_id,
+            device_id=acting_device_id,
+        )
+        if len(tools) > len(TOOL_SCHEMAS):
+            system += (
+                "\n\nIf you cannot fix the problem — a fix failed, no fix exists, or the "
+                "user says it is still broken after one worked — you may offer to raise a "
+                f"ticket with their IT helpdesk using {escalation_tools.OFFER}. Ask first "
+                "and wait for their answer; only call "
+                f"{escalation_tools.RAISE} once they have agreed. Never claim a ticket "
+                "has been raised unless the tool told you it was."
+            )
+
         try:
             for _ in range(self.max_iterations):
                 response = await self.provider.generate(
-                    system=system, messages=messages, tools=TOOL_SCHEMAS
+                    system=system, messages=messages, tools=tools
                 )
 
                 if not response.tool_calls:
