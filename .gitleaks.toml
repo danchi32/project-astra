@@ -1,0 +1,21 @@
+title = "ASTRA secret scanning"
+
+# Everything gitleaks ships with, plus one narrow exception below.
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Invented credentials in the helpdesk tests.
+
+The Freshservice tests need something key-shaped to encrypt, store, mask and assert on, and
+a high-entropy literal is exactly what a credential looks like — so the generic-api-key rule
+fires on strings that were typed by hand and open nothing.
+
+Matched by the invented prefix rather than by path. Exempting backend/tests/** wholesale
+would hide a real key that someone pastes into a fixture one day, which is the leak this
+scan exists to catch.
+"""
+regexes = [
+  '''fs-(secret|api-key|secret-key|round-trip|key)[-a-z0-9]*''',
+]
