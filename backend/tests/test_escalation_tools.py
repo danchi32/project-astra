@@ -486,3 +486,25 @@ async def test_a_refusal_survives_the_turn(session_factory, admin_user):
     async with session_factory() as session:
         escalation = (await session.execute(select(SupportEscalation))).scalars().one()
         assert escalation.state == EscalationState.DECLINED
+
+
+async def test_a_domain_stored_before_it_was_validated_does_not_break_chat(session_factory,
+                                                                           admin_user):
+    """The PATCH endpoint shipped with a permissive validator, so rows like "acme corp"
+    exist. The connector now refuses them — and `available_for` runs on every single chat
+    turn, so letting that refusal escape would 500 the whole assistant for the tenant, not
+    just escalation."""
+    async with session_factory() as session:
+        session.add(HelpdeskSettings(
+            org_id=admin_user.org_id, enabled=True, domain="10.128.0.1:8080?",
+            api_key_encrypted=crypto.encrypt("fs-key"),
+        ))
+        device, _ = await _device_with_user(session, admin_user.org_id)
+        convo = Conversation(org_id=admin_user.org_id, device_id=device.id, title="c")
+        session.add(convo)
+        await session.flush()
+
+        tools = await escalation_tools.available_for(
+            session, org_id=admin_user.org_id, conversation_id=convo.id, device_id=device.id
+        )
+        assert tools == [], "an unusable connection is unconfigured, not an error"

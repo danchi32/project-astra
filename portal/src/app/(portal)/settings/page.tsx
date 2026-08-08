@@ -766,9 +766,20 @@ function HelpdeskTab() {
             placeholder={data.api_key_masked && !unreadable ? "Leave blank to keep the saved key" : "From Freshservice → Profile Settings"}
             className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
             style={inputStyle} />
-          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-            Stored encrypted. It is never shown again after saving.
-          </p>
+          <div className="flex items-baseline justify-between gap-3 mt-1">
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              Stored encrypted. It is never shown again after saving.
+            </p>
+            {/* Turning the connector off leaves the key sitting in our database. An admin
+                whose key leaked needs to be able to take it out. */}
+            {data.api_key_masked && (
+              <button onClick={() => save({ api_key: "" })} disabled={busy !== null}
+                className="text-xs underline shrink-0 disabled:opacity-50"
+                style={{ color: "var(--text-secondary)" }}>
+                Remove saved key
+              </button>
+            )}
+          </div>
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

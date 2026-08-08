@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # What a Windows account name may contain before it is allowed to become a LIKE pattern.
 # Deliberately narrower than the RFC — no whitespace, no quotes, no "%".
-_LOCAL_PART = re.compile(r"^[a-z0-9._+-]{1,64}$")
+_LOCAL_PART = re.compile(r"\A[a-z0-9._+-]{1,64}\Z")
 
 
 def _like_literal(value: str) -> str:

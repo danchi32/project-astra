@@ -60,6 +60,9 @@ class HelpdeskSettingsService:
         for field, value in changed.items():
             setattr(settings, field, value)
 
+        # Revoking is an explicit "": a key that is only whitespace is a paste that went
+        # wrong, and silently wiping the credential for it is the wrong reading.
+        revoking = api_key == ""
         api_key = api_key.strip() if isinstance(api_key, str) else api_key
         if api_key:
             if not crypto.is_available():
@@ -79,9 +82,9 @@ class HelpdeskSettingsService:
             # A new credential invalidates whatever the last verification proved.
             settings.last_verified_at = None
             settings.last_error = None
-        elif api_key == "":
-            # An explicit empty string is "forget the key I saved", which is the only way
-            # an admin can revoke a leaked credential without deleting the whole org.
+        elif revoking:
+            # "Forget the key I saved" — the only way an admin can revoke a leaked
+            # credential without deleting the whole organization.
             settings.api_key_encrypted = None
             settings.last_verified_at = None
             settings.last_error = None
@@ -100,7 +103,7 @@ class HelpdeskSettingsService:
             detail={
                 "fields": sorted(changed.keys())
                 + (["api_key"] if api_key else [])
-                + (["api_key_cleared"] if api_key == "" else []),
+                + (["api_key_cleared"] if revoking else []),
             },
         )
         await self.session.commit()

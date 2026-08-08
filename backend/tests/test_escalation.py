@@ -521,3 +521,105 @@ async def test_raising_a_ticket_is_audited(session_factory, admin_user):
         assert entry.target_id == str(outcome.escalation.id)
         assert entry.detail["ticket_id"] == outcome.escalation.external_ticket_id
         assert entry.detail["requester"] == "priya@acme.com"
+
+
+@pytest.mark.parametrize("reply", [
+    "can you please check the cpu again?",
+    "please run the disk cleanup instead",
+    "actually, could you please try flushing dns first",
+    "ok so outlook is still crashing",
+    "restart karo",
+    "do it again",
+    "sharma ji, kya ho raha hai",
+    "is that ok?",
+    "sure, but first try restarting explorer",
+])
+async def test_a_polite_follow_up_request_is_not_a_yes(session_factory, admin_user, reply):
+    """The offer is posted when a fix fails and then sits open for the rest of the
+    conversation, so the next message is far likelier to be a follow-up than an answer.
+    Matching "please" or "ok" anywhere in it would file a ticket while the user was
+    asking for something else — in two of these they are asking for a different fix."""
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=MockConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=None, user_id=admin_user.id, dossier=_dossier())
+        await _user_says(session, convo, reply)
+
+        with pytest.raises(ConsentMissing, match="neither a yes nor a no"):
+            await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                   requester_email="priya@acme.com")
+
+
+@pytest.mark.parametrize("reply", [
+    "haan", "yes", "yes please", "ok", "ok kar do", "sure", "go ahead", "theek hai",
+    "ji haan", "yes, raise it", "please raise it", "bilkul", "kar do", "do it",
+])
+async def test_an_actual_yes_still_works(session_factory, admin_user, reply):
+    """The gate fails closed, so the cost of tightening it is a user whose "yes" is not
+    recognised being asked again. These are the phrasings that must not pay that cost."""
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=MockConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=None, user_id=admin_user.id, dossier=_dossier())
+        await _user_says(session, convo, reply)
+        outcome = await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                         requester_email="priya@acme.com")
+        assert outcome.created, f"{reply!r} should have counted as consent"
+
+
+async def test_one_yes_raises_one_ticket_even_with_two_offers_open(session_factory,
+                                                                   admin_user):
+    """Two failed fixes in a row leave two open offers. `_pending_offer` takes the newest,
+    so without this the model could call raise twice and the same "yes" would answer both
+    — two tickets in the customer's queue from one agreement."""
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=MockConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id, device_id=None,
+                        user_id=admin_user.id, dossier=_dossier("printer not working"))
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id, device_id=None,
+                        user_id=admin_user.id, dossier=_dossier("vpn keeps dropping"))
+        await _user_says(session, convo, "haan")
+
+        first = await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                       requester_email="priya@acme.com")
+        assert first.created
+
+        with pytest.raises(ConsentMissing, match="No outstanding"):
+            await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                   requester_email="priya@acme.com")
+
+        raised = (await session.execute(
+            select(SupportEscalation).where(
+                SupportEscalation.state == EscalationState.RAISED)
+        )).scalars().all()
+        assert len(raised) == 1
+
+
+async def test_the_audit_entry_exists_before_the_ticket_is_created(session_factory,
+                                                                   admin_user):
+    """Creating a ticket in someone else's system cannot be undone. If the audit row were
+    added afterwards and its flush failed, the transaction would roll back and leave a real
+    ticket in the customer's queue with nothing here to show for it."""
+    seen: list[bool] = []
+
+    class WatchingConnector(MockConnector):
+        async def create_ticket(self, request):
+            entries = (await session.execute(
+                select(AuditLog).where(AuditLog.target_type == "support_escalation")
+            )).scalars().all()
+            seen.append(len(entries) == 1)
+            return await super().create_ticket(request)
+
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=WatchingConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=None, user_id=admin_user.id, dossier=_dossier())
+        await _user_says(session, convo)
+        await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                               requester_email="priya@acme.com")
+
+    assert seen == [True], "the audit row must already be in the transaction"

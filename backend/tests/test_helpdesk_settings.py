@@ -365,3 +365,32 @@ async def test_a_malformed_secrets_key_says_so_instead_of_500ing(client, admin_h
                               json={"domain": "acme", "api_key": "fs-secret-key-9911"})
     assert resp.status_code == 503, resp.text
     assert "ASTRA_SECRETS_KEY" in resp.json()["detail"]
+
+
+async def test_a_whitespace_only_api_key_does_not_revoke(client, admin_headers):
+    """A paste that went wrong is not a revocation. Only an explicit "" clears the key."""
+    await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
+                       json={"domain": "acme", "api_key": "fs-secret-key-9911",
+                             "enabled": True})
+    resp = await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
+                              json={"api_key": "   "})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ready"] is True, "the saved key must still be there"
+
+
+async def test_a_failed_verify_is_audited(client, admin_headers, session_factory):
+    """This endpoint makes an outbound request on the deployment's behalf against an
+    admin-supplied domain. A run that failed is exactly the one an investigator needs to
+    see, and it was the only path that recorded nothing at all."""
+    from sqlalchemy import select
+
+    from app.models import AuditLog
+
+    resp = await client.post("/api/v1/settings/helpdesk/verify", headers=admin_headers)
+    assert resp.json()["ok"] is False
+
+    async with session_factory() as session:
+        entry = (await session.execute(
+            select(AuditLog).where(AuditLog.action == "helpdesk.settings.verify")
+        )).scalars().one()
+        assert entry.detail["ok"] is False

@@ -30,7 +30,7 @@ PRIORITY = {"low": 1, "medium": 2, "high": 3, "urgent": 4}
 # an admin-supplied string into an arbitrary host: "10.0.0.1:8080?" pushes the hardcoded
 # suffix into the query string and points our egress at an internal service. The template
 # is not a constraint on its own — this is.
-_SUBDOMAIN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_SUBDOMAIN = re.compile(r"\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 _AUTHORITY_END = re.compile(r"[/?#\\]")
 
 

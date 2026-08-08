@@ -22,7 +22,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Message, MessageRole, SupportEscalation
+from app.models import AuditLog, Message, MessageRole, SupportEscalation
 from app.models.base import utcnow
 from app.models.support_escalation import EscalationState
 from app.services.ai.embeddings import cosine_similarity, get_embedding_provider
@@ -52,13 +52,30 @@ _REFUSAL = re.compile(
     # `don'?t` rather than `dont`: an apostrophe is a word boundary, so \bdont\b would
     # miss the spelling people actually type.
     r"\b(no|nope|nah|don'?t|do not|cancel|skip|leave it|forget it|not now|later|"
-    r"nahi|nahin|nhi|naa|mat|rehne do|rahne do|baad me|baad mein|zarurat nahi)\b"
+    r"nahi|nahin|nhi|naa|mat|rehne do|rahne do|baad me|baad mein|zarurat nahi)\b",
 )
-_AGREEMENT = re.compile(
-    r"\b(yes|yeah|yep|yup|ok|okay|sure|please|go ahead|do it|raise it|raise one|"
-    r"haan|haa|han|hn|ji|theek hai|thik hai|kar do|kardo|kar dijiye|kro|kr do|"
-    r"karo|bilkul|zaroor|zarur)\b"
+
+# Agreement has to be the whole reply, not a word inside one. The offer is posted when a
+# fix fails and then sits open for the rest of the conversation, so the next message is far
+# more likely to be a follow-up request than an answer — and "please run the disk cleanup
+# instead" or "ok so outlook is still crashing" would otherwise file a ticket while the
+# user was asking for something else entirely.
+_YES = re.compile(
+    r"^\W*(yes|yeah|yep|yup|ya|ok|okay|sure|go ahead|do it|please do|"
+    r"ji haan|haan|haa|han|hn|ji|theek hai|thik hai|bilkul|zaroor|zarur|"
+    r"kar do|kardo|kr do|kro|karo|kar dijiye)"
+    r"(\s+(please|thanks|thank you|yes|haan|ji|na|bhai|yaar|go ahead|do it|"
+    r"kar do|kardo|karo|kro))*"
+    r"\W*\Z"
 )
+# The one form that is unambiguous wherever it appears: naming the thing being agreed to.
+_YES_EXPLICIT = re.compile(
+    r"\b(raise (it|one|a ticket|the ticket)|ticket (raise|bana)\s?(kar\s?)?do)\b"
+)
+
+
+def _is_agreement(answer: str) -> bool:
+    return bool(_YES.match(answer) or _YES_EXPLICIT.search(answer))
 
 
 class ConsentMissing(RuntimeError):
@@ -142,7 +159,7 @@ class EscalationService:
             escalation.state = EscalationState.DECLINED
             await self.session.flush()
             raise ConsentMissing("The user declined the offer to raise a ticket.")
-        if not _AGREEMENT.search(answer):
+        if not _is_agreement(answer):
             raise ConsentMissing(
                 "The user's reply was neither a yes nor a no — ask them plainly whether "
                 "to raise a ticket before calling this again."
@@ -176,6 +193,12 @@ class EscalationService:
             description_html=escalation.dossier or escalation.problem_summary,
             priority=priority, category=category, sub_category=sub_category,
         )
+        # Written before the call, not after. Creating a ticket in someone else's system is
+        # not undoable, so the row that records it must already be in the transaction — if
+        # it were added afterwards and its flush failed, the transaction would roll back
+        # and leave a real ticket in the customer's queue with nothing here to show for it.
+        entry = await self._audit(escalation, org_id=org_id, requester=requester_email)
+
         try:
             result = await self.connector.create_ticket(request)
         except TicketError as exc:
@@ -183,9 +206,10 @@ class EscalationService:
             # nobody is coming to write.
             escalation.state = EscalationState.FAILED
             escalation.last_error = str(exc)[:500]
+            entry.action = "helpdesk.ticket.failed"
+            entry.detail = {**entry.detail, "error": escalation.last_error}
             await self.session.flush()
             logger.warning("Escalation %s could not be filed: %s", escalation.id, exc)
-            await self._audit(escalation, org_id=org_id, ok=False, requester=requester_email)
             return RaiseOutcome(escalation, created=False, message=(
                 "I couldn't reach your IT helpdesk just now, so the ticket isn't raised "
                 "yet. I've flagged this for your IT team."
@@ -196,8 +220,11 @@ class EscalationService:
         escalation.external_ticket_id = result.external_id
         escalation.external_url = result.url
         escalation.raised_at = utcnow()
+        entry.detail = {**entry.detail, "ticket_id": result.external_id}
+        # Any other offer still open in this conversation was answered by the same "yes".
+        # Left alone, the model could raise each of them in turn on one consent.
+        await self._close_other_offers(conversation_id, keep=escalation.id)
         await self.session.flush()
-        await self._audit(escalation, org_id=org_id, ok=True, requester=requester_email)
         return RaiseOutcome(escalation, created=True, message=(
             f"Done — I've raised ticket #{result.external_id} with your IT team. "
             "Someone from support will reach out to you shortly."
@@ -217,31 +244,40 @@ class EscalationService:
     # -- Internals ----------------------------------------------------------
 
     async def _audit(
-        self, escalation: SupportEscalation, *, org_id: uuid.UUID, ok: bool,
-        requester: str | None,
-    ) -> None:
-        """Record that ASTRA created — or failed to create — a record in someone else's
-        system, on a named employee's behalf, carrying that employee's device telemetry.
+        self, escalation: SupportEscalation, *, org_id: uuid.UUID, requester: str | None,
+    ) -> AuditLog:
+        """Record that ASTRA is creating a record in someone else's system, on a named
+        employee's behalf, carrying that employee's device telemetry.
 
         The escalation row is the business record; this is the audit trail. The caller here
         is the model's tool loop, which is exactly the caller that most needs an entry it
-        cannot choose to skip.
+        cannot choose to skip. Returned so the outcome can be written onto it once known.
         """
-        await AuditService(self.session).record(
+        return await AuditService(self.session).record(
             org_id=org_id,
             actor_id=escalation.user_id,
-            action="helpdesk.ticket.raised" if ok else "helpdesk.ticket.failed",
+            action="helpdesk.ticket.raised",
             target_type="support_escalation",
             target_id=str(escalation.id),
             detail={
-                "provider": escalation.provider,
-                "ticket_id": escalation.external_ticket_id,
+                "provider": self.connector.name if self.connector else None,
                 "device_id": str(escalation.device_id) if escalation.device_id else None,
                 "requester": requester,
                 "action_tried": escalation.action_id,
-                "error": escalation.last_error if not ok else None,
             },
         )
+
+    async def _close_other_offers(self, conversation_id: uuid.UUID, *, keep: uuid.UUID) -> None:
+        rows = (await self.session.execute(
+            select(SupportEscalation).where(
+                SupportEscalation.conversation_id == conversation_id,
+                SupportEscalation.state == EscalationState.OFFERED,
+                SupportEscalation.id != keep,
+            )
+        )).scalars().all()
+        for row in rows:
+            row.state = EscalationState.DECLINED
+            row.last_error = "superseded — the user's answer raised a different ticket"
 
     async def _pending_offer(self, conversation_id: uuid.UUID) -> SupportEscalation | None:
         result = await self.session.execute(

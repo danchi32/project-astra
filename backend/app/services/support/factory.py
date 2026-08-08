@@ -52,14 +52,21 @@ async def build_connector(
         logger.error("Unsupported helpdesk provider %r for org %s", settings.provider, org_id)
         return None
 
-    return FreshserviceConnector(
-        domain=settings.domain,
-        api_key=api_key,
-        default_priority=settings.default_priority,
-        source=settings.default_source,
-        workspace_id=settings.workspace_id,
-        group_id=settings.group_id,
-    )
+    try:
+        return FreshserviceConnector(
+            domain=settings.domain,
+            api_key=api_key,
+            default_priority=settings.default_priority,
+            source=settings.default_source,
+            workspace_id=settings.workspace_id,
+            group_id=settings.group_id,
+        )
+    except ValueError as exc:
+        # A row written before the domain was validated. Treated as unconfigured, like
+        # every other unusable connection here — letting this escape would take out the
+        # whole assistant for the org, because `available_for` is called on every turn.
+        logger.error("Helpdesk domain for org %s is unusable: %s", org_id, exc)
+        return None
 
 
 def category_for(settings: HelpdeskSettings | None, action_id: str | None) -> tuple[
