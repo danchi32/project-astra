@@ -6,6 +6,7 @@ import { registerStart, registerVerify } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
 import {
   AuthShell,
+  SIGNUP_STEPS,
   TRIAL_POINTS,
   authButtonCls,
   authInputCls,
@@ -76,6 +77,7 @@ export default function RegisterPage() {
       headline="Start free. No credit card."
       blurb="Create your organization, install the agent on one device, and ASTRA starts reporting on it. Nothing to pay until you decide it's worth it."
       points={TRIAL_POINTS}
+      footer={SIGNUP_STEPS}
     >
       <div className="hidden lg:block mb-8">
         <h2 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>

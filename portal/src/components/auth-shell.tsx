@@ -70,9 +70,24 @@ export const TRIAL_POINTS: Point[] = [
   },
 ];
 
-/** The reasoning loop, in the product's own words. Rendered rather than screenshotted:
- *  a mocked-up dashboard would be a picture of a fleet nobody owns. */
-const LOOP = ["Understand", "Search knowledge", "Collect evidence", "Fix", "Verify"];
+/**
+ * The strip along the bottom. It has to answer the same question the rest of the panel
+ * does, or the page is making two arguments at once.
+ *
+ * Signing in: what does this thing do? — the reasoning loop, in the product's own words.
+ * Rendered rather than screenshotted, because a mocked-up dashboard would be a picture of
+ * a fleet nobody owns.
+ */
+const LOOP = {
+  label: "How a fix happens",
+  steps: ["Understand", "Search knowledge", "Collect evidence", "Fix", "Verify"],
+};
+
+/** Signing up: what happens after I press the button? */
+export const SIGNUP_STEPS = {
+  label: "What happens next",
+  steps: ["Confirm your email", "Install the agent", "First device reports in"],
+};
 
 export function AuthShell({
   children,
@@ -81,6 +96,7 @@ export function AuthShell({
   headline = "An AI system administrator for your Windows fleet.",
   blurb = "ASTRA watches every device, works out what is actually wrong, and fixes it — with a human in the loop wherever that matters.",
   points = PILLARS,
+  footer = LOOP,
 }: {
   children: ReactNode;
   /** What this particular page is for — sits under the wordmark on small screens. */
@@ -90,6 +106,8 @@ export function AuthShell({
   headline?: string;
   blurb?: string;
   points?: Point[];
+  /** The bottom strip. Must answer the same question as the rest of the panel. */
+  footer?: { label: string; steps: string[] };
 }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[1.05fr_minmax(420px,0.95fr)]"
@@ -153,10 +171,10 @@ export function AuthShell({
         <div className="relative">
           <p className="text-xs font-medium uppercase tracking-wider flex items-center gap-1.5"
             style={{ color: "var(--text-secondary)" }}>
-            <Activity size={13} /> How a fix happens
+            <Activity size={13} /> {footer.label}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
-            {LOOP.map((step, i) => (
+            {footer.steps.map((step, i) => (
               <span key={step} className="flex items-center gap-2">
                 <span className="px-2.5 py-1 rounded-md text-xs font-medium"
                   style={{
@@ -166,7 +184,7 @@ export function AuthShell({
                   }}>
                   {step}
                 </span>
-                {i < LOOP.length - 1 && (
+                {i < footer.steps.length - 1 && (
                   <span aria-hidden style={{ color: "var(--text-secondary)" }}>→</span>
                 )}
               </span>
