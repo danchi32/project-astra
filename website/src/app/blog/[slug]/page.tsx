@@ -68,7 +68,7 @@ export default async function BlogPostPage({
   };
 
   return (
-    <article className="pt-28 pb-24 sm:pt-32">
+    <article className="pt-8 pb-24 sm:pt-12">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}

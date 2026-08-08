@@ -25,7 +25,7 @@ export default function BlogIndexPage() {
   const posts = getAllPosts();
 
   return (
-    <Section className="pt-24 sm:pt-28">
+    <Section className="pt-12 sm:pt-16">
       <Container>
         <div className="mx-auto max-w-2xl text-center">
           <Badge>Blog</Badge>

@@ -55,7 +55,7 @@ export function AboutContent() {
 
   return (
     <>
-      <section className="relative overflow-hidden pt-32 pb-16 sm:pt-40">
+      <section className="relative overflow-hidden pt-12 pb-16 sm:pt-20">
         <AnimatedBackground />
         <Container>
           <Reveal>

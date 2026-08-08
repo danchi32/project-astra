@@ -21,7 +21,7 @@ export function Footer() {
         <div className="grid gap-10 md:grid-cols-4">
           <div className="md:col-span-2">
             <Link href="/" className="inline-flex items-center">
-              <BrandLogo className="h-16 sm:h-20" />
+              <BrandLogo className="h-20 sm:h-24" />
             </Link>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-secondary-token">
               <Rich

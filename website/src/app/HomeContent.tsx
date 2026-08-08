@@ -85,7 +85,7 @@ export function HomeContent() {
   return (
     <>
       {/* ------------------------------------------------------------ HERO */}
-      <section className="aurora grain relative overflow-hidden pt-32 pb-20 sm:pt-40">
+      <section className="aurora grain relative overflow-hidden pt-12 pb-20 sm:pt-20">
         <AnimatedBackground dense />
         <Container>
           <div className="grid items-center gap-12 lg:grid-cols-2">

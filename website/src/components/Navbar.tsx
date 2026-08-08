@@ -13,31 +13,18 @@ import { cn } from "@/lib/utils";
 export function Navbar() {
   const { c } = useContent();
   const pathname = usePathname();
-  const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   // Close mobile menu on route change.
   useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <header
-      className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-all duration-300",
-        scrolled
-          ? "glass border-b border-token"
-          : "border-b border-transparent",
-      )}
-    >
-      <nav className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:px-8">
+    // Not fixed: the header scrolls away with the page. It therefore needs its
+    // own background rather than the translucent overlay treatment.
+    <header className="relative z-50 border-b border-token bg-surface">
+      <nav className="mx-auto flex h-24 max-w-6xl items-center justify-between px-5 sm:px-8">
         <Link href="/" className="flex items-center">
-          <BrandLogo className="h-12 sm:h-14" />
+          <BrandLogo className="h-14 sm:h-16" />
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
@@ -87,7 +74,7 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="glass border-b border-token md:hidden">
+        <div className="border-b border-token bg-surface md:hidden">
           <div className="space-y-1 px-5 py-4">
             {nav.map((item) => (
               <Link

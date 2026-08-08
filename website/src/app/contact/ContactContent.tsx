@@ -20,7 +20,7 @@ export function ContactContent() {
 
   return (
     <>
-      <section className="relative overflow-hidden pt-32 pb-10 sm:pt-40">
+      <section className="relative overflow-hidden pt-12 pb-10 sm:pt-20">
         <AnimatedBackground />
         <Container>
           <div className="max-w-2xl">

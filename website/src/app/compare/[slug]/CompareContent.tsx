@@ -24,7 +24,7 @@ export function CompareContent({ data }: { data: Comparison }) {
   return (
     <>
       {/* Hero */}
-      <Section className="pb-10 pt-24 sm:pt-28">
+      <Section className="pb-10 pt-12 sm:pt-16">
         <Container>
           <Reveal className="mx-auto max-w-3xl text-center">
             <Badge>
