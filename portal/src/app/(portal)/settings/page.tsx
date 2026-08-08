@@ -4,17 +4,24 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Settings as SettingsIcon, User as UserIcon, Palette, Building2, ShieldCheck,
   Check, Minus, Monitor, Sun, Moon, Mail, Copy, RefreshCw, MapPin, Pencil, Trash2,
+  LifeBuoy,
 } from "lucide-react";
 import { getMe, updateProfile, changePassword } from "@/lib/api/auth";
 import {
   getOrgSettings, updateOrgSettings, getPermissionMatrix,
   getEmailSettings, configureEmailSettings, verifyEmailSettings, updateAssetEmailTemplate,
+  getHelpdeskSettings, updateHelpdeskSettings, verifyHelpdeskSettings,
 } from "@/lib/api/settings";
 import { listLocations, createLocation, renameLocation, deleteLocation } from "@/lib/api/locations";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
-import type { EmailSettings, EmailVerificationStatus, OrganizationSettingsInput, UserRole } from "@/lib/api/types";
+import type {
+  EmailSettings, EmailVerificationStatus, HelpdeskSettingsInput,
+  OrganizationSettingsInput, UserRole,
+} from "@/lib/api/types";
 
-type Tab = "profile" | "preferences" | "organization" | "email" | "locations" | "permissions";
+type Tab =
+  | "profile" | "preferences" | "organization" | "email" | "helpdesk"
+  | "locations" | "permissions";
 
 function errDetail(err: unknown): string | undefined {
   return (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -642,6 +649,183 @@ function LocationsTab() {
   );
 }
 
+/* ── Helpdesk ────────────────────────────────────────────────────────────── */
+
+const PRIORITIES = [
+  { value: 1, label: "Low" },
+  { value: 2, label: "Medium" },
+  { value: 3, label: "High" },
+  { value: 4, label: "Urgent" },
+];
+
+function HelpdeskTab() {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({ queryKey: ["helpdesk-settings"], queryFn: getHelpdeskSettings });
+
+  const [domain, setDomain] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [priority, setPriority] = useState(1);
+  const [workspace, setWorkspace] = useState("");
+  const [busy, setBusy] = useState<"save" | "verify" | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    setDomain(data.domain ?? "");
+    setPriority(data.default_priority);
+    setWorkspace(data.workspace_id ? String(data.workspace_id) : "");
+  }, [data]);
+
+  async function save(patch: HelpdeskSettingsInput) {
+    setBusy("save");
+    setMsg(null);
+    try {
+      await updateHelpdeskSettings(patch);
+      // The key is write-only: clear the box so it is never sitting in the DOM, and so a
+      // second save does not resend it.
+      setApiKey("");
+      await queryClient.invalidateQueries({ queryKey: ["helpdesk-settings"] });
+      setMsg({ ok: true, text: "Saved." });
+    } catch (err) {
+      setMsg({ ok: false, text: errDetail(err) ?? "Could not save." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function verify() {
+    setBusy("verify");
+    setMsg(null);
+    try {
+      const result = await verifyHelpdeskSettings();
+      await queryClient.invalidateQueries({ queryKey: ["helpdesk-settings"] });
+      setMsg(result.ok
+        ? { ok: true, text: "Connected. ASTRA can raise tickets in this helpdesk." }
+        : { ok: false, text: result.detail ?? "Could not connect." });
+    } catch (err) {
+      setMsg({ ok: false, text: errDetail(err) ?? "Could not connect." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (isLoading || !data) {
+    return <Panel title="Helpdesk"><p className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading…</p></Panel>;
+  }
+
+  const unreadable = data.api_key_masked === "unreadable";
+
+  return (
+    <div className="space-y-4">
+      <Panel
+        title="Freshservice"
+        description="When ASTRA can't fix something itself, it asks the user and — with their agreement — raises a ticket in your own helpdesk, with everything it already tried attached."
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              {data.ready ? "Connected" : "Not connected"}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              {data.ready
+                ? data.last_verified_at
+                  ? `Last checked ${new Date(data.last_verified_at).toLocaleString()}`
+                  : "Not checked yet — run a connection test."
+                : "Until this is connected, ASTRA won't offer to raise tickets."}
+            </p>
+          </div>
+          <Toggle on={data.enabled} disabled={busy !== null}
+            onChange={(on) => save({ enabled: on })} />
+        </div>
+
+        {/* Shown rather than hidden: a saved-but-unusable key looks identical to no key at
+            all, and the admin who saved it would never know to re-enter it. */}
+        {unreadable && (
+          <p className="text-xs rounded-lg p-3" style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>
+            The saved API key can no longer be read — the encryption key on this deployment
+            has changed. Enter the key again to reconnect.
+          </p>
+        )}
+
+        {data.last_error && !msg && (
+          <p className="text-xs rounded-lg p-3" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
+            {data.last_error}
+          </p>
+        )}
+
+        <Field label="Freshservice domain">
+          <input value={domain} onChange={(e) => setDomain(e.target.value)}
+            placeholder="acme  —  or paste the full URL"
+            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
+            style={inputStyle} />
+        </Field>
+
+        <Field label={data.api_key_masked && !unreadable ? `API key (saved: ${data.api_key_masked})` : "API key"}>
+          <input value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+            type="password" autoComplete="off"
+            placeholder={data.api_key_masked && !unreadable ? "Leave blank to keep the saved key" : "From Freshservice → Profile Settings"}
+            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
+            style={inputStyle} />
+          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+            Stored encrypted. It is never shown again after saving.
+          </p>
+        </Field>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Priority for ASTRA's tickets">
+            <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
+              {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+              ASTRA files at this level rather than judging urgency itself.
+            </p>
+          </Field>
+
+          <Field label="Workspace ID (optional)">
+            <input value={workspace} onChange={(e) => setWorkspace(e.target.value.replace(/\D/g, ""))}
+              inputMode="numeric" placeholder="Leave blank unless you have more than one"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
+              style={inputStyle} />
+            <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+              Multi-workspace accounts need this, or tickets land where nobody is watching.
+            </p>
+          </Field>
+        </div>
+
+        {msg && (
+          <p className="text-sm" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>
+        )}
+
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button onClick={verify} disabled={busy !== null || !data.ready}
+            className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+            {busy === "verify" ? "Checking…" : "Test connection"}
+          </button>
+          <button
+            onClick={() => save({
+              domain: domain.trim() || undefined,
+              api_key: apiKey.trim() || undefined,
+              default_priority: priority,
+              workspace_id: workspace ? Number(workspace) : null,
+            })}
+            disabled={busy !== null}
+            className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+            style={{ background: "var(--accent)" }}>
+            {busy === "save" ? "Saving…" : "Save"}
+          </button>
+        </div>
+
+        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+          Testing the connection only reads your ticket field settings — it never creates a
+          ticket, so you can run it as often as you like.
+        </p>
+      </Panel>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isAdmin = me?.role === "admin";
@@ -652,6 +836,7 @@ export default function SettingsPage() {
     { key: "preferences", label: "Preferences", icon: Palette, show: true },
     { key: "organization", label: "Organization", icon: Building2, show: !!isAdmin },
     { key: "email", label: "Email", icon: Mail, show: !!isAdmin },
+    { key: "helpdesk", label: "Helpdesk", icon: LifeBuoy, show: !!isAdmin },
     { key: "locations", label: "Locations", icon: MapPin, show: !!isAdmin },
     { key: "permissions", label: "Permissions", icon: ShieldCheck, show: true },
   ];
@@ -686,6 +871,7 @@ export default function SettingsPage() {
       {tab === "preferences" && <PreferencesTab />}
       {tab === "organization" && isAdmin && <OrganizationTab />}
       {tab === "email" && isAdmin && <EmailTab />}
+      {tab === "helpdesk" && isAdmin && <HelpdeskTab />}
       {tab === "locations" && isAdmin && <LocationsTab />}
       {tab === "permissions" && <PermissionsTab />}
     </div>

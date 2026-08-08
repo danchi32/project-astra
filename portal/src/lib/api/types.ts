@@ -504,6 +504,45 @@ export interface KnowledgeArticle {
   learning_status: "authored" | "learning" | "in_use" | "paused";
 }
 
+/** The organization's connection to the helpdesk it already runs. */
+export interface HelpdeskSettings {
+  provider: "freshservice";
+  enabled: boolean;
+  domain: string | null;
+  /** Masked. The API key is write-only — enough to recognise which key is saved, never
+   *  enough to use it. "unreadable" means the encryption key changed and it must be
+   *  re-entered. */
+  api_key_masked: string;
+  default_priority: number;
+  default_source: number | null;
+  workspace_id: number | null;
+  group_id: number | null;
+  /** { action_id: { category, sub_category } } — ASTRA's fixes mapped onto their tree. */
+  category_map: Record<string, { category?: string; sub_category?: string }> | null;
+  last_error: string | null;
+  last_verified_at: string | null;
+  /** Everything needed to actually file a ticket is present. Not the same as `enabled`:
+   *  a half-filled form is not a connection. */
+  ready: boolean;
+}
+
+export interface HelpdeskSettingsInput {
+  enabled?: boolean;
+  domain?: string;
+  /** Send only when it changes. Omitting it leaves the stored credential alone. */
+  api_key?: string;
+  default_priority?: number;
+  default_source?: number | null;
+  workspace_id?: number | null;
+  group_id?: number | null;
+  category_map?: Record<string, { category?: string; sub_category?: string }> | null;
+}
+
+export interface HelpdeskVerifyResult {
+  ok: boolean;
+  detail: string | null;
+}
+
 export type RemediationTier = "automatic" | "approval_required" | "admin_only";
 export type RemediationStatus =
   | "pending_approval"

@@ -1,6 +1,9 @@
 import { apiClient } from "./client";
 import type {
   EmailSettings,
+  HelpdeskSettings,
+  HelpdeskSettingsInput,
+  HelpdeskVerifyResult,
   OrganizationSettings,
   OrganizationSettingsInput,
   PermissionMatrix,
@@ -27,3 +30,15 @@ export const updateOrgSettings = (data: OrganizationSettingsInput) =>
 
 export const getPermissionMatrix = () =>
   apiClient.get<PermissionMatrix>("/settings/permissions").then((r) => r.data);
+
+// The helpdesk ASTRA escalates into. The API key only ever travels one way — it goes out
+// in the PATCH body and never comes back, so there is no "get the key" call here.
+export const getHelpdeskSettings = () =>
+  apiClient.get<HelpdeskSettings>("/settings/helpdesk").then((r) => r.data);
+
+export const updateHelpdeskSettings = (data: HelpdeskSettingsInput) =>
+  apiClient.patch<HelpdeskSettings>("/settings/helpdesk", data).then((r) => r.data);
+
+/** Reads the instance's field schema. Creates nothing, so it is safe to press repeatedly. */
+export const verifyHelpdeskSettings = () =>
+  apiClient.post<HelpdeskVerifyResult>("/settings/helpdesk/verify").then((r) => r.data);
