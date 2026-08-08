@@ -35,9 +35,9 @@ export function Navbar() {
           : "border-b border-transparent",
       )}
     >
-      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+      <nav className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:px-8">
         <Link href="/" className="flex items-center">
-          <BrandLogo className="h-9 sm:h-10" />
+          <BrandLogo className="h-12 sm:h-14" />
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
