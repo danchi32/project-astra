@@ -67,7 +67,7 @@ jobs:
         run: |
           gcloud run jobs deploy astra-migrate-staging \
             --image "$IMAGE" --region "$REGION" \
-            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL_STAGING:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY_STAGING:latest \
+            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL_STAGING:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY_STAGING:latest,ASTRA_SECRETS_KEY=ASTRA_SECRETS_KEY_STAGING:latest \
             --command alembic --args upgrade,head --quiet
           gcloud run jobs execute astra-migrate-staging --region "$REGION" --wait
 
@@ -82,7 +82,7 @@ jobs:
             --min-instances 0 --max-instances 3 --concurrency 80 --port 8000 \
             --cpu 1 --memory 512Mi --timeout 60s \
             --allow-unauthenticated \
-            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL_STAGING:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY_STAGING:latest \
+            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL_STAGING:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY_STAGING:latest,ASTRA_SECRETS_KEY=ASTRA_SECRETS_KEY_STAGING:latest \
             --set-env-vars RUN_MIGRATIONS_ON_START=false,ASTRA_ENVIRONMENT=staging,ASTRA_AGENT_BACKEND_IP= \
             --quiet
 
