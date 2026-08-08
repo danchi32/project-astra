@@ -14,6 +14,7 @@ prompt:
   guarded before anything else.
 """
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
@@ -25,6 +26,7 @@ from app.models import Message, MessageRole, SupportEscalation
 from app.models.base import utcnow
 from app.models.support_escalation import EscalationState
 from app.services.ai.embeddings import cosine_similarity, get_embedding_provider
+from app.services.audit import AuditService
 from app.services.support.connector import TicketConnector, TicketError, TicketRequest
 from app.services.support.dossier import Dossier
 
@@ -39,6 +41,24 @@ DEDUPE_WINDOW = timedelta(hours=24)
 # the cost of a false match is one deferred ticket and a message telling the user which
 # ticket already exists; the cost of a miss is a duplicate in the customer's queue.
 DEDUPE_SIMILARITY = 0.6
+
+
+# What counts as answering the offer. Checked in code because the alternative is trusting
+# the model to have read the reply correctly — and the model is the part of this system an
+# attacker can reach, through telemetry, event-log strings and knowledge articles that all
+# land in its context. Refusals are matched first: "no, don't bother" contains neither an
+# agreement token nor anything ambiguous, but "no thanks, ok" would otherwise pass.
+_REFUSAL = re.compile(
+    # `don'?t` rather than `dont`: an apostrophe is a word boundary, so \bdont\b would
+    # miss the spelling people actually type.
+    r"\b(no|nope|nah|don'?t|do not|cancel|skip|leave it|forget it|not now|later|"
+    r"nahi|nahin|nhi|naa|mat|rehne do|rahne do|baad me|baad mein|zarurat nahi)\b"
+)
+_AGREEMENT = re.compile(
+    r"\b(yes|yeah|yep|yup|ok|okay|sure|please|go ahead|do it|raise it|raise one|"
+    r"haan|haa|han|hn|ji|theek hai|thik hai|kar do|kardo|kar dijiye|kro|kr do|"
+    r"karo|bilkul|zaroor|zarur)\b"
+)
 
 
 class ConsentMissing(RuntimeError):
@@ -100,19 +120,33 @@ class EscalationService:
 
     async def raise_ticket(
         self, *, org_id: uuid.UUID, conversation_id: uuid.UUID, requester_email: str | None,
-        priority: str = "low", category: str | None = None, sub_category: str | None = None,
+        priority: str | None = None, category: str | None = None,
+        sub_category: str | None = None,
     ) -> RaiseOutcome:
         """Raise the ticket the user just agreed to.
 
         Refuses unless there is an outstanding offer in this conversation AND the user has
-        spoken since it was made. That second half is the actual gate: without it the model
-        could call offer and raise back to back and never let a person answer.
+        agreed to it in so many words. "The user said something" is not the gate: an offer
+        raised after a failed remediation sits open for as long as the conversation does,
+        and the next message of any content would otherwise open it.
         """
         escalation = await self._pending_offer(conversation_id)
         if escalation is None:
             raise ConsentMissing("No outstanding escalation offer in this conversation.")
-        if not await self._user_replied_after(conversation_id, escalation):
+
+        answer = await self._answer_to(conversation_id, escalation)
+        if answer is None:
             raise ConsentMissing("The user has not answered the escalation offer yet.")
+        if _REFUSAL.search(answer):
+            # Close it rather than leaving it open for a later message to reopen.
+            escalation.state = EscalationState.DECLINED
+            await self.session.flush()
+            raise ConsentMissing("The user declined the offer to raise a ticket.")
+        if not _AGREEMENT.search(answer):
+            raise ConsentMissing(
+                "The user's reply was neither a yes nor a no — ask them plainly whether "
+                "to raise a ticket before calling this again."
+            )
 
         # Re-check between offer and answer: another device or another chat may have raised
         # this in the meantime, and the user's "yes" should not turn into a second ticket.
@@ -151,6 +185,7 @@ class EscalationService:
             escalation.last_error = str(exc)[:500]
             await self.session.flush()
             logger.warning("Escalation %s could not be filed: %s", escalation.id, exc)
+            await self._audit(escalation, org_id=org_id, ok=False, requester=requester_email)
             return RaiseOutcome(escalation, created=False, message=(
                 "I couldn't reach your IT helpdesk just now, so the ticket isn't raised "
                 "yet. I've flagged this for your IT team."
@@ -162,6 +197,7 @@ class EscalationService:
         escalation.external_url = result.url
         escalation.raised_at = utcnow()
         await self.session.flush()
+        await self._audit(escalation, org_id=org_id, ok=True, requester=requester_email)
         return RaiseOutcome(escalation, created=True, message=(
             f"Done — I've raised ticket #{result.external_id} with your IT team. "
             "Someone from support will reach out to you shortly."
@@ -180,6 +216,33 @@ class EscalationService:
 
     # -- Internals ----------------------------------------------------------
 
+    async def _audit(
+        self, escalation: SupportEscalation, *, org_id: uuid.UUID, ok: bool,
+        requester: str | None,
+    ) -> None:
+        """Record that ASTRA created — or failed to create — a record in someone else's
+        system, on a named employee's behalf, carrying that employee's device telemetry.
+
+        The escalation row is the business record; this is the audit trail. The caller here
+        is the model's tool loop, which is exactly the caller that most needs an entry it
+        cannot choose to skip.
+        """
+        await AuditService(self.session).record(
+            org_id=org_id,
+            actor_id=escalation.user_id,
+            action="helpdesk.ticket.raised" if ok else "helpdesk.ticket.failed",
+            target_type="support_escalation",
+            target_id=str(escalation.id),
+            detail={
+                "provider": escalation.provider,
+                "ticket_id": escalation.external_ticket_id,
+                "device_id": str(escalation.device_id) if escalation.device_id else None,
+                "requester": requester,
+                "action_tried": escalation.action_id,
+                "error": escalation.last_error if not ok else None,
+            },
+        )
+
     async def _pending_offer(self, conversation_id: uuid.UUID) -> SupportEscalation | None:
         result = await self.session.execute(
             select(SupportEscalation)
@@ -192,19 +255,27 @@ class EscalationService:
         )
         return result.scalars().first()
 
-    async def _user_replied_after(
+    async def _answer_to(
         self, conversation_id: uuid.UUID, escalation: SupportEscalation
-    ) -> bool:
+    ) -> str | None:
+        """The first thing the user said after the offer, lowercased. None if they haven't.
+
+        The *first* reply, not the latest: it is the one that answered the question. Taking
+        the latest would let a conversation that has moved on to something else supply a
+        stray "ok" as consent to a ticket nobody is still thinking about.
+        """
         result = await self.session.execute(
-            select(Message.id)
+            select(Message.content)
             .where(
                 Message.conversation_id == conversation_id,
                 Message.role == MessageRole.USER,
                 Message.created_at >= escalation.created_at,
             )
+            .order_by(Message.created_at.asc())
             .limit(1)
         )
-        return result.scalars().first() is not None
+        answer = result.scalars().first()
+        return answer.lower() if answer else None
 
     async def _find_recent_ticket(
         self, *, org_id: uuid.UUID, device_id: uuid.UUID | None, user_id: uuid.UUID | None,

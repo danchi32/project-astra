@@ -296,3 +296,72 @@ async def test_the_service_updates_and_verifies_directly(session_factory, admin_
         ok, detail = await svc.verify(actor=user)
         assert ok is True and detail is None
         assert (await svc.get(org_id=user.org_id)).last_verified_at is not None
+
+
+# ── The domain is a hostname template, not free text ───────────────────────
+
+
+@pytest.mark.parametrize("hostile", [
+    "10.128.0.1:8080?",         # "?" ends the authority, so ".freshservice.com" lands in
+    "169.254.169.254:80?",      # the query string and the host becomes whatever was typed
+    "attacker.com?",
+    "[::1]:80?",
+    "acme.freshservice.com.evil.com",
+    "acme evil",
+    "-acme",
+])
+async def test_a_domain_that_would_escape_the_template_is_refused(client, admin_headers,
+                                                                  hostile):
+    """SSRF. `base_url` is f"https://{domain}.freshservice.com", and POST /verify makes the
+    request — so a domain that can terminate the authority early turns any org admin into a
+    client of ASTRA's own network, with the response body read back to them."""
+    resp = await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
+                              json={"domain": hostile})
+    assert resp.status_code == 422, f"{hostile!r} was accepted: {resp.text}"
+
+    body = (await client.get("/api/v1/settings/helpdesk", headers=admin_headers)).json()
+    assert body["domain"] is None, "a refused domain must not have been written"
+
+
+async def test_every_accepted_domain_stays_under_freshservice_com(client, admin_headers):
+    """The end-to-end version of the rule above: whatever survives validation must produce
+    a host inside the one domain this connector is allowed to talk to."""
+    import httpx as _httpx
+
+    for given in ["acme", "acme-it", "ACME.freshservice.com", "acme/../..", "localhost#",
+                  "https://a1.freshservice.com/a/tickets/12"]:
+        resp = await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
+                                  json={"domain": given})
+        if resp.status_code != 200:
+            continue
+        domain = resp.json()["domain"]
+        host = _httpx.URL(f"https://{domain}.freshservice.com/api/v2/tickets").host
+        assert host.endswith(".freshservice.com"), f"{given!r} -> {host}"
+
+
+# ── Revoking, and a broken deployment ──────────────────────────────────────
+
+
+async def test_an_empty_api_key_revokes_the_saved_one(client, admin_headers):
+    """An admin whose key leaked has to be able to take it out of our database. Turning the
+    connector off leaves the ciphertext sitting there."""
+    await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
+                       json={"domain": "acme", "api_key": "fs-secret-key-9911",
+                             "enabled": True})
+    resp = await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
+                              json={"api_key": ""})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["api_key_masked"] == ""
+    assert body["ready"] is False
+
+
+async def test_a_malformed_secrets_key_says_so_instead_of_500ing(client, admin_headers,
+                                                                 monkeypatch):
+    """Present-but-invalid is a deployment mistake, and it must not reach the admin as an
+    opaque error. It reads exactly like "not configured" to `is_available`."""
+    monkeypatch.setattr(get_settings(), "secrets_key", "not-a-fernet-key", raising=False)
+    resp = await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
+                              json={"domain": "acme", "api_key": "fs-secret-key-9911"})
+    assert resp.status_code == 503, resp.text
+    assert "ASTRA_SECRETS_KEY" in resp.json()["detail"]

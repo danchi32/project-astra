@@ -8,7 +8,11 @@ import uuid
 
 import pytest
 
-from app.models import Conversation, Message, MessageRole, SupportEscalation
+from sqlalchemy import select
+
+from app.models import (
+    AuditLog, Conversation, Message, MessageRole, SupportEscalation,
+)
 from app.models.support_escalation import EscalationState
 from app.services.support.connector import MockConnector, TicketRequest
 from app.services.support.dossier import Attempt, Dossier
@@ -428,3 +432,92 @@ def test_a_ticket_is_tagged_so_the_customer_can_report_on_it():
     assert "astra" in TicketRequest(
         requester_email="a@b.com", subject="s", description_html="d"
     ).tags
+
+
+# ── Consent is what the user said, not that they said something ────────────
+
+
+@pytest.mark.parametrize("reply", [
+    "no", "nahi", "nhi", "no thanks", "don't bother", "rehne do", "not now", "baad me",
+])
+async def test_a_refusal_declines_the_offer_instead_of_opening_it(
+    session_factory, admin_user, reply,
+):
+    """The offer is posted automatically when a remediation fails, then sits open for as
+    long as the conversation does. If any reply counted as an answer, "no, don't bother"
+    would be the thing that filed the ticket."""
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=MockConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=None, user_id=admin_user.id, dossier=_dossier())
+        await _user_says(session, convo, reply)
+
+        with pytest.raises(ConsentMissing):
+            await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                   requester_email="priya@acme.com")
+
+        escalation = (await session.execute(select(SupportEscalation))).scalars().one()
+        assert escalation.state == EscalationState.DECLINED, (
+            "a refused offer must be closed, not left open for a later message to reopen"
+        )
+
+
+async def test_an_unrelated_reply_is_not_consent(session_factory, admin_user):
+    """This is the prompt-injection gate. Event-log strings, process names and knowledge
+    articles all reach the model, so "the model decided the user agreed" cannot be the
+    thing that files a ticket in a customer's production queue."""
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=MockConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=None, user_id=admin_user.id, dossier=_dossier())
+        await _user_says(session, convo, "the printer on floor 3 is also making a noise")
+
+        with pytest.raises(ConsentMissing, match="neither a yes nor a no"):
+            await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                   requester_email="priya@acme.com")
+
+        escalation = (await session.execute(select(SupportEscalation))).scalars().one()
+        assert escalation.state == EscalationState.OFFERED, "still open — they can still say yes"
+
+
+async def test_consent_is_the_reply_to_the_offer_not_a_later_stray_yes(
+    session_factory, admin_user,
+):
+    """A conversation that moved on to something else must not supply an "ok" from three
+    messages later as agreement to a ticket nobody is still thinking about."""
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=MockConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=None, user_id=admin_user.id, dossier=_dossier())
+        await _user_says(session, convo, "actually let me try restarting first")
+        await _user_says(session, convo, "ok that worked")
+
+        with pytest.raises(ConsentMissing):
+            await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                   requester_email="priya@acme.com")
+
+
+async def test_raising_a_ticket_is_audited(session_factory, admin_user):
+    """ASTRA creates a record in someone else's system, on a named employee's behalf,
+    carrying their device telemetry — and the caller is the model's tool loop. The
+    escalation row is the business record; this is the trail an investigator reads."""
+    async with session_factory() as session:
+        svc = EscalationService(session, connector=MockConnector())
+        convo = await _conversation(session, admin_user.org_id)
+        await svc.offer(org_id=admin_user.org_id, conversation_id=convo.id,
+                        device_id=None, user_id=admin_user.id, dossier=_dossier())
+        await _user_says(session, convo)
+        outcome = await svc.raise_ticket(org_id=admin_user.org_id, conversation_id=convo.id,
+                                         requester_email="priya@acme.com")
+        assert outcome.created
+
+        entry = (await session.execute(
+            select(AuditLog).where(AuditLog.action == "helpdesk.ticket.raised")
+        )).scalars().one()
+        assert entry.org_id == admin_user.org_id
+        assert entry.target_id == str(outcome.escalation.id)
+        assert entry.detail["ticket_id"] == outcome.escalation.external_ticket_id
+        assert entry.detail["requester"] == "priya@acme.com"

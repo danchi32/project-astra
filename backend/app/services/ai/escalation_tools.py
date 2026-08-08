@@ -126,9 +126,14 @@ async def dispatch(
         outcome = await service.raise_ticket(
             org_id=org_id, conversation_id=conversation_id,
             requester_email=who.email if who else None,
-            priority="low", category=category, sub_category=sub_category,
+            # No priority: the org's configured default wins. ASTRA files at the level its
+            # admin chose rather than judging how urgent someone else's problem is.
+            category=category, sub_category=sub_category,
         )
     except ConsentMissing as exc:
+        # Committed, not rolled back: a refusal closes the offer, and that has to survive
+        # the turn or the next message would find it open again.
+        await session.commit()
         # The model got ahead of the user. Reported back to it rather than raised, so it
         # can ask properly instead of the turn failing.
         return json.dumps({"raised": False, "error": str(exc),

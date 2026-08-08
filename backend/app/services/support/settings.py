@@ -60,14 +60,29 @@ class HelpdeskSettingsService:
         for field, value in changed.items():
             setattr(settings, field, value)
 
+        api_key = api_key.strip() if isinstance(api_key, str) else api_key
         if api_key:
             if not crypto.is_available():
                 raise HelpdeskConfigError(
                     "Credential storage is not configured on this deployment "
                     "(ASTRA_SECRETS_KEY). The helpdesk API key cannot be saved."
                 )
-            settings.api_key_encrypted = crypto.encrypt(api_key)
+            try:
+                settings.api_key_encrypted = crypto.encrypt(api_key)
+            except crypto.CryptoUnavailable as exc:
+                # A key that is present but malformed passes `is_available` and would
+                # otherwise surface as a 500 with no hint at the cause.
+                raise HelpdeskConfigError(
+                    "Credential storage is misconfigured on this deployment "
+                    "(ASTRA_SECRETS_KEY is not a valid key). The API key cannot be saved."
+                ) from exc
             # A new credential invalidates whatever the last verification proved.
+            settings.last_verified_at = None
+            settings.last_error = None
+        elif api_key == "":
+            # An explicit empty string is "forget the key I saved", which is the only way
+            # an admin can revoke a leaked credential without deleting the whole org.
+            settings.api_key_encrypted = None
             settings.last_verified_at = None
             settings.last_error = None
 
@@ -82,7 +97,11 @@ class HelpdeskSettingsService:
             target_id=str(settings.id),
             # Field names only. What changed is the useful record; the value of a
             # credential never belongs in an audit log.
-            detail={"fields": sorted(changed.keys()) + (["api_key"] if api_key else [])},
+            detail={
+                "fields": sorted(changed.keys())
+                + (["api_key"] if api_key else [])
+                + (["api_key_cleared"] if api_key == "" else []),
+            },
         )
         await self.session.commit()
         return self._read(settings)
@@ -95,30 +114,35 @@ class HelpdeskSettingsService:
         ticket is on its way.
         """
         settings = await self._row(actor.org_id)
+
+        async def audited(ok: bool, detail: str | None) -> tuple[bool, str | None]:
+            # Recorded on failure too. This endpoint makes an outbound request on the
+            # deployment's behalf against an admin-supplied domain, so a run that failed
+            # is exactly the one an investigator needs to be able to see.
+            await self.audit.record(
+                org_id=actor.org_id, actor_id=actor.id, action="helpdesk.settings.verify",
+                target_type="helpdesk_settings", target_id=str(settings.id),
+                detail={"provider": settings.provider, "domain": settings.domain, "ok": ok},
+            )
+            await self.session.commit()
+            return ok, detail
+
         connector = await factory.build_connector(self.session, actor.org_id)
         if connector is None:
             detail = self._why_not_ready(settings)
             settings.last_error = detail
-            await self.session.commit()
-            return False, detail
+            return await audited(False, detail)
 
         try:
             await connector.verify()
         except TicketError as exc:
             settings.last_error = str(exc)[:500]
             settings.last_verified_at = None
-            await self.session.commit()
-            return False, str(exc)
+            return await audited(False, str(exc))
 
         settings.last_error = None
         settings.last_verified_at = utcnow()
-        await self.audit.record(
-            org_id=actor.org_id, actor_id=actor.id, action="helpdesk.settings.verify",
-            target_type="helpdesk_settings", target_id=str(settings.id),
-            detail={"provider": settings.provider, "domain": settings.domain},
-        )
-        await self.session.commit()
-        return True, None
+        return await audited(True, None)
 
     # -- Presentation -------------------------------------------------------
 

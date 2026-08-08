@@ -9,6 +9,7 @@ priority. Everything else the ticket needs (category, group, agent) is required 
 """
 import base64
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -23,6 +24,33 @@ logger = logging.getLogger(__name__)
 
 STATUS_OPEN = 2
 PRIORITY = {"low": 1, "medium": 2, "high": 3, "urgent": 4}
+
+# One DNS label, nothing else. The base URL is built by interpolating this into
+# "https://{}.freshservice.com", so anything that can terminate the authority early turns
+# an admin-supplied string into an arbitrary host: "10.0.0.1:8080?" pushes the hardcoded
+# suffix into the query string and points our egress at an internal service. The template
+# is not a constraint on its own — this is.
+_SUBDOMAIN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_AUTHORITY_END = re.compile(r"[/?#\\]")
+
+
+def normalise_domain(value: str) -> str:
+    """Reduce whatever an admin pastes to a bare Freshservice subdomain, or refuse.
+
+    "acme", "acme.freshservice.com" and "https://acme.freshservice.com/a/tickets" all mean
+    the same instance, and rejecting two of the three is a support ticket about the
+    ticketing integration. Everything else is refused rather than coerced.
+    """
+    cleaned = value.strip().lower()
+    for prefix in ("https://", "http://"):
+        cleaned = cleaned.removeprefix(prefix)
+    cleaned = _AUTHORITY_END.split(cleaned, maxsplit=1)[0]
+    cleaned = cleaned.removesuffix(".freshservice.com")
+    if not _SUBDOMAIN.match(cleaned):
+        raise ValueError(
+            "Enter just your Freshservice subdomain — the 'acme' in acme.freshservice.com"
+        )
+    return cleaned
 
 
 class FreshserviceConnector:
@@ -41,7 +69,10 @@ class FreshserviceConnector:
         group_id: int | None = None,
         timeout: float = 20.0,
     ) -> None:
-        self.domain = domain.strip().removesuffix(".freshservice.com")
+        # Re-checked here and not only at the schema: rows written before the validator
+        # existed, and any future caller that builds a connector straight from the DB,
+        # would otherwise reach `base_url` unvalidated.
+        self.domain = normalise_domain(domain)
         self._api_key = api_key
         self.default_priority = default_priority
         self.source = source
@@ -65,7 +96,7 @@ class FreshserviceConnector:
             "subject": request.subject,
             "description": request.description_html,
             "status": STATUS_OPEN,
-            "priority": PRIORITY.get(request.priority.lower(), self.default_priority),
+            "priority": PRIORITY.get((request.priority or "").lower(), self.default_priority),
             # Tags rather than a custom source: a source has to be created by an admin
             # first, while a tag needs no setup and still lets their reporting answer
             # "how many tickets did ASTRA raise".
@@ -174,7 +205,16 @@ class FreshserviceConnector:
             elif body.get("description"):
                 detail = str(body["description"])
         except ValueError:
-            detail = response.text[:200]
+            # A WAF block, an expired-trial notice, an HTML error page — the cases nobody
+            # can diagnose from a status code alone. It goes to the log, where an operator
+            # can read it, and not into the return value, which is handed back over the API
+            # and persisted in `last_error`. Echoing bytes from whatever answered would
+            # turn the verify endpoint into a readable probe of anything it can reach.
+            logger.warning(
+                "Freshservice %s for %s.freshservice.com returned a non-JSON body: %s",
+                code, self.domain, response.text[:200],
+            )
+            detail = "the response was not the JSON Freshservice sends (see server logs)"
 
         parts = [p for p in (hint, detail) if p]
         return f"Freshservice returned {code}" + (f" — {'; '.join(parts)}" if parts else "")

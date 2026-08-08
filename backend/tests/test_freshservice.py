@@ -7,6 +7,7 @@ number we never received, a credential readable in a database dump.
 """
 import base64
 import json
+import logging
 import uuid
 
 import httpx
@@ -191,13 +192,23 @@ async def test_a_201_that_is_not_json_is_an_error(monkeypatch):
         await conn.create_ticket(_request())
 
 
-async def test_a_rejection_that_is_not_json_still_carries_the_body(monkeypatch):
+async def test_a_rejection_that_is_not_json_goes_to_the_log_not_the_caller(monkeypatch, caplog):
     """Non-JSON errors are exactly the ones nobody can diagnose from a status code — a
-    WAF block, an expired trial notice, an HTML error page."""
+    WAF block, an expired trial notice, an HTML error page. An operator needs those bytes.
+
+    The caller must not get them. This same string is returned by POST /settings/helpdesk/
+    verify and stored in `last_error`, so echoing the body would let an org admin read the
+    reply of anything the deployment can reach.
+    """
     conn = _connector(monkeypatch,
                       lambda r: httpx.Response(400, text="Account suspended by admin"))
-    with pytest.raises(TicketError, match="Account suspended"):
-        await conn.create_ticket(_request())
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(TicketError) as caught:
+            await conn.create_ticket(_request())
+
+    assert "Account suspended" not in str(caught.value)
+    assert "400" in str(caught.value)
+    assert "Account suspended by admin" in caplog.text
 
 
 async def test_a_rejection_with_a_description_is_surfaced(monkeypatch):

@@ -3,6 +3,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.services.support.freshservice import normalise_domain
+
 
 class HelpdeskSettingsRead(BaseModel):
     """What the portal shows. Never the credential.
@@ -47,19 +49,14 @@ class HelpdeskSettingsUpdate(BaseModel):
     @field_validator("domain")
     @classmethod
     def _bare_subdomain(cls, value: str | None) -> str | None:
-        """Accept whatever an admin pastes from their address bar.
+        """Accept whatever an admin pastes from their address bar — and nothing else.
 
-        "acme", "acme.freshservice.com", "https://acme.freshservice.com/a/tickets" all mean
-        the same instance, and rejecting two of the three is a support ticket about the
-        ticketing integration.
+        The rule lives with the code that builds the URL, so the two can't drift apart:
+        a subdomain this accepts but `base_url` mis-handles is an SSRF.
         """
-        if value is None:
+        if value is None or not value.strip():
             return None
-        cleaned = value.strip().lower()
-        for prefix in ("https://", "http://"):
-            cleaned = cleaned.removeprefix(prefix)
-        cleaned = cleaned.split("/")[0].removesuffix(".freshservice.com")
-        return cleaned or None
+        return normalise_domain(value)
 
 
 class HelpdeskVerifyResult(BaseModel):

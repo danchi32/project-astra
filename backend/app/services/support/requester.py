@@ -17,6 +17,7 @@ Precedence runs from stated to inferred:
      narrow one: the local part of an email in the same organization.
 """
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -26,6 +27,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Asset, Conversation, Device, User
 
 logger = logging.getLogger(__name__)
+
+# What a Windows account name may contain before it is allowed to become a LIKE pattern.
+# Deliberately narrower than the RFC — no whitespace, no quotes, no "%".
+_LOCAL_PART = re.compile(r"^[a-z0-9._+-]{1,64}$")
+
+
+def _like_literal(value: str) -> str:
+    """Escape the LIKE metacharacters so the pattern matches the name and nothing else.
+
+    "_" survives the charset check because real Windows accounts are called things like
+    "priya_sharma" — and it is also LIKE's single-character wildcard, so "j_e" would match
+    both "joe" and "jae". Escaped rather than rejected.
+    """
+    return value.replace("\\", r"\\").replace("%", r"\%").replace("_", r"\_")
 
 
 @dataclass
@@ -44,7 +59,7 @@ async def resolve(
         if convo is not None:
             if convo.user_id is not None:
                 user = await session.get(User, convo.user_id)
-                if user is not None and user.email:
+                if user is not None and user.email and user.org_id == org_id:
                     return Requester(user.email, user.id, "conversation user")
             device_id = device_id or convo.device_id
 
@@ -69,7 +84,10 @@ async def resolve(
 
     # "LANCESOFT\\priya.sharma" or "priya.sharma" -> "priya.sharma"
     username = device.logged_in_user.split("\\")[-1].split("/")[-1].strip().lower()
-    if not username:
+    # This string comes off the wire from the agent, and it is about to become a LIKE
+    # pattern. A device reporting "%" would otherwise match every colleague in the org and
+    # file the ticket — telemetry and all — under whichever one came back first.
+    if not username or not _LOCAL_PART.match(username):
         return None
 
     # Match within this organization only, and only on the local part of a real address we
@@ -77,7 +95,7 @@ async def resolve(
     user = (await session.execute(
         select(User).where(
             User.org_id == org_id,
-            func.lower(func.substr(User.email, 1, func.length(User.email))).like(f"{username}@%"),
+            func.lower(User.email).like(f"{_like_literal(username)}@%", escape="\\"),
         ).limit(1)
     )).scalars().first()
     if user is not None:

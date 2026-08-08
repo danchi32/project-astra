@@ -34,7 +34,17 @@ class DecryptionFailed(RuntimeError):
 
 
 def is_available() -> bool:
-    return bool(get_settings().secrets_key)
+    """Whether a credential can actually be encrypted right now.
+
+    Builds the cipher rather than just checking the setting is non-empty: a key that is
+    present but malformed would otherwise pass here and blow up two lines later, turning a
+    deployment mistake into an opaque 500 for whoever pressed Save.
+    """
+    try:
+        _fernet()
+    except CryptoUnavailable:
+        return False
+    return True
 
 
 def _fernet():

@@ -29,9 +29,9 @@ class TicketRequest:
     requester_email: str
     subject: str
     description_html: str
-    # ASTRA does not decide how urgent a customer's problems are — this is the org's
-    # configured default, not a guess from the symptom.
-    priority: str = "low"
+    # ASTRA does not decide how urgent a customer's problems are. None means "use whatever
+    # this organization configured", which is the normal case; a name here is an override.
+    priority: str | None = None
     # Best-effort routing hints. Dropped by an adapter whose helpdesk has no equivalent
     # rather than being forced into some nearest match.
     category: str | None = None

@@ -13,6 +13,7 @@ import json
 import uuid
 
 import pytest
+from sqlalchemy import select
 
 from app.core import crypto
 from app.core.config import get_settings
@@ -409,3 +410,79 @@ async def test_a_failed_fix_without_a_helpdesk_keeps_the_old_wording(
 
     assert not escalations
     assert any("flagged it for your IT team" in m for m in messages)
+
+
+@pytest.mark.parametrize("reported", ["%", "ACME\\%", "priya%", "%@acme.com", "pri ya"])
+async def test_a_wildcard_logged_in_user_matches_nobody(session_factory, admin_user, reported):
+    """`logged_in_user` comes off the wire from the agent and becomes a LIKE pattern. A
+    compromised endpoint reporting "%" would otherwise match every colleague in the org,
+    and `.limit(1)` would file the ticket — device telemetry and all — under whichever
+    one the database happened to return first."""
+    async with session_factory() as session:
+        session.add(User(org_id=admin_user.org_id, email="priya@acme.com",
+                         full_name="Priya", hashed_password="x", role=UserRole.USER))
+        device = _device(admin_user.org_id, "PC-9", reported)
+        session.add(device)
+        await session.flush()
+        assert await requester.resolve(session, org_id=admin_user.org_id,
+                                       conversation_id=None, device_id=device.id) is None
+
+
+async def test_an_underscore_in_a_username_is_a_letter_not_a_wildcard(session_factory,
+                                                                      admin_user):
+    """Windows accounts really are called "priya_sharma", so "_" cannot simply be banned.
+    It is LIKE's single-character wildcard, so it has to be escaped instead — otherwise
+    "j_e" resolves to whichever of joe@ and jae@ comes back first."""
+    async with session_factory() as session:
+        session.add(User(org_id=admin_user.org_id, email="priya_sharma@acme.com",
+                         full_name="Priya Sharma", hashed_password="x", role=UserRole.USER))
+        session.add(User(org_id=admin_user.org_id, email="jae@acme.com",
+                         full_name="Jae", hashed_password="x", role=UserRole.USER))
+        await session.flush()
+
+        exact = _device(admin_user.org_id, "PC-A", "ACME\\priya_sharma")
+        wild = _device(admin_user.org_id, "PC-B", "j_e")
+        session.add_all([exact, wild])
+        await session.flush()
+
+        who = await requester.resolve(session, org_id=admin_user.org_id,
+                                      conversation_id=None, device_id=exact.id)
+        assert who is not None and who.email == "priya_sharma@acme.com"
+
+        assert await requester.resolve(session, org_id=admin_user.org_id,
+                                       conversation_id=None, device_id=wild.id) is None
+
+
+async def test_a_refusal_survives_the_turn(session_factory, admin_user):
+    """The decline path runs inside a tool call that returns an error rather than raising,
+    so nothing downstream commits for it. If it were only flushed, the very next message
+    in the conversation would find the offer open again."""
+    async with session_factory() as session:
+        await _configure_helpdesk(session, admin_user.org_id)
+        device, _ = await _device_with_user(session, admin_user.org_id)
+        convo = Conversation(org_id=admin_user.org_id, device_id=device.id, title="chat")
+        session.add(convo)
+        await session.flush()
+        await session.commit()
+        convo_id, device_id = convo.id, device.id
+
+    async with session_factory() as session:
+        await escalation_tools.dispatch(
+            session=session, org_id=admin_user.org_id, name=escalation_tools.OFFER,
+            tool_input={"problem": "wifi keeps dropping"},
+            conversation_id=convo_id, device_id=device_id,
+        )
+        session.add(Message(conversation_id=convo_id, role=MessageRole.USER,
+                            content="nahi, rehne do"))
+        await session.commit()
+
+    async with session_factory() as session:
+        out = json.loads(await escalation_tools.dispatch(
+            session=session, org_id=admin_user.org_id, name=escalation_tools.RAISE,
+            tool_input={}, conversation_id=convo_id, device_id=device_id,
+        ))
+        assert out["raised"] is False
+
+    async with session_factory() as session:
+        escalation = (await session.execute(select(SupportEscalation))).scalars().one()
+        assert escalation.state == EscalationState.DECLINED
