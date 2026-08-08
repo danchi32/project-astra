@@ -85,7 +85,8 @@ export default function LoginPage() {
 
       <p className="mt-3 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
         Don&apos;t have an account?{" "}
-        <Link href="/register" className="font-medium" style={{ color: "var(--accent)" }}>Create an organization</Link>
+        <Link href="/register" className="font-medium" style={{ color: "var(--accent)" }}>Sign up</Link>
+        {" "}— free for 14 days, no card needed.
       </p>
     </AuthShell>
   );

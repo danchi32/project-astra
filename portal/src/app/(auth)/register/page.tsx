@@ -6,6 +6,7 @@ import { registerStart, registerVerify } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
 import {
   AuthShell,
+  TRIAL_POINTS,
   authButtonCls,
   authInputCls,
   authInputStyle,
@@ -69,14 +70,20 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell subtitle={step === "details" ? "Create your organization" : "Confirm your email"}>
+    <AuthShell
+      subtitle={step === "details" ? "Start your 14-day free trial" : "Confirm your email"}
+      eyebrow="14-day free trial"
+      headline="Start free. No credit card."
+      blurb="Create your organization, install the agent on one device, and ASTRA starts reporting on it. Nothing to pay until you decide it's worth it."
+      points={TRIAL_POINTS}
+    >
       <div className="hidden lg:block mb-8">
         <h2 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>
-          {step === "details" ? "Create your organization" : "Confirm your email"}
+          {step === "details" ? "Sign up" : "Confirm your email"}
         </h2>
         <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
           {step === "details"
-            ? "Takes a minute. Install the agent on one device and ASTRA starts reporting on it."
+            ? "Takes a minute. No credit card needed."
             : "One more step and your organization is ready."}
         </p>
       </div>
