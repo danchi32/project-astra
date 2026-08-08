@@ -109,12 +109,12 @@ export function AuthShell({
   /** The bottom strip. Must answer the same question as the rest of the panel. */
   footer?: { label: string; steps: string[] };
 }) {
-  // h-screen + overflow-hidden on lg: these pages fit the viewport rather than scrolling it.
-  // The form column keeps its own overflow-y-auto as a floor — on a viewport too short for
-  // the fields something has to give, and it must never be "the password box is
-  // unreachable". Below lg the page scrolls normally; a phone always has to.
+  // Fits one screen at ordinary window sizes — that is done by the type scale and spacing
+  // below, which step with the viewport, NOT by pinning the height. Pinning it would mean a
+  // genuinely small window silently loses the bottom of the form instead of scrolling to
+  // it, and a page you cannot scroll is worse than a page that scrolls.
   return (
-    <div className="min-h-screen lg:h-screen lg:overflow-hidden lg:grid lg:grid-cols-[1.05fr_minmax(420px,0.95fr)]"
+    <div className="min-h-screen lg:grid lg:grid-cols-[1.05fr_minmax(420px,0.95fr)]"
       style={{ background: "var(--bg)" }}>
 
       {/* Left: what this is. Hidden below lg — on a phone the form is the whole job, and a
@@ -200,10 +200,8 @@ export function AuthShell({
         </div>
       </aside>
 
-      {/* Right: the form, and nothing else. min-h-0 lets this column shrink inside the
-          h-screen grid — without it the row would grow to the content and put the scrollbar
-          back on the page, which is the thing we just removed. */}
-      <main className="flex items-center justify-center px-6 py-10 lg:px-10 lg:py-6 xl:px-12 xl:py-10 lg:min-h-0 lg:overflow-y-auto">
+      {/* Right: the form, and nothing else. */}
+      <main className="flex items-center justify-center px-6 py-10 lg:px-10 lg:py-8 xl:px-12 xl:py-10">
         <div className="w-full max-w-sm my-auto">
           {/* The wordmark repeats here only where the left panel is gone, so large screens
               don't show it twice. */}
