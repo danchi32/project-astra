@@ -129,6 +129,10 @@ jobs:
           SECRETS=ASTRA_DATABASE_URL=ASTRA_DATABASE_URL:latest
           SECRETS=$SECRETS,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY:latest
           SECRETS=$SECRETS,ASTRA_ANTHROPIC_API_KEY=ASTRA_ANTHROPIC_API_KEY:latest
+          # Encrypts the third-party credentials an org entrusts to us (the helpdesk API
+          # key today). Rotating it makes every stored credential undecryptable, so it is
+          # a restore-this-one item in the DR notes, not just another secret.
+          SECRETS=$SECRETS,ASTRA_SECRETS_KEY=ASTRA_SECRETS_KEY:latest
           SECRETS=$SECRETS,ASTRA_RESEND_API_KEY=ASTRA_RESEND_API_KEY:latest
           SECRETS=$SECRETS,ASTRA_EMAIL_FROM=ASTRA_EMAIL_FROM:latest
           SECRETS=$SECRETS,ASTRA_PAYPAL_CLIENT_ID=ASTRA_PAYPAL_CLIENT_ID:latest
