@@ -109,13 +109,17 @@ export function AuthShell({
   /** The bottom strip. Must answer the same question as the rest of the panel. */
   footer?: { label: string; steps: string[] };
 }) {
+  // h-screen + overflow-hidden on lg: these pages fit the viewport rather than scrolling it.
+  // The form column keeps its own overflow-y-auto as a floor — on a viewport too short for
+  // the fields something has to give, and it must never be "the password box is
+  // unreachable". Below lg the page scrolls normally; a phone always has to.
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[1.05fr_minmax(420px,0.95fr)]"
+    <div className="min-h-screen lg:h-screen lg:overflow-hidden lg:grid lg:grid-cols-[1.05fr_minmax(420px,0.95fr)]"
       style={{ background: "var(--bg)" }}>
 
       {/* Left: what this is. Hidden below lg — on a phone the form is the whole job, and a
           wall of prose above it would push the fields off the first screen. */}
-      <aside className="hidden lg:flex flex-col justify-between p-12 xl:p-16 relative overflow-hidden"
+      <aside className="hidden lg:flex flex-col justify-between p-10 xl:p-14 2xl:p-16 relative overflow-hidden"
         style={{ background: "var(--surface)", borderRight: "1px solid var(--border)" }}>
 
         {/* Two soft accent washes. Kept at low alpha off var(--accent) so they read the same
@@ -136,7 +140,7 @@ export function AuthShell({
 
         <div className="relative max-w-lg">
           {eyebrow && (
-            <span className="inline-block mb-4 px-3 py-1 rounded-full text-xs font-semibold tracking-wide"
+            <span className="inline-block mb-3 px-3 py-1 rounded-full text-xs font-semibold tracking-wide"
               style={{
                 background: "color-mix(in srgb, var(--accent) 14%, transparent)",
                 color: "var(--accent)",
@@ -144,24 +148,27 @@ export function AuthShell({
               {eyebrow}
             </span>
           )}
-          <h1 className="text-3xl xl:text-4xl font-semibold leading-tight tracking-tight"
+          {/* Type scale steps with the viewport rather than sitting at one size: the same
+              headline that looks right on a 27" monitor is what pushes the last pillar off
+              a 1366×768 laptop, which is the machine most of our admins actually use. */}
+          <h1 className="text-2xl xl:text-3xl 2xl:text-4xl font-semibold leading-tight tracking-tight"
             style={{ color: "var(--text-primary)" }}>
             {headline}
           </h1>
-          <p className="mt-4 text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+          <p className="mt-3 text-sm xl:text-base leading-relaxed" style={{ color: "var(--text-secondary)" }}>
             {blurb}
           </p>
 
-          <ul className="mt-10 space-y-6">
+          <ul className="mt-6 xl:mt-8 space-y-4 xl:space-y-5">
             {points.map(({ icon: Icon, title, body }) => (
-              <li key={title} className="flex gap-4">
+              <li key={title} className="flex gap-3.5">
                 <span className="shrink-0 mt-0.5 p-2 rounded-lg h-fit"
                   style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)", color: "var(--accent)" }}>
-                  <Icon size={18} />
+                  <Icon size={16} />
                 </span>
                 <div>
                   <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</p>
-                  <p className="text-sm mt-1 leading-relaxed" style={{ color: "var(--text-secondary)" }}>{body}</p>
+                  <p className="text-sm mt-0.5 leading-relaxed" style={{ color: "var(--text-secondary)" }}>{body}</p>
                 </div>
               </li>
             ))}
@@ -193,9 +200,11 @@ export function AuthShell({
         </div>
       </aside>
 
-      {/* Right: the form, and nothing else. */}
-      <main className="flex items-center justify-center p-6 py-12 lg:p-12">
-        <div className="w-full max-w-sm">
+      {/* Right: the form, and nothing else. min-h-0 lets this column shrink inside the
+          h-screen grid — without it the row would grow to the content and put the scrollbar
+          back on the page, which is the thing we just removed. */}
+      <main className="flex items-center justify-center px-6 py-10 lg:px-10 lg:py-6 xl:px-12 xl:py-10 lg:min-h-0 lg:overflow-y-auto">
+        <div className="w-full max-w-sm my-auto">
           {/* The wordmark repeats here only where the left panel is gone, so large screens
               don't show it twice. */}
           <div className="lg:hidden mb-8 text-center">
