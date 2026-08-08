@@ -4,6 +4,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerStart, registerVerify } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
+import {
+  AuthShell,
+  authButtonCls,
+  authInputCls,
+  authInputStyle,
+  authLabelCls,
+} from "@/components/auth-shell";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -61,89 +68,81 @@ export default function RegisterPage() {
     }
   }
 
-  const inputStyle = {
-    background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)",
-  } as const;
-  const inputCls = "w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500";
-  const labelCls = "block text-sm font-medium mb-1";
-
   return (
-    <div className="min-h-screen flex items-center justify-center py-10" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-sm p-8 rounded-xl shadow-lg" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <div className="mb-6 text-center">
-          <div className="inline-flex items-center gap-2 text-2xl font-bold" style={{ color: "var(--accent)" }}>
-            <span className="text-3xl">⬡</span> ASTRA
-          </div>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-            {step === "details" ? "Create your organization" : "Confirm your email"}
-          </p>
-        </div>
-
-        {step === "details" ? (
-          <form onSubmit={submitDetails} className="space-y-4">
-            <div>
-              <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Organization name</label>
-              <input required value={form.organization_name} onChange={set("organization_name")}
-                className={inputCls} style={inputStyle} placeholder="Acme Corp" />
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Your name</label>
-              <input required value={form.admin_name} onChange={set("admin_name")}
-                className={inputCls} style={inputStyle} placeholder="Jane Admin" />
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Work email</label>
-              <input type="email" required value={form.admin_email} onChange={set("admin_email")}
-                className={inputCls} style={inputStyle} placeholder="admin@yourcompany.com" />
-              {/* Say it up front — the backend rejects personal providers, and finding that
-                  out only after submitting (and after the OTP email) is a poor first run. */}
-              <p className="text-xs mt-1.5" style={{ color: "var(--text-secondary)" }}>
-                Use your company email — personal addresses (Gmail, Outlook, Yahoo…) aren&apos;t accepted.
-              </p>
-            </div>
-            <div>
-              <label className={labelCls} style={{ color: "var(--text-secondary)" }}>Password</label>
-              <input type="password" required value={form.admin_password} onChange={set("admin_password")}
-                className={inputCls} style={inputStyle} placeholder="At least 8 characters" />
-            </div>
-
-            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-
-            <button type="submit" disabled={loading}
-              className="w-full py-2 rounded-lg text-sm font-semibold text-white transition-opacity disabled:opacity-50"
-              style={{ background: "var(--accent)" }}>
-              {loading ? "Please wait…" : "Continue"}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={submitCode} className="space-y-4">
-            <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
-              We emailed a 6-digit code to <strong style={{ color: "var(--text-primary)" }}>{form.admin_email}</strong>. Enter it to finish.
-            </p>
-            <input required value={code} onChange={(e) => setCode(e.target.value)}
-              inputMode="numeric" autoFocus placeholder="123456"
-              className="w-full px-3 py-2 rounded-lg text-center text-lg tracking-[0.4em] font-mono outline-none focus:ring-2 focus:ring-brand-500"
-              style={inputStyle} />
-
-            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-
-            <button type="submit" disabled={loading}
-              className="w-full py-2 rounded-lg text-sm font-semibold text-white transition-opacity disabled:opacity-50"
-              style={{ background: "var(--accent)" }}>
-              {loading ? "Verifying…" : "Create organization"}
-            </button>
-            <button type="button" onClick={() => { setStep("details"); setError(""); setCode(""); }}
-              className="w-full text-sm" style={{ color: "var(--text-secondary)" }}>
-              ← Back to edit details
-            </button>
-          </form>
-        )}
-
-        <p className="mt-5 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
-          Already have an account?{" "}
-          <Link href="/login" className="font-medium" style={{ color: "var(--accent)" }}>Sign in</Link>
+    <AuthShell subtitle={step === "details" ? "Create your organization" : "Confirm your email"}>
+      <div className="hidden lg:block mb-8">
+        <h2 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>
+          {step === "details" ? "Create your organization" : "Confirm your email"}
+        </h2>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+          {step === "details"
+            ? "Takes a minute. Install the agent on one device and ASTRA starts reporting on it."
+            : "One more step and your organization is ready."}
         </p>
       </div>
-    </div>
+
+      {step === "details" ? (
+        <form onSubmit={submitDetails} className="space-y-4">
+          <div>
+            <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Organization name</label>
+            <input required value={form.organization_name} onChange={set("organization_name")}
+              className={authInputCls} style={authInputStyle} placeholder="Acme Corp" />
+          </div>
+          <div>
+            <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Your name</label>
+            <input required value={form.admin_name} onChange={set("admin_name")}
+              className={authInputCls} style={authInputStyle} placeholder="Jane Admin" />
+          </div>
+          <div>
+            <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Work email</label>
+            <input type="email" required value={form.admin_email} onChange={set("admin_email")}
+              className={authInputCls} style={authInputStyle} placeholder="admin@yourcompany.com" />
+            {/* Say it up front — the backend rejects personal providers, and finding that
+                out only after submitting (and after the OTP email) is a poor first run. */}
+            <p className="text-xs mt-1.5" style={{ color: "var(--text-secondary)" }}>
+              Use your company email — personal addresses (Gmail, Outlook, Yahoo…) aren&apos;t accepted.
+            </p>
+          </div>
+          <div>
+            <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Password</label>
+            <input type="password" required value={form.admin_password} onChange={set("admin_password")}
+              className={authInputCls} style={authInputStyle} placeholder="At least 8 characters" />
+          </div>
+
+          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+
+          <button type="submit" disabled={loading} className={authButtonCls}
+            style={{ background: "var(--accent)" }}>
+            {loading ? "Please wait…" : "Continue"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={submitCode} className="space-y-4">
+          <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
+            We emailed a 6-digit code to <strong style={{ color: "var(--text-primary)" }}>{form.admin_email}</strong>. Enter it to finish.
+          </p>
+          <input required value={code} onChange={(e) => setCode(e.target.value)}
+            inputMode="numeric" autoFocus placeholder="123456"
+            className="w-full px-3 py-2.5 rounded-lg text-center text-lg tracking-[0.4em] font-mono outline-none focus:ring-2 focus:ring-brand-500"
+            style={authInputStyle} />
+
+          {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+
+          <button type="submit" disabled={loading} className={authButtonCls}
+            style={{ background: "var(--accent)" }}>
+            {loading ? "Verifying…" : "Create organization"}
+          </button>
+          <button type="button" onClick={() => { setStep("details"); setError(""); setCode(""); }}
+            className="w-full text-sm" style={{ color: "var(--text-secondary)" }}>
+            ← Back to edit details
+          </button>
+        </form>
+      )}
+
+      <p className="mt-5 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+        Already have an account?{" "}
+        <Link href="/login" className="font-medium" style={{ color: "var(--accent)" }}>Sign in</Link>
+      </p>
+    </AuthShell>
   );
 }

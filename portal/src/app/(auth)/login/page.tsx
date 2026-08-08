@@ -3,6 +3,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { login } from "@/lib/api/auth";
+import {
+  AuthShell,
+  authButtonCls,
+  authInputCls,
+  authInputStyle,
+  authLabelCls,
+} from "@/components/auth-shell";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,71 +33,60 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
-      <div className="w-full max-w-sm p-8 rounded-xl shadow-lg" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        {/* Logo */}
-        <div className="mb-8 text-center">
-          <div className="inline-flex items-center gap-2 text-2xl font-bold" style={{ color: "var(--accent)" }}>
-            <span className="text-3xl">⬡</span> ASTRA
-          </div>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-            AI Operations Platform
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-              Email
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-              placeholder="admin@company.com"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-              Password
-            </label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-              placeholder="••••••••••••"
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-500 text-center">{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 rounded-lg text-sm font-semibold text-white transition-opacity disabled:opacity-50"
-            style={{ background: "var(--accent)" }}
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-
-        <p className="mt-4 text-center text-sm">
-          <Link href="/forgot-password" className="font-medium" style={{ color: "var(--accent)" }}>Forgot password?</Link>
-        </p>
-
-        <p className="mt-3 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="font-medium" style={{ color: "var(--accent)" }}>Create an organization</Link>
+    <AuthShell subtitle="AI Operations Platform">
+      <div className="hidden lg:block mb-8">
+        <h2 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>
+          Sign in
+        </h2>
+        <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
+          Welcome back — pick up where your fleet left off.
         </p>
       </div>
-    </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Email</label>
+          <input
+            type="email"
+            required
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={authInputCls}
+            style={authInputStyle}
+            placeholder="admin@company.com"
+          />
+        </div>
+        <div>
+          <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Password</label>
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={authInputCls}
+            style={authInputStyle}
+            placeholder="••••••••••••"
+          />
+        </div>
+
+        {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+
+        <button type="submit" disabled={loading} className={authButtonCls}
+          style={{ background: "var(--accent)" }}>
+          {loading ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+
+      <p className="mt-4 text-center text-sm">
+        <Link href="/forgot-password" className="font-medium" style={{ color: "var(--accent)" }}>Forgot password?</Link>
+      </p>
+
+      <p className="mt-3 text-center text-sm" style={{ color: "var(--text-secondary)" }}>
+        Don&apos;t have an account?{" "}
+        <Link href="/register" className="font-medium" style={{ color: "var(--accent)" }}>Create an organization</Link>
+      </p>
+    </AuthShell>
   );
 }
