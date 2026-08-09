@@ -44,7 +44,11 @@ class KnowledgeBaseService:
         article = await self.repo.add(
             KnowledgeArticle(
                 org_id=org_id, title=title, content=content, embedding=vector,
-                embedding_model=self.embed.name, symptom_samples=aliases or None,
+                embedding_model=self.embed.name,
+                # Stored as-is, so `NULL` keeps meaning "never generated" and can be
+                # backfilled, while `[]` means we asked and there was nothing to add.
+                symptom_samples=aliases,
+                aliases_generated_at=utcnow() if aliases is not None else None,
                 source=source, created_by_user_id=actor_user_id,
                 # A person wrote this and meant it — it is searchable at once. Only the
                 # learned path has to earn its way in.
@@ -93,7 +97,11 @@ class KnowledgeBaseService:
         article = await self.repo.add(
             KnowledgeArticle(
                 org_id=None, title=title, content=content, embedding=vector,
-                embedding_model=self.embed.name, symptom_samples=aliases or None,
+                embedding_model=self.embed.name,
+                # Stored as-is, so `NULL` keeps meaning "never generated" and can be
+                # backfilled, while `[]` means we asked and there was nothing to add.
+                symptom_samples=aliases,
+                aliases_generated_at=utcnow() if aliases is not None else None,
                 source=KnowledgeSource.MANUAL, created_by_user_id=actor_user_id,
                 published_at=utcnow(),
             )
@@ -143,6 +151,19 @@ class KnowledgeBaseService:
                 "%s knowledge article(s) are embedded with a different model than the "
                 "configured provider (%s) and were skipped — run scripts/reembed.py",
                 stale, self.embed.name,
+            )
+
+        # Articles nobody could generate aliases for. Without them retrieval falls back to
+        # matching the article's own words, and a user typing "wifi" scores exactly 0.0
+        # against an article titled "Wi-Fi keeps dropping" — not a weak hit, no hit. Said
+        # out loud for the same reason as the stale-vector warning above: the symptom is
+        # "the assistant doesn't know things" and the cause is nowhere near it.
+        missing = [a for a in usable if a.aliases_generated_at is None]
+        if missing:
+            logger.warning(
+                "%s of %s knowledge article(s) have no query aliases and are only findable "
+                "by their own wording — run scripts/backfill_aliases.py",
+                len(missing), len(usable),
             )
 
         scored = [(cosine_similarity(query_vec, a.embedding), a) for a in usable]

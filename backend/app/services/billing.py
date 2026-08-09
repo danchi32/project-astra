@@ -14,18 +14,23 @@ Design:
 * Discounts are operator-only: the super-admin sets a percent, realised as a Stripe
   coupon attached to the subscription and applied to future checkouts.
 """
+import logging
 from datetime import datetime, timezone
 
 import stripe
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import Device, Organization, SubscriptionStatus, User
+from app.models import Device, Organization, SubscriptionStatus, User, WebhookEvent
+from app.models.base import as_utc
 from app.services.exceptions import SubscriptionNotFound, ValidationError
 from app.services.payments import SubscriptionEvent, available_providers, get_provider
 from app.services.subscription import org_is_writable, read_only_reason
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -172,6 +177,25 @@ class BillingService:
         if org is None:
             return {"received": True, "applied": False}
 
+        # A verified signature says the payload is authentic, not that it is new or that it
+        # is the latest. Both of those have to be checked here or a captured `activated`
+        # payload re-grants a cancelled org, and a delayed delivery overwrites a newer one.
+        seen = await self._already_applied(event)
+        if seen:
+            logger.info(
+                "Ignoring %s webhook %s — already applied at %s",
+                event.provider, event.event_id, seen.created_at,
+            )
+            return {"received": True, "applied": False, "reason": "duplicate"}
+
+        if await self._is_stale(event, org):
+            logger.warning(
+                "Ignoring %s webhook %s for org %s — it describes %s, which is older than "
+                "what has already been applied",
+                event.provider, event.event_id, org.id, event.occurred_at,
+            )
+            return {"received": True, "applied": False, "reason": "out of order"}
+
         if event.subscription_id:
             org.provider_subscription_id = event.subscription_id
         if event.customer_id:
@@ -187,8 +211,66 @@ class BillingService:
             org.license_count = event.quantity
         if event.period_end is not None:
             org.current_period_end = event.period_end
-        await self.session.commit()
+
+        self._record_applied(event, org)
+        try:
+            await self.session.commit()
+        except IntegrityError:
+            # Two deliveries of the same event raced each other. The unique constraint —
+            # not the check above — is what decides; the loser rolls back having changed
+            # nothing, which is the correct outcome for a duplicate.
+            await self.session.rollback()
+            logger.info(
+                "Concurrent duplicate of %s webhook %s — the other delivery won",
+                event.provider, event.event_id,
+            )
+            return {"received": True, "applied": False, "reason": "duplicate"}
         return {"received": True, "applied": True}
+
+    async def _already_applied(self, event: SubscriptionEvent) -> WebhookEvent | None:
+        """The row proving we have handled this exact delivery before.
+
+        Rails without an event id (or a provider that stops sending one) fall through as
+        "not seen". Deliberate: dropping a real subscription change because we could not
+        identify it is worse than applying it twice, and the ordering check below still
+        stands between a replay and the org.
+        """
+        if not (event.provider and event.event_id):
+            return None
+        return (await self.session.execute(
+            select(WebhookEvent).where(
+                WebhookEvent.provider == event.provider,
+                WebhookEvent.event_id == event.event_id,
+            )
+        )).scalars().first()
+
+    async def _is_stale(self, event: SubscriptionEvent, org: Organization) -> bool:
+        """Whether this event describes a moment we have already moved past.
+
+        No rail guarantees delivery order, so `canceled` then a delayed `activated` is a
+        normal occurrence rather than an attack — and it would leave a cancelled org active.
+        Compared on the rail's own timestamp, never on arrival time.
+        """
+        if event.occurred_at is None:
+            return False
+        latest = (await self.session.execute(
+            select(WebhookEvent.occurred_at)
+            .where(WebhookEvent.org_id == org.id, WebhookEvent.occurred_at.isnot(None))
+            .order_by(WebhookEvent.occurred_at.desc())
+            .limit(1)
+        )).scalars().first()
+        return latest is not None and as_utc(event.occurred_at) < as_utc(latest)
+
+    def _record_applied(self, event: SubscriptionEvent, org: Organization) -> None:
+        if not (event.provider and event.event_id):
+            return
+        self.session.add(WebhookEvent(
+            provider=event.provider,
+            event_id=event.event_id,
+            org_id=org.id,
+            occurred_at=event.occurred_at,
+            applied_status=event.status.value if event.status else None,
+        ))
 
     async def _org_for_event(self, event: SubscriptionEvent) -> Organization | None:
         if event.org_id:

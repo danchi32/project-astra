@@ -34,7 +34,7 @@ from app.schemas.compliance import (
     DeviceCompliance,
 )
 from app.services.audit import AuditService
-from app.services.exceptions import ConflictError, NotFoundError
+from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 
 # The checks and the remediation (if any) that fixes each. Order = display order.
 CHECKS: list[tuple[str, str, str | None]] = [
@@ -51,6 +51,21 @@ CHECK_FIX = {key: fix for key, _, fix in CHECKS}
 
 DISK_FREE_MIN_PCT = 10.0
 STALE_AFTER = timedelta(hours=24)
+
+#: Shortest restricted-software pattern we will accept. Substring matching means "e" fails
+#: nearly every device in the fleet, and the admin who typed it has no way to see why.
+MIN_PATTERN_LENGTH = 3
+
+
+def _like_literal(value: str) -> str:
+    """Escape the LIKE metacharacters so a pattern matches the name and nothing else.
+
+    Real product names contain "_" — TeamViewer_Host, Zoom_Installer — and "_" is also
+    LIKE's single-character wildcard, so an admin pasting an exact name gets a pattern that
+    quietly matches more than they typed. A stray "%" is worse: it matches every installed
+    app, and the whole fleet fails the restricted-software check at once.
+    """
+    return value.replace("\\", r"\\").replace("%", r"\%").replace("_", r"\_")
 
 
 class ComplianceService:
@@ -69,6 +84,11 @@ class ComplianceService:
     async def add_banned(self, *, actor: User, name: str) -> BannedSoftware:
         name = name.strip()
         pattern = name.lower()
+        if len(pattern) < MIN_PATTERN_LENGTH:
+            raise ValidationError(
+                f"Enter at least {MIN_PATTERN_LENGTH} characters — a shorter name matches "
+                "part of almost every application and would fail your whole fleet."
+            )
         exists = await self.session.execute(
             select(BannedSoftware).where(
                 BannedSoftware.org_id == actor.org_id, BannedSoftware.pattern == pattern
@@ -184,7 +204,12 @@ class ComplianceService:
         banned_hits: dict[uuid.UUID, list[str]] = {}
         have_apps: set[uuid.UUID] = set()
         if banned:
-            conds = [func.lower(DeviceInstalledApp.name).like(f"%{b.pattern}%") for b in banned]
+            conds = [
+                func.lower(DeviceInstalledApp.name).like(
+                    f"%{_like_literal(b.pattern)}%", escape="\\"
+                )
+                for b in banned
+            ]
             hit_rows = (await self.session.execute(
                 select(DeviceInstalledApp.device_id, DeviceInstalledApp.name)
                 .where(DeviceInstalledApp.org_id == org_id, or_(*conds))

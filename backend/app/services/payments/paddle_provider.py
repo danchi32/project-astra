@@ -34,6 +34,12 @@ _STATUS_MAP = {
 }
 
 
+#: How stale a signed Paddle delivery may be before we refuse it. Generous enough to absorb
+#: their retries and any clock skew between us and them; short enough that a payload
+#: captured from a log is useless by the time anyone finds it.
+SIGNATURE_MAX_AGE_SECONDS = 300
+
+
 def _to_dt(value: str | None) -> datetime | None:
     """Paddle sends RFC3339, e.g. 2026-08-01T10:00:00.000Z."""
     if not value:
@@ -148,6 +154,15 @@ class PaddleProvider:
         if not hmac.compare_digest(expected, h1):
             raise ValidationError("Invalid Paddle webhook signature.")
 
+        # The signature covers the timestamp but nothing was checking its age, so a captured
+        # payload stayed valid indefinitely. Paddle signs `ts` precisely so this is possible.
+        try:
+            age = abs(datetime.now(timezone.utc).timestamp() - float(ts))
+        except ValueError as exc:
+            raise ValidationError("Malformed Paddle-Signature timestamp.") from exc
+        if age > SIGNATURE_MAX_AGE_SECONDS:
+            raise ValidationError("Paddle webhook signature is too old — refusing a replay.")
+
         try:
             event = json.loads(payload)
         except ValueError as exc:
@@ -173,6 +188,9 @@ class PaddleProvider:
             quantity=quantity,
             period_end=_to_dt((data.get("current_billing_period") or {}).get("ends_at")),
             ignored=status is None,
+            provider="paddle",
+            event_id=event.get("event_id"),
+            occurred_at=_to_dt(event.get("occurred_at")),
         )
 
 

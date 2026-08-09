@@ -52,6 +52,16 @@ class KnowledgeArticle(TimestampMixin, Base):
     # retrieval matches the words a person actually types, so the next user who says
     # "outlook stuck again" needs those words to be in the article.
     symptom_samples: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # When the query aliases were generated — NULL means nobody ever managed to.
+    #
+    # A separate column rather than `symptom_samples IS NULL`, because SQLAlchemy stores a
+    # Python None in a JSON column as the JSON value 'null', not as SQL NULL. The Python
+    # side reads back as None either way, so the distinction is invisible until a query
+    # tries `IS NULL` and quietly matches nothing — which is exactly how the first version
+    # of the backfill reported "0 articles affected" and did nothing.
+    aliases_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     # Evidence, and the reason an article can lose its place: a fix that worked eleven
     # times and has now failed four is no longer something to recommend confidently.
     successes: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

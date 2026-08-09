@@ -257,3 +257,21 @@ async def test_paying_does_not_upgrade_the_feature_tier(session_factory, admin_u
         # The parts billing IS responsible for still moved.
         assert org.subscription_status == SubscriptionStatus.ACTIVE
         assert org.license_count == 25
+
+
+@pytest.mark.parametrize("stored", ["essential", " essential", "essential ", "  ESSENTIAL  ", "\tessential\n"])
+def test_whitespace_around_a_plan_does_not_upgrade_the_customer(stored):
+    """`features_for` fell back to Expert for anything it did not recognise — deliberate, so
+    a typo cannot switch a paying customer's product off. But " essential " is not an
+    unknown plan, it is Essential with a space, which is what a CSV import or a hand-edited
+    row produces. It was silently handing that customer all 16 features."""
+    assert features_for(stored) == features_for("essential")
+
+
+def test_the_label_and_the_grant_read_the_plan_the_same_way():
+    """normalise_plan drives what the admin is told; features_for drives what they get.
+    Two different readings of the same string is how a page says Essential while the API
+    allows Expert."""
+    for stored in [" essential ", "PROFESSIONAL", "expert "]:
+        label = normalise_plan(stored)
+        assert features_for(stored) == features_for(label), stored

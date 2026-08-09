@@ -217,6 +217,9 @@ class PayPalProvider:
                 (resource.get("billing_info") or {}).get("next_billing_time")
             ),
             ignored=status is None,
+            provider="paypal",
+            event_id=event.get("id"),
+            occurred_at=_to_dt(event.get("create_time")),
         )
 
 

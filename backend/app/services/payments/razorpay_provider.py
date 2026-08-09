@@ -145,6 +145,11 @@ class RazorpayProvider:
             quantity=int(entity["quantity"]) if entity.get("quantity") is not None else None,
             period_end=_to_dt(entity.get("current_end")),
             ignored=status is None,
+            # Razorpay signs the body and nothing else, so a captured payload stays valid
+            # forever. These are what stop it being applied twice.
+            provider="razorpay",
+            event_id=headers.get("x-razorpay-event-id") or event.get("id"),
+            occurred_at=_to_dt(event.get("created_at")),
         )
 
 

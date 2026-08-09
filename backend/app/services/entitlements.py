@@ -81,13 +81,24 @@ TRIAL_PLAN = EXPERT
 _LEGACY_PLANS = {"trial", "per-seat", "basic", "pro"}
 
 
+def _plan_key(plan: str | None) -> str:
+    """The stored plan value reduced to something `PLANS` can be looked up with.
+
+    Stripped as well as lowercased. Falling back to Expert for an unknown plan is deliberate
+    (below), but " essential " is not an unknown plan — it is Essential with a space, which
+    is what a CSV import or a hand-edited row produces. Without the strip it fell through to
+    the fallback and handed that customer the entire product.
+    """
+    return (plan or "").strip().lower()
+
+
 def features_for(plan: str | None, overrides: dict | None = None) -> frozenset[str]:
     """Everything this org may use.
 
     An unrecognised plan resolves to Expert rather than to nothing. That is the deliberate
     choice: a typo in a plan name should not switch a paying customer's product off.
     """
-    granted = set(PLANS.get((plan or "").lower(), _EXPERT))
+    granted = set(PLANS.get(_plan_key(plan), _EXPERT))
 
     for key, on in (overrides or {}).items():
         if on:
@@ -98,8 +109,12 @@ def features_for(plan: str | None, overrides: dict | None = None) -> frozenset[s
 
 
 def normalise_plan(plan: str | None) -> str:
-    """The tier a stored plan value corresponds to, for display."""
-    p = (plan or "").lower()
+    """The tier a stored plan value corresponds to, for display.
+
+    Shares `_plan_key` with `features_for` on purpose: the label an admin is shown and the
+    features they actually get must be derived from the same reading of the same string.
+    """
+    p = _plan_key(plan)
     if p in PLANS:
         return p
     return TRIAL_PLAN if p in _LEGACY_PLANS else EXPERT

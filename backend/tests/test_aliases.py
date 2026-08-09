@@ -108,6 +108,9 @@ async def test_an_article_still_saves_when_the_model_is_down(session_factory, ad
         ).create(org_id=admin_user.org_id, title="VPN", content="Open GlobalConnect.")
     assert article.title == "VPN"
     assert article.symptom_samples is None
+    # The half that makes it recoverable: NULL here is what scripts/backfill_aliases.py
+    # looks for. Without it the article is degraded permanently and nothing can find it.
+    assert article.aliases_generated_at is None
 
 
 async def test_it_is_inert_without_a_key(session_factory, admin_user, monkeypatch):
@@ -120,6 +123,7 @@ async def test_it_is_inert_without_a_key(session_factory, admin_user, monkeypatc
             org_id=admin_user.org_id, title="VPN", content="Open GlobalConnect."
         )
     assert article.symptom_samples is None
+    assert article.aliases_generated_at is None
 
 
 @pytest.mark.parametrize("reply", [

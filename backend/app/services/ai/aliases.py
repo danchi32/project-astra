@@ -67,16 +67,22 @@ class AliasGenerator:
         # the stub provider answers device-support questions, not this.
         self._enabled = provider is not None or bool(get_settings().anthropic_api_key)
 
-    async def for_article(self, *, title: str, content: str) -> list[str]:
-        """Aliases for one article, or [] when unavailable.
+    async def for_article(self, *, title: str, content: str) -> list[str] | None:
+        """Aliases for one article.
 
-        Returns [] rather than raising on every failure path. An article with no aliases is
-        merely findable by fewer words; an article that could not be saved because the
-        model was busy is a technician's work thrown away. The degradation is worth far
-        less than the write.
+        Three outcomes, and the caller must be able to tell them apart:
+
+          ``["wifi keeps dropping", ...]``  the model answered
+          ``[]``                            the model answered with nothing useful
+          ``None``                          we never got to ask — no key, or the call failed
+
+        Never raises. An article with no aliases is merely findable by fewer words; an
+        article that could not be saved because the model was busy is a technician's work
+        thrown away. But the difference between "asked and got nothing" and "never asked"
+        is what makes the second one fixable later, so it is not flattened into [].
         """
         if not self._enabled:
-            return []
+            return None
 
         provider = self._provider or get_provider()
         prompt = _PROMPT.format(title=title[:300], content=content[:4000])
@@ -89,7 +95,7 @@ class AliasGenerator:
             )
         except Exception:  # noqa: BLE001 — an article must save even if the model is down
             logger.warning("Alias generation failed for %r; saving without aliases", title[:60])
-            return []
+            return None
 
         return _parse(response.text)
 

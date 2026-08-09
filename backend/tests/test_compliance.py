@@ -177,3 +177,76 @@ async def test_is_installed_cannot_be_set_directly():
 
     with pytest.raises(TypeError, match="derived from state"):
         DeviceWindowsUpdate(kb_article_id="KB1", title="t", is_installed=True)
+
+
+# ── Restricted software: the pattern is data, not a query ──────────────────
+
+
+async def test_a_percent_in_a_pattern_does_not_condemn_the_whole_fleet(
+    client, admin_headers, session_factory, admin_user
+):
+    """The pattern went into a LIKE with its metacharacters intact, so one stray "%" matched
+    every installed application and every device in the org failed the restricted-software
+    check at once. Compliance is a number customers report on; corrupting it silently is
+    worse than rejecting the input."""
+    org = _Org(admin_user.org_id)
+    await _make_device(session_factory, org)          # has uTorrent + a pending update
+
+    # "uTo%ent" is not any application's name. Unescaped, the "%" bridges the gap and it
+    # matches uTorrent anyway — which is the bug: the admin banned one thing and caught
+    # another. A bare "%" is the extreme version and is now refused by the length rule.
+    resp = await client.post("/api/v1/compliance/banned-software", headers=admin_headers,
+                             json={"name": "uTo%ent"})
+    assert resp.status_code == 201, resp.text
+
+    body = (await client.get("/api/v1/compliance/devices", headers=admin_headers)).json()
+    device = body["items"][0] if isinstance(body, dict) else body[0]
+    check = next(c for c in device["checks"] if c["key"] == "no_banned_software")
+    assert check["status"] == "pass", (
+        "'uTo%ent' is not an application name — the % must not bridge to uTorrent"
+    )
+
+
+async def test_an_underscore_is_a_character_not_a_wildcard(
+    client, admin_headers, session_factory, admin_user
+):
+    """Real product names contain underscores — TeamViewer_Host, Zoom_Installer — and "_"
+    is LIKE's single-character wildcard, so an admin pasting an exact name got a pattern
+    matching more than they typed."""
+    org = _Org(admin_user.org_id)
+    await _make_device(session_factory, org)          # installs "uTorrent"
+
+    resp = await client.post("/api/v1/compliance/banned-software", headers=admin_headers,
+                             json={"name": "uTorren_"})
+    assert resp.status_code == 201, resp.text
+
+    body = (await client.get("/api/v1/compliance/devices", headers=admin_headers)).json()
+    device = body["items"][0] if isinstance(body, dict) else body[0]
+    check = next(c for c in device["checks"] if c["key"] == "no_banned_software")
+    assert check["status"] == "pass", "'uTorren_' is not 'uTorrent' once the wildcard is escaped"
+
+
+async def test_the_exact_product_name_still_matches(
+    client, admin_headers, session_factory, admin_user
+):
+    """The escaping must not break the feature it is protecting."""
+    org = _Org(admin_user.org_id)
+    await _make_device(session_factory, org)
+
+    await client.post("/api/v1/compliance/banned-software", headers=admin_headers,
+                      json={"name": "uTorrent"})
+
+    body = (await client.get("/api/v1/compliance/devices", headers=admin_headers)).json()
+    device = body["items"][0] if isinstance(body, dict) else body[0]
+    check = next(c for c in device["checks"] if c["key"] == "no_banned_software")
+    assert check["status"] == "fail"
+    assert "uTorrent" in check["detail"]
+
+
+async def test_a_pattern_too_short_to_be_a_name_is_refused(client, admin_headers):
+    """Substring matching means "e" fails nearly every device, and the admin who typed it
+    has no way to see why."""
+    resp = await client.post("/api/v1/compliance/banned-software", headers=admin_headers,
+                             json={"name": "e"})
+    assert resp.status_code == 400, resp.text
+    assert "at least" in resp.json()["detail"]

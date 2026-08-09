@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -97,8 +98,14 @@ async def test_razorpay_status_mapping(monkeypatch, rzp_status, expected):
 
 # -- Paddle -------------------------------------------------------------------
 
-def _paddle_body(status="active", quantity=3) -> bytes:
+def _paddle_body(status="active", quantity=3, event_id="evt_pdl_1",
+                 occurred_at="2026-08-01T09:00:00.000Z") -> bytes:
+    # `event_id` and `occurred_at` are top-level on every real Paddle delivery. They were
+    # missing from this fixture, which is how the dedupe and ordering guards could have
+    # shipped reading None from a payload that always carries them.
     return json.dumps({
+        "event_id": event_id,
+        "occurred_at": occurred_at,
         "event_type": "subscription.activated",
         "data": {
             "id": "sub_PDL1", "status": status, "customer_id": "ctm_1",
@@ -109,7 +116,11 @@ def _paddle_body(status="active", quantity=3) -> bytes:
     }).encode()
 
 
-def _paddle_headers(body: bytes, secret: str, ts: str = "1700000000") -> dict:
+def _paddle_headers(body: bytes, secret: str, ts: str | None = None) -> dict:
+    """A Paddle signature header. Defaults to *now* because that is what a real delivery
+    carries — the timestamp is signed and its age is checked, so a hardcoded 2023 constant
+    is a replay, not a fixture."""
+    ts = ts or str(int(datetime.now(timezone.utc).timestamp()))
     h1 = hmac.new(secret.encode(), f"{ts}:".encode() + body, hashlib.sha256).hexdigest()
     return {"paddle-signature": f"ts={ts};h1={h1}"}
 
@@ -134,6 +145,46 @@ async def test_paddle_webhook_rejects_forged_signature(monkeypatch):
         await PaddleProvider().parse_webhook(
             payload=body, headers={"paddle-signature": "ts=1700000000;h1=deadbeef"}
         )
+
+
+async def test_paddle_webhook_rejects_a_correctly_signed_but_old_delivery(monkeypatch):
+    """The signature stays valid forever — Paddle signs `ts:body` and the secret does not
+    rotate — so a payload captured from a log or a proxy could be replayed at any time to
+    reactivate a cancelled subscription. Paddle signs the timestamp precisely so that its
+    age can be checked; nothing was checking it."""
+    monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
+    body = _paddle_body()
+    old = str(int((datetime.now(timezone.utc) - timedelta(hours=2)).timestamp()))
+
+    with pytest.raises(ValidationError, match="too old"):
+        await PaddleProvider().parse_webhook(
+            payload=body, headers=_paddle_headers(body, "whsec_pdl", ts=old)
+        )
+
+
+async def test_paddle_webhook_accepts_a_delivery_within_the_freshness_window(monkeypatch):
+    """The guard must absorb their retries and ordinary clock skew, or it becomes an
+    outage of its own the first time a redelivery is a minute late."""
+    monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
+    body = _paddle_body()
+    recent = str(int((datetime.now(timezone.utc) - timedelta(minutes=2)).timestamp()))
+
+    ev = await PaddleProvider().parse_webhook(
+        payload=body, headers=_paddle_headers(body, "whsec_pdl", ts=recent)
+    )
+    assert ev.status is SubscriptionStatus.ACTIVE
+
+
+async def test_paddle_webhook_carries_what_dedupe_needs(monkeypatch):
+    """apply_event refuses a delivery it has already applied, and one older than the org's
+    current state. Both need the rail to hand up its event id and timestamp."""
+    monkeypatch.setattr(paddle_mod.settings, "paddle_webhook_secret", "whsec_pdl")
+    body = _paddle_body()
+    ev = await PaddleProvider().parse_webhook(
+        payload=body, headers=_paddle_headers(body, "whsec_pdl")
+    )
+    assert ev.provider == "paddle"
+    assert ev.event_id, "without an event id every replay looks new"
 
 
 async def test_paddle_webhook_rejects_malformed_signature_header(monkeypatch):

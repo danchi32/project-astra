@@ -28,6 +28,15 @@ class SubscriptionEvent:
     period_end: datetime | None = None
     ignored: bool = False                # event we don't care about
 
+    # -- Replay and ordering ---------------------------------------------------
+    # A signature proves a payload is authentic. It does not prove it is NEW, and it does
+    # not prove it arrived in the order it was sent — no rail guarantees ordering. These
+    # two fields are what `apply_event` uses to refuse a webhook it has already applied,
+    # and to refuse one that describes a moment earlier than the org's current state.
+    provider: str | None = None          # which rail sent it
+    event_id: str | None = None          # the rail's own id for this delivery
+    occurred_at: datetime | None = None  # when the rail says it happened
+
 
 class PaymentProvider(Protocol):
     """One payment rail. Implementations must be inert until configured."""

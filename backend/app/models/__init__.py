@@ -2,6 +2,7 @@ from app.models.asset import AcknowledgementStatus, Asset, AssetCategory, AssetS
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.audit_log import AuditLog
 from app.models.banned_software import BannedSoftware
+from app.models.webhook_event import WebhookEvent
 from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.device import Device
@@ -87,4 +88,5 @@ __all__ = [
     "TelemetrySnapshot",
     "User",
     "UserRole",
+    "WebhookEvent",
 ]
