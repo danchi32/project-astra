@@ -27,9 +27,9 @@ export function Navbar() {
           anchors it to the top so the overhang falls downward, over the page
           rather than off the top of the viewport. Kept smaller on mobile, where
           a wider mark would run into the controls. */}
-      <nav className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:px-8">
+      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
         <Link href="/" className="flex items-center self-start pt-2 sm:pt-3">
-          <BrandLogo className="h-20 sm:h-28" />
+          <BrandLogo className="h-20 sm:h-24" />
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
