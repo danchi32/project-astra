@@ -16,8 +16,10 @@ reversal of an offboarding, not a symptom anyone reports).
 Each one also states the approval tier, because "I can do this now" and "I need your
 admin to approve this" are different sentences and the user should hear the right one.
 
-Idempotent: an article whose title already exists is skipped, so this is safe to re-run
-after adding more.
+Safe to re-run. An article whose text is unchanged is left alone; one whose text HAS
+changed is rewritten — new aliases, new vector — because "idempotent by title" alone would
+mean a starter article could never be corrected by the tool that wrote it, and the first
+one that needed correcting was the day it shipped.
 """
 import argparse
 import asyncio
@@ -216,7 +218,13 @@ ARTICLES: list[tuple[str, str]] = [
     ),
     (
         "An employee is leaving and their access must be cut off",
-        "Symptoms: an offboarding, a suspension, or a laptop that has to be locked now.\n\n"
+        # The words a person types, not the words IT uses. This line is the head slice that
+        # goes into the vector, and the first version said "an offboarding, a suspension" —
+        # so "employee resigned block his laptop" shared no token with it, scored 0.0, and
+        # returned nothing. resigned / fired / quitting / leaving are one thing to a human
+        # and four different tokens to a bag of words.
+        "Symptoms: an employee has resigned, been fired, or is leaving; someone is "
+        "suspended; or a laptop has to be locked right now.\n\n"
         "Disable the local Windows account (action_id: disable_local_account, username: "
         "the account). Admin approval only. It signs the user out immediately and stops "
         "them signing back in.\n\n"
@@ -233,38 +241,68 @@ ARTICLES: list[tuple[str, str]] = [
 
 async def main(dry_run: bool) -> int:
     async with SessionLocal() as session:
-        existing = set((await session.execute(select(KnowledgeArticle.title))).scalars().all())
+        stored = {
+            t: c for t, c in (await session.execute(
+                select(KnowledgeArticle.title, KnowledgeArticle.content)
+                .where(KnowledgeArticle.org_id.is_(None))
+            )).all()
+        }
 
-    new = [(t, c) for t, c in ARTICLES if t not in existing]
+    to_create = [(t, c) for t, c in ARTICLES if t not in stored]
+    to_update = [(t, c) for t, c in ARTICLES if t in stored and stored[t] != c]
+
     print(f"Starter articles defined: {len(ARTICLES)}")
-    print(f"Already present:          {len(ARTICLES) - len(new)}")
-    print(f"To create:                {len(new)}")
+    print(f"Unchanged:                {len(ARTICLES) - len(to_create) - len(to_update)}")
+    print(f"To create:                {len(to_create)}")
+    print(f"To rewrite:               {len(to_update)}")
 
     if dry_run:
-        for title, _ in new:
+        for title, _ in to_create:
             print(f"  + {title}")
+        for title, _ in to_update:
+            print(f"  ~ {title}")
         print("\nDry run — nothing was written.")
         return 0
 
-    if not new:
+    if not (to_create or to_update):
         print("Nothing to do.")
         return 0
 
     async with SessionLocal() as session:
         service = KnowledgeBaseService(session)
-        for title, content in new:
+
+        for title, content in to_create:
             # create_global also generates the query aliases and the embedding, which is
             # what makes these findable by the words a user types rather than the words we
             # happened to title them with.
             await service.create_global(title=title, content=content)
             print(f"  created: {title}", flush=True)
 
-    print(f"\nCreated {len(new)} global article(s).")
+        for title, content in to_update:
+            # Deleted and rewritten rather than edited in place. Aliases are derived from
+            # the text, and the vector is derived from both — so an article whose wording
+            # changed needs all three redone, which is exactly what create_global does.
+            # Editing the content alone would leave it findable by the words it used to
+            # say, which is the failure this rewrite exists to fix.
+            row = (await session.execute(
+                select(KnowledgeArticle).where(
+                    KnowledgeArticle.org_id.is_(None), KnowledgeArticle.title == title
+                )
+            )).scalars().first()
+            if row is not None:
+                await session.delete(row)
+                await session.commit()
+            await service.create_global(title=title, content=content)
+            print(f"  rewritten: {title}", flush=True)
+
+    print(f"\nCreated {len(to_create)}, rewrote {len(to_update)}.")
     return 0
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dry-run", action="store_true", help="list what would be created")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="list what would be created or rewritten"
+    )
     args = parser.parse_args()
     raise SystemExit(asyncio.run(main(args.dry_run)))
