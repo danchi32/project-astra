@@ -19,10 +19,12 @@ export function Navbar() {
   useEffect(() => setOpen(false), [pathname]);
 
   return (
-    // Not fixed: the header scrolls away with the page. It therefore needs its
-    // own background rather than the translucent overlay treatment.
-    <header className="relative z-50 border-b border-token bg-surface">
-      {/* The bar keeps its 80px height. The logo is larger than that and hangs
+    // Not fixed: the header scrolls away with the page. It carries the page
+    // background rather than the raised surface colour, so it reads as the top
+    // of the page it sits on instead of a white bar stuck above it — and no
+    // rule underneath, which would put a seam back in.
+    <header className="relative z-50 bg-app">
+      {/* The bar keeps its 64px height. The logo is larger than that and hangs
           past the bottom edge rather than stretching the bar — `self-start`
           anchors it to the top so the overhang falls downward, over the page
           rather than off the top of the viewport. Kept smaller on mobile, where
@@ -79,7 +81,7 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="border-b border-token bg-surface md:hidden">
+        <div className="border-b border-token bg-app md:hidden">
           <div className="space-y-1 px-5 py-4">
             {nav.map((item) => (
               <Link
