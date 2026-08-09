@@ -144,14 +144,36 @@ def _parse(text: str) -> list[str]:
     return out
 
 
+#: How much of the body goes into the vector. A runbook opens by describing the problem and
+#: then explains the procedure; only the first part helps anyone find it.
+CONTENT_HEAD_CHARS = 240
+
+
 def embedding_text(title: str, content: str, aliases: list[str] | None) -> str:
-    """What gets embedded — the article plus the words people use for it.
+    """What gets embedded — what the article is ABOUT, not everything it says.
 
     Deliberately different from what is displayed. The aliases exist to be matched against,
     not read: showing a technician's runbook with eight paraphrases of "it's broken"
     stapled underneath would make the article worse to read while making it easier to find.
+
+    The body is included only as a head slice, because embedding all of it actively buried
+    the article. Measured on a real runbook, against a query whose exact words were in its
+    aliases:
+
+        0.600  title + aliases
+        0.318  title + first 240 chars + aliases
+        0.143  title + whole body + aliases      <- below the 0.2 floor: returns NOTHING
+
+    A long body is mostly procedure, and procedure across every runbook shares the same
+    vocabulary — restart, approval, user, device. Those tokens dilute the ones that
+    distinguish this article from the other fifty, so writing a more thorough runbook made
+    it harder to find. The head slice keeps the symptom description, which is the part a
+    user's wording actually resembles, and drops the rest.
     """
-    parts = [title, content]
+    parts = [title]
     if aliases:
         parts.extend(aliases)
+    head = (content or "")[:CONTENT_HEAD_CHARS].strip()
+    if head:
+        parts.append(head)
     return "\n".join(parts)

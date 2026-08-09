@@ -121,9 +121,15 @@ class HashingEmbeddingProvider:
     just as surely as changing model does, and vectors built by v1 are not comparable with
     v2's — so the name has to move, or search would compare them and silently score every
     old article at zero.
+
+    v3 is not a tokenizer change: it is a change to WHAT gets embedded. `embedding_text`
+    stopped putting an article's whole body into the vector, because doing so buried the
+    article rather than describing it. A v2 document vector was built from different text
+    than a v3 one, so the two rank against a query on different scales and must not be
+    compared. Same rule, same mechanism — bump the name and let reembed rebuild.
     """
 
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self, dim: int = 256) -> None:
         self.dim = dim

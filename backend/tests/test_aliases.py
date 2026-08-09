@@ -96,6 +96,62 @@ def test_embedding_text_includes_aliases_but_content_does_not():
     assert "laptop slow" in text and "Check working set." in text
 
 
+def test_a_long_body_is_not_embedded_whole():
+    """Embedding the entire body buried the article instead of describing it.
+
+    A runbook opens with the symptoms and then explains the procedure, and procedure across
+    every runbook shares the same words — restart, approval, user, device. Those tokens
+    dilute the ones that make this article different from the other fifty, so a more
+    thorough runbook became a harder-to-find one.
+    """
+    body = "Symptoms: the printer is offline.\n\n" + ("Restart the service. " * 200)
+    text = embedding_text("Printing does not work", body, ["printer not printing"])
+
+    assert "Symptoms: the printer is offline." in text, "the symptom line is what users echo"
+    assert len(text) < 600, "the procedure must not be embedded in full"
+
+
+async def test_a_thorough_article_is_still_findable_by_a_users_words(
+    session_factory, admin_user
+):
+    """The regression this exists for, measured on a real runbook.
+
+    Query verbatim in the article's aliases, article body ~700 characters:
+
+        0.600  title + aliases
+        0.318  title + head of body + aliases
+        0.143  title + whole body + aliases     <- below the 0.2 floor: NOTHING returned
+
+    So the article was unfindable specifically because it was well written.
+    """
+    llm = FakeLLM('["employee resigned block his laptop", "offboarding", "disable account"]')
+    body = (
+        "Symptoms: an offboarding, a suspension, or a laptop that has to be locked now.\n\n"
+        "Disable the local Windows account (action_id: disable_local_account, username: the "
+        "account). Admin approval only. It signs the user out immediately and stops them "
+        "signing back in.\n\nWhat it does not do: it does not change the password, delete "
+        "anything, or touch their files, and it is fully reversible with "
+        "enable_local_account if the offboarding is cancelled.\n\nIt applies to LOCAL "
+        "Windows accounts only. Domain and Entra accounts are managed in Active Directory "
+        "or Intune, and disabling a local account does not stop someone signing in with a "
+        "domain account."
+    )
+    async with session_factory() as session:
+        await KnowledgeBaseService(session, aliases=AliasGenerator(provider=llm)).create(
+            org_id=admin_user.org_id,
+            title="An employee is leaving and their access must be cut off",
+            content=body,
+        )
+
+    async with session_factory() as session:
+        hits = await KnowledgeBaseService(session).search(
+            org_id=admin_user.org_id, query="employee resigned block his laptop"
+        )
+    assert [a.title for a in hits][:1] == [
+        "An employee is leaving and their access must be cut off"
+    ]
+
+
 # ── Failing safely ─────────────────────────────────────────────────────────
 
 
@@ -219,11 +275,15 @@ def test_short_words_and_error_codes_survive_intact():
 # ── The version bump, which is the dangerous part ──────────────────────────
 
 
-def test_changing_tokenization_changed_the_vector_space_name():
-    """Stemming produces different vectors for the same text. If the name had not moved,
-    search would compare v1 and v2 vectors — and score every pre-existing article at zero
-    with no error anywhere. This is the same trap the model tag was built for."""
-    assert HashingEmbeddingProvider().name == "hash-v2-256"
+def test_changing_what_is_embedded_moved_the_vector_space_name():
+    """Two reasons the name has moved so far, and they are the same reason.
+
+    v2: stemming produces different vectors for the same text. v3: `embedding_text` stopped
+    putting an article's whole body in, so a v2 document vector was built from different
+    text than a v3 one. Either way the two are not comparable, and without the bump search
+    would score every pre-existing article at zero with no error anywhere.
+    """
+    assert HashingEmbeddingProvider().name == "hash-v3-256"
     assert HashingEmbeddingProvider().name != "hash-256"
 
 

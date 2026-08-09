@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy import select
 
 from app.models import KnowledgeArticle, LearnedAction, SemanticCacheEntry
+from app.models.base import utcnow
 from app.services.ai.embeddings import EmbeddingError, HashingEmbeddingProvider
 from app.services.ai.knowledge import KnowledgeBaseService
 from app.services.ai.reembed import reembed_all
@@ -202,3 +203,36 @@ async def test_a_failed_run_says_so_instead_of_reporting_a_total(session_factory
     )
     assert "Stopped after an embedding failure" in lines
     assert "keep their previous vectors" in lines
+
+
+async def test_reembedding_produces_the_same_vector_as_writing_the_article_fresh(
+    session_factory, admin_user
+):
+    """The one thing this module exists to guarantee.
+
+    TARGETS used to carry its own copy of the embedding formula. When `embedding_text`
+    changed, a re-embedded article was built from different text than a newly written one —
+    so the job whose entire purpose is making old rows match new ones would have produced
+    rows that matched neither. Nothing would have failed; search would just have been
+    quietly worse for exactly the articles someone had repaired.
+    """
+    from app.services.ai.aliases import embedding_text
+    from app.services.ai.embeddings import get_embedding_provider
+    from app.services.ai.reembed import TARGETS
+
+    provider = get_embedding_provider()
+    article = KnowledgeArticle(
+        org_id=admin_user.org_id,
+        title="Printing does not work",
+        content="Symptoms: jobs sit in the queue. " + ("Restart the spooler. " * 60),
+        symptom_samples=["printer not printing", "print queue stuck"],
+        embedding=[0.0], embedding_model="hash-v1-256", published_at=utcnow(),
+    )
+
+    text_of = next(fn for model, _, fn in TARGETS if model is KnowledgeArticle)
+    rebuilt = await provider.embed(text_of(article), purpose="document")
+    written_fresh = await provider.embed(
+        embedding_text(article.title, article.content, article.symptom_samples),
+        purpose="document",
+    )
+    assert rebuilt == written_fresh

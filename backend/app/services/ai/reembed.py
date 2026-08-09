@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 
 from app.models import KnowledgeArticle, LearnedAction, SemanticCacheEntry
+from app.services.ai.aliases import embedding_text
 from app.services.ai.embeddings import EmbeddingError, EmbeddingProvider
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,11 @@ BATCH = 50
 
 # (model, human label, how to rebuild the text that gets embedded)
 TARGETS = [
+    # Calls `embedding_text` rather than repeating it. This line used to be its own copy of
+    # the formula, which meant a re-embedded article was built from different text than a
+    # newly written one — and the whole job of this module is to make those two agree.
     (KnowledgeArticle, "knowledge articles",
-     lambda r: "\n".join([r.title, r.content, *(r.symptom_samples or [])])),
+     lambda r: embedding_text(r.title, r.content, r.symptom_samples)),
     (SemanticCacheEntry, "cached answers", lambda r: r.query_text),
     (LearnedAction, "learned fixes", lambda r: r.query_text),
 ]
