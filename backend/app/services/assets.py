@@ -13,7 +13,6 @@ from app.models import (
     AssetEvent,
     AssetEventType,
     EmailSettings,
-    EmailVerificationStatus,
     Organization,
     User,
 )
@@ -25,6 +24,7 @@ from app.repositories.devices import DeviceRepository
 from app.repositories.users import UserRepository
 from app.schemas.asset import AssetCreate, AssetRead, AssetSummary, AssetUpdate
 from app.services.audit import AuditService
+from app.services.email_integration import EmailIntegrationService
 from app.services.email import EmailService
 from app.services.exceptions import ConflictError, NotFoundError
 
@@ -314,15 +314,15 @@ class AssetService:
             )).scalar_one_or_none()
             org_name = org.name if org else "Your organization"
 
-            # One read for both the sending identity and the custom template.
+            # One read for the template; the sending identity comes from the one function
+            # that owns that decision. It used to be decided again right here, which is how
+            # this copy and that one drifted apart on what the display name should be.
             email_row = (await self.session.execute(
                 select(EmailSettings).where(EmailSettings.org_id == asset.org_id)
             )).scalar_one_or_none()
-            if email_row and email_row.status is EmailVerificationStatus.VERIFIED and email_row.from_address:
-                from_name, from_email = (email_row.from_name or org_name), email_row.from_address
-            else:
-                # Not yet verified → send from ASTRA's default, clearly on the org's behalf.
-                from_name, from_email = f"{org_name} (via ASTRA)", None
+            sender = await EmailIntegrationService.resolve_sender(
+                self.session, asset.org_id, org_name=org_name
+            )
 
             base = get_settings().public_api_url.rstrip("/")
             link = f"{base}/api/v1/assets/acknowledge?token={asset.ack_token}"
@@ -331,7 +331,8 @@ class AssetService:
                 to=user.email, context=context, ack_link=link,
                 subject_tmpl=email_row.asset_email_subject if email_row else None,
                 body_tmpl=email_row.asset_email_body if email_row else None,
-                from_name=from_name, from_email=from_email,
+                from_name=sender.from_name, from_email=sender.from_address,
+                reply_to=sender.reply_to,
             )
         except Exception:
             logger.exception("Asset acknowledgement email failed for asset %s", asset.id)

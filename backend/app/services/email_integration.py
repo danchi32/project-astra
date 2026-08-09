@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import EmailSettings, EmailVerificationStatus, User
+from app.models import EmailSendMethod, EmailSettings, EmailVerificationStatus, User
 from app.models.base import utcnow
 from app.services import email_domains
 from app.services.audit import AuditService
@@ -25,9 +25,18 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})$")
 
 @dataclass(frozen=True)
 class OrgSender:
-    """The verified identity ASTRA sends as for one org."""
+    """Who one org's mail goes out as.
+
+    `from_address` is None for the shared sender: the caller passes None down to
+    EmailService, which fills in ASTRA's own configured address. Saying it that way rather
+    than resolving our address here keeps one owner for "what is ASTRA's From address".
+    """
     from_name: str | None
-    from_address: str
+    from_address: str | None
+    reply_to: str | None = None
+    #: True when the From address belongs to ASTRA rather than to the organization. The
+    #: portal uses it to explain what recipients will see.
+    shared: bool = False
 
 
 class EmailIntegrationService:
@@ -62,6 +71,11 @@ class EmailIntegrationService:
         row.from_name = from_name.strip() or None
         row.from_address = from_address
         row.last_error = None
+        # Registering your own domain IS choosing it. Without this an admin could complete
+        # DNS verification and still have every message go out from ASTRA's address,
+        # because `method` was left on the default — which looks exactly like the feature
+        # not working, with nothing anywhere saying why.
+        row.method = EmailSendMethod.DNS
 
         try:
             # Reuse the provider domain when it's unchanged; otherwise (re)register it.
@@ -87,6 +101,35 @@ class EmailIntegrationService:
             org_id=actor.org_id, actor_id=actor.id, action="email.configure",
             target_type="email_settings", target_id=domain,
             detail={"from_address": from_address},
+        )
+        await self.session.commit()
+        await self.session.refresh(row)
+        return row
+
+    async def choose_sender(
+        self, *, actor: User, method: EmailSendMethod,
+        from_name: str | None, reply_to: str | None,
+    ) -> EmailSettings:
+        """Pick which of the two ways this org's mail goes out.
+
+        Switching to `shared` deliberately leaves the domain rows alone. An org that
+        verified acme.com, switched to shared for a week, and switched back should not have
+        to redo the DNS — and a verified domain costs nothing to keep sitting there.
+        """
+        row = await self._row(actor.org_id)
+        if row is None:
+            row = EmailSettings(org_id=actor.org_id)
+            self.session.add(row)
+
+        row.method = method
+        if from_name is not None:
+            row.from_name = from_name.strip() or None
+        row.reply_to = (reply_to or "").strip().lower() or None
+
+        await self.audit.record(
+            org_id=actor.org_id, actor_id=actor.id, action="email.sender_method",
+            target_type="email_settings", target_id=row.domain or "",
+            detail={"method": method.value, "reply_to_set": bool(row.reply_to)},
         )
         await self.session.commit()
         await self.session.refresh(row)
@@ -139,15 +182,50 @@ class EmailIntegrationService:
         return row
 
     @staticmethod
-    async def resolve_sender(session: AsyncSession, org_id: uuid.UUID) -> OrgSender | None:
-        """The verified identity to send an org's mail as, or None to use ASTRA's default.
-        This is the single seam OAuth methods will also implement later."""
+    async def resolve_sender(
+        session: AsyncSession, org_id: uuid.UUID, *, org_name: str
+    ) -> OrgSender:
+        """Who this org's mail goes out as. Always answers — there is no unsendable state.
+
+        Two outcomes, and which one you get is the org's choice rather than a measure of
+        how far through setup they are:
+
+          own domain, verified   ->  From: Acme IT <it@acme.com>
+          anything else          ->  From: Acme IT (via ASTRA) <astra@technomateai.com>
+
+        The second is not a degraded mode. Getting DNS records added is a request to
+        somebody else in most companies, and an org that has chosen not to do it still
+        needs its asset emails delivered today.
+
+        The single seam the OAuth methods will implement later. It is also the only one —
+        this logic used to exist here AND inline in AssetService, which is how the two came
+        to disagree about what the display name should be.
+        """
         row = (await session.execute(
             select(EmailSettings).where(EmailSettings.org_id == org_id)
         )).scalar_one_or_none()
-        if row and row.status is EmailVerificationStatus.VERIFIED and row.from_address:
-            return OrgSender(from_name=row.from_name, from_address=row.from_address)
-        return None
+
+        if (
+            row is not None
+            and row.method is EmailSendMethod.DNS
+            and row.status is EmailVerificationStatus.VERIFIED
+            and row.from_address
+        ):
+            return OrgSender(
+                from_name=row.from_name or org_name,
+                from_address=row.from_address,
+                reply_to=row.reply_to,
+            )
+
+        # "(via ASTRA)" is said out loud rather than hidden. The address is ours, and a
+        # recipient who checks is going to see that anyway — better they read it as an
+        # organization using a tool than as mail impersonating their IT department.
+        return OrgSender(
+            from_name=f"{(row.from_name if row else None) or org_name} (via ASTRA)",
+            from_address=None,
+            reply_to=row.reply_to if row else None,
+            shared=True,
+        )
 
 
 def _status_from_payload(payload: dict) -> EmailVerificationStatus:

@@ -10,9 +10,17 @@ from app.models.base import GUID, Base, TimestampMixin, utcnow
 
 
 class EmailSendMethod(str, enum.Enum):
-    """How ASTRA sends mail on the org's behalf. Only DNS is implemented today; the
-    OAuth methods are reserved so the sender-resolution layer can grow into them
-    without a schema change."""
+    """How ASTRA sends mail on the org's behalf.
+
+    SHARED and DNS are a real choice, not a ladder. Verifying a domain means getting DNS
+    records added, which in a lot of companies means a ticket to somebody else and a wait
+    of days — while the asset emails they signed up for sit undelivered. SHARED works the
+    moment they create the organization, at the cost of the From address being ours.
+
+    The OAuth methods are reserved so the sender-resolution layer can grow into them
+    without a schema change.
+    """
+    SHARED = "shared"              # ASTRA's own verified address, sent on the org's behalf
     DNS = "dns"                    # verified sending domain via Resend (SPF/DKIM)
     OAUTH_GOOGLE = "oauth_google"  # reserved — Gmail API
     OAUTH_MICROSOFT = "oauth_microsoft"  # reserved — Microsoft Graph
@@ -41,7 +49,9 @@ class EmailSettings(TimestampMixin, Base):
     method: Mapped[EmailSendMethod] = mapped_column(
         Enum(EmailSendMethod, native_enum=False, length=20,
              values_callable=lambda e: [m.value for m in e]),
-        nullable=False, default=EmailSendMethod.DNS,
+        # SHARED by default: a new organization can send on day one. Choosing DNS is a
+        # deliberate upgrade, not the only road out of a broken state.
+        nullable=False, default=EmailSendMethod.SHARED,
     )
     status: Mapped[EmailVerificationStatus] = mapped_column(
         Enum(EmailVerificationStatus, native_enum=False, length=20,
@@ -52,6 +62,13 @@ class EmailSettings(TimestampMixin, Base):
     from_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     from_address: Mapped[str | None] = mapped_column(String(320), nullable=True)
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Where a reply goes. Without it, an employee who hits Reply on an asset email sent
+    # from our address writes to astra@technomateai.com — which nobody reads on the
+    # customer's behalf, so their question simply disappears. That makes it close to
+    # required for SHARED and merely useful for DNS, where replies at least land in the
+    # org's own domain.
+    reply_to: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
     # Provider bookkeeping (Resend): the domain id + the DNS records the org must add.
     provider_domain_id: Mapped[str | None] = mapped_column(String(100), nullable=True)

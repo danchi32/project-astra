@@ -60,20 +60,28 @@ class EmailService:
         text: str | None = None,
         from_name: str | None = None,
         from_email: str | None = None,
+        reply_to: str | None = None,
     ) -> bool:
         """Send one message. Returns False (no-op) when email isn't configured.
         Prefers the Resend HTTPS API; falls back to SMTP. `from_email`/`from_name`
-        override the sender (used to send as a customer org's verified address)."""
+        override the sender (used to send as a customer org's verified address).
+
+        `reply_to` matters most when the From address is ours: without it a recipient who
+        hits Reply writes to ASTRA, and nobody here reads a customer's employees' mail.
+        """
         from_header = self._from_header(from_name, from_email)
         if settings.resend_api_key:
             return await self._send_resend(
-                to=to, subject=subject, html=html, text=text, from_header=from_header
+                to=to, subject=subject, html=html, text=text,
+                from_header=from_header, reply_to=reply_to,
             )
         if self._smtp_configured():
             msg = EmailMessage()
             msg["Subject"] = subject
             msg["From"] = from_header
             msg["To"] = to
+            if reply_to:
+                msg["Reply-To"] = reply_to
             msg.set_content(text or _text_from_html(html))
             msg.add_alternative(html, subtype="html")
             await run_in_threadpool(self._deliver, msg)
@@ -81,11 +89,14 @@ class EmailService:
         return False
 
     async def _send_resend(
-        self, *, to: str, subject: str, html: str, text: str | None, from_header: str
+        self, *, to: str, subject: str, html: str, text: str | None, from_header: str,
+        reply_to: str | None = None,
     ) -> bool:
         payload: dict = {"from": from_header, "to": [to], "subject": subject, "html": html}
         if text:
             payload["text"] = text
+        if reply_to:
+            payload["reply_to"] = reply_to
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 _RESEND_ENDPOINT,
@@ -182,10 +193,16 @@ class EmailService:
         self, *, to: str, context: dict, ack_link: str,
         subject_tmpl: str | None = None, body_tmpl: str | None = None,
         from_name: str | None = None, from_email: str | None = None,
+        reply_to: str | None = None,
     ) -> bool:
         """Ask an employee to confirm receipt of an asset just assigned to them. Uses the
         org's customized template when set, else the default; sent AS the organization when
-        they've verified a sending domain. `context` maps placeholders to values."""
+        they've verified a sending domain. `context` maps placeholders to values.
+
+        This is the message most likely to be replied to — an employee who is confused
+        about the laptop they were just handed answers the email in front of them — so the
+        reply-to is not decorative.
+        """
         from app.services.email_templates import render_asset_assignment
 
         subject, html, text = render_asset_assignment(
@@ -194,7 +211,7 @@ class EmailService:
         )
         return await self.send(
             to=to, subject=subject, html=html, text=text,
-            from_name=from_name, from_email=from_email,
+            from_name=from_name, from_email=from_email, reply_to=reply_to,
         )
 
     async def send_welcome(self, *, to: str, name: str, org_name: str, trial_days: int) -> bool:

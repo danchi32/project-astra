@@ -3,10 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
-from app.models import EmailSettings, User, UserRole
+from app.models import EmailSendMethod, EmailSettings, User, UserRole
 from app.schemas.email_settings import (
     AssetEmailTemplateUpdate,
     EmailDnsRecord,
+    EmailSenderChoice,
     EmailSettingsConfigure,
     EmailSettingsRead,
 )
@@ -36,12 +37,43 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 admin_required = require_roles(UserRole.ADMIN)
 
 
-def _email_read(row: EmailSettings | None) -> EmailSettingsRead:
+def _effective_from(row: EmailSettings | None, org_name: str) -> str:
+    """The From line a recipient will see, worked out the same way the send path does.
+
+    Shown rather than described, because "we will send on your behalf" leaves an admin
+    guessing what lands in their employee's inbox — and the answer is the whole difference
+    between the two options.
+    """
+    from app.core.config import get_settings as _s
+
+    if (
+        row is not None
+        and row.method is EmailSendMethod.DNS
+        and row.status is EmailVerificationStatus.VERIFIED
+        and row.from_address
+    ):
+        return f"{row.from_name or org_name} <{row.from_address}>"
+    shared = _s().email_from or "(no platform sender configured)"
+    return f"{(row.from_name if row else None) or org_name} (via ASTRA) <{shared}>"
+
+
+async def _org_name(session: AsyncSession, actor: User) -> str:
+    """The organization's own name, so the From preview shows what the admin will actually
+    see rather than the placeholder "Your organization"."""
+    from app.models import Organization
+
+    org = await session.get(Organization, actor.org_id)
+    return org.name if org else "Your organization"
+
+
+def _email_read(row: EmailSettings | None, org_name: str = "Your organization") -> EmailSettingsRead:
     ready = provider_configured()
     if row is None:
         return EmailSettingsRead(
             configured=False, provider_ready=ready,
             status=EmailVerificationStatus.UNCONFIGURED,
+            method=EmailSendMethod.SHARED,
+            effective_from=_effective_from(None, org_name),
             asset_email_subject=DEFAULT_ASSET_SUBJECT,
             asset_email_body=DEFAULT_ASSET_BODY,
             asset_email_placeholders=ASSET_PLACEHOLDERS,
@@ -50,6 +82,9 @@ def _email_read(row: EmailSettings | None) -> EmailSettingsRead:
         configured=bool(row.from_address),
         provider_ready=ready,
         status=row.status,
+        method=row.method,
+        effective_from=_effective_from(row, org_name),
+        reply_to=row.reply_to,
         from_name=row.from_name,
         from_address=row.from_address,
         domain=row.domain,
@@ -73,7 +108,25 @@ async def get_email_settings(
     session: AsyncSession = Depends(get_db),
 ) -> EmailSettingsRead:
     row = await EmailIntegrationService(session).read(org_id=actor.org_id)
-    return _email_read(row)
+    return _email_read(row, await _org_name(session, actor))
+
+
+@router.put(
+    "/email/sender",
+    response_model=EmailSettingsRead,
+    summary="Choose how mail is sent: ASTRA's shared address, or your own domain (admin)",
+)
+async def choose_email_sender(
+    body: EmailSenderChoice,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> EmailSettingsRead:
+    row = await EmailIntegrationService(session).choose_sender(
+        actor=actor, method=body.method,
+        from_name=body.from_name,
+        reply_to=str(body.reply_to) if body.reply_to else None,
+    )
+    return _email_read(row, await _org_name(session, actor))
 
 
 @router.post(
@@ -94,7 +147,7 @@ async def configure_email_settings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except EmailProviderError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-    return _email_read(row)
+    return _email_read(row, await _org_name(session, actor))
 
 
 @router.post(
@@ -112,7 +165,7 @@ async def verify_email_settings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except EmailProviderError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-    return _email_read(row)
+    return _email_read(row, await _org_name(session, actor))
 
 
 @router.put(
@@ -128,7 +181,7 @@ async def update_asset_email_template(
     row = await EmailIntegrationService(session).update_asset_template(
         actor=actor, subject=body.subject, body=body.body
     )
-    return _email_read(row)
+    return _email_read(row, await _org_name(session, actor))
 
 
 @router.get(

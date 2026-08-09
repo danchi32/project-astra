@@ -9,13 +9,14 @@ import {
 import { getMe, updateProfile, changePassword } from "@/lib/api/auth";
 import {
   getOrgSettings, updateOrgSettings, getPermissionMatrix,
-  getEmailSettings, configureEmailSettings, verifyEmailSettings, updateAssetEmailTemplate,
+  getEmailSettings, configureEmailSettings, verifyEmailSettings, chooseEmailSender,
+  updateAssetEmailTemplate,
   getHelpdeskSettings, updateHelpdeskSettings, verifyHelpdeskSettings,
 } from "@/lib/api/settings";
 import { listLocations, createLocation, renameLocation, deleteLocation } from "@/lib/api/locations";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
 import type {
-  EmailSettings, EmailVerificationStatus, HelpdeskSettingsInput,
+  EmailSendMethod, EmailSettings, EmailVerificationStatus, HelpdeskSettingsInput,
   OrganizationSettingsInput, UserRole,
 } from "@/lib/api/types";
 
@@ -462,20 +463,66 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
   );
 }
 
+/** One of the two ways to send. A card rather than a radio row: the two options differ in
+ *  what they cost the admin to set up, and that trade needs room to be stated. */
+function SenderOption({
+  selected, onSelect, disabled, title, body, note,
+}: {
+  selected: boolean; onSelect: () => void; disabled: boolean;
+  title: string; body: string; note: string;
+}) {
+  return (
+    <button type="button" onClick={onSelect} disabled={disabled}
+      className="text-left p-3.5 rounded-xl transition-colors disabled:opacity-60"
+      style={{
+        background: selected ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "var(--bg)",
+        border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+      }}>
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center"
+          style={{ border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}` }}>
+          {selected && <span className="w-2 h-2 rounded-full" style={{ background: "var(--accent)" }} />}
+        </span>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{title}</p>
+          <p className="text-xs mt-1 leading-relaxed" style={{ color: "var(--text-secondary)" }}>{body}</p>
+          <p className="text-xs mt-1.5 font-medium" style={{ color: "var(--accent)" }}>{note}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function EmailTab() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery({ queryKey: ["email-settings"], queryFn: getEmailSettings });
   const [fromName, setFromName] = useState("");
   const [fromAddress, setFromAddress] = useState("");
-  const [busy, setBusy] = useState<"save" | "verify" | null>(null);
+  const [replyTo, setReplyTo] = useState("");
+  const [busy, setBusy] = useState<"save" | "verify" | "sender" | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (settings) {
       setFromName(settings.from_name ?? "");
       setFromAddress(settings.from_address ?? "");
+      setReplyTo(settings.reply_to ?? "");
     }
   }, [settings]);
+
+  async function chooseSender(next: EmailSendMethod) {
+    setBusy("sender"); setError("");
+    try {
+      const saved = await chooseEmailSender({
+        method: next,
+        from_name: fromName.trim() || null,
+        reply_to: replyTo.trim() || null,
+      });
+      queryClient.setQueryData(["email-settings"], saved);
+    } catch (err) {
+      setError(errDetail(err) ?? "Couldn't save. Check the reply-to address and try again.");
+    } finally { setBusy(null); }
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -503,8 +550,78 @@ function EmailTab() {
   const status = settings?.status ?? "unconfigured";
   const badge = EMAIL_STATUS[status];
 
+  const method = settings?.method ?? "shared";
+
   return (
     <div className="space-y-6">
+      <Panel
+        title="How your email is sent"
+        description="Asset acknowledgements and notifications go to your employees. Pick which address they arrive from."
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <SenderOption
+            selected={method === "shared"}
+            onSelect={() => chooseSender("shared")}
+            disabled={busy !== null}
+            title="Send through ASTRA"
+            body="Works immediately — nothing to set up. Mail arrives from our address, shown as coming from you."
+            note="No DNS changes"
+          />
+          <SenderOption
+            selected={method === "dns"}
+            onSelect={() => chooseSender("dns")}
+            disabled={busy !== null}
+            title="Send from your own domain"
+            body="Mail arrives from your address, so it looks like every other email your IT team sends."
+            note="Needs DNS records added"
+          />
+        </div>
+
+        {/* What the employee will see. Shown rather than described — the difference
+            between the two options is exactly this line. */}
+        <div className="rounded-lg px-3 py-2.5 text-xs space-y-1"
+          style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+          <p style={{ color: "var(--text-secondary)" }}>Recipients will see</p>
+          <p className="font-mono" style={{ color: "var(--text-primary)" }}>
+            {settings?.effective_from || "—"}
+          </p>
+        </div>
+
+        <Field label="Display name">
+          <input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Acme IT"
+            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
+        </Field>
+
+        <Field label="Reply-to address">
+          <input type="email" value={replyTo} onChange={(e) => setReplyTo(e.target.value)}
+            placeholder="helpdesk@yourcompany.com"
+            className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
+          <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+            Where replies go when an employee answers the email.
+          </p>
+        </Field>
+
+        {/* Not a nag. Without a reply-to on the shared sender, an employee's reply reaches
+            ASTRA, where nobody reads a customer's staff mail — so their question is lost
+            with no bounce and no trace. */}
+        {method === "shared" && !settings?.reply_to && (
+          <p className="text-xs rounded-lg p-3"
+            style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>
+            Set a reply-to address. Mail goes out from ASTRA&apos;s address, so without one a
+            reply comes to us — and nobody here can answer your employee&apos;s question.
+          </p>
+        )}
+
+        <div className="flex justify-end">
+          <button type="button" onClick={() => chooseSender(method)} disabled={busy !== null}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+            style={{ background: "var(--accent)" }}>
+            {busy === "sender" ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </Panel>
+
+      {method !== "dns" ? null : (
       <Panel title="Send email as your organization"
         description="Asset acknowledgements and other notifications will be sent from your own address once your domain is verified.">
         {!settings?.provider_ready && (
@@ -532,6 +649,7 @@ function EmailTab() {
           </button>
         </form>
       </Panel>
+      )}
 
       {settings?.dns_records && settings.dns_records.length > 0 && status !== "verified" && (
         <Panel title="Add these DNS records"

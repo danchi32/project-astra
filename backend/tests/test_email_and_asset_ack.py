@@ -190,7 +190,8 @@ async def test_custom_template_used_on_assignment(client, admin_headers, regular
     }, headers=admin_headers)
     captured: dict = {}
 
-    async def fake_send(self, *, to, subject, html, text=None, from_name=None, from_email=None):
+    async def fake_send(self, *, to, subject, html, text=None, from_name=None,
+                        from_email=None, reply_to=None):
         captured.update(to=to, subject=subject, html=html)
         return True
 
@@ -240,3 +241,98 @@ async def test_ack_email_sends_as_verified_org_address(
     assert captured.get("to") == regular_user.email
     assert captured.get("from_email") == "it-support@acme.com"
     assert "acknowledge" in captured.get("ack_link", "").lower()
+
+
+# ── Two ways to send, and the reply that used to disappear ─────────────────
+
+
+async def test_a_new_org_can_send_before_touching_dns(session_factory, admin_user):
+    """The point of offering the shared sender. Publishing DNS records is a request to
+    another team in most companies; an org should not be unable to send while it waits."""
+    from app.services.email_integration import EmailIntegrationService
+
+    async with session_factory() as session:
+        sender = await EmailIntegrationService.resolve_sender(
+            session, admin_user.org_id, org_name="Acme Corp"
+        )
+    assert sender.shared is True
+    assert sender.from_address is None, "None means 'use ASTRA's own configured address'"
+    assert sender.from_name == "Acme Corp (via ASTRA)", (
+        "said out loud — a recipient who checks the address will see it is ours anyway"
+    )
+
+
+async def test_choosing_the_shared_sender_records_a_reply_to(session_factory, admin_user):
+    """Without one, an employee replying to an asset email writes to ASTRA, where nobody
+    reads a customer's staff mail. The question vanishes with no bounce and no trace."""
+    from app.models import EmailSendMethod
+    from app.services.email_integration import EmailIntegrationService
+
+    async with session_factory() as session:
+        await EmailIntegrationService(session).choose_sender(
+            actor=admin_user, method=EmailSendMethod.SHARED,
+            from_name="Acme IT", reply_to="helpdesk@acme.com",
+        )
+
+    async with session_factory() as session:
+        sender = await EmailIntegrationService.resolve_sender(
+            session, admin_user.org_id, org_name="Acme Corp"
+        )
+    assert sender.shared is True
+    assert sender.from_name == "Acme IT (via ASTRA)"
+    assert sender.reply_to == "helpdesk@acme.com"
+
+
+async def test_the_reply_to_reaches_the_actual_send(session_factory, admin_user, monkeypatch):
+    """The header has to survive the whole path, not just be stored. This is the message
+    most likely to be replied to — someone confused about a laptop they were just handed."""
+    from app.models import Asset, AssetCategory, EmailSendMethod
+    from app.services.assets import AssetService
+    from app.services.email import EmailService
+    from app.services.email_integration import EmailIntegrationService
+
+    captured: dict = {}
+
+    async def fake_send_assignment(self, **kwargs):
+        captured.update(kwargs)
+        return True
+
+    monkeypatch.setattr(EmailService, "send_asset_assignment", fake_send_assignment)
+    monkeypatch.setattr(EmailService, "enabled", property(lambda self: True))
+
+    async with session_factory() as session:
+        await EmailIntegrationService(session).choose_sender(
+            actor=admin_user, method=EmailSendMethod.SHARED,
+            from_name="Acme IT", reply_to="helpdesk@acme.com",
+        )
+        asset = Asset(
+            org_id=admin_user.org_id, name="Dell Latitude", category=AssetCategory.LAPTOP,
+            assigned_to_user_id=admin_user.id, ack_token="tok-reply-to",
+        )
+        session.add(asset)
+        await session.flush()
+        await AssetService(session)._send_ack_email(asset)
+
+    assert captured.get("reply_to") == "helpdesk@acme.com"
+    assert captured.get("from_email") is None, "shared sender uses ASTRA's own address"
+
+
+async def test_registering_your_own_domain_selects_it(session_factory, admin_user, monkeypatch):
+    """Setting up a sending domain IS choosing it. Without this an admin could finish DNS
+    verification and still have everything go out from ASTRA's address, which looks exactly
+    like the feature being broken with nothing anywhere explaining it."""
+    from app.models import EmailSendMethod
+    from app.services import email_domains
+    from app.services.email_integration import EmailIntegrationService
+
+    async def fake_create(domain):
+        return {"id": "dom_1", "status": "pending", "records": []}
+
+    monkeypatch.setattr(email_domains, "create_domain", fake_create)
+    monkeypatch.setattr(email_domains, "normalize_records", lambda p: [])
+
+    async with session_factory() as session:
+        row = await EmailIntegrationService(session).configure(
+            actor=admin_user, from_name="Acme IT", from_address="it@acme.com"
+        )
+    assert row.method is EmailSendMethod.DNS

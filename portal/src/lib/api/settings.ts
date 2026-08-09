@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import type {
+  EmailSenderChoiceInput,
   EmailSettings,
   HelpdeskSettings,
   HelpdeskSettingsInput,
@@ -18,6 +19,12 @@ export const configureEmailSettings = (data: { from_name: string; from_address: 
 
 export const verifyEmailSettings = () =>
   apiClient.post<EmailSettings>("/settings/email/verify").then((r) => r.data);
+
+/** Pick between ASTRA's shared address and the org's own domain. Separate from
+ *  `configureEmailSettings`, which registers a domain — choosing to send through us
+ *  should not require touching a domain at all. */
+export const chooseEmailSender = (data: EmailSenderChoiceInput) =>
+  apiClient.put<EmailSettings>("/settings/email/sender", data).then((r) => r.data);
 
 export const updateAssetEmailTemplate = (data: { subject: string; body: string }) =>
   apiClient.put<EmailSettings>("/settings/email/asset-template", data).then((r) => r.data);

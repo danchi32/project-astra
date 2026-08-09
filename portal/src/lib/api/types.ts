@@ -218,10 +218,18 @@ export interface EmailDnsRecord {
   status: string;
 }
 
+/** How an org's mail goes out. Two choices, not two stages of one setup. */
+export type EmailSendMethod = "shared" | "dns" | "oauth_google" | "oauth_microsoft";
+
 export interface EmailSettings {
   configured: boolean;
   provider_ready: boolean;
   status: EmailVerificationStatus;
+  method: EmailSendMethod;
+  /** The From line a recipient will actually see. Resolved server-side so the page shows
+   *  the same answer the send path uses, rather than reconstructing it and drifting. */
+  effective_from: string;
+  reply_to: string | null;
   from_name: string | null;
   from_address: string | null;
   domain: string | null;
@@ -231,6 +239,12 @@ export interface EmailSettings {
   asset_email_subject: string | null;
   asset_email_body: string | null;
   asset_email_placeholders: string[];
+}
+
+export interface EmailSenderChoiceInput {
+  method: EmailSendMethod;
+  from_name?: string | null;
+  reply_to?: string | null;
 }
 
 // ── Operator console (platform admin) ──────────────────────────────────────
