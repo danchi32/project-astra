@@ -16,7 +16,15 @@ import { Logo } from "./Logo";
  *
  * Existence is probed with a preloaded Image() (reliable), rather than relying
  * on <img> onError timing. Size via the `className` height, e.g. "h-10".
+ *
+ * The files are served with a seven-day cache, so a re-export of the artwork
+ * would otherwise keep showing the stale copy to anyone who had already loaded
+ * the site. Bump V whenever either logo file changes to break that cache.
  */
+const V = "2";
+const LIGHT_SRC = `/logo.png?v=${V}`;
+const DARK_SRC = `/logo-dark.png?v=${V}`;
+
 export function BrandLogo({ className }: { className?: string }) {
   const [light, setLight] = useState<boolean | null>(null);
   const [dark, setDark] = useState<boolean | null>(null);
@@ -25,12 +33,12 @@ export function BrandLogo({ className }: { className?: string }) {
     const a = new Image();
     a.onload = () => setLight(true);
     a.onerror = () => setLight(false);
-    a.src = "/logo.png";
+    a.src = LIGHT_SRC;
 
     const b = new Image();
     b.onload = () => setDark(true);
     b.onerror = () => setDark(false);
-    b.src = "/logo-dark.png";
+    b.src = DARK_SRC;
   }, []);
 
   // Still probing — reserve height, render nothing visible (avoids flash).
@@ -50,11 +58,11 @@ export function BrandLogo({ className }: { className?: string }) {
     );
   }
 
-  const darkSrc = dark ? "/logo-dark.png" : "/logo.png";
+  const darkSrc = dark ? DARK_SRC : LIGHT_SRC;
   return (
     <>
       <img
-        src="/logo.png"
+        src={LIGHT_SRC}
         alt={site.company}
         className={cn("block w-auto object-contain dark:hidden", className)}
       />
