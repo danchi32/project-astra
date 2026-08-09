@@ -22,11 +22,11 @@ export function Navbar() {
     // Not fixed: the header scrolls away with the page. It therefore needs its
     // own background rather than the translucent overlay treatment.
     <header className="relative z-50 border-b border-token bg-surface">
-      {/* The logo sets the bar height; the links and buttons keep their own
-          sizing regardless of how large the logo grows. */}
-      <nav className="mx-auto flex h-24 max-w-6xl items-stretch justify-between px-5 sm:h-28 sm:px-8">
+      {/* The bar stays at its normal height — only the logo is scaled up, so it
+          fills the bar rather than forcing it taller. */}
+      <nav className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:px-8">
         <Link href="/" className="flex items-center">
-          <BrandLogo className="h-16 sm:h-20" />
+          <BrandLogo className="h-14 sm:h-16" />
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
