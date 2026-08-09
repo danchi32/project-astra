@@ -20,7 +20,7 @@ const inside = [
 
 export default function OffboardingChecklistPage() {
   return (
-    <Section className="pt-12 sm:pt-16">
+    <Section className="aurora grain relative -mt-16 pt-28 sm:pt-36">
       <Container>
         <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-16">
           {/* Pitch */}
