@@ -27,6 +27,10 @@ class EmailSettingsRead(BaseModel):
     #: portal shows the same answer the send path will use rather than guessing at it.
     effective_from: str = ""
     reply_to: str | None = None
+    #: Whether this org's plan includes sending from ASTRA's address. False means the
+    #: shared option is not theirs to pick, and the portal has to say why rather than
+    #: offering a control that answers 402.
+    shared_sender_available: bool = True
     from_name: str | None = None
     from_address: str | None = None
     domain: str | None = None
@@ -37,6 +41,10 @@ class EmailSettingsRead(BaseModel):
     asset_email_subject: str | None = None
     asset_email_body: str | None = None
     asset_email_placeholders: list[str] = []
+    #: Copied on every asset-assignment email. CC and not BCC, because the point is that
+    #: Reply All reaches IT — a BCC is invisible to the recipient's mail client, so their
+    #: reply would go only to the sender.
+    asset_email_cc: list[str] = []
 
 
 class EmailSettingsConfigure(BaseModel):
@@ -64,3 +72,6 @@ class AssetEmailTemplateUpdate(BaseModel):
     """Customize the asset-assignment email. Empty strings reset to the default."""
     subject: str = Field(max_length=300)
     body: str = Field(max_length=4000)
+    #: Addresses copied on the email. Omitted (None) leaves the saved list alone; an empty
+    #: list clears it — otherwise there would be no way to remove the last address.
+    cc: list[str] | None = Field(default=None, max_length=20)

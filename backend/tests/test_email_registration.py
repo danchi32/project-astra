@@ -42,7 +42,11 @@ async def test_resend_transport_preferred_when_key_set(monkeypatch):
     monkeypatch.setattr(email_mod.settings, "resend_api_key", "re_test")
     calls: list = []
 
-    async def fake_resend(self, *, to, subject, html, text, from_header, reply_to=None):
+    # **kwargs, not a fixed signature. This test is about transport selection — that a
+    # Resend key alone routes through the API — and it has now broken twice for reasons
+    # that had nothing to do with what it asserts, once per optional argument added to
+    # the real method.
+    async def fake_resend(self, *, to, subject, **kwargs):
         calls.append((to, subject))
         return True
 

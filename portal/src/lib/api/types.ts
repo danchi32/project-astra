@@ -166,6 +166,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   fleet_remediation: "Mass remediation",
   audit_export: "Audit export & retention",
   advanced_rbac: "Advanced RBAC & SSO",
+  shared_email_sender: "Send email via ASTRA",
 };
 
 export interface OrganizationAdmin {
@@ -230,6 +231,9 @@ export interface EmailSettings {
    *  the same answer the send path uses, rather than reconstructing it and drifting. */
   effective_from: string;
   reply_to: string | null;
+  /** Whether the org's plan includes sending from ASTRA's address. False means the option
+   *  isn't theirs to pick, so the page explains rather than offering a control that 402s. */
+  shared_sender_available: boolean;
   from_name: string | null;
   from_address: string | null;
   domain: string | null;
@@ -239,6 +243,9 @@ export interface EmailSettings {
   asset_email_subject: string | null;
   asset_email_body: string | null;
   asset_email_placeholders: string[];
+  /** Copied on every asset-assignment email. A CC, not a hidden copy — that is what makes
+   *  the employee's Reply All come back to IT. */
+  asset_email_cc: string[];
 }
 
 export interface EmailSenderChoiceInput {

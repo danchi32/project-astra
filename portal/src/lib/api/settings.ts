@@ -26,8 +26,11 @@ export const verifyEmailSettings = () =>
 export const chooseEmailSender = (data: EmailSenderChoiceInput) =>
   apiClient.put<EmailSettings>("/settings/email/sender", data).then((r) => r.data);
 
-export const updateAssetEmailTemplate = (data: { subject: string; body: string }) =>
-  apiClient.put<EmailSettings>("/settings/email/asset-template", data).then((r) => r.data);
+/** `cc` is always sent, never omitted — omitting it leaves the saved list alone, which
+ *  would make the last address impossible to remove from the UI. */
+export const updateAssetEmailTemplate = (data: {
+  subject: string; body: string; cc?: string[];
+}) => apiClient.put<EmailSettings>("/settings/email/asset-template", data).then((r) => r.data);
 
 export const getOrgSettings = () =>
   apiClient.get<OrganizationSettings>("/settings/organization").then((r) => r.data);

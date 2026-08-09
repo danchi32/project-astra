@@ -333,6 +333,7 @@ class AssetService:
                 body_tmpl=email_row.asset_email_body if email_row else None,
                 from_name=sender.from_name, from_email=sender.from_address,
                 reply_to=sender.reply_to,
+                cc=(email_row.asset_email_cc if email_row else None),
             )
         except Exception:
             logger.exception("Asset acknowledgement email failed for asset %s", asset.id)

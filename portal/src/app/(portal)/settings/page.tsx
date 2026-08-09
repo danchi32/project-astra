@@ -397,6 +397,9 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
   const queryClient = useQueryClient();
   const [subject, setSubject] = useState(settings.asset_email_subject ?? "");
   const [body, setBody] = useState(settings.asset_email_body ?? "");
+  // One comma-separated field rather than a row-adding widget: an admin pastes a couple of
+  // addresses here once and never touches it again.
+  const [cc, setCc] = useState((settings.asset_email_cc ?? []).join(", "));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -404,7 +407,12 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
   async function save() {
     setSaving(true); setSaved(false);
     try {
-      const next = await updateAssetEmailTemplate({ subject, body });
+      const next = await updateAssetEmailTemplate({
+        subject, body,
+        // Always sent, so clearing the field actually clears the list. Omitting it would
+        // leave the last address saved with no way to remove it.
+        cc: cc.split(",").map((a) => a.trim()).filter(Boolean),
+      });
       queryClient.setQueryData(["email-settings"], next);
       setSaved(true); setTimeout(() => setSaved(false), 2000);
     } finally { setSaving(false); }
@@ -429,6 +437,16 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
       <Field label="Subject">
         <input value={subject} onChange={(e) => setSubject(e.target.value)}
           className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
+      </Field>
+      <Field label="Copy to (CC)">
+        <input value={cc} onChange={(e) => setCc(e.target.value)}
+          placeholder="it@yourcompany.com, assets@yourcompany.com"
+          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500" style={inputStyle} />
+        <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+          Kept in your own inbox, and — because it is a CC rather than a hidden copy — the
+          employee&apos;s Reply All comes back to you too. Applies to this email only, not to
+          password resets or sign-in alerts. Up to 5 addresses.
+        </p>
       </Field>
       <Field label="Message">
         <textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={7}
@@ -551,6 +569,11 @@ function EmailTab() {
   const badge = EMAIL_STATUS[status];
 
   const method = settings?.method ?? "shared";
+  const sharedAvailable = settings?.shared_sender_available ?? true;
+  // Already sending through us, but no longer entitled to. Mail is deliberately still
+  // going out — cutting a customer's employee-facing email the moment a plan changes turns
+  // a billing event into a support incident — so this has to be visible instead.
+  const sharedRevoked = method === "shared" && !sharedAvailable;
 
   return (
     <div className="space-y-6">
@@ -562,10 +585,10 @@ function EmailTab() {
           <SenderOption
             selected={method === "shared"}
             onSelect={() => chooseSender("shared")}
-            disabled={busy !== null}
+            disabled={busy !== null || !sharedAvailable}
             title="Send through ASTRA"
             body="Works immediately — nothing to set up. Mail arrives from our address, shown as coming from you."
-            note="No DNS changes"
+            note={sharedAvailable ? "No DNS changes" : "Not included in your plan"}
           />
           <SenderOption
             selected={method === "dns"}
@@ -604,7 +627,16 @@ function EmailTab() {
         {/* Not a nag. Without a reply-to on the shared sender, an employee's reply reaches
             ASTRA, where nobody reads a customer's staff mail — so their question is lost
             with no bounce and no trace. */}
-        {method === "shared" && !settings?.reply_to && (
+        {sharedRevoked && (
+          <p className="text-xs rounded-lg p-3"
+            style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>
+            Your plan no longer includes sending through ASTRA. Your email is still going
+            out for now — set up your own sending domain below, or ask your ASTRA operator
+            to re-enable it.
+          </p>
+        )}
+
+        {method === "shared" && sharedAvailable && !settings?.reply_to && (
           <p className="text-xs rounded-lg p-3"
             style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>
             Set a reply-to address. Mail goes out from ASTRA&apos;s address, so without one a
@@ -621,7 +653,9 @@ function EmailTab() {
         </div>
       </Panel>
 
-      {method !== "dns" ? null : (
+      {/* The domain panel also shows when the shared option isn't theirs — otherwise an
+          Essential customer sees two cards, cannot pick either, and has nowhere to go. */}
+      {method !== "dns" && sharedAvailable ? null : (
       <Panel title="Send email as your organization"
         description="Asset acknowledgements and other notifications will be sent from your own address once your domain is verified.">
         {!settings?.provider_ready && (

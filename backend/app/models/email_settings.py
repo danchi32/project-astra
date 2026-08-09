@@ -75,6 +75,15 @@ class EmailSettings(TimestampMixin, Base):
     dns_records: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Who else gets a copy of the asset-assignment email. CC rather than BCC on purpose:
+    # the point is that Reply All reaches IT, and a BCC'd address is invisible to the
+    # recipient's mail client, so their reply would go only to the sender.
+    #
+    # Scoped to THIS message deliberately. Password resets, OTPs and login alerts are
+    # written for one person and copying an administrator on them would hand that person's
+    # account to somebody else.
+    asset_email_cc: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+
     # Org-customizable asset-assignment email. Null = use the built-in default template.
     # Bodies are plain text with {{placeholders}}; the acknowledge button is appended
     # (or positioned with {{acknowledge_button}}).

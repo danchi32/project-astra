@@ -34,6 +34,15 @@ FLEET_REMEDIATION = "fleet_remediation"  # one-click mass remediation
 AUDIT_EXPORT = "audit_export"            # CSV export + extended retention
 ADVANCED_RBAC = "advanced_rbac"          # incl. SSO
 
+#: Sending customer-facing mail from ASTRA's own address instead of the org's domain.
+#:
+#: Gated for reputation, not for cost. Both paths bill to the same Resend account, so the
+#: per-message price is identical either way. What differs is whose domain carries the
+#: consequences: on the shared sender every organization draws on one sending reputation,
+#: so one customer's bad recipient list degrades delivery for everybody else on it. That is
+#: worth being able to say no to, per organization, which is what this key is for.
+SHARED_EMAIL_SENDER = "shared_email_sender"
+
 # ── Plans ──────────────────────────────────────────────────────────────────
 
 ESSENTIAL = "essential"
@@ -53,8 +62,13 @@ _ESSENTIAL: frozenset[str] = frozenset({
     INVENTORY, PATCHING, AI_DIAGNOSE, REPORTING, NOTIFICATIONS, AUDIT_VIEW,
 })
 
+#: SHARED_EMAIL_SENDER starts here rather than in Essential — a placement worth stating,
+#: because it is a commercial call and not a technical one. Essential customers send from
+#: their own domain, which costs them a DNS change and costs us no reputation. Anyone
+#: paying above that may borrow ours. The operator can grant or revoke it per organization
+#: on the org page, which is where an exception belongs.
 _PROFESSIONAL: frozenset[str] = _ESSENTIAL | frozenset({
-    AI_ACT, APPROVAL_TIERS, LOCKDOWN, EMPLOYEE_CHAT,
+    AI_ACT, APPROVAL_TIERS, LOCKDOWN, EMPLOYEE_CHAT, SHARED_EMAIL_SENDER,
 })
 
 _EXPERT: frozenset[str] = _PROFESSIONAL | frozenset({

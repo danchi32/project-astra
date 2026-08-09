@@ -61,6 +61,7 @@ class EmailService:
         from_name: str | None = None,
         from_email: str | None = None,
         reply_to: str | None = None,
+        cc: list[str] | None = None,
     ) -> bool:
         """Send one message. Returns False (no-op) when email isn't configured.
         Prefers the Resend HTTPS API; falls back to SMTP. `from_email`/`from_name`
@@ -69,34 +70,43 @@ class EmailService:
         `reply_to` matters most when the From address is ours: without it a recipient who
         hits Reply writes to ASTRA, and nobody here reads a customer's employees' mail.
         """
+        # A copy addressed to the recipient themselves is noise, not a copy.
+        cc = [a for a in (cc or []) if a.lower() != to.lower()] or None
+
         from_header = self._from_header(from_name, from_email)
         if settings.resend_api_key:
             return await self._send_resend(
                 to=to, subject=subject, html=html, text=text,
-                from_header=from_header, reply_to=reply_to,
+                from_header=from_header, reply_to=reply_to, cc=cc,
             )
         if self._smtp_configured():
             msg = EmailMessage()
             msg["Subject"] = subject
             msg["From"] = from_header
             msg["To"] = to
+            if cc:
+                msg["Cc"] = ", ".join(cc)
             if reply_to:
                 msg["Reply-To"] = reply_to
             msg.set_content(text or _text_from_html(html))
             msg.add_alternative(html, subtype="html")
+            # send_message reads To and Cc off the headers, so the copies are actually
+            # delivered rather than merely announced.
             await run_in_threadpool(self._deliver, msg)
             return True
         return False
 
     async def _send_resend(
         self, *, to: str, subject: str, html: str, text: str | None, from_header: str,
-        reply_to: str | None = None,
+        reply_to: str | None = None, cc: list[str] | None = None,
     ) -> bool:
         payload: dict = {"from": from_header, "to": [to], "subject": subject, "html": html}
         if text:
             payload["text"] = text
         if reply_to:
             payload["reply_to"] = reply_to
+        if cc:
+            payload["cc"] = cc
         async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 _RESEND_ENDPOINT,
@@ -193,7 +203,7 @@ class EmailService:
         self, *, to: str, context: dict, ack_link: str,
         subject_tmpl: str | None = None, body_tmpl: str | None = None,
         from_name: str | None = None, from_email: str | None = None,
-        reply_to: str | None = None,
+        reply_to: str | None = None, cc: list[str] | None = None,
     ) -> bool:
         """Ask an employee to confirm receipt of an asset just assigned to them. Uses the
         org's customized template when set, else the default; sent AS the organization when
@@ -211,7 +221,7 @@ class EmailService:
         )
         return await self.send(
             to=to, subject=subject, html=html, text=text,
-            from_name=from_name, from_email=from_email, reply_to=reply_to,
+            from_name=from_name, from_email=from_email, reply_to=reply_to, cc=cc,
         )
 
     async def send_welcome(self, *, to: str, name: str, org_name: str, trial_days: int) -> bool:

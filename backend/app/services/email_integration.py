@@ -22,6 +22,31 @@ from app.services.email_domains import EmailProviderError
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})$")
 
+#: How many addresses may be copied on an asset email. A cap because this list is applied
+#: to every assignment: a fleet handover of two hundred laptops with ten addresses copied
+#: is two thousand messages, and a shared mailbox is the right answer past a handful.
+MAX_CC = 5
+
+
+def _clean_cc(addresses: list[str]) -> list[str] | None:
+    """Normalise a CC list, or None for empty.
+
+    Invalid entries are dropped rather than rejected: a trailing comma or a stray space in
+    a pasted list should not fail the whole save and lose the admin's template edits along
+    with it. Order is kept so the list reads back the way it was typed.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in addresses:
+        addr = (raw or "").strip().lower()
+        if not addr or addr in seen or not _EMAIL_RE.match(addr):
+            continue
+        seen.add(addr)
+        out.append(addr)
+        if len(out) >= MAX_CC:
+            break
+    return out or None
+
 
 @dataclass(frozen=True)
 class OrgSender:
@@ -39,10 +64,30 @@ class OrgSender:
     shared: bool = False
 
 
+class SharedSenderNotEntitled(Exception):
+    """The org's plan doesn't include sending from ASTRA's own address."""
+
+
 class EmailIntegrationService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.audit = AuditService(session)
+
+    @staticmethod
+    async def shared_sender_allowed(session: AsyncSession, org_id: uuid.UUID) -> bool:
+        """Whether this org may send from ASTRA's address.
+
+        Derived from the plan plus the operator's per-org overrides, like every other
+        entitlement — so granting an exception is the same one-click act on the org page
+        that it is for any other feature, and it is audited the same way.
+        """
+        from app.models import Organization
+        from app.services.entitlements import SHARED_EMAIL_SENDER, features_for
+
+        org = await session.get(Organization, org_id)
+        if org is None:
+            return False
+        return SHARED_EMAIL_SENDER in features_for(org.plan, org.entitlement_overrides)
 
     async def _row(self, org_id: uuid.UUID) -> EmailSettings | None:
         return (await self.session.execute(
@@ -116,6 +161,14 @@ class EmailIntegrationService:
         verified acme.com, switched to shared for a week, and switched back should not have
         to redo the DNS — and a verified domain costs nothing to keep sitting there.
         """
+        if method is EmailSendMethod.SHARED and not await self.shared_sender_allowed(
+            self.session, actor.org_id
+        ):
+            raise SharedSenderNotEntitled(
+                "Sending through ASTRA's address isn't included in your plan. Set up your "
+                "own sending domain below, or ask your ASTRA operator to enable it."
+            )
+
         row = await self._row(actor.org_id)
         if row is None:
             row = EmailSettings(org_id=actor.org_id)
@@ -136,7 +189,7 @@ class EmailIntegrationService:
         return row
 
     async def update_asset_template(
-        self, *, actor: User, subject: str, body: str
+        self, *, actor: User, subject: str, body: str, cc: list[str] | None = None
     ) -> EmailSettings:
         """Save the org's asset-assignment email template. Blank fields reset to the default
         (stored as NULL). A row is created even before a sending domain is set."""
@@ -146,6 +199,8 @@ class EmailIntegrationService:
             self.session.add(row)
         row.asset_email_subject = subject.strip() or None
         row.asset_email_body = body.strip() or None
+        if cc is not None:
+            row.asset_email_cc = _clean_cc(cc)
         await self.audit.record(
             org_id=actor.org_id, actor_id=actor.id, action="email.asset_template",
             target_type="email_settings", target_id=row.domain or "",

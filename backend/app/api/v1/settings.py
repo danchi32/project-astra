@@ -23,7 +23,7 @@ from app.schemas.settings import (
     PermissionMatrix,
 )
 from app.services.email_domains import EmailProviderError, provider_configured
-from app.services.email_integration import EmailIntegrationService
+from app.services.email_integration import EmailIntegrationService, SharedSenderNotEntitled
 from app.services.settings import SettingsService
 from app.schemas.helpdesk import (
     HelpdeskSettingsRead,
@@ -55,6 +55,18 @@ def _effective_from(row: EmailSettings | None, org_name: str) -> str:
         return f"{row.from_name or org_name} <{row.from_address}>"
     shared = _s().email_from or "(no platform sender configured)"
     return f"{(row.from_name if row else None) or org_name} (via ASTRA) <{shared}>"
+
+
+async def _email_read_for(
+    session: AsyncSession, actor: User, row: EmailSettings | None
+) -> EmailSettingsRead:
+    """The read model with everything that needs a database lookup already resolved —
+    the org's name for the From preview, and whether the shared sender is on their plan."""
+    read = _email_read(row, await _org_name(session, actor))
+    read.shared_sender_available = await EmailIntegrationService.shared_sender_allowed(
+        session, actor.org_id
+    )
+    return read
 
 
 async def _org_name(session: AsyncSession, actor: User) -> str:
@@ -95,6 +107,7 @@ def _email_read(row: EmailSettings | None, org_name: str = "Your organization") 
         asset_email_subject=row.asset_email_subject or DEFAULT_ASSET_SUBJECT,
         asset_email_body=row.asset_email_body or DEFAULT_ASSET_BODY,
         asset_email_placeholders=ASSET_PLACEHOLDERS,
+        asset_email_cc=row.asset_email_cc or [],
     )
 
 
@@ -108,7 +121,7 @@ async def get_email_settings(
     session: AsyncSession = Depends(get_db),
 ) -> EmailSettingsRead:
     row = await EmailIntegrationService(session).read(org_id=actor.org_id)
-    return _email_read(row, await _org_name(session, actor))
+    return await _email_read_for(session, actor, row)
 
 
 @router.put(
@@ -121,12 +134,20 @@ async def choose_email_sender(
     actor: User = Depends(admin_required),
     session: AsyncSession = Depends(get_db),
 ) -> EmailSettingsRead:
-    row = await EmailIntegrationService(session).choose_sender(
-        actor=actor, method=body.method,
-        from_name=body.from_name,
-        reply_to=str(body.reply_to) if body.reply_to else None,
-    )
-    return _email_read(row, await _org_name(session, actor))
+    try:
+        row = await EmailIntegrationService(session).choose_sender(
+            actor=actor, method=body.method,
+            from_name=body.from_name,
+            reply_to=str(body.reply_to) if body.reply_to else None,
+        )
+    except SharedSenderNotEntitled as exc:
+        # 402, not 403 — the caller has the right role, their plan simply does not include
+        # this. "Ask your administrator" and "upgrade your plan" are different next steps.
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=str(exc),
+            headers={"X-Astra-Required-Feature": "shared_email_sender"},
+        )
+    return await _email_read_for(session, actor, row)
 
 
 @router.post(
@@ -147,7 +168,7 @@ async def configure_email_settings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except EmailProviderError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-    return _email_read(row, await _org_name(session, actor))
+    return await _email_read_for(session, actor, row)
 
 
 @router.post(
@@ -165,7 +186,7 @@ async def verify_email_settings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except EmailProviderError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-    return _email_read(row, await _org_name(session, actor))
+    return await _email_read_for(session, actor, row)
 
 
 @router.put(
@@ -179,9 +200,9 @@ async def update_asset_email_template(
     session: AsyncSession = Depends(get_db),
 ) -> EmailSettingsRead:
     row = await EmailIntegrationService(session).update_asset_template(
-        actor=actor, subject=body.subject, body=body.body
+        actor=actor, subject=body.subject, body=body.body, cc=body.cc
     )
-    return _email_read(row, await _org_name(session, actor))
+    return await _email_read_for(session, actor, row)
 
 
 @router.get(
