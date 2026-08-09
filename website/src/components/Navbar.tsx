@@ -19,11 +19,11 @@ export function Navbar() {
   useEffect(() => setOpen(false), [pathname]);
 
   return (
-    // Not fixed: the header scrolls away with the page. It carries the page
-    // background rather than the raised surface colour, so it reads as the top
-    // of the page it sits on instead of a white bar stuck above it — and no
-    // rule underneath, which would put a seam back in.
-    <header className="relative z-50 bg-app">
+    // Not fixed: the header scrolls away with the page. Transparent rather than
+    // filled, so the hero's aurora wash — which is pulled up behind it — shows
+    // through. On pages without a hero the body background shows instead, which
+    // is the colour it would have painted anyway.
+    <header className="relative z-50">
       {/* The bar keeps its 64px height. The logo is larger than that and hangs
           past the bottom edge rather than stretching the bar — `self-start`
           anchors it to the top so the overhang falls downward, over the page

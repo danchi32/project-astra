@@ -125,7 +125,10 @@ export function AstraContent() {
   return (
     <>
       {/* ------------------------------------------------------------ HERO */}
-      <section className="aurora grain relative overflow-hidden pt-12 pb-16 sm:pt-20">
+      {/* Pulled up by the header's height so the aurora starts at the very top
+          of the page and washes behind the (transparent) header. The top
+          padding absorbs that shift, keeping content where it was. */}
+      <section className="aurora grain relative -mt-16 overflow-hidden pt-28 pb-16 sm:pt-36">
         <AnimatedBackground dense />
         <Container>
           <div className="grid items-center gap-10 lg:grid-cols-2">
