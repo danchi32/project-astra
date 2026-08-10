@@ -39,7 +39,9 @@
       "Approval Tiers",
       "Real-time Dashboards",
       "Secure Offboarding",
-      "Compliance"
+      "Compliance",
+      "Helpdesk Escalation",
+      "Self-Learning KB"
     ],
     "stats": [
       {
@@ -283,6 +285,18 @@
       {
         "title": "Fleet Correlation & Mass Remediation",
         "desc": "Astra links the same fault across many devices, then fixes the whole affected group in one click instead of one by one."
+      },
+      {
+        "title": "Helpdesk Integration",
+        "desc": "Connect Freshservice and let Astra raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees."
+      },
+      {
+        "title": "Self-Learning Knowledge Base",
+        "desc": "Every confirmed fix teaches the knowledge base. Astra publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type."
+      },
+      {
+        "title": "Asset Assignment & Acknowledgement",
+        "desc": "Hand a laptop to an employee and Astra emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record."
       }
     ],
     "inventory": {

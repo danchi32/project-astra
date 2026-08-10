@@ -25,6 +25,9 @@ import {
   LogOut,
   ClipboardCheck,
   Ban,
+  Ticket,
+  GraduationCap,
+  MailCheck,
 } from "lucide-react";
 import {
   Container,
@@ -52,7 +55,7 @@ import { site, bookDemo } from "@/lib/site";
 const featureIcons = [
   Boxes, Activity, BrainCircuit, Wrench, DownloadCloud,
   UserX, MessageSquare, ShieldCheck, FileBarChart, Bell, ScrollText,
-  ClipboardCheck, Ban, Network,
+  ClipboardCheck, Ban, Network, Ticket, GraduationCap, MailCheck,
 ];
 const featureDefaults = [
   { title: "Asset Inventory", desc: "A live, auto-discovered registry of every device, spec, app and license across your fleet." },
@@ -69,6 +72,9 @@ const featureDefaults = [
   { title: "Compliance & Security Posture", desc: "A live compliance dashboard scores your fleet's security posture and flags the devices that fall short." },
   { title: "Restricted Software Detection", desc: "Spot unapproved or risky applications across every device, so shadow IT surfaces before it becomes an incident." },
   { title: "Fleet Correlation & Mass Remediation", desc: "Astra links the same fault across many devices, then fixes the whole affected group in one click instead of one by one." },
+  { title: "Helpdesk Integration", desc: "Connect Freshservice and let Astra raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees." },
+  { title: "Self-Learning Knowledge Base", desc: "Every confirmed fix teaches the knowledge base. Astra publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type." },
+  { title: "Asset Assignment & Acknowledgement", desc: "Hand a laptop to an employee and Astra emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record." },
 ];
 
 const workflowIcons = [Search, BrainCircuit, Activity, Gauge, Wrench, BadgeCheck];

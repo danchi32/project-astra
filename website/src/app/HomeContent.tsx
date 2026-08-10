@@ -50,6 +50,9 @@ const capDefaults = [
   "AI Reasoning",
   "Approval Tiers",
   "Real-time Dashboards",
+  "Compliance",
+  "Helpdesk Escalation",
+  "Self-Learning KB",
 ];
 
 type Stat = { value: number; suffix?: string; decimals?: number; label: string };
