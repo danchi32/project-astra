@@ -6,6 +6,8 @@ from app.core.database import get_db
 from app.models import EmailSendMethod, EmailSettings, User, UserRole
 from app.schemas.email_settings import (
     AssetEmailTemplateUpdate,
+    AssetPlaceholder,
+    AssetPlaceholderGroup,
     EmailDnsRecord,
     EmailSenderChoice,
     EmailSettingsConfigure,
@@ -16,6 +18,7 @@ from app.services.email_templates import (
     ASSET_PLACEHOLDERS,
     DEFAULT_ASSET_BODY,
     DEFAULT_ASSET_SUBJECT,
+    placeholder_groups,
 )
 from app.schemas.settings import (
     OrganizationSettingsRead,
@@ -78,6 +81,22 @@ async def _org_name(session: AsyncSession, actor: User) -> str:
     return org.name if org else "Your organization"
 
 
+def _placeholder_groups() -> list[AssetPlaceholderGroup]:
+    return [
+        AssetPlaceholderGroup(
+            key=key,
+            title=title,
+            placeholders=[
+                AssetPlaceholder(
+                    key=s.key, label=s.label, sample=s.sample, needs_device=s.needs_device,
+                )
+                for s in specs
+            ],
+        )
+        for key, title, specs in placeholder_groups()
+    ]
+
+
 def _email_read(row: EmailSettings | None, org_name: str = "Your organization") -> EmailSettingsRead:
     ready = provider_configured()
     if row is None:
@@ -89,6 +108,7 @@ def _email_read(row: EmailSettings | None, org_name: str = "Your organization") 
             asset_email_subject=DEFAULT_ASSET_SUBJECT,
             asset_email_body=DEFAULT_ASSET_BODY,
             asset_email_placeholders=ASSET_PLACEHOLDERS,
+            asset_email_placeholder_groups=_placeholder_groups(),
         )
     return EmailSettingsRead(
         configured=bool(row.from_address),
@@ -107,6 +127,7 @@ def _email_read(row: EmailSettings | None, org_name: str = "Your organization") 
         asset_email_subject=row.asset_email_subject or DEFAULT_ASSET_SUBJECT,
         asset_email_body=row.asset_email_body or DEFAULT_ASSET_BODY,
         asset_email_placeholders=ASSET_PLACEHOLDERS,
+        asset_email_placeholder_groups=_placeholder_groups(),
         asset_email_cc=row.asset_email_cc or [],
     )
 

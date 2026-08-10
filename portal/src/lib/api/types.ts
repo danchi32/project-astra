@@ -243,9 +243,30 @@ export interface EmailSettings {
   asset_email_subject: string | null;
   asset_email_body: string | null;
   asset_email_placeholders: string[];
+  /** The same placeholders, grouped and described. The editor builds its picker and its
+   *  preview from this, so which fields need a linked device is answered server-side —
+   *  it used to be restated here as a hardcoded list and the two drifted. */
+  asset_email_placeholder_groups: AssetPlaceholderGroup[];
   /** Copied on every asset-assignment email. A CC, not a hidden copy — that is what makes
    *  the employee's Reply All come back to IT. */
   asset_email_cc: string[];
+}
+
+export interface AssetPlaceholder {
+  key: string;
+  label: string;
+  /** What the preview substitutes. Comes from the server so the sample and the real send
+   *  path can't disagree about what a field looks like. */
+  sample: string;
+  /** True when the value is the linked device's telemetry, so it renders empty for an
+   *  asset with no device. */
+  needs_device: boolean;
+}
+
+export interface AssetPlaceholderGroup {
+  key: string;
+  title: string;
+  placeholders: AssetPlaceholder[];
 }
 
 export interface EmailSenderChoiceInput {

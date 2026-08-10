@@ -167,11 +167,118 @@ def test_render_device_placeholders():
         assert token in html
 
 
+def test_values_are_not_rescanned_as_template():
+    """A value that happens to contain a token must survive as text.
+
+    Substitution used to be one str.replace per key, which rewrote text it had already
+    substituted — an asset literally named "Dell {{org_name}}" came out with the org name
+    spliced into it. Values are data, never template.
+    """
+    _, _, text = render_asset_assignment(
+        subject_tmpl="x", body_tmpl="{{asset_name}}",
+        context={"asset_name": "Dell {{org_name}}", "org_name": "Acme"},
+        ack_link="https://x/a")
+    assert "Dell {{org_name}}" in text
+    assert "Acme" not in text
+
+
+def test_unknown_token_is_left_alone():
+    """Not silently blanked: an author who mistypes should see it in the preview and the
+    email, rather than wondering where the sentence went."""
+    _, _, text = render_asset_assignment(
+        subject_tmpl="x", body_tmpl="Hi {{no_such_field}}", context={}, ack_link="https://x/a")
+    assert "{{no_such_field}}" in text
+
+
 async def test_get_settings_returns_default_template(client, admin_headers):
     body = (await client.get("/api/v1/settings/email", headers=admin_headers)).json()
     assert body["asset_email_subject"]
     assert body["asset_email_body"]
     assert "employee_name" in body["asset_email_placeholders"]
+
+
+async def test_placeholder_groups_cover_every_placeholder_once(client, admin_headers):
+    """The grouped catalogue and the flat key list are the same set.
+
+    The editor renders from the groups, so anything missing here is a field an admin can
+    never reach, and anything extra is a token that renders as itself in a real email.
+    """
+    body = (await client.get("/api/v1/settings/email", headers=admin_headers)).json()
+    groups = body["asset_email_placeholder_groups"]
+    keys = [p["key"] for g in groups for p in g["placeholders"]]
+
+    assert len(keys) == len(set(keys)), "a placeholder is offered in two groups"
+    assert set(keys) == set(body["asset_email_placeholders"])
+    # Every placeholder needs a label and a sample — both are what the picker shows.
+    assert all(p["label"] and p["sample"] for g in groups for p in g["placeholders"])
+    # needs_device is the device group's defining property, and nothing else's.
+    for g in groups:
+        expected = g["key"] == "device"
+        assert all(p["needs_device"] is expected for p in g["placeholders"])
+
+
+async def test_every_offered_placeholder_is_actually_supplied(session_factory, org, admin_user, regular_user):
+    """Nothing is offered in the editor that the send path leaves unfilled.
+
+    This is the bug class worth a test of its own: a placeholder listed in Settings that no
+    one populates looks fine in the preview (the preview has its own samples) and arrives
+    blank in the employee's inbox. Asserting the two sets match catches it at the source.
+    """
+    from datetime import datetime, timezone
+
+    from app.models import Asset, AssetCategory, Device
+    from app.services.assets import AssetService
+    from app.services.email_templates import ASSET_PLACEHOLDERS
+
+    async with session_factory() as s:
+        device = Device(
+            org_id=org.id, hostname="PC-1", machine_id="m-1", os_version="Windows 11 Pro 23H2",
+            agent_version="0.7.3", token_hash="h" * 64, logged_in_user="ACME\\sam",
+            manufacturer="Dell", model="Latitude 7440", cpu_name="Intel i7",
+            total_ram_mb=16384, total_storage_gb=512.0, serial_number="SN-9",
+            last_seen_at=datetime(2026, 8, 10, 14, 32, tzinfo=timezone.utc),
+        )
+        s.add(device)
+        await s.flush()
+        asset = Asset(
+            org_id=org.id, name="Laptop", category=AssetCategory.LAPTOP,
+            device_id=device.id, assigned_to_user_id=regular_user.id,
+            location="Mumbai HQ", purchase_date="2025-04-12", warranty_expiry="2028-04-11",
+            purchase_cost=84999.0, notes="Includes charger", asset_tag="AST-001",
+        )
+        s.add(asset)
+        await s.flush()
+
+        ctx = await AssetService(s)._email_context(asset, regular_user, org.name)
+
+    assert set(ctx) == set(ASSET_PLACEHOLDERS)
+    # With a device linked and every field populated, none of them should be blank —
+    # an empty string here would mean the wiring exists but reads the wrong attribute.
+    assert [k for k, v in ctx.items() if not v] == []
+    assert ctx["os_version"] == "Windows 11 Pro 23H2"
+    assert ctx["agent_version"] == "0.7.3"
+    assert ctx["purchase_cost"] == "84999"      # no stray ".0" from float storage
+    assert ctx["device_last_seen"] == "2026-08-10 14:32 UTC"
+    assert ctx["employee_email"] == regular_user.email
+
+
+async def test_device_placeholders_are_blank_without_a_device(session_factory, org, regular_user):
+    """The other half of the contract: no device means empty, never invented hardware."""
+    from app.models import Asset, AssetCategory
+    from app.services.assets import AssetService
+    from app.services.email_templates import ASSET_PLACEHOLDER_SPECS
+
+    async with session_factory() as s:
+        asset = Asset(org_id=org.id, name="Monitor", category=AssetCategory.MONITOR,
+                      assigned_to_user_id=regular_user.id)
+        s.add(asset)
+        await s.flush()
+        ctx = await AssetService(s)._email_context(asset, regular_user, org.name)
+
+    for spec in ASSET_PLACEHOLDER_SPECS:
+        if spec.needs_device:
+            assert ctx[spec.key] == "", f"{spec.key} invented a value with no device linked"
+    assert ctx["employee_name"] == regular_user.full_name  # non-device fields still resolve
 
 
 async def test_customize_and_persist_template(client, admin_headers):

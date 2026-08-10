@@ -15,6 +15,23 @@ class EmailDnsRecord(BaseModel):
     status: str = ""
 
 
+class AssetPlaceholder(BaseModel):
+    """One `{{token}}` the template author can insert."""
+    key: str
+    label: str
+    sample: str        # what the editor's preview substitutes
+    #: True when the value comes from the linked device's telemetry, so it renders empty
+    #: for an asset with no device. The editor has to say so — a preview that invents
+    #: hardware makes a template look finished that will arrive with holes in it.
+    needs_device: bool = False
+
+
+class AssetPlaceholderGroup(BaseModel):
+    key: str
+    title: str
+    placeholders: list[AssetPlaceholder]
+
+
 class EmailSettingsRead(BaseModel):
     """The org's outbound-email identity + what (if anything) still needs doing."""
     configured: bool                       # a sending address has been set
@@ -41,6 +58,10 @@ class EmailSettingsRead(BaseModel):
     asset_email_subject: str | None = None
     asset_email_body: str | None = None
     asset_email_placeholders: list[str] = []
+    #: The same placeholders, grouped and described. The editor renders its picker and its
+    #: preview from this, so which fields need a linked device is defined once — server-side
+    #: — instead of being restated in the portal where it could drift.
+    asset_email_placeholder_groups: list[AssetPlaceholderGroup] = []
     #: Copied on every asset-assignment email. CC and not BCC, because the point is that
     #: Reply All reaches IT — a BCC is invisible to the recipient's mail client, so their
     #: reply would go only to the sender.

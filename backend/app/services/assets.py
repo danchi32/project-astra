@@ -355,21 +355,46 @@ class AssetService:
                 return ""
             return f"{gb / 1024:.1f} TB" if gb >= 1024 else f"{round(gb)} GB"
 
+        def cost(value: float | None) -> str:
+            # No currency symbol — the org's currency isn't recorded, so the author supplies
+            # it. Whole amounts lose the ".0" that float storage would otherwise print.
+            if value is None:
+                return ""
+            return str(int(value)) if float(value).is_integer() else f"{value:.2f}"
+
+        def seen(dt) -> str:
+            return as_utc(dt).strftime("%Y-%m-%d %H:%M UTC") if dt else ""
+
         manufacturer = asset.manufacturer or (device.manufacturer if device else None)
         model = asset.model or (device.model if device else None)
         return {
             "employee_name": user.full_name,                     # "Name of user" (assignee)
+            "employee_email": user.email,
             "asset_name": asset.name,
             "asset_tag": asset.asset_tag or "",
+            "category": asset.category.value.replace("_", " "),
             "status": asset.status.value.replace("_", " "),
-            "hostname": (device.hostname if device else "") or "",
+            # Make/model/serial read the asset first and fall back to the device, so they
+            # still resolve for a monitor or phone that no agent reports on.
             "brand_model": " ".join(x for x in (manufacturer, model) if x),
+            "manufacturer": manufacturer or "",
+            "model": model or "",
             "serial": asset.serial_number or (device.serial_number if device else "") or "",
+            "location": asset.location or "",
+            "purchase_date": asset.purchase_date or "",
+            "warranty_expiry": asset.warranty_expiry or "",
+            "purchase_cost": cost(asset.purchase_cost),
+            "notes": asset.notes or "",
+            "assigned_on": utcnow().strftime("%Y-%m-%d"),
+            "hostname": (device.hostname if device else "") or "",
+            "os_version": (device.os_version if device else "") or "",
             "cpu": (device.cpu_name if device else "") or "",
             "ram": ram(device.total_ram_mb) if device else "",
             "storage": storage(device.total_storage_gb) if device else "",
             "software": f"{app_count} apps" if app_count is not None else "",
             "device_user": (device.logged_in_user if device else "") or "",  # "User" on the device
+            "device_last_seen": seen(device.last_seen_at) if device else "",
+            "agent_version": (device.agent_version if device else "") or "",
             "org_name": org_name,
         }
 
