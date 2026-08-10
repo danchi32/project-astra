@@ -190,6 +190,119 @@ def test_unknown_token_is_left_alone():
     assert "{{no_such_field}}" in text
 
 
+# ── Rich-text bodies ────────────────────────────────────────────────────────
+#
+# The editor grew a formatting toolbar, which means the product now accepts markup from a
+# customer and mails it to their staff. Escaping everything was the old safety, and it only
+# worked while nobody could author markup at all; these cover what replaced it.
+
+def _rich(body: str, **context) -> str:
+    _, html, _ = render_asset_assignment(
+        subject_tmpl="s", body_tmpl=body, context=context,
+        ack_link="https://x/a", body_format="html")
+    return html
+
+
+def test_rich_body_keeps_formatting():
+    html = _rich("<p>Hi <b>there</b></p><ul><li>one</li></ul>")
+    assert "<b>there</b>" in html
+    assert "<li>one</li>" in html
+
+
+def test_rich_body_drops_scripts_and_handlers():
+    html = _rich('<p onclick="steal()">Hi</p><script>alert(1)</script><img src=x onerror=alert(1)>')
+    assert "<script" not in html
+    assert "onclick" not in html and "onerror" not in html
+    assert "Hi" in html  # the words survive; only the dangerous parts go
+
+
+def test_rich_body_drops_javascript_links():
+    html = _rich('<a href="javascript:alert(1)">click</a>')
+    assert "javascript:" not in html
+    assert "click" in html
+
+
+def test_placeholder_in_an_attribute_is_removed():
+    """Placeholders are text-only, and this is the reason.
+
+    A bare token reads as a relative URL, so the scheme allowlist lets it through — and the
+    link target would then be whatever an asset's notes or location field happens to say.
+    Those are not all admin-written.
+    """
+    html = _rich('<a href="{{notes}}">click</a>', notes="javascript:alert(1)")
+    assert "javascript:" not in html
+    assert "{{notes}}" not in html
+
+
+def test_rich_body_escapes_the_values_it_substitutes():
+    """The author's markup renders; the data's markup does not."""
+    html = _rich("<p><b>{{asset_name}}</b></p>", asset_name="<script>alert(1)</script>")
+    assert "<b>" in html                    # author formatting kept
+    assert "<script>alert(1)" not in html   # value neutered
+    assert "&lt;script&gt;" in html
+
+
+def test_rich_body_ampersand_in_a_value_is_not_mangled():
+    """Sanitizing after substitution would run the cleaner over the org's own data."""
+    _, html, text = render_asset_assignment(
+        subject_tmpl="s", body_tmpl="<p>{{asset_name}}</p>",
+        context={"asset_name": "R&D laptop"}, ack_link="https://x/a", body_format="html")
+    assert "R&amp;D laptop" in html
+    assert "R&D laptop" in text
+
+
+def test_rich_body_plain_text_alternative_keeps_the_lines():
+    _, _, text = render_asset_assignment(
+        subject_tmpl="s", body_tmpl="<p>Line one</p><p>Line two</p><ul><li>a</li><li>b</li></ul>",
+        context={}, ack_link="https://x/a", body_format="html")
+    assert "<" not in text
+    assert "Line one\nLine two" in text
+    assert "a\nb" in text
+
+
+def test_rich_body_places_the_button_inline_at_the_marker():
+    html = _rich("<p>Ready? {{acknowledge_button}}</p>")
+    assert html.count("Acknowledge receipt") == 1
+    # Inline anchor, not a block: the author already put it inside their own paragraph.
+    assert "<p>Ready? <a href=" in html
+
+
+def test_plain_text_body_still_renders_as_plain_text():
+    """Existing templates predate the editor and must not start showing their own tags."""
+    _, html, _ = render_asset_assignment(
+        subject_tmpl="s", body_tmpl="Line one\nLine two <b>not bold</b>",
+        context={}, ack_link="https://x/a")           # body_format defaults to "text"
+    assert "Line one<br>Line two" in html
+    assert "&lt;b&gt;not bold&lt;/b&gt;" in html
+
+
+async def test_saving_a_rich_body_stores_it_sanitized(client, admin_headers):
+    """Sanitized on the way in as well as on the way out.
+
+    Rendering alone would keep the mail safe, but the editor reloads what was stored — so
+    storing the raw markup means the editor shows something we would refuse to send, which
+    is the exact gap between preview and reality this feature keeps producing.
+    """
+    resp = await client.put("/api/v1/settings/email/asset-template", json={
+        "subject": "Kit for {{employee_name}}",
+        "body": "<p>Hi <b>{{employee_name}}</b></p><script>alert(1)</script>",
+        "body_format": "html",
+    }, headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    saved = resp.json()
+    assert saved["asset_email_body_format"] == "html"
+    assert "<script" not in saved["asset_email_body"]
+    assert "<b>{{employee_name}}</b>" in saved["asset_email_body"]
+
+
+async def test_saving_a_plain_body_keeps_its_format(client, admin_headers):
+    resp = await client.put("/api/v1/settings/email/asset-template", json={
+        "subject": "s", "body": "Hi {{employee_name}}",
+    }, headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["asset_email_body_format"] == "text"
+
+
 async def test_get_settings_returns_default_template(client, admin_headers):
     body = (await client.get("/api/v1/settings/email", headers=admin_headers)).json()
     assert body["asset_email_subject"]

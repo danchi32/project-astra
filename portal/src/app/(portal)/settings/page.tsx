@@ -14,6 +14,7 @@ import {
   getHelpdeskSettings, updateHelpdeskSettings, verifyHelpdeskSettings,
 } from "@/lib/api/settings";
 import { listLocations, createLocation, renameLocation, deleteLocation } from "@/lib/api/locations";
+import { RichTextEditor, type RichTextHandle } from "@/components/rich-text-editor";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
 import type {
   EmailSendMethod, EmailSettings, EmailVerificationStatus, HelpdeskSettingsInput,
@@ -386,22 +387,45 @@ function DnsValue({ value }: { value: string }) {
   );
 }
 
+/** Turn a template written before the rich-text editor existed into equivalent markup.
+ *
+ *  Necessary rather than tidy: HTML collapses newlines, so loading a plain-text body into a
+ *  contentEditable as-is would run every paragraph together and the author would find their
+ *  template mangled by having opened it. Escaping first keeps a body that literally says
+ *  "<b>" saying "<b>", which is how it sends today. */
+function textToHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return escaped
+    .split(/\n{2,}/)
+    .map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
 function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
   const queryClient = useQueryClient();
   const [subject, setSubject] = useState(settings.asset_email_subject ?? "");
-  const [body, setBody] = useState(settings.asset_email_body ?? "");
+  const [body, setBody] = useState(
+    settings.asset_email_body_format === "html"
+      ? (settings.asset_email_body ?? "")
+      : textToHtml(settings.asset_email_body ?? ""),
+  );
   // One comma-separated field rather than a row-adding widget: an admin pastes a couple of
   // addresses here once and never touches it again.
   const [cc, setCc] = useState((settings.asset_email_cc ?? []).join(", "));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<RichTextHandle>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerGroup, setPickerGroup] = useState(0);
 
   async function save() {
     setSaving(true); setSaved(false);
     try {
       const next = await updateAssetEmailTemplate({
-        subject, body,
+        // Always html: the body has been through the rich-text editor by the time it can be
+        // saved, and an old plain-text template was converted when it loaded.
+        subject, body, body_format: "html",
         // Always sent, so clearing the field actually clears the list. Omitting it would
         // leave the last address saved with no way to remove it.
         cc: cc.split(",").map((a) => a.trim()).filter(Boolean),
@@ -412,12 +436,7 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
   }
 
   function insert(token: string) {
-    const t = `{{${token}}}`;
-    const ta = bodyRef.current;
-    if (!ta) { setBody(body + t); return; }
-    const start = ta.selectionStart, end = ta.selectionEnd;
-    setBody(body.slice(0, start) + t + body.slice(end));
-    requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + t.length; });
+    editorRef.current?.insertText(`{{${token}}}`);
   }
 
   // Every placeholder the server offers, flattened for lookup. Sample values and the
@@ -433,13 +452,20 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
   // Two previews of the same template, because assets come in two kinds and only one of
   // them has hardware to talk about. Showing sample device values unconditionally is how a
   // template gets written that looks finished and arrives with holes in it.
+  //
+  // Sample values are escaped on the way in, the same as the send path escapes real ones —
+  // otherwise a sample containing a bracket would render as markup here and as text in the
+  // actual email, and the preview would be lying again in a new way.
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
   const render = (s: string, withDevice: boolean) =>
     s.replace(/\{\{(\w+)\}\}/g, (_, k) => {
       if (k === "acknowledge_button") return "[ Acknowledge receipt ]";
       const spec = byKey.get(k);
       if (!spec) return `{{${k}}}`;        // unknown token — left visible, as it will send
       if (!withDevice && spec.needs_device) return "";
-      return spec.sample;
+      return esc(spec.sample);
     });
 
   const used = (key: string) => body.includes(`{{${key}}}`) || subject.includes(`{{${key}}}`);
@@ -462,52 +488,68 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
           password resets or sign-in alerts. Up to 5 addresses.
         </p>
       </Field>
-      <Field label="Message">
-        <textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={7}
-          className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 font-mono" style={inputStyle} />
-      </Field>
-      {/* Grouped by where the value comes from, and each one labelled. A flat row of bare
-          tokens made you guess what {{brand_model}} or {{device_user}} would produce, and
-          hid the fact that the device group behaves differently from the rest. */}
-      <div className="space-y-3">
-        {groups.map((g) => {
-          const device = g.key === "device";
-          const accent = device ? "#f59e0b" : "var(--border)";
-          return (
-            <div key={g.key}>
-              <p className="text-xs mb-1.5" style={{ color: device ? "#f59e0b" : "var(--text-secondary)" }}>
-                {g.title}
-                {device && " — empty unless the asset is linked to a device"}
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {g.placeholders.map((p) => (
-                  <button key={p.key} type="button" onClick={() => insert(p.key)}
-                    title={`e.g. ${p.sample}`}
-                    className="text-left px-2 py-1.5 rounded-lg"
-                    style={{ background: "var(--bg)", border: `1px solid ${accent}` }}>
-                    <span className="block text-xs truncate" style={{ color: "var(--text-primary)" }}>{p.label}</span>
-                    <span className="block text-[11px] font-mono truncate" style={{ color: "var(--text-secondary)" }}>
-                      {`{{${p.key}}}`}
-                    </span>
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-sm" style={{ color: "var(--text-secondary)" }}>Message</label>
+          <button type="button" onClick={() => setPickerOpen((v) => !v)}
+            className="text-xs font-medium" style={{ color: "var(--accent)" }}>
+            {pickerOpen ? "Hide placeholders" : "Insert placeholder"}
+          </button>
+        </div>
+        {/* The picker sits beside the editor rather than above it, so the text you are
+            writing stays on screen while you hunt for the field to drop into it. */}
+        <div className="flex gap-3 items-start">
+          <div className="flex-1 min-w-0">
+            <RichTextEditor ref={editorRef} value={body} onChange={setBody} />
+          </div>
+          {pickerOpen && (
+            <div className="w-72 shrink-0 rounded-lg overflow-hidden"
+              style={{ border: "1px solid var(--border)", background: "var(--bg)" }}>
+              <div className="flex" style={{ maxHeight: 320 }}>
+                <div className="w-28 shrink-0 overflow-y-auto py-1"
+                  style={{ borderRight: "1px solid var(--border)" }}>
+                  {groups.map((g, i) => (
+                    <button key={g.key} type="button" onClick={() => setPickerGroup(i)}
+                      className="w-full text-left px-2 py-1.5 text-xs leading-tight"
+                      style={{
+                        color: i === pickerGroup ? "var(--accent)" : "var(--text-secondary)",
+                        background: i === pickerGroup ? "var(--surface)" : "transparent",
+                        fontWeight: i === pickerGroup ? 600 : 400,
+                      }}>
+                      {g.title}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setPickerGroup(groups.length)}
+                    className="w-full text-left px-2 py-1.5 text-xs leading-tight"
+                    style={{
+                      color: pickerGroup === groups.length ? "var(--accent)" : "var(--text-secondary)",
+                      background: pickerGroup === groups.length ? "var(--surface)" : "transparent",
+                      fontWeight: pickerGroup === groups.length ? 600 : 400,
+                    }}>
+                    The button
                   </button>
-                ))}
+                </div>
+                <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
+                  {pickerGroup === groups.length ? (
+                    <PlaceholderChip label="Acknowledge receipt" token="acknowledge_button"
+                      hint="Positions the button instead of leaving it at the end"
+                      onClick={() => insert("acknowledge_button")} accent />
+                  ) : (
+                    groups[pickerGroup]?.placeholders.map((p) => (
+                      <PlaceholderChip key={p.key} label={p.label} token={p.key}
+                        hint={`e.g. ${p.sample}`} warn={p.needs_device}
+                        onClick={() => insert(p.key)} />
+                    ))
+                  )}
+                  {groups[pickerGroup]?.key === "device" && (
+                    <p className="text-[11px] px-1 pt-1" style={{ color: "#f59e0b" }}>
+                      Empty unless the asset is linked to a device.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          );
-        })}
-        <div>
-          <p className="text-xs mb-1.5" style={{ color: "var(--text-secondary)" }}>The button</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-            <button type="button" onClick={() => insert("acknowledge_button")}
-              title="Placed here instead of at the end"
-              className="text-left px-2 py-1.5 rounded-lg"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-              <span className="block text-xs truncate" style={{ color: "var(--accent)" }}>Acknowledge receipt</span>
-              <span className="block text-[11px] font-mono truncate" style={{ color: "var(--text-secondary)" }}>
-                {`{{acknowledge_button}}`}
-              </span>
-            </button>
-          </div>
+          )}
         </div>
       </div>
       <div className="rounded-lg p-4" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
@@ -515,7 +557,10 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
           Preview — asset linked to a device
         </p>
         <p className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>{render(subject, true) || "—"}</p>
-        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{render(body, true)}</p>
+        {/* The body is markup now, so the preview has to render it as markup or it stops
+            resembling the email. What it renders is what the server sanitized on save. */}
+        <div className="astra-rte text-sm" style={{ color: "var(--text-secondary)" }}
+          dangerouslySetInnerHTML={{ __html: render(body, true) }} />
       </div>
 
       {/* The second preview only earns its space when the template actually uses device
@@ -526,7 +571,8 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
             Preview — asset with no device linked
           </p>
           <p className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>{render(subject, false) || "—"}</p>
-          <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{render(body, false)}</p>
+          <div className="astra-rte text-sm" style={{ color: "var(--text-secondary)" }}
+            dangerouslySetInnerHTML={{ __html: render(body, false) }} />
           {/* Names the fields this template actually uses, rather than reciting the whole
               device group — the recited list went stale the moment the group grew. */}
           <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
@@ -545,6 +591,28 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
         {saved && <span className="text-sm" style={{ color: "#10b981" }}>Saved</span>}
       </div>
     </Panel>
+  );
+}
+
+/** One row in the placeholder picker: what it means on top, what it inserts underneath.
+ *  The token alone made you guess — {{brand_model}} and {{device_user}} in particular. */
+function PlaceholderChip({ label, token, hint, onClick, warn, accent }: {
+  label: string; token: string; hint: string; onClick: () => void;
+  warn?: boolean; accent?: boolean;
+}) {
+  return (
+    <button type="button" onClick={onClick} title={hint}
+      className="w-full text-left px-2 py-1.5 rounded-md"
+      style={{
+        background: "var(--surface)",
+        border: `1px solid ${warn ? "#f59e0b" : "var(--border)"}`,
+      }}>
+      <span className="block text-xs truncate"
+        style={{ color: accent ? "var(--accent)" : "var(--text-primary)" }}>{label}</span>
+      <span className="block text-[11px] font-mono truncate" style={{ color: "var(--text-secondary)" }}>
+        {`{{${token}}}`}
+      </span>
+    </button>
   );
 }
 

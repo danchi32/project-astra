@@ -10,6 +10,10 @@ bcrypt>=4.2
 PyJWT>=2.10
 # Fernet, for the third-party helpdesk credentials an organization entrusts to us.
 cryptography>=43.0
+# Allowlist HTML sanitizer (Rust ammonia) for org-authored email bodies. Not hand-rolled:
+# the rich-text editor means we accept markup, and an escape-everything policy is only safe
+# while nobody can author markup at all.
+nh3>=0.2.18
 anthropic>=0.40
 stripe>=11.0
 httpx>=0.27

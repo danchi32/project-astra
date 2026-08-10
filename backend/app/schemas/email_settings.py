@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -57,6 +58,10 @@ class EmailSettingsRead(BaseModel):
     # Asset-assignment email template. When null, the built-in default (returned here) is used.
     asset_email_subject: str | None = None
     asset_email_body: str | None = None
+    #: "html" for a body written in the rich-text editor, "text" for one written before it
+    #: existed. The editor needs this to know whether to load the body as markup or as lines
+    #: of plain text — the same string means different things under the two.
+    asset_email_body_format: str = "text"
     asset_email_placeholders: list[str] = []
     #: The same placeholders, grouped and described. The editor renders its picker and its
     #: preview from this, so which fields need a linked device is defined once — server-side
@@ -92,7 +97,11 @@ class EmailSenderChoice(BaseModel):
 class AssetEmailTemplateUpdate(BaseModel):
     """Customize the asset-assignment email. Empty strings reset to the default."""
     subject: str = Field(max_length=300)
-    body: str = Field(max_length=4000)
+    body: str = Field(max_length=20000)
+    #: "html" when the body carries markup from the rich-text editor. Anything the allowlist
+    #: does not recognise is dropped server-side, so this is a statement about the format,
+    #: not a grant of trust.
+    body_format: Literal["text", "html"] = "text"
     #: Addresses copied on the email. Omitted (None) leaves the saved list alone; an empty
     #: list clears it — otherwise there would be no way to remove the last address.
     cc: list[str] | None = Field(default=None, max_length=20)

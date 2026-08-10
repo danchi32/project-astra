@@ -19,6 +19,7 @@ from app.models.base import utcnow
 from app.services import email_domains
 from app.services.audit import AuditService
 from app.services.email_domains import EmailProviderError
+from app.services.email_templates import sanitize_body
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})$")
 
@@ -189,16 +190,26 @@ class EmailIntegrationService:
         return row
 
     async def update_asset_template(
-        self, *, actor: User, subject: str, body: str, cc: list[str] | None = None
+        self, *, actor: User, subject: str, body: str, cc: list[str] | None = None,
+        body_format: str = "text",
     ) -> EmailSettings:
         """Save the org's asset-assignment email template. Blank fields reset to the default
-        (stored as NULL). A row is created even before a sending domain is set."""
+        (stored as NULL). A row is created even before a sending domain is set.
+
+        The body is sanitized on the way in as well as on the way out. Once at render time
+        would be enough to keep the mail safe, but storing what the author sent means the
+        editor later reloads markup we would refuse to send, and the difference between what
+        it shows and what goes out is exactly the confusion this feature keeps producing.
+        """
         row = await self._row(actor.org_id)
         if row is None:
             row = EmailSettings(org_id=actor.org_id)
             self.session.add(row)
+        rich = body_format == "html"
+        cleaned = sanitize_body(body) if rich else body
         row.asset_email_subject = subject.strip() or None
-        row.asset_email_body = body.strip() or None
+        row.asset_email_body = cleaned.strip() or None
+        row.asset_email_body_format = "html" if rich else "text"
         if cc is not None:
             row.asset_email_cc = _clean_cc(cc)
         await self.audit.record(
