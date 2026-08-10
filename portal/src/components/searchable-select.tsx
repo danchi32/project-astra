@@ -27,14 +27,48 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [menuBox, setMenuBox] = useState<{ left: number; width: number; top?: number; bottom?: number } | null>(null);
+
+  /** Position the menu in viewport coordinates.
+   *
+   *  It used to be `absolute`, which meant any ancestor with `overflow: hidden` cut it off.
+   *  On the device Assignment tab there are four such ancestors, and the nearest one ends
+   *  123px into the list — so the options rendered, the search filtered them, and the user
+   *  saw an empty box and reported that search was broken. `fixed` escapes all of them at
+   *  once, which matters because this control is used in several places and only one of
+   *  them was ever noticed.
+   */
+  const place = () => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    // Flip upward when the list would run off the bottom of the window — otherwise the
+    // fix for one kind of invisibility introduces another.
+    setMenuBox(
+      spaceBelow < 260 && r.top > spaceBelow
+        ? { left: r.left, width: r.width, bottom: window.innerHeight - r.top + 4 }
+        : { left: r.left, width: r.width, top: r.bottom + 4 },
+    );
+  };
 
   useEffect(() => {
     if (!open) return;
+    place();
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    // `true` so scrolling inside any container repositions it, not just the window.
+    const onMove = () => place();
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
   }, [open]);
 
   const selected = options.find((o) => o.value === value);
@@ -48,6 +82,7 @@ export function SearchableSelect({
     <div className="relative" ref={ref}>
       <button
         type="button"
+        ref={triggerRef}
         onClick={() => { setOpen((v) => !v); setQuery(""); }}
         className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none flex items-center justify-between gap-2 text-left"
         style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
@@ -58,10 +93,16 @@ export function SearchableSelect({
         <ChevronDown size={15} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
       </button>
 
-      {open && (
+      {open && menuBox && (
         <div
-          className="absolute z-50 mt-1 w-full rounded-lg overflow-hidden shadow-lg"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+          className="fixed z-50 rounded-lg overflow-hidden shadow-lg"
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            left: menuBox.left,
+            width: menuBox.width,
+            ...(menuBox.top !== undefined ? { top: menuBox.top } : { bottom: menuBox.bottom }),
+          }}
         >
           <div className="p-2" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="relative">

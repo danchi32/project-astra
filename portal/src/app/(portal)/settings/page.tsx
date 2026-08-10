@@ -393,6 +393,17 @@ const TEMPLATE_SAMPLE: Record<string, string> = {
   software: "142 apps", device_user: "ACME\\sam", org_name: "Your Company",
 };
 
+/** Placeholders that come from the linked DEVICE's telemetry, not from the asset record.
+ *
+ *  An asset that is not linked to a device has nothing to put here, so they render empty —
+ *  correctly, since the alternative is inventing hardware. The preview used to fill them in
+ *  with sample values unconditionally, which made a template look complete while the real
+ *  email went out with holes in it. `brand_model` and `serial` are absent from this list on
+ *  purpose: both fall back to the asset's own fields first. */
+const DEVICE_PLACEHOLDERS = new Set([
+  "hostname", "cpu", "ram", "storage", "software", "device_user",
+]);
+
 function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
   const queryClient = useQueryClient();
   const [subject, setSubject] = useState(settings.asset_email_subject ?? "");
@@ -427,9 +438,17 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
     requestAnimationFrame(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = start + t.length; });
   }
 
-  const render = (s: string) =>
-    s.replace(/\{\{(\w+)\}\}/g, (_, k) =>
-      k === "acknowledge_button" ? "[ Acknowledge receipt ]" : (TEMPLATE_SAMPLE[k] ?? `{{${k}}}`));
+  // Two previews of the same template, because assets come in two kinds and only one of
+  // them has hardware to talk about. Showing sample device values unconditionally is how a
+  // template gets written that looks finished and arrives with holes in it.
+  const render = (s: string, withDevice: boolean) =>
+    s.replace(/\{\{(\w+)\}\}/g, (_, k) => {
+      if (k === "acknowledge_button") return "[ Acknowledge receipt ]";
+      if (!withDevice && DEVICE_PLACEHOLDERS.has(k)) return "";
+      return TEMPLATE_SAMPLE[k] ?? `{{${k}}}`;
+    });
+
+  const usesDeviceFields = [...DEVICE_PLACEHOLDERS].some((k) => body.includes(`{{${k}}}`) || subject.includes(`{{${k}}}`));
 
   return (
     <Panel title="Asset assignment email"
@@ -452,9 +471,11 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
         <textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={7}
           className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 font-mono" style={inputStyle} />
       </Field>
+      {/* Split, because the two groups do not behave the same and picking from one flat row
+          gives no way to know that. */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Insert:</span>
-        {settings.asset_email_placeholders.map((p) => (
+        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Always available:</span>
+        {settings.asset_email_placeholders.filter((p) => !DEVICE_PLACEHOLDERS.has(p)).map((p) => (
           <button key={p} type="button" onClick={() => insert(p)}
             className="text-xs font-mono px-2 py-1 rounded-lg" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
             {`{{${p}}}`}
@@ -465,11 +486,41 @@ function AssetEmailTemplateEditor({ settings }: { settings: EmailSettings }) {
           {`{{acknowledge_button}}`}
         </button>
       </div>
-      <div className="rounded-lg p-4" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
-        <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "var(--text-secondary)" }}>Preview</p>
-        <p className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>{render(subject) || "—"}</p>
-        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{render(body)}</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs" style={{ color: "#f59e0b" }}>Only when a device is linked:</span>
+        {settings.asset_email_placeholders.filter((p) => DEVICE_PLACEHOLDERS.has(p)).map((p) => (
+          <button key={p} type="button" onClick={() => insert(p)}
+            className="text-xs font-mono px-2 py-1 rounded-lg"
+            style={{ background: "var(--bg)", border: "1px solid #f59e0b", color: "var(--text-primary)" }}>
+            {`{{${p}}}`}
+          </button>
+        ))}
       </div>
+      <div className="rounded-lg p-4" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+        <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "var(--text-secondary)" }}>
+          Preview — asset linked to a device
+        </p>
+        <p className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>{render(subject, true) || "—"}</p>
+        <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{render(body, true)}</p>
+      </div>
+
+      {/* The second preview only earns its space when the template actually uses device
+          fields. Otherwise both are identical and it is just noise. */}
+      {usesDeviceFields && (
+        <div className="rounded-lg p-4" style={{ background: "var(--bg)", border: "1px solid #f59e0b" }}>
+          <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "#f59e0b" }}>
+            Preview — asset with no device linked
+          </p>
+          <p className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>{render(subject, false) || "—"}</p>
+          <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--text-secondary)" }}>{render(body, false)}</p>
+          <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
+            Hostname, CPU, RAM, storage, app count and signed-in user come from the device&apos;s
+            own telemetry. An asset that isn&apos;t linked to a device has none of that, so those
+            placeholders come out empty — as above. Link the asset to a device when you create
+            it, or write the wording so the gaps read cleanly.
+          </p>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <button onClick={save} disabled={saving}
           className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "var(--accent)" }}>
