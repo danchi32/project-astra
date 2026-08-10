@@ -202,6 +202,7 @@ class EmailService:
     async def send_asset_assignment(
         self, *, to: str, context: dict, ack_link: str,
         subject_tmpl: str | None = None, body_tmpl: str | None = None,
+        body_format: str = "text",
         from_name: str | None = None, from_email: str | None = None,
         reply_to: str | None = None, cc: list[str] | None = None,
     ) -> bool:
@@ -217,7 +218,7 @@ class EmailService:
 
         subject, html, text = render_asset_assignment(
             subject_tmpl=subject_tmpl, body_tmpl=body_tmpl,
-            context=context, ack_link=ack_link,
+            context=context, ack_link=ack_link, body_format=body_format,
         )
         return await self.send(
             to=to, subject=subject, html=html, text=text,

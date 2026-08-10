@@ -85,10 +85,18 @@ class EmailSettings(TimestampMixin, Base):
     asset_email_cc: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     # Org-customizable asset-assignment email. Null = use the built-in default template.
-    # Bodies are plain text with {{placeholders}}; the acknowledge button is appended
-    # (or positioned with {{acknowledge_button}}).
+    # Bodies carry {{placeholders}}; the acknowledge button is appended (or positioned with
+    # {{acknowledge_button}}).
     asset_email_subject: Mapped[str | None] = mapped_column(String(300), nullable=True)
-    asset_email_body: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    asset_email_body: Mapped[str | None] = mapped_column(String(20000), nullable=True)
+
+    # "text" or "html". Bodies written before the rich-text editor existed are plain text and
+    # must keep rendering that way — escaped, newlines turned into breaks. Recorded rather
+    # than guessed from the content: a sniffer would read a plain-text body that happens to
+    # say "<3" as markup and silently eat it.
+    asset_email_body_format: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="text", server_default="text"
+    )
 
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

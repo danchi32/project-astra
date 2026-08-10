@@ -331,6 +331,7 @@ class AssetService:
                 to=user.email, context=context, ack_link=link,
                 subject_tmpl=email_row.asset_email_subject if email_row else None,
                 body_tmpl=email_row.asset_email_body if email_row else None,
+                body_format=(email_row.asset_email_body_format if email_row else "text"),
                 from_name=sender.from_name, from_email=sender.from_address,
                 reply_to=sender.reply_to,
                 cc=(email_row.asset_email_cc if email_row else None),

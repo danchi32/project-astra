@@ -27,3 +27,23 @@ body {
 }
 
 * { box-sizing: border-box; }
+
+/* The email-template editor and its preview.
+ *
+ * Tailwind's reset strips list markers and paragraph spacing, which is right for the app
+ * chrome and wrong here: this markup is going into a mail client that applies its own
+ * defaults, so the editor has to show what the recipient will see rather than what the rest
+ * of the portal looks like. */
+.astra-rte ul { list-style: disc; padding-left: 1.4em; margin: 0.4em 0; }
+.astra-rte ol { list-style: decimal; padding-left: 1.6em; margin: 0.4em 0; }
+.astra-rte li { margin: 0.15em 0; }
+.astra-rte p { margin: 0.5em 0; }
+.astra-rte blockquote {
+  margin: 0.5em 0; padding-left: 0.8em; border-left: 3px solid var(--border);
+}
+.astra-rte h3 { font-size: 1.05em; font-weight: 700; margin: 0.6em 0 0.3em; }
+.astra-rte h4 { font-size: 1em; font-weight: 600; margin: 0.6em 0 0.3em; }
+.astra-rte a { color: var(--accent); text-decoration: underline; }
+.astra-rte b, .astra-rte strong { font-weight: 700; }
+.astra-rte i, .astra-rte em { font-style: italic; }
+.astra-rte u { text-decoration: underline; }

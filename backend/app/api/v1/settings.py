@@ -126,6 +126,9 @@ def _email_read(row: EmailSettings | None, org_name: str = "Your organization") 
         # Show the org's template, falling back to the shipped default so the editor is populated.
         asset_email_subject=row.asset_email_subject or DEFAULT_ASSET_SUBJECT,
         asset_email_body=row.asset_email_body or DEFAULT_ASSET_BODY,
+        # The shipped default is plain text, so a row that has no body of its own is showing
+        # plain text whatever format its own (absent) body was saved in.
+        asset_email_body_format=(row.asset_email_body_format if row.asset_email_body else "text"),
         asset_email_placeholders=ASSET_PLACEHOLDERS,
         asset_email_placeholder_groups=_placeholder_groups(),
         asset_email_cc=row.asset_email_cc or [],
@@ -221,7 +224,8 @@ async def update_asset_email_template(
     session: AsyncSession = Depends(get_db),
 ) -> EmailSettingsRead:
     row = await EmailIntegrationService(session).update_asset_template(
-        actor=actor, subject=body.subject, body=body.body, cc=body.cc
+        actor=actor, subject=body.subject, body=body.body, cc=body.cc,
+        body_format=body.body_format,
     )
     return await _email_read_for(session, actor, row)
 

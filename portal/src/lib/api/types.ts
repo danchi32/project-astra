@@ -242,6 +242,10 @@ export interface EmailSettings {
   verified_at: string | null;
   asset_email_subject: string | null;
   asset_email_body: string | null;
+  /** "html" for a body written in the rich-text editor, "text" for one that predates it.
+   *  The editor loads the two differently — plain text has to be converted to markup or the
+   *  line breaks vanish when it lands in a contentEditable. */
+  asset_email_body_format: "text" | "html";
   asset_email_placeholders: string[];
   /** The same placeholders, grouped and described. The editor builds its picker and its
    *  preview from this, so which fields need a linked device is answered server-side —
