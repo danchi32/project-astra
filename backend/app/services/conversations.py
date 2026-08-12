@@ -12,7 +12,12 @@ from app.repositories.conversations import ConversationRepository, MessageReposi
 from app.repositories.organizations import OrganizationRepository
 from app.services.ai.cache import SemanticCache
 from app.services.ai.cognitive import CognitiveEngine
-from app.services.ai.intent import OFF_TOPIC_REPLY, is_off_topic, requires_live_action
+from app.services.ai.intent import (
+    OFF_TOPIC_REPLY,
+    is_off_topic,
+    reports_still_broken,
+    requires_live_action,
+)
 from app.services.ai.learned import LearnedFixStore, learnable_action
 from app.services.ai.provider import (
     LearnedActionProvider,
@@ -93,7 +98,13 @@ class ConversationService:
         user_message = await self.messages.add(
             Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
         )
-        reply = await self._reply(org_id=actor.org_id, history=history, content=content)
+        # The conversation id was not passed before, which quietly made escalation
+        # impossible from the portal: the tools are withheld unless we can say whose ticket
+        # it would be, and that answer starts from the conversation.
+        reply = await self._reply(
+            org_id=actor.org_id, history=history, content=content,
+            conversation_id=conversation.id,
+        )
         assistant_message = await self.messages.add(
             Message(
                 conversation_id=conversation.id,
@@ -224,6 +235,24 @@ class ConversationService:
     ) -> Reply:
         settings = get_settings()
 
+        # 0. An outstanding offer to raise a ticket owns this turn.
+        #
+        # Until now the only code that could answer one was the LLM's escalation tool, and
+        # the real LLM runs only for ai_pro orgs — so on every other org ASTRA asked "shall
+        # I raise a ticket?" after a failed fix, the user said yes, and nothing happened.
+        # The offer sat open forever. Answering it here makes the question mean something
+        # regardless of which provider is doing the talking.
+        #
+        # First, because a bare "yes please" put through the keyword rules is not a support
+        # request and would be answered as if it were one.
+        if conversation_id is not None:
+            answered = await self._answer_pending_offer(
+                org_id=org_id, conversation_id=conversation_id,
+                device_id=acting_device_id, content=content,
+            )
+            if answered is not None:
+                return answered
+
         # 1. Intent gate — reject clearly off-topic queries with no LLM call.
         if settings.ai_intent_gate_enabled and is_off_topic(content):
             return Reply(text=OFF_TOPIC_REPLY, tool_trail=None, source="intent_gate")
@@ -238,10 +267,56 @@ class ConversationService:
             if cached is not None:
                 return Reply(text=cached, tool_trail=None, source="cache")
 
-        # 3. Route the provider: a listed/common issue is free (built-in rules); a
+        # 3. The fix didn't help — move to the next tier rather than round the same loop.
+        #
+        # The built-in rules answer on keywords, so "outlook is still crashing" matches the
+        # same rule that just failed and would restart Outlook a second time. What the
+        # message actually means is that this tier is finished.
+        force_llm = False
+        ai_pro = bool(settings.anthropic_api_key) and await self._org_is_ai_pro(org_id)
+        if conversation_id is not None and reports_still_broken(content):
+            from app.services.support.attempts import attempts_in
+
+            if await attempts_in(self.session, conversation_id):
+                if ai_pro:
+                    # Claude carries the escalation tools, so the ticket question stays its
+                    # to ask. Two owners in one turn is two offers for one problem.
+                    force_llm = True
+                else:
+                    offered = await self._offer_ticket(
+                        org_id=org_id, conversation_id=conversation_id,
+                        device_id=acting_device_id,
+                    )
+                    if offered is not None:
+                        return offered
+
+        # 4. Route the provider: a listed/common issue is free (built-in rules); a
         #    previously-learned fix is free (built-in path); only a genuinely new,
         #    unlisted problem is worth an LLM (Claude) call.
-        provider, source = await self._route(org_id, content, device_hostname)
+        provider, source = await self._route(
+            org_id, content, device_hostname, force_llm=force_llm
+        )
+
+        # Nothing here can help and there is no model to ask. Answering with the built-in
+        # greeting — "tell me what's going wrong and I'll take care of it" — to somebody who
+        # has just told us what is going wrong is the worst of the available replies.
+        #
+        # `actionable` is the guard, and it is not decoration: without it "yes please" or
+        # "thanks" reaches this branch too, and ASTRA offers to open a ticket about a
+        # pleasantry. A ticket needs a complaint to be about.
+        if (
+            conversation_id is not None
+            and actionable
+            and isinstance(provider, StubProvider)
+            and self._forced_provider is None
+            and not StubProvider().can_handle(user_text=content, hostname=device_hostname)
+        ):
+            offered = await self._offer_ticket(
+                org_id=org_id, conversation_id=conversation_id,
+                device_id=acting_device_id, problem=content,
+            )
+            if offered is not None:
+                return offered
         result = await CognitiveEngine(self.session, provider=provider).run(
             org_id=org_id, history=history, user_message=content,
             device_hostname=device_hostname, acting_device_id=acting_device_id,
@@ -269,8 +344,114 @@ class ConversationService:
 
         return Reply(text=result.text, tool_trail=result.tool_trail or None, source=source)
 
+    async def _answer_pending_offer(
+        self, *, org_id: uuid.UUID, conversation_id: uuid.UUID,
+        device_id: uuid.UUID | None, content: str,
+    ) -> Reply | None:
+        """Treat this message as the answer to an outstanding "shall I raise a ticket?".
+
+        Returns None when there is no offer open, or when the reply is neither a yes nor a
+        no — in that case the user has moved on to something else and the message belongs to
+        the normal path.
+
+        The yes/no decision comes from EscalationService rather than from anything local:
+        those patterns already carry the English and Hinglish forms people actually type,
+        and a second copy would drift from the one the tool path uses.
+        """
+        from app.services.support import factory, requester
+        from app.services.support.escalation import (
+            ConsentMissing,
+            EscalationService,
+            classify_answer,
+        )
+
+        verdict = classify_answer(content)
+        if verdict == "unclear":
+            return None
+
+        connector = await factory.build_connector(self.session, org_id)
+        service = EscalationService(self.session, connector=connector)
+        if await service.pending_offer(conversation_id) is None:
+            return None
+
+        if verdict == "no":
+            await service.decline(conversation_id=conversation_id)
+            await self.session.commit()
+            return Reply(
+                text="No problem — I won't raise a ticket. Tell me if you change your mind.",
+                tool_trail=None, source="escalation",
+            )
+
+        settings = await factory.get_settings_for(self.session, org_id)
+        offered = await service.pending_offer(conversation_id)
+        category, sub_category = factory.category_for(
+            settings, offered.action_id if offered else None
+        )
+        who = await requester.resolve(
+            self.session, org_id=org_id, conversation_id=conversation_id, device_id=device_id
+        )
+        try:
+            outcome = await service.raise_ticket(
+                org_id=org_id, conversation_id=conversation_id,
+                requester_email=who.email if who else None,
+                category=category, sub_category=sub_category,
+            )
+        except ConsentMissing:
+            # The service reads the FIRST reply after the offer, not the latest, so a "yes"
+            # that follows some other remark is not consent to it. Committed because a
+            # refusal closes the offer and that has to outlive the turn.
+            await self.session.commit()
+            return None
+        await self.session.commit()
+        return Reply(text=outcome.message, tool_trail=None, source="escalation")
+
+    async def _offer_ticket(
+        self, *, org_id: uuid.UUID, conversation_id: uuid.UUID,
+        device_id: uuid.UUID | None, problem: str | None = None,
+    ) -> Reply | None:
+        """Ask whether to hand this to a human. None when we must not ask.
+
+        The same conditions the model's tools are withheld under apply here: no helpdesk,
+        no nameable requester, or an open ticket that already covers it. Asking and then
+        failing is worse than never asking, because by then the user has stopped looking
+        for a fix themselves.
+        """
+        from app.services.support import attempts, factory, requester
+        from app.services.support.escalation import EscalationService
+
+        connector = await factory.build_connector(self.session, org_id)
+        if connector is None:
+            return None
+        who = await requester.resolve(
+            self.session, org_id=org_id, conversation_id=conversation_id,
+            device_id=device_id,
+        )
+        if who is None:
+            return None
+
+        dossier = await attempts.build_dossier(
+            self.session, conversation_id=conversation_id, device_id=device_id,
+            problem=problem,
+        )
+        if dossier is None:
+            return None
+
+        tried = await attempts.attempts_in(self.session, conversation_id)
+        escalation, message = await EscalationService(
+            self.session, connector=connector
+        ).offer(
+            org_id=org_id, conversation_id=conversation_id, device_id=device_id,
+            user_id=who.user_id, dossier=dossier,
+            action_id=tried[-1].action_id if tried else None,
+        )
+        await self.session.commit()
+        # `escalation is None` means an open ticket already covers this; the message says
+        # which one, and that is the right thing to send either way.
+        return Reply(text=message, tool_trail=None, source="escalation")
+
     async def _route(
-        self, org_id: uuid.UUID, content: str, device_hostname: str | None
+        self, org_id: uuid.UUID, content: str, device_hostname: str | None,
+        *, force_llm: bool = False,
     ) -> tuple[LLMProvider, str]:
         """Pick who answers, cheapest capable first:
         1. An injected provider (tests) always wins.
@@ -281,6 +462,10 @@ class ConversationService:
         The returned source string is recorded for cost telemetry."""
         if self._forced_provider is not None:
             return self._forced_provider, "engine"
+        # The built-in rules already had their turn and the user says it did not help, so
+        # skip them: running the same keyword match again would apply the same fix again.
+        if force_llm:
+            return get_provider(), "engine"
         if StubProvider().can_handle(user_text=content, hostname=device_hostname):
             return StubProvider(), "engine"
         fix = await self.learned.lookup(org_id=org_id, query=content)

@@ -572,10 +572,7 @@ class RemediationService:
         the org has no helpdesk, when we cannot name a requester, or when a ticket already
         covers this — the caller then falls back to the plain "flagged for IT" wording.
         """
-        from sqlalchemy import select
-
-        from app.services.support import factory, requester
-        from app.services.support.dossier import Attempt, Dossier
+        from app.services.support import attempts, factory, requester
         from app.services.support.escalation import EscalationService
 
         try:
@@ -589,26 +586,24 @@ class RemediationService:
             if who is None:
                 return None
 
-            # The complaint that led here, in the user's own words.
-            problem = (await self.session.execute(
-                select(Message.content).where(
-                    Message.conversation_id == task.conversation_id,
-                    Message.role == MessageRole.USER,
-                    Message.created_at <= task.created_at,
-                ).order_by(Message.created_at.desc()).limit(1)
-            )).scalar_one_or_none()
+            # The complaint this fix was answering, in the user's own words — the last
+            # thing they said before it started, not the first thing in the chat.
+            problem = await attempts.complaint_before(
+                self.session, task.conversation_id, task.created_at
+            )
             if not problem:
                 return None
 
-            device = await self.devices.get(task.device_id)
-            dossier = Dossier(
-                problem=problem[:1000],
-                hostname=device.hostname if device else None,
-                os_version=device.os_version if device else None,
-                attempts=[Attempt(label, succeeded=False,
-                                  outcome=(task.result or {}).get("output", "")[:200] or None,
-                                  at=task.completed_at)],
+            # Shared with the chat-driven path so the two ways a ticket gets offered
+            # describe the same situation the same way. This task is already in the session
+            # with its final status, so it appears in the attempts without being added here.
+            dossier = await attempts.build_dossier(
+                self.session, conversation_id=task.conversation_id,
+                device_id=task.device_id, problem=problem,
             )
+            if dossier is None:
+                return None
+
             _, message = await EscalationService(
                 self.session, connector=connector
             ).offer(
