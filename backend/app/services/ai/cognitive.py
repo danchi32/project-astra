@@ -109,10 +109,20 @@ class CognitiveEngine:
             # exactly that: it wrote "shall I raise a ticket?" in its own words and called
             # nothing, so no offer was recorded and the user's yes had nothing to act on.
             # Asking and calling are the same act, and the wording has to say so.
+            #
+            # Saying it was not quite enough. Measured over ten runs of the same complaint,
+            # the tool was called in eight — and the two misses were the two longest
+            # replies. Every reply that called it was under 350 characters; the ones that
+            # explained workarounds first ran to 900 and asked in prose at the end. So the
+            # ordering is stated too: the call comes before the prose, not after it.
             system += (
                 "\n\nIf you cannot fix the problem — a fix failed, no fix exists, or the "
                 "user says it is still broken after one worked — offer to raise a ticket "
                 f"with their IT helpdesk by calling {escalation_tools.OFFER}.\n"
+                "Call it FIRST, before you write the reply. Not after explaining the "
+                "problem, not after listing workarounds — those come afterwards and can be "
+                "brief. A long reply that ends by asking about a ticket is the failure "
+                "mode: the question never gets recorded.\n"
                 "That call IS the question. It puts it to the user and records it. Never "
                 "write the question yourself instead: an unrecorded question cannot be "
                 "answered, so their 'yes' would be lost and they would be asked twice. If "
