@@ -98,11 +98,20 @@ class Settings(BaseSettings):
     # clear it once DNS resolves.
     agent_backend_ip: str = ""
 
+    # Root log level. INFO because the records this codebase already writes are the ones
+    # worth having when something goes wrong in production; raise it to WARNING if the
+    # volume ever becomes the problem.
+    log_level: str = "INFO"
+
     # AI engine — when the API key is unset, a deterministic stub provider is used
     # (local demo + tests run without a key or network).
     anthropic_api_key: str | None = None
-    ai_model: str = "claude-opus-4-8"
-    ai_max_tokens: int = 4096
+    ai_model: str = "claude-sonnet-5"
+    # Sonnet 5 thinks by default — leaving the thinking parameter unset gets adaptive
+    # thinking, where on the previous model it got none. max_tokens caps thinking AND the
+    # reply together, so a budget sized for reply-only would now cut answers off mid
+    # sentence. Raised to leave the reasoning somewhere to go.
+    ai_max_tokens: int = 8192
     ai_max_tool_iterations: int = 6
 
     # Cost controls — an intent gate rejects off-topic queries before any LLM call,
