@@ -33,6 +33,16 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+# Which model a running revision is actually answering with is otherwise only knowable by
+# reading the deploy that produced it. It is the first thing worth having when a reply
+# looks wrong, and the first thing to check after changing the model or rolling one back.
+# It doubles as proof the line above works: no app record reached production before it.
+logging.getLogger("astra.startup").info(
+    "starting environment=%s ai_model=%s ai_configured=%s max_tokens=%s",
+    settings.environment, settings.ai_model,
+    bool(settings.anthropic_api_key), settings.ai_max_tokens,
+)
+
 # Write methods on these path prefixes are NOT gated by subscription status:
 # auth (login/register/profile), platform (operator), agent (devices keep
 # reporting even when the org is read-only for its human users), and billing
