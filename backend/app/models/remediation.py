@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, JSON, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, JSON, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -48,6 +48,12 @@ class RemediationTask(TimestampMixin, Base):
         Enum(RemediationSource, native_enum=False, length=20,
              values_callable=lambda e: [m.value for m in e]),
         nullable=False,
+    )
+    # Whether the model chose this fix, as opposed to the built-in keyword rules. `source`
+    # cannot answer that — it says ASSISTANT either way. Learning needs the distinction:
+    # a rule-driven fix teaches nothing, because the rule already knew the answer.
+    from_llm: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
     )
     requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)

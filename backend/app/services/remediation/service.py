@@ -525,7 +525,15 @@ class RemediationService:
         # symptom in the user's own words, which is the half of a runbook that can't be
         # reconstructed later — the action id was always in the task row, the complaint
         # that led to it was not.
-        if task.conversation_id is not None and task.source is RemediationSource.ASSISTANT:
+        # from_llm, not just ASSISTANT: the built-in keyword rules also create tasks marked
+        # ASSISTANT, and there is nothing to learn from those — the rule already knew the
+        # answer, so writing a runbook for it would fill the knowledge base with things the
+        # system could always do, and bury the hand-written ones under them.
+        if (
+            task.conversation_id is not None
+            and task.source is RemediationSource.ASSISTANT
+            and task.from_llm
+        ):
             await self._learn_from(task, label, success)
 
         # If this fix was started from a device chat, post the real outcome back into

@@ -4,10 +4,19 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import Conversation, Device, Message, MessageRole, Organization, User
+from app.models import (
+    Conversation,
+    Device,
+    Message,
+    MessageRole,
+    Organization,
+    RemediationTask,
+    User,
+)
 from app.repositories.conversations import ConversationRepository, MessageRepository
 from app.repositories.organizations import OrganizationRepository
 from app.services.ai.cache import SemanticCache
@@ -18,7 +27,7 @@ from app.services.ai.intent import (
     reports_still_broken,
     requires_live_action,
 )
-from app.services.ai.learned import LearnedFixStore, learnable_action
+from app.services.ai.learned import LearnedFixStore, created_task_ids, learnable_action
 from app.services.ai.provider import (
     LearnedActionProvider,
     LLMProvider,
@@ -327,6 +336,18 @@ class ConversationService:
         #    applying a fix, remember it so the same kind of issue is handled for
         #    free next time. Built-in and already-learned paths teach nothing new.
         if not isinstance(provider, (StubProvider, LearnedActionProvider)):
+            # Mark the fixes as the model's, for the runbook path to read later. It learns
+            # on the agent's result — minutes later, in another request — by which time
+            # which provider answered is no longer knowable from anything but the row.
+            # Without this every fix looks alike, and the built-in rules would teach the
+            # knowledge base things it already knew.
+            task_ids = created_task_ids(result.tool_trail)
+            if task_ids:
+                await self.session.execute(
+                    update(RemediationTask)
+                    .where(RemediationTask.id.in_([uuid.UUID(t) for t in task_ids]))
+                    .values(from_llm=True)
+                )
             learned = learnable_action(result.tool_trail)
             if learned is not None:
                 await self.learned.learn(

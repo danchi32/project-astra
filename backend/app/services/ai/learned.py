@@ -113,6 +113,28 @@ class LearnedFixStore:
         )
 
 
+def created_task_ids(tool_trail: list[dict[str, Any]] | None) -> list[str]:
+    """Every remediation this turn actually created.
+
+    Not the same question as learnable_action, which wants the one fix worth remembering.
+    This wants all of them, because marking a turn as the model's work has to cover the
+    whole turn: a slow machine gets clear_temp AND clear_system_temp, and stamping only the
+    last would leave the other looking like something the built-in rules produced.
+    """
+    ids: list[str] = []
+    for entry in tool_trail or []:
+        if entry.get("tool") != "propose_remediation":
+            continue
+        try:
+            output = json.loads(entry.get("output") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            continue
+        task_id = output.get("task_id")
+        if task_id:
+            ids.append(str(task_id))
+    return ids
+
+
 def learnable_action(tool_trail: list[dict[str, Any]] | None) -> tuple[str, dict[str, Any]] | None:
     """Pull the (action_id, params) of a remediation the engine actually created in
     this turn, so it can be learned. Returns None if no task was created."""
