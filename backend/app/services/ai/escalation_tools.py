@@ -33,7 +33,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "not work, no fix exists for the problem, or the user says the problem is still "
             "there after a successful fix. Do not use it as a first response, and do not "
             "use it for questions you can answer. This tool asks the user — it does not "
-            "raise anything. Wait for their reply."
+            "raise anything. Wait for their reply.\n\n"
+            "Calling this tool IS how you ask. Do NOT write the question yourself: a "
+            "'shall I raise a ticket?' you compose in your reply records nothing, so when "
+            "the user says yes there is no offer to act on and their answer is lost. If you "
+            "intend to ask, call this."
         ),
         "input_schema": {
             "type": "object",
