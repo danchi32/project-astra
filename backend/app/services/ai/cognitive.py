@@ -7,7 +7,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.services.ai.provider import LLMProvider, get_provider
+from app.services.ai.prompts import WINDOWS_EXPERT_PROMPT
+from app.services.ai.provider import (
+    LearnedActionProvider,
+    LLMProvider,
+    StubProvider,
+    get_provider,
+)
 from app.services.ai.tools import TOOL_SCHEMAS, dispatch_tool
 
 logger = logging.getLogger("astra.cognitive")
@@ -49,6 +55,14 @@ class CognitiveEngine:
         self.provider = provider or get_provider()
         self.max_iterations = get_settings().ai_max_tool_iterations
 
+    def _is_real_llm(self) -> bool:
+        """True when the provider is an actual model rather than the built-in rules.
+
+        Same test conversations.py uses to decide what is worth learning from — the
+        built-in paths are deterministic and teach nothing, and they read no prompt.
+        """
+        return not isinstance(self.provider, (StubProvider, LearnedActionProvider))
+
     async def run(
         self,
         *,
@@ -64,7 +78,12 @@ class CognitiveEngine:
         `history` is prior user/assistant text turns in Anthropic wire format.
         When `device_hostname` is set (tray chat), the AI focuses on that device.
         """
-        system = SYSTEM_PROMPT
+        # The expert brief is for the model and nobody else. The built-in providers answer
+        # from keyword rules and ignore a system prompt entirely, so sending it to them
+        # would be several thousand tokens describing a job they are not doing — and it
+        # would blur what reaching the model is FOR. A problem only gets here because the
+        # rules could not place it.
+        system = WINDOWS_EXPERT_PROMPT if self._is_real_llm() else SYSTEM_PROMPT
         if device_hostname:
             system += (
                 f"\n\nThe person chatting with you is the logged-in user of device "
