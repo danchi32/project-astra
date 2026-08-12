@@ -72,6 +72,33 @@ _ACTIONABLE_MARKERS = (
 )
 
 
+# "What you did made no difference." Distinct from _PROBLEM_WORDS on purpose: those say
+# *a* problem exists, these say *this* problem survived a fix — which is the sentence that
+# moves a conversation to the next tier. Meaningless on its own, so the caller must also
+# establish that something was actually tried; otherwise the first message of a chat that
+# happens to say "still not working" would escalate before ASTRA had lifted a finger.
+_STILL_BROKEN = (
+    "still not", "still cant", "still can't", "still doesn't", "still does not",
+    "still isnt", "still isn't", "still the same", "still same", "still happening",
+    "still crashing", "still slow", "still there", "still an issue", "still broken",
+    "same problem", "same issue", "same thing", "no change", "no difference",
+    "didn't work", "didnt work", "did not work", "doesn't help", "does not help",
+    "didn't help", "didnt help", "not fixed", "wasn't fixed", "hasn't fixed",
+    "nothing changed", "no luck", "tried that", "already tried",
+    # Hinglish / Hindi
+    "abhi bhi", "abhi b", "ab bhi", "phir se", "fir se", "wahi problem", "wahi dikkat",
+    "wahi issue", "koi fark nahi", "koi farak nahi", "fark nahi pada", "thik nahi hua",
+    "theek nahi hua", "sahi nahi hua", "nahi hua", "nhi hua", "kaam nahi aaya",
+    "kaam nhi aaya", "same hai", "waise ka waisa",
+)
+
+
+def reports_still_broken(text: str) -> bool:
+    """True when the user is saying the previous attempt did not help."""
+    lowered = text.lower()
+    return any(marker in lowered for marker in _STILL_BROKEN)
+
+
 def requires_live_action(text: str) -> bool:
     """True when the message names an app or reports a problem/cleanup — such messages
     must reach the engine live and bypass the semantic cache entirely."""

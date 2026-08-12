@@ -78,6 +78,19 @@ def _is_agreement(answer: str) -> bool:
     return bool(_YES.match(answer) or _YES_EXPLICIT.search(answer))
 
 
+def classify_answer(text: str) -> str:
+    """"yes", "no", or "unclear" — the one place that decides what answering means.
+
+    Exported because the rules-driven path answers offers too, and a second copy of these
+    patterns is a second copy that will disagree with this one. Refusals are matched first
+    for the reason given above the regexes.
+    """
+    lowered = text.lower()
+    if _REFUSAL.search(lowered):
+        return "no"
+    return "yes" if _is_agreement(lowered) else "unclear"
+
+
 class ConsentMissing(RuntimeError):
     """raise_support_ticket was called without an outstanding offer the user answered."""
 
