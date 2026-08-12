@@ -86,13 +86,20 @@ class CognitiveEngine:
             device_id=acting_device_id,
         )
         if len(tools) > len(TOOL_SCHEMAS):
+            # "Ask first, then call the tool" is what this used to say, and the model did
+            # exactly that: it wrote "shall I raise a ticket?" in its own words and called
+            # nothing, so no offer was recorded and the user's yes had nothing to act on.
+            # Asking and calling are the same act, and the wording has to say so.
             system += (
                 "\n\nIf you cannot fix the problem — a fix failed, no fix exists, or the "
-                "user says it is still broken after one worked — you may offer to raise a "
-                f"ticket with their IT helpdesk using {escalation_tools.OFFER}. Ask first "
-                "and wait for their answer; only call "
-                f"{escalation_tools.RAISE} once they have agreed. Never claim a ticket "
-                "has been raised unless the tool told you it was."
+                "user says it is still broken after one worked — offer to raise a ticket "
+                f"with their IT helpdesk by calling {escalation_tools.OFFER}.\n"
+                "That call IS the question. It puts it to the user and records it. Never "
+                "write the question yourself instead: an unrecorded question cannot be "
+                "answered, so their 'yes' would be lost and they would be asked twice. If "
+                "your reply is about to ask whether to raise a ticket, call the tool and "
+                f"let it ask.\nWhen they agree, call {escalation_tools.RAISE}. Never claim "
+                "a ticket has been raised unless the tool told you it was."
             )
 
         try:
