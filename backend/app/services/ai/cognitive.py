@@ -7,7 +7,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.services.ai.provider import LLMProvider, get_provider
+from app.services.ai.prompts import WINDOWS_EXPERT_PROMPT
+from app.services.ai.provider import (
+    LearnedActionProvider,
+    LLMProvider,
+    StubProvider,
+    get_provider,
+)
 from app.services.ai.tools import TOOL_SCHEMAS, dispatch_tool
 
 logger = logging.getLogger("astra.cognitive")
@@ -49,6 +55,14 @@ class CognitiveEngine:
         self.provider = provider or get_provider()
         self.max_iterations = get_settings().ai_max_tool_iterations
 
+    def _is_real_llm(self) -> bool:
+        """True when the provider is an actual model rather than the built-in rules.
+
+        Same test conversations.py uses to decide what is worth learning from — the
+        built-in paths are deterministic and teach nothing, and they read no prompt.
+        """
+        return not isinstance(self.provider, (StubProvider, LearnedActionProvider))
+
     async def run(
         self,
         *,
@@ -64,7 +78,12 @@ class CognitiveEngine:
         `history` is prior user/assistant text turns in Anthropic wire format.
         When `device_hostname` is set (tray chat), the AI focuses on that device.
         """
-        system = SYSTEM_PROMPT
+        # The expert brief is for the model and nobody else. The built-in providers answer
+        # from keyword rules and ignore a system prompt entirely, so sending it to them
+        # would be several thousand tokens describing a job they are not doing — and it
+        # would blur what reaching the model is FOR. A problem only gets here because the
+        # rules could not place it.
+        system = WINDOWS_EXPERT_PROMPT if self._is_real_llm() else SYSTEM_PROMPT
         if device_hostname:
             system += (
                 f"\n\nThe person chatting with you is the logged-in user of device "
@@ -86,13 +105,30 @@ class CognitiveEngine:
             device_id=acting_device_id,
         )
         if len(tools) > len(TOOL_SCHEMAS):
+            # "Ask first, then call the tool" is what this used to say, and the model did
+            # exactly that: it wrote "shall I raise a ticket?" in its own words and called
+            # nothing, so no offer was recorded and the user's yes had nothing to act on.
+            # Asking and calling are the same act, and the wording has to say so.
+            #
+            # Saying it was not quite enough. Measured over ten runs of the same complaint,
+            # the tool was called in eight — and the two misses were the two longest
+            # replies. Every reply that called it was under 350 characters; the ones that
+            # explained workarounds first ran to 900 and asked in prose at the end. So the
+            # ordering is stated too: the call comes before the prose, not after it.
             system += (
                 "\n\nIf you cannot fix the problem — a fix failed, no fix exists, or the "
-                "user says it is still broken after one worked — you may offer to raise a "
-                f"ticket with their IT helpdesk using {escalation_tools.OFFER}. Ask first "
-                "and wait for their answer; only call "
-                f"{escalation_tools.RAISE} once they have agreed. Never claim a ticket "
-                "has been raised unless the tool told you it was."
+                "user says it is still broken after one worked — offer to raise a ticket "
+                f"with their IT helpdesk by calling {escalation_tools.OFFER}.\n"
+                "Call it FIRST, before you write the reply. Not after explaining the "
+                "problem, not after listing workarounds — those come afterwards and can be "
+                "brief. A long reply that ends by asking about a ticket is the failure "
+                "mode: the question never gets recorded.\n"
+                "That call IS the question. It puts it to the user and records it. Never "
+                "write the question yourself instead: an unrecorded question cannot be "
+                "answered, so their 'yes' would be lost and they would be asked twice. If "
+                "your reply is about to ask whether to raise a ticket, call the tool and "
+                f"let it ask.\nWhen they agree, call {escalation_tools.RAISE}. Never claim "
+                "a ticket has been raised unless the tool told you it was."
             )
 
         try:
