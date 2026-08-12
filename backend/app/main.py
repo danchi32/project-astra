@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -20,6 +21,17 @@ from app.services.exceptions import (
 from app.services.subscription import org_is_writable, read_only_reason
 
 settings = get_settings()
+
+# Nothing had ever configured the root logger, and uvicorn only configures its own — so
+# every logger.info in this codebase went to the lastResort handler, which starts at
+# WARNING, and was discarded. Rate-limit notices, unresolved ticket requesters, remediation
+# progress: all written, none of it ever reaching Cloud Logging. Found while trying to read
+# the token counters the AI provider now reports, which would have vanished the same way.
+# uvicorn's own loggers do not propagate, so this adds our records without duplicating its.
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 # Write methods on these path prefixes are NOT gated by subscription status:
 # auth (login/register/profile), platform (operator), agent (devices keep

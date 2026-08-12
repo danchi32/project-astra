@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     # clear it once DNS resolves.
     agent_backend_ip: str = ""
 
+    # Root log level. INFO because the records this codebase already writes are the ones
+    # worth having when something goes wrong in production; raise it to WARNING if the
+    # volume ever becomes the problem.
+    log_level: str = "INFO"
+
     # AI engine — when the API key is unset, a deterministic stub provider is used
     # (local demo + tests run without a key or network).
     anthropic_api_key: str | None = None
