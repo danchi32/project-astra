@@ -83,14 +83,7 @@ class CognitiveEngine:
         # would be several thousand tokens describing a job they are not doing — and it
         # would blur what reaching the model is FOR. A problem only gets here because the
         # rules could not place it.
-        system = WINDOWS_EXPERT_PROMPT if self._is_real_llm() else SYSTEM_PROMPT
-        if device_hostname:
-            system += (
-                f"\n\nThe person chatting with you is the logged-in user of device "
-                f"'{device_hostname}'. They are reporting a problem on THIS device. Focus your "
-                f"investigation on '{device_hostname}' unless they explicitly ask about another. "
-                f"Speak to them as the end user (not an IT admin): be friendly and avoid jargon."
-            )
+        brief = WINDOWS_EXPERT_PROMPT if self._is_real_llm() else SYSTEM_PROMPT
 
         messages: list[dict[str, Any]] = [*history, {"role": "user", "content": user_message}]
         trail: list[dict[str, Any]] = []
@@ -115,7 +108,7 @@ class CognitiveEngine:
             # replies. Every reply that called it was under 350 characters; the ones that
             # explained workarounds first ran to 900 and asked in prose at the end. So the
             # ordering is stated too: the call comes before the prose, not after it.
-            system += (
+            brief += (
                 "\n\nIf you cannot fix the problem — a fix failed, no fix exists, or the "
                 "user says it is still broken after one worked — offer to raise a ticket "
                 f"with their IT helpdesk by calling {escalation_tools.OFFER}.\n"
@@ -130,6 +123,26 @@ class CognitiveEngine:
                 f"let it ask.\nWhen they agree, call {escalation_tools.RAISE}. Never claim "
                 "a ticket has been raised unless the tool told you it was."
             )
+
+        # The brief and every tool schema are resent on each pass of the tool-use loop, so
+        # the same few thousand tokens are billed three to five times a conversation. They
+        # are also byte-identical across the whole fleet, which is what makes them worth
+        # caching — and caching is a prefix match, so the arrangement below is the point:
+        # the invariant text comes first and carries the breakpoint, and the one sentence
+        # that names a device comes after it. Written the other way round the hostname
+        # would sit inside the cached prefix, and nineteen machines would mean nineteen
+        # separate copies of an identical brief, each read only by its own device.
+        # Tools render ahead of the system prompt, so this one breakpoint covers both.
+        system: list[dict[str, Any]] = [
+            {"type": "text", "text": brief, "cache_control": {"type": "ephemeral"}}
+        ]
+        if device_hostname:
+            system.append({"type": "text", "text": (
+                f"The person chatting with you is the logged-in user of device "
+                f"'{device_hostname}'. They are reporting a problem on THIS device. Focus your "
+                f"investigation on '{device_hostname}' unless they explicitly ask about another. "
+                f"Speak to them as the end user (not an IT admin): be friendly and avoid jargon."
+            )})
 
         try:
             for _ in range(self.max_iterations):

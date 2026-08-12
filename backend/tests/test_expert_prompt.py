@@ -53,3 +53,40 @@ def test_the_brief_still_says_what_it_was_adopted_for():
     for idea in ("diagnose first", "root cause", "evidence", "rank them", "verify"):
         assert idea in lowered, f"the brief lost {idea!r}"
     assert len(WINDOWS_EXPERT_PROMPT) > len(SYSTEM_PROMPT)
+
+
+async def test_the_cached_part_of_the_prompt_names_no_device(session_factory, admin_user):
+    """The hostname must fall outside the cache breakpoint, and nothing enforces that but
+    the order the blocks are built in.
+
+    Caching is a prefix match, so a device name inside the cached block would give every
+    machine its own private copy of a brief that is identical on all of them — read only
+    by that one device, rewritten whenever it goes cold. Nothing would break: replies stay
+    correct and the tests still pass, the bill just quietly stops improving. That is
+    precisely why it is pinned here, where moving the sentence back fails loudly.
+    """
+    seen: list[list[dict]] = []
+
+    class _Recorder(StubProvider):
+        async def generate(self, *, system, messages, tools):
+            seen.append(system)
+            return await super().generate(system=system, messages=messages, tools=tools)
+
+    async with session_factory() as session:
+        await CognitiveEngine(session, _Recorder()).run(
+            org_id=admin_user.org_id, history=[], user_message="hello",
+            device_hostname="LAPTOP-042",
+        )
+
+    assert seen, "the engine never called the provider"
+    system = seen[0]
+    assert isinstance(system, list), "a plain string carries no cache breakpoint"
+
+    cached = [b for b in system if b.get("cache_control")]
+    assert len(cached) == 1, "exactly one breakpoint — tools render ahead of it, so one covers both"
+    assert system[0] is cached[0], "anything before the breakpoint is what gets cached"
+
+    assert "LAPTOP-042" not in cached[0]["text"], \
+        "the device name is inside the cached prefix — that is one cache entry per machine"
+    assert any("LAPTOP-042" in b["text"] for b in system[1:]), \
+        "the model still has to be told which device it is looking at"

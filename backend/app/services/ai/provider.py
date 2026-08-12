@@ -5,11 +5,32 @@ Claude via the official SDK; `StubProvider` is deterministic and lets the platfo
 run in tests and local demos without an API key or network access.
 """
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+# The system prompt is either plain text or a list of content blocks. Blocks exist so the
+# stable part of the prompt can carry a cache breakpoint while the per-device sentence
+# that follows it stays outside the cached prefix.
+SystemPrompt = str | list[dict[str, Any]]
+
+
+def system_text(system: SystemPrompt) -> str:
+    """The system prompt as one string, whichever shape it arrived in.
+
+    Only the built-in providers need this: they read the acting hostname back out of the
+    prompt, and there is no reason for each of them to learn the block format.
+    """
+    if isinstance(system, str):
+        return system
+    return "\n\n".join(
+        str(block.get("text", "")) for block in system if isinstance(block, dict)
+    )
 
 
 @dataclass
@@ -27,7 +48,8 @@ class LLMResponse:
 
 class LLMProvider(Protocol):
     async def generate(
-        self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+        self, *, system: SystemPrompt, messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
     ) -> LLMResponse:
         """Given the system prompt, conversation messages (Anthropic wire format),
         and tool schemas, return the assistant's next turn."""
@@ -46,7 +68,8 @@ class AnthropicProvider:
         self._max_tokens = max_tokens
 
     async def generate(
-        self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+        self, *, system: SystemPrompt, messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
     ) -> LLMResponse:
         response = await self._client.messages.create(
             model=self._model,
@@ -55,6 +78,21 @@ class AnthropicProvider:
             messages=messages,
             tools=tools,
         )
+        # A tool-use turn re-sends the whole brief and every tool schema on each pass of the
+        # loop, so the same few thousand tokens are billed three to five times per
+        # conversation unless they are cached. Whether they actually were is not something
+        # to assume — it is a number the response reports, and a silent cache miss looks
+        # exactly like a cache hit from the outside. So it gets logged.
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            logger.info(
+                "claude call model=%s input=%s cache_write=%s cache_read=%s output=%s",
+                self._model,
+                getattr(usage, "input_tokens", None),
+                getattr(usage, "cache_creation_input_tokens", None),
+                getattr(usage, "cache_read_input_tokens", None),
+                getattr(usage, "output_tokens", None),
+            )
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []
         for block in response.content:
@@ -164,7 +202,8 @@ class StubProvider:
     _HOSTNAME_RE = re.compile(r"device '([^']+)'")
 
     async def generate(
-        self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+        self, *, system: SystemPrompt, messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
     ) -> LLMResponse:
         last = messages[-1]
         hostname = self._acting_hostname(system)
@@ -364,8 +403,8 @@ class StubProvider:
             return ("clear_temp", "On it — clearing out temporary files to free up space.")
         return None
 
-    def _acting_hostname(self, system: str) -> str | None:
-        match = self._HOSTNAME_RE.search(system or "")
+    def _acting_hostname(self, system: SystemPrompt) -> str | None:
+        match = self._HOSTNAME_RE.search(system_text(system))
         return match.group(1) if match else None
 
     def _follow_up_after_evidence(
@@ -530,7 +569,8 @@ class LearnedActionProvider:
         self._params = params or {}
 
     async def generate(
-        self, *, system: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+        self, *, system: SystemPrompt, messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
     ) -> LLMResponse:
         results = StubProvider._extract_tool_results(messages[-1])
         if results is not None:
