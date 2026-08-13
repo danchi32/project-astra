@@ -21,6 +21,7 @@ public sealed class SystemRemediationExecutor
         {
             "clear_system_temp", "windows_update_install",
             "disable_local_account", "enable_local_account",
+            "uninstall_application",
         };
 
     public (bool Success, string Output) Execute(
@@ -34,6 +35,11 @@ public sealed class SystemRemediationExecutor
                 "windows_update_install" => InstallWindowsUpdates(GetKbFilter(parameters)),
                 "disable_local_account" => LocalAccountManager.SetEnabled(GetParam(parameters, "username"), enable: false),
                 "enable_local_account" => LocalAccountManager.SetEnabled(GetParam(parameters, "username"), enable: true),
+                // The backend has already checked this name against the organization's own
+                // restricted-software list and against the software it protects absolutely.
+                // The agent still refuses anything it cannot remove silently — see
+                // ApplicationUninstaller: session 0 has no desktop to show a prompt on.
+                "uninstall_application" => ApplicationUninstaller.Uninstall(GetParam(parameters, "app_name")),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),

@@ -113,22 +113,22 @@ class LearnedFixStore:
         )
 
 
-def learnable_action(tool_trail: list[dict[str, Any]] | None) -> tuple[str, dict[str, Any]] | None:
-    """Pull the (action_id, params) of a remediation the engine actually created in
-    this turn, so it can be learned. Returns None if no task was created."""
-    for entry in reversed(tool_trail or []):
+def created_task_ids(tool_trail: list[dict[str, Any]] | None) -> list[str]:
+    """Every remediation this turn actually created.
+
+    Marking a turn as the model's work has to cover the whole turn: a slow machine gets
+    clear_temp AND clear_system_temp, and stamping only one would leave the other looking
+    like something the built-in rules produced.
+    """
+    ids: list[str] = []
+    for entry in tool_trail or []:
         if entry.get("tool") != "propose_remediation":
             continue
         try:
             output = json.loads(entry.get("output") or "{}")
         except (json.JSONDecodeError, TypeError):
             continue
-        if "task_id" not in output:  # only learn fixes that were actually applied/queued
-            continue
-        tool_input = entry.get("input") or {}
-        action_id = tool_input.get("action_id")
-        if not action_id:
-            continue
-        params = {k: tool_input[k] for k in ("process_name", "service_name") if tool_input.get(k)}
-        return action_id, params
-    return None
+        task_id = output.get("task_id")
+        if task_id:
+            ids.append(str(task_id))
+    return ids

@@ -127,6 +127,32 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "Reverses disable_local_account: re-activates the local account so the user can "
                       "sign in again with their existing password. Elevated + admin approval only.",
                       params=("username",), execution_context="system"),
+
+    # ── Remove software the organization has restricted (elevated, admin-only) ──
+    # Unlike every other action here, the permitted targets are NOT a constant in this
+    # file: they are whatever the organization put on its own restricted-software list,
+    # which is the entire point. The service checks the name against that list per request,
+    # and against UNINSTALL_NEVER below, which no organization can override.
+    RemediationAction("uninstall_application", "Uninstall restricted software",
+                      RemediationTier.ADMIN_ONLY,
+                      "Silently removes an application the organization has placed on its "
+                      "restricted-software list. Machine-wide installations only, and only "
+                      "where the vendor provides a silent uninstaller — an application that "
+                      "would open a window is reported rather than removed, because nobody "
+                      "would ever see that window. Elevated + admin approval only.",
+                      params=("app_name",), execution_context="system"),
+)
+
+# Software ASTRA will never uninstall, whatever an organization lists as restricted.
+# Removing endpoint protection across a fleet is precisely what someone who got into the
+# portal would try, and disarming the agent would end the platform's own visibility. A
+# restricted-software list is an IT policy; it is not a licence to strip a machine's
+# defences. Matched as a case-insensitive substring, so vendor naming variants are covered.
+UNINSTALL_NEVER: tuple[str, ...] = (
+    "astra", "windows defender", "microsoft defender", "crowdstrike", "falcon",
+    "sentinelone", "sophos", "mcafee", "symantec", "eset", "kaspersky",
+    "trend micro", "carbon black", "cylance", "bitdefender", "webroot",
+    "malwarebytes", "cortex xdr", "forticlient", "trellix",
 )
 
 ACTIONS: dict[str, RemediationAction] = {a.id: a for a in _ACTIONS}

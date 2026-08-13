@@ -237,6 +237,12 @@ class RemediationService:
         if action is None:
             raise RemediationError(f"Unknown remediation action '{action_id}'.")
         params = self._validate_params(action_id, params)
+        # Checked here rather than in _validate_params because the answer depends on the
+        # organization's own policy list, which is a database read, not a constant.
+        if "app_name" in action.params:
+            params["app_name"] = await self._validate_restricted_app(
+                org_id, params.get("app_name")
+            )
 
         # Secure offboarding is a Professional feature. Checked here rather than by hiding
         # the button, because the button is not the security boundary.
@@ -351,6 +357,47 @@ class RemediationService:
             )
         await self.session.commit()
         return task
+
+    async def _validate_restricted_app(self, org_id: uuid.UUID, value: Any) -> str:
+        """An application may be uninstalled only because THIS organization restricted it.
+
+        Every other action in the registry is constrained by a fixed allowlist. This one
+        cannot be: the whole point is to remove whatever the customer decided they do not
+        want, and that set is theirs to define. So the check is a lookup against their own
+        policy list — which also means an uninstall can never be requested for something
+        nobody wrote down, and the audit trail always has a stated reason behind it.
+
+        What is NOT theirs to define is UNINSTALL_NEVER. It is checked first, so an
+        organization cannot reach protected software by adding it to their own list.
+        """
+        from sqlalchemy import select
+
+        from app.models import BannedSoftware
+        from app.services.remediation.actions import UNINSTALL_NEVER
+
+        name = (value or "").strip() if isinstance(value, str) else ""
+        if not name:
+            raise RemediationError("An application name is required to uninstall it.")
+        if len(name) > 300:
+            raise RemediationError("Application name is too long.")
+
+        lowered = name.lower()
+        for protected in UNINSTALL_NEVER:
+            if protected in lowered:
+                raise RemediationError(
+                    f"'{name}' is protected and can never be uninstalled by ASTRA."
+                )
+
+        patterns = (await self.session.execute(
+            select(BannedSoftware.pattern).where(BannedSoftware.org_id == org_id)
+        )).scalars().all()
+        if not any(p and p in lowered for p in patterns):
+            raise RemediationError(
+                f"'{name}' is not on this organization's restricted-software list. "
+                "Uninstall is only offered for software the organization has restricted — "
+                "add it there first."
+            )
+        return name
 
     def _validate_params(
         self, action_id: str, params: dict[str, Any] | None
@@ -525,7 +572,15 @@ class RemediationService:
         # symptom in the user's own words, which is the half of a runbook that can't be
         # reconstructed later — the action id was always in the task row, the complaint
         # that led to it was not.
-        if task.conversation_id is not None and task.source is RemediationSource.ASSISTANT:
+        # from_llm, not just ASSISTANT: the built-in keyword rules also create tasks marked
+        # ASSISTANT, and there is nothing to learn from those — the rule already knew the
+        # answer, so writing a runbook for it would fill the knowledge base with things the
+        # system could always do, and bury the hand-written ones under them.
+        if (
+            task.conversation_id is not None
+            and task.source is RemediationSource.ASSISTANT
+            and task.from_llm
+        ):
             await self._learn_from(task, label, success)
 
         # If this fix was started from a device chat, post the real outcome back into
@@ -619,7 +674,15 @@ class RemediationService:
     async def _learn_from(self, task: RemediationTask, label: str, success: bool) -> None:
         """Record what this fix taught us, without ever putting the result at risk.
 
-        The agent is reporting an outcome that has already happened on a real machine. If
+        Two things are learned here, and this is the right place for both because it is the
+        only place that knows the fix actually WORKED. The device has run it and said so.
+
+          - the auto-apply store, so the next person to describe this problem gets the fix
+            straight away and the model is never called;
+          - the knowledge article, which needs the same outcome repeatedly before it will
+            publish anything.
+
+        The agent is reporting something that has already happened on a real machine. If
         anything here goes wrong — a missing conversation, an embedding that throws — the
         task result must still be written, so this swallows its own failures rather than
         propagating them up the agent's request.
@@ -627,6 +690,7 @@ class RemediationService:
         from sqlalchemy import select
 
         from app.services.ai.knowledge import KnowledgeBaseService
+        from app.services.ai.learned import LearnedFixStore
 
         try:
             # The complaint that led to this fix: the last thing the user said before the
@@ -645,6 +709,17 @@ class RemediationService:
             symptom = result.scalar_one_or_none()
             if not symptom:
                 return
+
+            # Only a fix that worked earns a place in the auto-apply store, because a hit
+            # there skips the model entirely. A failure teaches the knowledge article
+            # something — its success rate is how it knows to stop recommending itself —
+            # but it must never become an answer handed out on its own.
+            if success:
+                await LearnedFixStore(self.session).learn(
+                    org_id=task.org_id, query=symptom[:1000],
+                    action_id=task.action_id, params=task.params,
+                )
+
             await KnowledgeBaseService(self.session).learn_from_fix(
                 org_id=task.org_id,
                 action_id=task.action_id,

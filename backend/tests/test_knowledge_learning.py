@@ -244,19 +244,42 @@ async def test_a_global_article_is_searchable_immediately(session_factory, admin
 # ── End to end, through the agent's own result path ────────────────────────
 
 
-async def test_a_chat_fix_teaches_the_base_end_to_end(client, admin_headers, session_factory):
-    """The whole point, exercised the way it will actually happen: a user complains in the
-    tray chat, the assistant fixes it, the agent reports the result — three times."""
+async def _enroll(client, admin_headers, *, name: str, machine_id: str):
     tok = await client.post(
-        "/api/v1/devices/enrollment-tokens", json={"name": "learn"}, headers=admin_headers
+        "/api/v1/devices/enrollment-tokens", json={"name": name}, headers=admin_headers
     )
     enrolled = (await client.post("/api/v1/agent/enroll", json={
-        "enrollment_token": tok.json()["token"], "hostname": "LEARN-PC",
-        "machine_id": "learn-pc", "os_version": "Windows 11", "agent_version": "0.7.4",
+        "enrollment_token": tok.json()["token"], "hostname": machine_id.upper(),
+        "machine_id": machine_id, "os_version": "Windows 11", "agent_version": "0.7.4",
     })).json()
-    device_headers = {"Authorization": f"Bearer {enrolled['device_token']}"}
+    return {"Authorization": f"Bearer {enrolled['device_token']}"}
 
-    org_id = None
+
+async def _learned_rows(session_factory, machine_id: str):
+    from sqlalchemy import select
+
+    from app.models import Device
+
+    async with session_factory() as session:
+        org_id = (await session.execute(
+            select(Device.org_id).where(Device.machine_id == machine_id)
+        )).scalar_one()
+    async with session_factory() as session:
+        rows, _ = await KnowledgeBaseService(session).list_page(org_id=org_id)
+    return [r for r in rows if r.source is KnowledgeSource.RESOLVED_ISSUE]
+
+
+async def test_the_built_in_rules_teach_the_base_nothing(
+    client, admin_headers, session_factory
+):
+    """A keyword rule fixing Outlook is not a discovery — the rule already knew the answer.
+
+    Writing a runbook for it would fill the knowledge base with things the system could
+    always do and bury the hand-written entries under them. So the same complaint, fixed
+    three times by the built-in path, must leave the base exactly as it was.
+    """
+    device_headers = await _enroll(client, admin_headers, name="rules", machine_id="rules-pc")
+
     for _ in range(3):
         chat = await client.post(
             "/api/v1/agent/chat",
@@ -264,7 +287,6 @@ async def test_a_chat_fix_teaches_the_base_end_to_end(client, admin_headers, ses
             headers=device_headers,
         )
         assert chat.status_code == 200, chat.text
-
         claimed = (await client.get("/api/v1/agent/tasks", headers=device_headers)).json()
         if not claimed:
             pytest.skip("the stub assistant proposed no remediation for this phrasing")
@@ -275,21 +297,205 @@ async def test_a_chat_fix_teaches_the_base_end_to_end(client, admin_headers, ses
                 headers=device_headers,
             )
 
+    learned = await _learned_rows(session_factory, "rules-pc")
+    assert learned == [], (
+        "the built-in rules taught the knowledge base something — only the model's own "
+        "fixes are worth writing down"
+    )
+
+
+async def test_a_fix_the_model_chose_does_teach_the_base(
+    client, admin_headers, session_factory, monkeypatch
+):
+    """The other half of the same rule: when Claude picks the fix, that IS a discovery.
+
+    Something the rules could not place was resolved anyway, and the pairing of the user's
+    own words with the action that worked is the part that cannot be reconstructed later.
+    """
+    from app.core.config import get_settings
+    from app.services.ai.provider import LLMResponse, ToolCall
+
+    class _ModelPicksRestart:
+        """Not a StubProvider subclass — that is exactly what the gate keys on."""
+
+        async def generate(self, *, system, messages, tools):
+            last = messages[-1]
+            if isinstance(last.get("content"), list):
+                return LLMResponse(text="Restarted Outlook for you.")
+            return LLMResponse(
+                text="Let me restart Outlook.",
+                tool_calls=[ToolCall(
+                    id="t1", name="propose_remediation",
+                    input={"action_id": "restart_outlook", "reason": "model's choice"},
+                )],
+            )
+
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "sk-test", raising=False)
+    monkeypatch.setattr(
+        "app.services.conversations.get_provider", lambda: _ModelPicksRestart()
+    )
+    monkeypatch.setattr(
+        "app.services.conversations.ConversationService._org_is_ai_pro",
+        lambda self, org_id: _true(),
+    )
+
+    device_headers = await _enroll(client, admin_headers, name="model", machine_id="model-pc")
+
+    # Three different people describing one problem — which is also the only way the model
+    # stays in the loop for all three. Repeat the exact wording and the auto-apply store
+    # recognises it after the first, answers without Claude, and the runbook stops counting:
+    # correct behaviour, but it means identical phrasing can never reach the publish
+    # threshold. Varying the words is what a real week looks like anyway.
+    phrasings = [
+        "how do i stop outlook asking for my password",
+        "how can i make outlook quit prompting me for credentials",
+        "how do i get outlook to remember my sign in details",
+    ]
+    for words in phrasings:
+        chat = await client.post(
+            "/api/v1/agent/chat",
+            json={"content": words},
+            headers=device_headers,
+        )
+        assert chat.status_code == 200, chat.text
+        claimed = (await client.get("/api/v1/agent/tasks", headers=device_headers)).json()
+        assert claimed, "the model proposed a fix but no task was queued"
+        for task in claimed:
+            await client.post(
+                f"/api/v1/agent/tasks/{task['id']}/result",
+                json={"success": True, "output": "Outlook restarted"},
+                headers=device_headers,
+            )
+
+    learned = await _learned_rows(session_factory, "model-pc")
+    assert learned, "three confirmed model-chosen fixes should have taught the base something"
+    assert learned[0].published_at is not None, (
+        "three confirmations should have published it — check that every turn actually "
+        "reached the model rather than being served by the learned-fix store"
+    )
+    # The user's own words are the half of a runbook that cannot be reconstructed later.
+    assert phrasings[0] in learned[0].content
+
+
+async def _true() -> bool:
+    return True
+
+
+async def test_a_confirmed_model_fix_is_applied_next_time_without_the_model(
+    client, admin_headers, session_factory, monkeypatch
+):
+    """The whole point of learning, stated as the behaviour a user would notice.
+
+    Claude works out a fix for something the rules could not place, the device runs it and
+    says it worked — and the next person to describe that problem gets it applied straight
+    away, with the model never called. The assertion that matters is the second one: the
+    model is asked exactly once across two identical complaints.
+    """
+    from app.core.config import get_settings
+    from app.services.ai.provider import LLMResponse, ToolCall
+
+    asked: list[str] = []
+
+    class _CountingModel:
+        async def generate(self, *, system, messages, tools):
+            last = messages[-1]
+            if isinstance(last.get("content"), list):
+                return LLMResponse(text="Cleared it out for you.")
+            asked.append("called")
+            return LLMResponse(
+                text="Let me clear the temp files.",
+                tool_calls=[ToolCall(
+                    id="t1", name="propose_remediation",
+                    input={"action_id": "clear_temp", "reason": "model's choice"},
+                )],
+            )
+
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "sk-test", raising=False)
+    monkeypatch.setattr("app.services.conversations.get_provider", lambda: _CountingModel())
+    monkeypatch.setattr(
+        "app.services.conversations.ConversationService._org_is_ai_pro",
+        lambda self, org_id: _true(),
+    )
+
+    device_headers = await _enroll(client, admin_headers, name="loop", machine_id="loop-pc")
+    complaint = "how do i free up room on the c drive without deleting my files"
+
+    # First time: nobody knows the answer, so the model is asked and its fix is confirmed.
+    await client.post("/api/v1/agent/chat",
+                      json={"content": complaint}, headers=device_headers)
+    claimed = (await client.get("/api/v1/agent/tasks", headers=device_headers)).json()
+    assert claimed, "the model proposed a fix but no task was queued"
+    assert asked == ["called"], "the first complaint should have reached the model"
+    for task in claimed:
+        await client.post(
+            f"/api/v1/agent/tasks/{task['id']}/result",
+            json={"success": True, "output": "Freed 2.1 GB"}, headers=device_headers,
+        )
+
+    # Second time: the same problem, and the model is not consulted at all.
+    await client.post("/api/v1/agent/chat",
+                      json={"content": complaint}, headers=device_headers)
+    assert asked == ["called"], (
+        "the model was asked a second time — a confirmed fix should be applied from the "
+        "learned store instead"
+    )
+    again = (await client.get("/api/v1/agent/tasks", headers=device_headers)).json()
+    assert again, "the learned fix should still have queued the remediation"
+    assert again[0]["action_id"] == "clear_temp"
+
+
+async def test_a_fix_that_never_ran_is_not_learned(
+    client, admin_headers, session_factory, monkeypatch
+):
+    """A queued fix is an intention, not a result.
+
+    Learning from it would auto-apply it forever on the strength of something no device
+    ever confirmed — and the one entry this store had in production was exactly that: a
+    task still sitting at APPROVED, months later, having never executed.
+    """
     from sqlalchemy import select
 
-    from app.models import Device
+    from app.core.config import get_settings
+    from app.models import Device, LearnedAction
+    from app.services.ai.provider import LLMResponse, ToolCall
+
+    class _ModelProposes:
+        async def generate(self, *, system, messages, tools):
+            last = messages[-1]
+            if isinstance(last.get("content"), list):
+                return LLMResponse(text="Working on it.")
+            return LLMResponse(
+                text="Let me clear the temp files.",
+                tool_calls=[ToolCall(
+                    id="t1", name="propose_remediation",
+                    input={"action_id": "clear_temp", "reason": "model's choice"},
+                )],
+            )
+
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "sk-test", raising=False)
+    monkeypatch.setattr("app.services.conversations.get_provider", lambda: _ModelProposes())
+    monkeypatch.setattr(
+        "app.services.conversations.ConversationService._org_is_ai_pro",
+        lambda self, org_id: _true(),
+    )
+
+    device_headers = await _enroll(client, admin_headers, name="queued", machine_id="queued-pc")
+    await client.post(
+        "/api/v1/agent/chat",
+        json={"content": "how do i make more space on this laptop"},
+        headers=device_headers,
+    )
+    # Deliberately never report a result — the fix stays queued.
 
     async with session_factory() as session:
         org_id = (await session.execute(
-            select(Device.org_id).where(Device.machine_id == "learn-pc")
+            select(Device.org_id).where(Device.machine_id == "queued-pc")
         )).scalar_one()
+        learned = (await session.execute(
+            select(LearnedAction).where(LearnedAction.org_id == org_id)
+        )).scalars().all()
 
-    async with session_factory() as session:
-        rows, _ = await KnowledgeBaseService(session).list_page(org_id=org_id)
-    learned = [r for r in rows if r.source is KnowledgeSource.RESOLVED_ISSUE]
-    assert learned, "three confirmed chat fixes should have taught the base something"
-    assert learned[0].published_at is not None
-    assert "outlook is not responding again" in learned[0].content
+    assert learned == [], "a fix no device has run yet must not be learned"
 
 
 async def test_a_result_still_records_when_learning_cannot(

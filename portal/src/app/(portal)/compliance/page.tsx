@@ -7,11 +7,89 @@ import {
   getComplianceSummary, getComplianceDevices,
   listBannedSoftware, addBannedSoftware, removeBannedSoftware,
 } from "@/lib/api/compliance";
-import type { DeviceComplianceStatus } from "@/lib/api/compliance";
+import type { BannedSoftware, DeviceComplianceStatus } from "@/lib/api/compliance";
+import { createRemediation } from "@/lib/api/remediation";
 import { getMe } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
 import { Pagination } from "@/components/pagination";
 import { UpgradeRequired, isUpgradeRequired, requiredFeature } from "@/components/upgrade-required";
+
+/** Offers to remove the restricted software this device is actually carrying.
+ *
+ * The failing check reports the installed names it matched, joined into one string. Rather
+ * than splitting that back apart — application names contain commas often enough to make
+ * that a quiet source of wrong targets — each entry on the org's own list is tested against
+ * it. What gets sent is the administrator's own wording, which is what the restricted list
+ * holds and what the agent matches against the registry name.
+ */
+function UninstallRestricted({
+  deviceId, hostname, detail, banned, disabled,
+}: {
+  deviceId: string;
+  hostname: string;
+  detail: string;
+  banned: BannedSoftware[];
+  disabled: boolean;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [done, setDone] = useState<Record<string, string>>({});
+  const present = banned.filter((b) => detail.toLowerCase().includes(b.pattern));
+  if (present.length === 0) return null;
+
+  const run = async (app: BannedSoftware) => {
+    // Removing software from someone's machine is not undoable from here, and the person
+    // clicking may not be the person using the device.
+    if (!window.confirm(
+      `Uninstall ${app.name} from ${hostname}?\n\n`
+      + "It will be removed the next time the device checks in. Anything the user has "
+      + "open in it will be lost, and only a machine-wide installation can be removed — "
+      + "a copy installed under their own profile will stay."
+    )) return;
+    setBusy(app.id);
+    try {
+      await createRemediation({
+        device_id: deviceId,
+        action_id: "uninstall_application",
+        params: { app_name: app.name },
+        reason: `${app.name} is on the organization's restricted-software list.`,
+        approve: true,   // the admin clicking IS the approver for this exact action
+      });
+      setDone((d) => ({ ...d, [app.id]: "Queued" }));
+    } catch (err) {
+      setDone((d) => ({
+        ...d,
+        [app.id]: apiErrorMessage(err, "Could not queue the uninstall"),
+      }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {present.map((app) => (
+        <span key={app.id} className="inline-flex items-center gap-1">
+          <button
+            onClick={() => run(app)}
+            disabled={disabled || busy === app.id || done[app.id] === "Queued"}
+            className="text-xs px-2 py-0.5 rounded-md disabled:opacity-50"
+            style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}
+            title={disabled
+              ? "Only an administrator can approve removing software"
+              : `Uninstall ${app.name} from ${hostname}`}
+          >
+            {busy === app.id ? "…" : `Uninstall ${app.name}`}
+          </button>
+          {done[app.id] && (
+            <span className="text-xs" style={{
+              color: done[app.id] === "Queued" ? "#10b981" : "#ef4444",
+            }}>{done[app.id]}</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 const STATUS_STYLE: Record<DeviceComplianceStatus, { label: string; color: string }> = {
   compliant: { label: "Compliant", color: "#10b981" },
@@ -205,7 +283,7 @@ export default function CompliancePage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Device", "Status", "Score", "Failing checks"].map((h) => (
+                {["Device", "Status", "Score", "Failing checks", "Action"].map((h) => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
                 ))}
               </tr>
@@ -228,10 +306,27 @@ export default function CompliancePage() {
                       ))}
                     </div>
                   </td>
+                  <td className="px-5 py-3">
+                    {(() => {
+                      const hit = d.checks.find(
+                        (c) => c.key === "no_banned_software" && c.status === "fail",
+                      );
+                      if (!hit || !banned?.length) return null;
+                      return (
+                        <UninstallRestricted
+                          deviceId={d.device_id}
+                          hostname={d.hostname}
+                          detail={hit.detail ?? ""}
+                          banned={banned}
+                          disabled={!isAdmin}
+                        />
+                      );
+                    })()}
+                  </td>
                 </tr>
               ))}
               {attention.length === 0 && (
-                <tr><td colSpan={4} className="px-5 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
+                <tr><td colSpan={5} className="px-5 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
                   {(summary?.total_devices ?? 0) > 0 ? "Everything looks compliant. 🎉" : "No devices to evaluate yet."}
                 </td></tr>
               )}
