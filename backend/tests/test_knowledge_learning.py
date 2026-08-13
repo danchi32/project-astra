@@ -381,6 +381,123 @@ async def _true() -> bool:
     return True
 
 
+async def test_a_confirmed_model_fix_is_applied_next_time_without_the_model(
+    client, admin_headers, session_factory, monkeypatch
+):
+    """The whole point of learning, stated as the behaviour a user would notice.
+
+    Claude works out a fix for something the rules could not place, the device runs it and
+    says it worked — and the next person to describe that problem gets it applied straight
+    away, with the model never called. The assertion that matters is the second one: the
+    model is asked exactly once across two identical complaints.
+    """
+    from app.core.config import get_settings
+    from app.services.ai.provider import LLMResponse, ToolCall
+
+    asked: list[str] = []
+
+    class _CountingModel:
+        async def generate(self, *, system, messages, tools):
+            last = messages[-1]
+            if isinstance(last.get("content"), list):
+                return LLMResponse(text="Cleared it out for you.")
+            asked.append("called")
+            return LLMResponse(
+                text="Let me clear the temp files.",
+                tool_calls=[ToolCall(
+                    id="t1", name="propose_remediation",
+                    input={"action_id": "clear_temp", "reason": "model's choice"},
+                )],
+            )
+
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "sk-test", raising=False)
+    monkeypatch.setattr("app.services.conversations.get_provider", lambda: _CountingModel())
+    monkeypatch.setattr(
+        "app.services.conversations.ConversationService._org_is_ai_pro",
+        lambda self, org_id: _true(),
+    )
+
+    device_headers = await _enroll(client, admin_headers, name="loop", machine_id="loop-pc")
+    complaint = "how do i free up room on the c drive without deleting my files"
+
+    # First time: nobody knows the answer, so the model is asked and its fix is confirmed.
+    await client.post("/api/v1/agent/chat",
+                      json={"content": complaint}, headers=device_headers)
+    claimed = (await client.get("/api/v1/agent/tasks", headers=device_headers)).json()
+    assert claimed, "the model proposed a fix but no task was queued"
+    assert asked == ["called"], "the first complaint should have reached the model"
+    for task in claimed:
+        await client.post(
+            f"/api/v1/agent/tasks/{task['id']}/result",
+            json={"success": True, "output": "Freed 2.1 GB"}, headers=device_headers,
+        )
+
+    # Second time: the same problem, and the model is not consulted at all.
+    await client.post("/api/v1/agent/chat",
+                      json={"content": complaint}, headers=device_headers)
+    assert asked == ["called"], (
+        "the model was asked a second time — a confirmed fix should be applied from the "
+        "learned store instead"
+    )
+    again = (await client.get("/api/v1/agent/tasks", headers=device_headers)).json()
+    assert again, "the learned fix should still have queued the remediation"
+    assert again[0]["action_id"] == "clear_temp"
+
+
+async def test_a_fix_that_never_ran_is_not_learned(
+    client, admin_headers, session_factory, monkeypatch
+):
+    """A queued fix is an intention, not a result.
+
+    Learning from it would auto-apply it forever on the strength of something no device
+    ever confirmed — and the one entry this store had in production was exactly that: a
+    task still sitting at APPROVED, months later, having never executed.
+    """
+    from sqlalchemy import select
+
+    from app.core.config import get_settings
+    from app.models import Device, LearnedAction
+    from app.services.ai.provider import LLMResponse, ToolCall
+
+    class _ModelProposes:
+        async def generate(self, *, system, messages, tools):
+            last = messages[-1]
+            if isinstance(last.get("content"), list):
+                return LLMResponse(text="Working on it.")
+            return LLMResponse(
+                text="Let me clear the temp files.",
+                tool_calls=[ToolCall(
+                    id="t1", name="propose_remediation",
+                    input={"action_id": "clear_temp", "reason": "model's choice"},
+                )],
+            )
+
+    monkeypatch.setattr(get_settings(), "anthropic_api_key", "sk-test", raising=False)
+    monkeypatch.setattr("app.services.conversations.get_provider", lambda: _ModelProposes())
+    monkeypatch.setattr(
+        "app.services.conversations.ConversationService._org_is_ai_pro",
+        lambda self, org_id: _true(),
+    )
+
+    device_headers = await _enroll(client, admin_headers, name="queued", machine_id="queued-pc")
+    await client.post(
+        "/api/v1/agent/chat",
+        json={"content": "how do i make more space on this laptop"},
+        headers=device_headers,
+    )
+    # Deliberately never report a result — the fix stays queued.
+
+    async with session_factory() as session:
+        org_id = (await session.execute(
+            select(Device.org_id).where(Device.machine_id == "queued-pc")
+        )).scalar_one()
+        learned = (await session.execute(
+            select(LearnedAction).where(LearnedAction.org_id == org_id)
+        )).scalars().all()
+
+    assert learned == [], "a fix no device has run yet must not be learned"
+
+
 async def test_a_result_still_records_when_learning_cannot(
     client, admin_headers, session_factory, monkeypatch
 ):

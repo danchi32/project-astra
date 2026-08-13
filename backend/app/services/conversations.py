@@ -27,7 +27,7 @@ from app.services.ai.intent import (
     reports_still_broken,
     requires_live_action,
 )
-from app.services.ai.learned import LearnedFixStore, created_task_ids, learnable_action
+from app.services.ai.learned import LearnedFixStore, created_task_ids
 from app.services.ai.provider import (
     LearnedActionProvider,
     LLMProvider,
@@ -332,26 +332,22 @@ class ConversationService:
             conversation_id=conversation_id,
         )
 
-        # 4. Learn: if a NON-built-in provider (the LLM) solved a new issue by
-        #    applying a fix, remember it so the same kind of issue is handled for
-        #    free next time. Built-in and already-learned paths teach nothing new.
+        # 4. Mark the fixes as the model's, so the result path can tell them from the ones
+        #    the built-in rules produced. Every task the assistant creates is stored as
+        #    source=ASSISTANT either way, and by the time learning happens — minutes later,
+        #    on the agent's result, in another request — which provider answered is no
+        #    longer knowable from anything but the row.
+        #
+        #    Learning itself is NOT done here. A fix queued is not a fix that worked: the
+        #    device has not run it yet, and remembering it now would auto-apply it forever
+        #    on the strength of an intention. It is learned where the outcome arrives.
         if not isinstance(provider, (StubProvider, LearnedActionProvider)):
-            # Mark the fixes as the model's, for the runbook path to read later. It learns
-            # on the agent's result — minutes later, in another request — by which time
-            # which provider answered is no longer knowable from anything but the row.
-            # Without this every fix looks alike, and the built-in rules would teach the
-            # knowledge base things it already knew.
             task_ids = created_task_ids(result.tool_trail)
             if task_ids:
                 await self.session.execute(
                     update(RemediationTask)
                     .where(RemediationTask.id.in_([uuid.UUID(t) for t in task_ids]))
                     .values(from_llm=True)
-                )
-            learned = learnable_action(result.tool_trail)
-            if learned is not None:
-                await self.learned.learn(
-                    org_id=org_id, query=content, action_id=learned[0], params=learned[1]
                 )
 
         # 5. Cache only device-independent, non-actionable, successful answers.

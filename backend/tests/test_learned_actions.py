@@ -13,8 +13,12 @@ class _FakeLLM:
     learnable LLM path. Proposes a service restart for an unlisted issue."""
 
     async def generate(self, *, system, messages, tools):
-        if StubProvider._extract_tool_results(messages[-1]) is not None:
-            return LLMResponse(text="All done.")
+        results = StubProvider._extract_tool_results(messages[-1])
+        if results is not None:
+            # Relay what the tool actually said. A real model tells the user when a fix was
+            # refused because one is already running; a fake that always answers "All done"
+            # would let that message go missing without any test noticing.
+            return LLMResponse(text=" ".join(results) or "All done.")
         return LLMResponse(
             text="Restarting the print spooler.",
             tool_calls=[ToolCall(
@@ -42,8 +46,32 @@ async def _make_device(session, org_id, hostname="PRINT-PC"):
     return device
 
 
-async def test_llm_fix_is_learned_then_reused_for_free(session_factory, admin_user):
-    # 1. The LLM solves the unlisted issue by restarting a service -> it's learned.
+async def _device_reports_success(session_factory, hostname="PRINT-PC"):
+    """Drive the fix all the way to a confirmed result, the way the agent does.
+
+    Setting the status by hand would skip record_result, and record_result is where
+    learning now happens — a fix is remembered because a device ran it and said it worked,
+    not because the model suggested it.
+    """
+    from app.services.remediation.service import RemediationService
+
+    async with session_factory() as session:
+        device = (
+            await session.execute(select(Device).where(Device.hostname == hostname))
+        ).scalar_one()
+        task = (await session.execute(select(RemediationTask))).scalars().first()
+        task.status = RemediationStatus.DISPATCHED
+        await session.commit()
+        await RemediationService(session).record_result(
+            device=device, task_id=task.id, success=True, output="Spooler restarted",
+        )
+
+
+async def test_a_proposed_fix_is_not_learned_until_a_device_confirms_it(
+    session_factory, admin_user
+):
+    """A queued fix is an intention. Learning from it would auto-apply it forever on the
+    strength of something no machine ever ran."""
     async with session_factory() as session:
         device = await _make_device(session, admin_user.org_id)
         svc = ConversationService(session, provider=_FakeLLM())
@@ -51,17 +79,30 @@ async def test_llm_fix_is_learned_then_reused_for_free(session_factory, admin_us
         assert source == "engine"
 
         learned = (await session.execute(select(LearnedAction))).scalars().all()
-        assert len(learned) == 1
+        assert learned == [], "nothing has run yet — there is nothing to have learned"
+
+
+async def test_a_confirmed_llm_fix_is_learned_then_reused_for_free(
+    session_factory, admin_user
+):
+    # 1. The LLM solves the unlisted issue by restarting a service...
+    async with session_factory() as session:
+        device = await _make_device(session, admin_user.org_id)
+        svc = ConversationService(session, provider=_FakeLLM())
+        _, _, source = await svc.device_chat(device=device, content=_QUERY, conversation_id=None)
+        assert source == "engine"
+
+    # ...and the device runs it and reports back. THAT is what teaches the store — and it
+    # also clears the way for the second turn, which would otherwise be refused as a
+    # duplicate: someone reporting the same problem while the fix is still queued should be
+    # told it is already under way, not have it queued again.
+    await _device_reports_success(session_factory)
+
+    async with session_factory() as session:
+        learned = (await session.execute(select(LearnedAction))).scalars().all()
+        assert len(learned) == 1, "a confirmed fix should have been learned"
         assert learned[0].action_id == "restart_service"
         assert learned[0].params == {"service_name": "Spooler"}
-
-    # The first fix runs and finishes. Without this the second turn would be refused as a
-    # duplicate — correctly: someone reporting the same problem while the fix is still
-    # queued should be told it's already under way, not have it queued a second time.
-    async with session_factory() as session:
-        first = (await session.execute(select(RemediationTask))).scalar_one()
-        first.status = RemediationStatus.SUCCEEDED
-        await session.commit()
 
     # 2. A fresh service with NO LLM provider sees the same issue -> handled for free
     #    from the learned store (no LLM call), and it applies the same fix.
@@ -73,7 +114,6 @@ async def test_llm_fix_is_learned_then_reused_for_free(session_factory, admin_us
         _, msg, source = await svc.device_chat(device=device, content=_QUERY, conversation_id=None)
         assert source == "learned", "the repeat issue should be served from the learned store"
 
-        # Both turns created a remediation task (the LLM's, then the free learned reuse).
         tasks = (await session.execute(select(RemediationTask))).scalars().all()
         assert len(tasks) == 2
         assert all(t.action_id == "restart_service" for t in tasks)
@@ -82,7 +122,11 @@ async def test_llm_fix_is_learned_then_reused_for_free(session_factory, admin_us
 async def test_a_repeat_report_does_not_queue_the_fix_twice(session_factory, admin_user):
     """Reporting the same problem again while the fix is still queued must not queue it
     again. The user hasn't seen it work yet — that's precisely why they're asking again —
-    and a second identical action only ties the device up for longer."""
+    and a second identical action only ties the device up for longer.
+
+    Both turns go through the model here. The first fix is deliberately left unconfirmed,
+    so nothing has been learned and the guard is the only thing that can stop the repeat.
+    """
     async with session_factory() as session:
         device = await _make_device(session, admin_user.org_id)
         svc = ConversationService(session, provider=_FakeLLM())
@@ -92,7 +136,7 @@ async def test_a_repeat_report_does_not_queue_the_fix_twice(session_factory, adm
         device = (
             await session.execute(select(Device).where(Device.hostname == "PRINT-PC"))
         ).scalar_one()
-        svc = ConversationService(session)
+        svc = ConversationService(session, provider=_FakeLLM())
         _, msg, _ = await svc.device_chat(device=device, content=_QUERY, conversation_id=None)
 
         tasks = (await session.execute(select(RemediationTask))).scalars().all()
