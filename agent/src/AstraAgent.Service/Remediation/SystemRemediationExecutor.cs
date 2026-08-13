@@ -21,7 +21,7 @@ public sealed class SystemRemediationExecutor
         {
             "clear_system_temp", "windows_update_install",
             "disable_local_account", "enable_local_account",
-            "uninstall_application",
+            "uninstall_application", "set_timezone",
         };
 
     public (bool Success, string Output) Execute(
@@ -40,6 +40,7 @@ public sealed class SystemRemediationExecutor
                 // The agent still refuses anything it cannot remove silently — see
                 // ApplicationUninstaller: session 0 has no desktop to show a prompt on.
                 "uninstall_application" => ApplicationUninstaller.Uninstall(GetParam(parameters, "app_name")),
+                "set_timezone" => SetTimeZone(GetParam(parameters, "timezone_id")),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),
@@ -53,6 +54,44 @@ public sealed class SystemRemediationExecutor
 
     private static string? GetParam(IReadOnlyDictionary<string, string>? parameters, string key)
         => parameters is not null && parameters.TryGetValue(key, out var v) ? v : null;
+
+    /// <summary>Sets the machine's time zone. The identifier has already been checked against
+    /// a fixed list server-side; tzutil is the one that decides whether Windows knows it, and
+    /// its refusal is reported rather than swallowed — a clock that silently did not move is
+    /// worse than an error, because the person believes their calendar is now right.</summary>
+    private static (bool, string) SetTimeZone(string? timeZoneId)
+    {
+        var id = (timeZoneId ?? string.Empty).Trim();
+        if (id.Length == 0) return (false, "No time zone was given.");
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "tzutil.exe",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("/s");
+            psi.ArgumentList.Add(id);   // one argv element — never a shell string
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p is null) return (false, "Could not run tzutil.");
+            var err = p.StandardError.ReadToEnd();
+            var so = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(30000);
+            if (p.ExitCode != 0)
+            {
+                var why = string.IsNullOrWhiteSpace(err) ? so : err;
+                return (false, $"Windows would not set the time zone to '{id}'. {why.Trim()}");
+            }
+            return (true, $"Time zone set to {id}. Existing calendar entries move with it.");
+        }
+        catch (Exception ex)
+        {
+            return (false, "Could not change the time zone: " + ex.Message);
+        }
+    }
 
     private static string? GetKbFilter(IReadOnlyDictionary<string, string>? parameters)
     {
