@@ -141,7 +141,52 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "would open a window is reported rather than removed, because nobody "
                       "would ever see that window. Elevated + admin approval only.",
                       params=("app_name",), execution_context="system"),
+
+    # ── Self-service: things a person could do themselves, done for them ────────
+    # Automatic because the user asked for their own machine and both are reversible.
+    # They run in different processes for a reason that is easy to get wrong: the clock is
+    # machine-wide and needs elevation, while a printer connection belongs to a user's
+    # profile — added by the elevated service it would land in LocalSystem's profile and
+    # the person who asked would never see it.
+    RemediationAction("set_timezone", "Change the time zone", RemediationTier.AUTOMATIC,
+                      "Sets the Windows time zone. Reversible, and the clock corrects itself "
+                      "immediately — but every appointment in the person's calendar moves "
+                      "with it, so the zone must be the one they actually meant.",
+                      params=("timezone_id",), execution_context="system"),
+    RemediationAction("add_network_printer", "Add a network printer", RemediationTier.AUTOMATIC,
+                      "Connects the signed-in user to a shared printer by its network path "
+                      "(\\\\server\\printer). Runs in that person's own session, because a "
+                      "printer connection belongs to their profile and not to the machine.",
+                      params=("printer_path",), execution_context="user"),
 )
+
+# Windows time-zone identifiers ASTRA may set. An allowlist rather than a format check,
+# because the value names a real place: a typo that still looked like an identifier would be
+# accepted by tzutil, shift every meeting in the person's calendar, and give no clue why.
+# Windows knows about 140; this is the set a business fleet actually asks for.
+SAFE_TIMEZONES: frozenset[str] = frozenset({
+    "UTC",
+    # South Asia
+    "India Standard Time", "Pakistan Standard Time", "Bangladesh Standard Time",
+    "Sri Lanka Standard Time", "Nepal Standard Time",
+    # Americas
+    "Eastern Standard Time", "Central Standard Time", "Mountain Standard Time",
+    "Pacific Standard Time", "Alaskan Standard Time", "Hawaiian Standard Time",
+    "Atlantic Standard Time", "Canada Central Standard Time",
+    "Central Standard Time (Mexico)", "E. South America Standard Time",
+    "Argentina Standard Time",
+    # Europe, Middle East, Africa
+    "GMT Standard Time", "W. Europe Standard Time", "Central Europe Standard Time",
+    "Romance Standard Time", "E. Europe Standard Time", "Russian Standard Time",
+    "Turkey Standard Time", "Israel Standard Time", "Arabian Standard Time",
+    "Arab Standard Time", "South Africa Standard Time",
+    "W. Central Africa Standard Time", "E. Africa Standard Time",
+    # Asia Pacific
+    "SE Asia Standard Time", "Singapore Standard Time", "China Standard Time",
+    "Tokyo Standard Time", "Korea Standard Time", "W. Australia Standard Time",
+    "AUS Central Standard Time", "AUS Eastern Standard Time",
+    "New Zealand Standard Time",
+})
 
 # Software ASTRA will never uninstall, whatever an organization lists as restricted.
 # Removing endpoint protection across a fleet is precisely what someone who got into the

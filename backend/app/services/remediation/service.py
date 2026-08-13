@@ -32,6 +32,7 @@ from app.services.remediation.actions import (
     ACTIONS,
     SAFE_APP_PROCESSES,
     SAFE_SERVICES,
+    SAFE_TIMEZONES,
     RemediationTier,
     get_action,
 )
@@ -100,6 +101,37 @@ def _validate_folder_name(value: Any) -> str:
 
 
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9 ._-]{0,62}[A-Za-z0-9.])?$")
+
+
+#: A Windows share path and nothing else: two backslashes, a host, one backslash, a share.
+#: The characters Windows itself forbids in a share name are excluded, which also leaves no
+#: room for a path that walks somewhere else. The value is passed as a single argv element,
+#: never through a shell, so this is about naming a real printer rather than about quoting.
+_UNC_PRINTER = re.compile(r"\A\\\\[A-Za-z0-9][A-Za-z0-9._-]{0,62}\\[^\\/:*?\"<>|]{1,80}\Z")
+
+
+def _validate_printer_path(value: Any) -> str:
+    path = value.strip() if isinstance(value, str) else ""
+    if not path:
+        raise RemediationError("A printer path is required, e.g. \\\\printserver\\reception.")
+    if not _UNC_PRINTER.match(path):
+        raise RemediationError(
+            f"'{path}' is not a printer network path. It should look like "
+            "\\\\printserver\\reception."
+        )
+    return path
+
+
+def _validate_timezone(value: Any) -> str:
+    name = value.strip() if isinstance(value, str) else ""
+    if not name:
+        raise RemediationError("A time zone is required.")
+    if name not in SAFE_TIMEZONES:
+        raise RemediationError(
+            f"'{name}' is not a Windows time zone ASTRA can set. Use an identifier such as "
+            "'India Standard Time' or 'Eastern Standard Time'."
+        )
+    return name
 
 
 def _validate_username(value: Any) -> str:
@@ -429,6 +461,10 @@ class RemediationService:
             params["kb_article_id"] = _validate_kb_article_id(params["kb_article_id"])
         if "username" in action.params:
             params["username"] = _validate_username(params.get("username"))
+        if "timezone_id" in action.params:
+            params["timezone_id"] = _validate_timezone(params.get("timezone_id"))
+        if "printer_path" in action.params:
+            params["printer_path"] = _validate_printer_path(params.get("printer_path"))
         return params
 
     # -- Approval workflow (portal staff) --------------------------------------

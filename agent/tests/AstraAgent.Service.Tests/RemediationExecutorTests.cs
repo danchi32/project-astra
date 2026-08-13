@@ -36,6 +36,11 @@ public class RemediationExecutorTests
         Assert.Equal(
             new[]
             {
+                // add_network_printer runs here rather than in the elevated service on
+                // purpose: a printer connection belongs to the signed-in person's profile,
+                // and one attached by LocalSystem would report success to a printer only
+                // LocalSystem can see.
+                "add_network_printer",
                 "clear_browser_cache", "clear_temp", "create_outlook_rule", "flush_dns",
                 "restart_application", "restart_chrome", "restart_edge", "restart_explorer",
                 "restart_outlook", "restart_teams", "restart_zoom",

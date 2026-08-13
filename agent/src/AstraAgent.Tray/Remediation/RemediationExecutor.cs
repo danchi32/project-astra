@@ -19,7 +19,7 @@ public sealed class RemediationExecutor
             "restart_explorer", "restart_outlook", "restart_teams", "restart_zoom",
             "restart_chrome", "restart_edge", "restart_application",
             "flush_dns", "clear_temp", "clear_browser_cache",
-            "create_outlook_rule",
+            "create_outlook_rule", "add_network_printer",
         };
 
     public async Task<(bool Success, string Output)> ExecuteAsync(
@@ -32,6 +32,8 @@ public sealed class RemediationExecutor
             return actionId switch
             {
                 "flush_dns" => await RunAsync("ipconfig", "/flushdns", ct),
+                "add_network_printer" => await AddNetworkPrinterAsync(
+                    parameters is not null && parameters.TryGetValue("printer_path", out var pp) ? pp : null, ct),
                 "clear_temp" => ClearTemp(),
                 "clear_browser_cache" => ClearBrowserCache(),
                 "restart_explorer" => RestartApp(new[] { "explorer" }, "explorer.exe"),
@@ -89,6 +91,55 @@ public sealed class RemediationExecutor
             catch { /* registry unavailable — fall through to the bare name */ }
         }
         return exeName;
+    }
+
+    /// <summary>Connects this user to a shared printer.
+    ///
+    /// It runs here, in the signed-in person's session, because a printer connection lives in
+    /// their profile — the same command run by the elevated service would attach the printer
+    /// to LocalSystem, where nobody can print to it, and report success.
+    ///
+    /// The common failure is not a wrong path. Since the PrintNightmare hardening, installing
+    /// a print driver needs administrator rights, so this succeeds when the driver is already
+    /// present and is refused when it is not. That refusal is passed on in those words rather
+    /// than as a bare error code, because the answer to it is to deploy the driver, not to
+    /// try again.</summary>
+    private static async Task<(bool, string)> AddNetworkPrinterAsync(
+        string? printerPath, CancellationToken ct)
+    {
+        var path = (printerPath ?? string.Empty).Trim();
+        if (path.Length == 0) return (false, "No printer path was given.");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "rundll32.exe",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("printui.dll,PrintUIEntry");
+        psi.ArgumentList.Add("/in");    // install a network printer connection
+        psi.ArgumentList.Add("/q");     // no UI: there may be nobody watching
+        psi.ArgumentList.Add("/n");
+        psi.ArgumentList.Add(path);     // one argv element — never a shell string
+
+        using var proc = Process.Start(psi);
+        if (proc is null) return (false, "Could not start the printer installer.");
+        var stdout = await proc.StandardOutput.ReadToEndAsync(ct);
+        var stderr = await proc.StandardError.ReadToEndAsync(ct);
+        await proc.WaitForExitAsync(ct);
+
+        if (proc.ExitCode == 0)
+            return (true, $"Connected to {path}. It should now appear in your printer list.");
+
+        var text = (string.IsNullOrWhiteSpace(stderr) ? stdout : stderr).Trim();
+        return (false,
+            $"Windows would not connect to {path}. This is usually one of: the printer name is "
+            + "wrong, you do not have permission to it, or its driver is not installed on this "
+            + "PC — since a Windows security update, installing a print driver needs an "
+            + "administrator."
+            + (text.Length > 0 ? " " + text : string.Empty));
     }
 
     private static async Task<(bool, string)> RunAsync(string exe, string args, CancellationToken ct)
