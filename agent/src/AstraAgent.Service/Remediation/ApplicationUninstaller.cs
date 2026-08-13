@@ -194,22 +194,52 @@ public static class ApplicationUninstaller
                                + "for a confirmation that cannot be shown here.");
             }
 
-            // 3010 is "success, a restart is needed" — a success, and never rebooted here.
-            if (p.ExitCode == 0)
-                return (true, $"Uninstalled {displayName} ({plan.How}).");
-            if (p.ExitCode == 3010)
-                return (true, $"Uninstalled {displayName} ({plan.How}). Windows reports a "
-                              + "restart is needed to finish removing it.");
-
             var err = p.StandardError.ReadToEnd().Trim();
-            var msg = err.Length > 0 ? err : p.StandardOutput.ReadToEnd().Trim();
-            return (false, $"The uninstaller for {displayName} exited with code {p.ExitCode}."
-                           + (msg.Length > 0 ? " " + Truncate(msg, 500) : string.Empty));
+            var stdout = p.StandardOutput.ReadToEnd().Trim();
+            var output = err.Length > 0 ? err : stdout;
+
+            // Do not trust the exit code alone. Chrome's own uninstaller returns 19 from the
+            // SYSTEM account over cosmetic shortcut-cleanup failures while genuinely removing
+            // the program — the exact case that reported a successful removal as a failure and
+            // put a scary error in front of an operator. The registry is the arbiter: read it
+            // back and let whether the app is actually gone decide the verdict.
+            var stillInstalled = FindInstalled(wanted) is not null;
+            return Verdict(displayName, plan.How, p.ExitCode, stillInstalled, output);
         }
         catch (Exception ex)
         {
             return (false, $"Could not uninstall '{displayName}': {ex.Message}");
         }
+    }
+
+    /// <summary>Decides success from what the machine shows, not from the exit code — because
+    /// the exit code lied. Pure, so the judgement that just misreported a real removal is the
+    /// part under test.
+    ///
+    ///   still gone      → success, whatever the code (Chrome's 19 over cosmetic cleanup).
+    ///   3010, gone      → success, restart to finish (some removers keep a stub until reboot,
+    ///                     so a lingering entry after 3010 is not a failure — trust the code).
+    ///   still installed → a real failure; the code and the uninstaller's own words explain it,
+    ///                     and a "success" exit that left the app behind is called out as odd.</summary>
+    public static (bool Success, string Output) Verdict(
+        string displayName, string how, int exitCode, bool stillInstalled, string? errorText)
+    {
+        if (exitCode == 3010)
+            return (true, $"Uninstalled {displayName} ({how}). Windows reports a restart is "
+                          + "needed to finish removing it.");
+
+        if (!stillInstalled)
+            return (true, $"Uninstalled {displayName} ({how}).");
+
+        var tail = string.IsNullOrWhiteSpace(errorText) ? string.Empty : " " + Truncate(errorText, 500);
+        if (exitCode == 0)
+            return (false,
+                $"The uninstaller for {displayName} reported success, but it is still listed as "
+                + "installed. It may need a reboot to finish, or a second copy is present." + tail);
+
+        return (false,
+            $"The uninstaller for {displayName} exited with code {exitCode} and it is still "
+            + "installed." + tail);
     }
 
     private static (string DisplayName, string? UninstallString, string? QuietString)? FindInstalled(

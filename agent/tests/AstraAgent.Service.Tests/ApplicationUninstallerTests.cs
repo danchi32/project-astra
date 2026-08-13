@@ -126,6 +126,53 @@ public class ApplicationUninstallerTests
     }
 
     [Fact]
+    public void A_nonzero_exit_is_success_when_the_app_is_actually_gone()
+    {
+        // The real failure this pins: Chrome's uninstaller ran from the SYSTEM account,
+        // returned 19 over a cosmetic shortcut-cleanup error, and removed Chrome anyway —
+        // and ASTRA called it a failure and showed the operator an error. The registry, not
+        // the exit code, decides.
+        var (ok, output) = ApplicationUninstaller.Verdict(
+            "Google Chrome", "Chrome-style silent uninstall", exitCode: 19,
+            stillInstalled: false, errorText: "Could not get application shortcuts location.");
+        Assert.True(ok);
+        Assert.Contains("Uninstalled Google Chrome", output);
+    }
+
+    [Fact]
+    public void A_nonzero_exit_is_a_failure_when_the_app_remains()
+    {
+        var (ok, output) = ApplicationUninstaller.Verdict(
+            "Some App", "vendor QuietUninstallString", exitCode: 1603,
+            stillInstalled: true, errorText: "Fatal error during installation.");
+        Assert.False(ok);
+        Assert.Contains("1603", output);
+        Assert.Contains("still", output);
+    }
+
+    [Fact]
+    public void A_clean_exit_that_left_the_app_behind_is_reported_as_odd_not_success()
+    {
+        var (ok, output) = ApplicationUninstaller.Verdict(
+            "Some App", "Windows Installer (/qn)", exitCode: 0,
+            stillInstalled: true, errorText: "");
+        Assert.False(ok);
+        Assert.Contains("reported success", output);
+    }
+
+    [Fact]
+    public void A_restart_needed_exit_is_success_even_if_the_entry_lingers()
+    {
+        // 3010 means "removed, reboot to finish" — the registry stub can outlive the exit, so
+        // a still-present entry here is expected, not a failure.
+        var (ok, output) = ApplicationUninstaller.Verdict(
+            "Some App", "Windows Installer (/qn)", exitCode: 3010,
+            stillInstalled: true, errorText: "");
+        Assert.True(ok);
+        Assert.Contains("restart", output);
+    }
+
+    [Fact]
     public void The_elevated_service_now_accepts_the_action()
     {
         Assert.Contains("uninstall_application", SystemRemediationExecutor.SupportedActions);
