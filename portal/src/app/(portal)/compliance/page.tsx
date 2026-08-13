@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { ShieldCheck, ShieldAlert, Ban, Plus, X } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Ban, Plus, X, Usb } from "lucide-react";
 import {
   getComplianceSummary, getComplianceDevices,
   listBannedSoftware, addBannedSoftware, removeBannedSoftware,
@@ -10,6 +10,7 @@ import {
 import type { BannedSoftware, DeviceComplianceStatus } from "@/lib/api/compliance";
 import { createRemediation } from "@/lib/api/remediation";
 import { getMe } from "@/lib/api/auth";
+import { fleetUsb } from "@/lib/api/fleet";
 import { apiErrorMessage } from "@/lib/utils";
 import { Pagination } from "@/components/pagination";
 import { UpgradeRequired, isUpgradeRequired, requiredFeature } from "@/components/upgrade-required";
@@ -87,6 +88,84 @@ function UninstallRestricted({
           )}
         </span>
       ))}
+    </div>
+  );
+}
+
+/** Fleet USB posture, from what each agent last reported, plus a one-click block/allow for
+ *  every device. Admin-only for the buttons; the counts are visible to any staff member. */
+function UsbPostureCard({
+  usb, isAdmin,
+}: {
+  usb: { blocked: number; allowed: number; unknown: number } | undefined;
+  isAdmin: boolean;
+}) {
+  const [busy, setBusy] = useState<"block" | "allow" | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const qc = useQueryClient();
+  const b = usb?.blocked ?? 0, a = usb?.allowed ?? 0, u = usb?.unknown ?? 0;
+
+  const run = async (state: "block" | "allow") => {
+    if (state === "block" && !window.confirm(
+      "Block USB pen drives and portable disks on every device in the fleet?\n\n"
+      + "Keyboards, mice and other USB devices keep working. It takes effect on each device "
+      + "the next time a drive is connected, and is reversible from here. Devices whose agent "
+      + "is too old to support this will simply not change."
+    )) return;
+    setBusy(state); setMsg(null);
+    try {
+      const r = await fleetUsb(state);
+      const parts = [`${r.queued} device(s) queued`];
+      if (r.already_running) parts.push(`${r.already_running} already set`);
+      if (r.failed) parts.push(`${r.failed} could not be reached or refused`);
+      setMsg({ ok: true, text: parts.join(", ") + ". The counts update as devices check in." });
+      // The posture numbers change as devices report back — refetch shortly.
+      setTimeout(() => qc.invalidateQueries({ queryKey: ["compliance-summary"] }), 3000);
+    } catch (err) {
+      setMsg({ ok: false, text: apiErrorMessage(err, "Couldn't queue it.") });
+    } finally { setBusy(null); }
+  };
+
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: "var(--border)" }}>
+        <Usb size={15} style={{ color: "var(--accent)" }} />
+        <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>USB storage</h2>
+      </div>
+      <div className="p-5">
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {[
+            ["Blocked", b, "#10b981"],
+            ["Allowed", a, "#f59e0b"],
+            ["Unknown", u, "#64748b"],
+          ].map(([label, n, color]) => (
+            <div key={label as string} className="rounded-xl p-3 text-center" style={{ background: "var(--bg)" }}>
+              <div className="text-2xl font-bold tabular-nums" style={{ color: color as string }}>{n as number}</div>
+              <div className="text-[11px] uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{label as string}</div>
+            </div>
+          ))}
+        </div>
+        {u > 0 && (
+          <p className="text-xs mb-3" style={{ color: "var(--text-secondary)" }}>
+            &ldquo;Unknown&rdquo; is a device whose agent has not reported its USB state yet — it updates once the agent 0.8+ has checked in.
+          </p>
+        )}
+        {isAdmin && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => run("block")} disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+              <Usb size={14} /> {busy === "block" ? "Queuing…" : "Block on all devices"}
+            </button>
+            <button onClick={() => run("allow")} disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+              {busy === "allow" ? "Queuing…" : "Allow on all"}
+            </button>
+          </div>
+        )}
+        {msg && <p className="text-xs mt-3" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}
+      </div>
     </div>
   );
 }
@@ -272,6 +351,8 @@ export default function CompliancePage() {
           </div>
         </div>
       </div>
+
+      <UsbPostureCard usb={summary?.usb} isAdmin={isAdmin} />
 
       {/* Needs attention */}
       <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>

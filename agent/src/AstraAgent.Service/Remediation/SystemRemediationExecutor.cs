@@ -22,6 +22,7 @@ public sealed class SystemRemediationExecutor
             "clear_system_temp", "windows_update_install",
             "disable_local_account", "enable_local_account",
             "uninstall_application", "set_timezone",
+            "block_usb_storage", "unblock_usb_storage",
         };
 
     public (bool Success, string Output) Execute(
@@ -41,6 +42,8 @@ public sealed class SystemRemediationExecutor
                 // ApplicationUninstaller: session 0 has no desktop to show a prompt on.
                 "uninstall_application" => ApplicationUninstaller.Uninstall(GetParam(parameters, "app_name")),
                 "set_timezone" => SetTimeZone(GetParam(parameters, "timezone_id")),
+                "block_usb_storage" => UsbStorageManager.SetBlocked(true),
+                "unblock_usb_storage" => UsbStorageManager.SetBlocked(false),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),

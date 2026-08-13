@@ -35,3 +35,8 @@ export const bulkRemediate = (body: {
   params?: Record<string, string>;
   reason: string;
 }) => apiClient.post<BulkRemediateResult>("/fleet/remediate", body).then((r) => r.data);
+
+// Block or allow USB storage on every device in the org. Admin only; the backend loads the
+// device list itself, so "all" means every device the org has, not a page of them.
+export const fleetUsb = (state: "block" | "allow") =>
+  apiClient.post<BulkRemediateResult>(`/fleet/usb/${state}`).then((r) => r.data);

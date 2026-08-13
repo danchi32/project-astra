@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench, Check, Minus } from "lucide-react";
+import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench, Check, Minus, Usb } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
 import { getAssetForDevice, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
@@ -199,6 +199,7 @@ export default function DeviceDetailPage() {
   const [lockUser, setLockUser] = useState("");
   const [lockConfirm, setLockConfirm] = useState("");
   const [lockMsg, setLockMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [usbMsg, setUsbMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const { data: device, isLoading } = useQuery({ queryKey: ["device", id], queryFn: () => getDevice(id) });
   const { data: telemetry } = useQuery({ queryKey: ["telemetry", id], queryFn: () => getDeviceTelemetry(id), refetchInterval: 30_000 });
@@ -394,6 +395,33 @@ export default function DeviceDetailPage() {
     } finally { setBusy(false); }
   }
 
+  // USB mass storage: block or allow pen drives and portable disks on this device. Elevated
+  // and admin-only, so it goes through the same create-and-approve path as offboarding.
+  async function runUsb(block: boolean) {
+    if (!device) return;
+    if (block && !confirm(
+      `Block USB pen drives and portable disks on ${device.hostname}?\n\n`
+      + "Keyboards, mice and other USB devices keep working. A drive plugged in right now "
+      + "keeps working until it is unplugged. Reversible from here."
+    )) return;
+    setBusy(true); setUsbMsg(null);
+    try {
+      await createRemediation({
+        device_id: device.id,
+        action_id: block ? "block_usb_storage" : "unblock_usb_storage",
+        reason: block
+          ? `Block USB storage on ${device.hostname}`
+          : `Allow USB storage on ${device.hostname}`,
+        approve: true,   // the admin clicking IS the approver
+      });
+      setUsbMsg({ ok: true, text: block
+        ? `Blocking USB storage on ${device.hostname}. It takes effect next time a drive is connected. Track it under Self-Healing.`
+        : `Allowing USB storage on ${device.hostname} again.` });
+    } catch (err) {
+      setUsbMsg({ ok: false, text: apiErrorMessage(err, "Couldn't queue it. The device may be offline, or you may lack permission.") });
+    } finally { setBusy(false); }
+  }
+
   async function remove() {
     if (!device || !confirm(`Remove ${device.hostname} from the portal? This deletes its history and can't be undone.`)) return;
     try { await deleteDevice(device.id); window.location.href = "/devices"; }
@@ -437,6 +465,12 @@ export default function DeviceDetailPage() {
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}><Pencil size={15} /> Edit details</button>
             )}
             {isAdmin && (<>
+              <button onClick={() => runUsb(true)} disabled={busy} title="Stop pen drives and portable disks; keyboards and mice keep working"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}><Usb size={15} /> Block USB</button>
+              <button onClick={() => runUsb(false)} disabled={busy} title="Allow USB storage again"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}><Usb size={15} /> Allow USB</button>
               <button onClick={openLock} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#d97706" }}><UserX size={15} /> Lock down</button>
               <button onClick={remove} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
@@ -447,6 +481,7 @@ export default function DeviceDetailPage() {
       </div>
 
       {msg && <p className="text-sm" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}
+      {usbMsg && <p className="text-sm" style={{ color: usbMsg.ok ? "#10b981" : "#ef4444" }}>{usbMsg.text}</p>}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: "var(--border)" }}>

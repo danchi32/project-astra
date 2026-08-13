@@ -65,6 +65,11 @@ class HeartbeatRequest(BaseModel):
     # written only at enrollment, so a device that feature-updates (or an agent that fixes
     # how it names the OS) would otherwise show the enrolment-day string forever.
     os_version: str | None = Field(default=None, min_length=1, max_length=100)
+    # The device's actual USB mass-storage state, read from the registry. Optional: an agent
+    # too old to report it omits the field, and an omitted field must never be read as
+    # "allowed" — that would flip a genuinely blocked device to allowed on its next beat. The
+    # ingest only writes this when it is present.
+    usb_storage_blocked: bool | None = None
     # Opt-in: when true, the heartbeat response carries this device's approved
     # system-context tasks, so the elevated Service needs no separate poll.
     #
