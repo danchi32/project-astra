@@ -214,6 +214,11 @@ class DeviceService:
         # that as "unknown" would blank out the value they set at enrollment.
         if data.os_version:
             device.os_version = data.os_version
+        # Same rule as os_version: write only when the agent reported it. `is not None` rather
+        # than truthiness, because False is a real value here — a device reporting that USB is
+        # allowed must be able to move the flag from blocked to allowed.
+        if data.usb_storage_blocked is not None:
+            device.usb_storage_blocked = data.usb_storage_blocked
         await self.session.commit()
 
     # -- Portal-facing (staff/admin) -------------------------------------------

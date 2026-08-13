@@ -37,6 +37,8 @@ class DeviceCompliance(BaseModel):
     passed: int
     failed: int
     checks: list[CheckResult]
+    # The device's reported USB storage state; None until a reporting agent has beaten.
+    usb_storage_blocked: bool | None = None
 
 
 class CheckBreakdown(BaseModel):
@@ -44,6 +46,14 @@ class CheckBreakdown(BaseModel):
     label: str
     passed: int
     failed: int
+    unknown: int
+
+
+class UsbPosture(BaseModel):
+    """How USB mass storage sits across the fleet, from what each agent last reported.
+    `unknown` is devices no agent new enough to report it has checked in for yet."""
+    blocked: int
+    allowed: int
     unknown: int
 
 
@@ -55,3 +65,4 @@ class ComplianceSummary(BaseModel):
     unknown: int
     score: int  # fleet compliance % = compliant / total
     checks: list[CheckBreakdown]
+    usb: UsbPosture

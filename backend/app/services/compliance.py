@@ -32,6 +32,7 @@ from app.schemas.compliance import (
     CheckResult,
     ComplianceSummary,
     DeviceCompliance,
+    UsbPosture,
 )
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
@@ -299,6 +300,7 @@ class ComplianceService:
             results.append(DeviceCompliance(
                 device_id=d.id, hostname=d.hostname, status=dstatus,
                 score=score, passed=passed, failed=failed, checks=checks,
+                usb_storage_blocked=d.usb_storage_blocked,
             ))
         return results, total
 
@@ -378,10 +380,20 @@ class ComplianceService:
             if p or f or u:  # omit checks that don't apply (e.g. banned list empty)
                 breakdown.append(CheckBreakdown(key=key, label=label, passed=p, failed=f, unknown=u))
 
+        # USB posture travels on the device rows, so it is counted in the same pass and both
+        # this and the dashboard get it for free. NULL is a device no reporting agent has
+        # beaten for yet — unknown, never assumed allowed.
+        usb = UsbPosture(
+            blocked=sum(1 for r in rows if r.usb_storage_blocked is True),
+            allowed=sum(1 for r in rows if r.usb_storage_blocked is False),
+            unknown=sum(1 for r in rows if r.usb_storage_blocked is None),
+        )
+
         score = round(compliant / total * 100) if total else 100
         return ComplianceSummary(
             total_devices=total, compliant=compliant, at_risk=at_risk,
             non_compliant=non_compliant, unknown=unknown, score=score, checks=breakdown,
+            usb=usb,
         )
 
     # ── helpers ────────────────────────────────────────────────────────────────

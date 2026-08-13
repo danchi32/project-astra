@@ -158,6 +158,23 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "(\\\\server\\printer). Runs in that person's own session, because a "
                       "printer connection belongs to their profile and not to the machine.",
                       params=("printer_path",), execution_context="user"),
+
+    # ── USB mass-storage control (elevated, admin-only) ─────────────────────────
+    # A reversible pair, like the account lock. It disables the USB STORAGE driver only —
+    # the one a pen drive or portable disk loads — and leaves keyboards, mice, webcams and
+    # everything else untouched, because those load different drivers. A drive already
+    # plugged in keeps working until it is unplugged; the block takes hold on the next
+    # connection. No parameters: the action is the whole instruction.
+    RemediationAction("block_usb_storage", "Block USB storage", RemediationTier.ADMIN_ONLY,
+                      "Stops USB pen drives and portable disks from being used on this device, "
+                      "to close the most common route data leaves on. Keyboards, mice, webcams "
+                      "and other USB devices are unaffected. Reversible with 'unblock_usb_storage'. "
+                      "Elevated + admin approval only.",
+                      execution_context="system"),
+    RemediationAction("unblock_usb_storage", "Allow USB storage", RemediationTier.ADMIN_ONLY,
+                      "Reverses block_usb_storage: USB pen drives and portable disks work again "
+                      "from the next time one is connected. Elevated + admin approval only.",
+                      execution_context="system"),
 )
 
 # Windows time-zone identifiers ASTRA may set. An allowlist rather than a format check,

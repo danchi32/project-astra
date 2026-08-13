@@ -23,7 +23,11 @@ public sealed record HeartbeatRequest(
     // Reported on every beat, not just at enrollment: a device that feature-updates
     // (23H2 -> 25H2) would otherwise keep its enrolment-day OS string forever. It is also
     // how already-enrolled devices pick up the corrected OS name without re-enrolling.
-    [property: JsonPropertyName("os_version")] string? OsVersion = null);
+    [property: JsonPropertyName("os_version")] string? OsVersion = null,
+    // The device's actual USB mass-storage state, read from the registry each beat. Null
+    // when it could not be read, so the backend leaves the last known value alone rather
+    // than flipping a blocked device to allowed on a transient read failure.
+    [property: JsonPropertyName("usb_storage_blocked")] bool? UsbStorageBlocked = null);
 
 public sealed record HeartbeatResponse(
     [property: JsonPropertyName("status")] string Status,

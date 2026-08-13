@@ -154,6 +154,27 @@ class FleetService:
         issues.sort(key=lambda i: len(i.affected), reverse=True)
         return issues
 
+    async def usb_on_all(self, *, actor: User, block: bool) -> BulkRemediateResult:
+        """Block or allow USB storage on every active device in the org at once.
+
+        Loads the device ids server-side rather than accepting them from the caller: "all
+        devices" should mean every device the org actually has right now, not a list the
+        browser assembled and might have truncated or paged. From there it is the ordinary
+        bulk path, so the admin-only tier check, the fleet circuit-breaker and the
+        already-running dedupe all apply per device exactly as they do for Fix all.
+        """
+        ids = (await self.session.execute(
+            select(Device.id).where(
+                Device.org_id == actor.org_id, Device.is_active.is_(True)
+            )
+        )).scalars().all()
+        action_id = "block_usb_storage" if block else "unblock_usb_storage"
+        verb = "Block" if block else "Allow"
+        return await self.bulk_remediate(
+            actor=actor, device_ids=list(ids), action_id=action_id, params=None,
+            reason=f"{verb} USB storage across the fleet",
+        )
+
     async def bulk_remediate(
         self, *, actor: User, device_ids: list[uuid.UUID], action_id: str,
         params: dict[str, str] | None, reason: str,

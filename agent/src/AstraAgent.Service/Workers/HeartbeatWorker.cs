@@ -96,7 +96,8 @@ public sealed class HeartbeatWorker(
             AgentVersion.Current,
             LoggedInUserResolver.GetConsoleUser(),
             IncludeTasks: !busy,
-            OsVersion: _osVersion.Value);
+            OsVersion: _osVersion.Value,
+            UsbStorageBlocked: Remediation.UsbStorageManager.IsBlocked());
         var result = await api.HeartbeatAsync(token, request, ct);
 
         if (result.Status == HeartbeatStatus.Unauthorized)

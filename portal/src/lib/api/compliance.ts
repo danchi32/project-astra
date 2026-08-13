@@ -30,6 +30,12 @@ export interface CheckBreakdown {
   unknown: number;
 }
 
+export interface UsbPosture {
+  blocked: number;
+  allowed: number;
+  unknown: number;
+}
+
 export interface ComplianceSummary {
   total_devices: number;
   compliant: number;
@@ -38,6 +44,7 @@ export interface ComplianceSummary {
   unknown: number;
   score: number;
   checks: CheckBreakdown[];
+  usb: UsbPosture;
 }
 
 export interface BannedSoftware {

@@ -24,6 +24,12 @@ class Device(TimestampMixin, Base):
     logged_in_user: Mapped[str | None] = mapped_column(String(100), nullable=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Whether USB mass storage is blocked on the device, as the agent reads it from the
+    # registry on each heartbeat — the actual state, not what ASTRA last asked for, so a port
+    # reopened by hand or by Group Policy shows here as allowed. NULL means no agent new
+    # enough to report it has checked in yet; the compliance count shows those as "unknown"
+    # rather than guessing.
+    usb_storage_blocked: Mapped[bool | None] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
 
     # Hardware asset attributes — refreshed from the agent's inventory push.
