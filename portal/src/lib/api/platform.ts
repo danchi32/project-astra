@@ -1,9 +1,12 @@
 import { apiClient } from "./client";
 import type {
-  Asset, Device, GlobalFix, KnowledgeArticle, OrganizationAdmin, PlatformAuditEntry,
-  PlatformBilling, PlatformOverview, PlatformReports,
+  Asset, Device, GlobalFix, HelpArticleAdmin, KnowledgeArticle, OrganizationAdmin,
+  PlatformAnalytics, PlatformAuditEntry, PlatformBilling,
+  PlatformOverview, PlatformReports,
   RemediationActionOption, RemediationTask, SubscriptionStatus, User,
   Page, PageParams, Invoice, BillingProfile,
+  SupportQueue, SupportRequestDetail, SupportRequestPriority, SupportRequestStatus,
+  SupportRequestSummary,
 } from "./types";
 
 export const getPlatformOverview = () =>
@@ -12,6 +15,11 @@ export const getPlatformOverview = () =>
 // Platform-wide revenue rollup — MRR/ARR, provider mix, per-org economics.
 export const getPlatformBilling = () =>
   apiClient.get<PlatformBilling>("/platform/billing").then((r) => r.data);
+
+// Revenue history from invoices + per-customer health scoring. Distinct from /reports:
+// this is the "where is this going" layer, not the "what is true now" one.
+export const getPlatformAnalytics = () =>
+  apiClient.get<PlatformAnalytics>("/platform/analytics").then((r) => r.data);
 
 // Cross-org analytics — growth, self-healing outcomes, fleet, AI volume.
 export const getPlatformReports = () =>
@@ -77,12 +85,53 @@ export const getOrgRemediation = (id: string) =>
 export const getOrgAssets = (id: string) =>
   apiClient.get<Asset[]>(`/platform/organizations/${id}/assets`).then((r) => r.data);
 
-// Global problem→solution knowledge applied to every organization.
-export const listGlobalKnowledge = () =>
-  apiClient.get<KnowledgeArticle[]>("/platform/knowledge").then((r) => r.data);
+// ── Support queue: customers asking ASTRA itself for help ─────────────────
 
-export const createGlobalKnowledge = (data: { title: string; content: string }) =>
-  apiClient.post<KnowledgeArticle>("/platform/knowledge", data).then((r) => r.data);
+export const getSupportQueue = (params: {
+  request_status?: SupportRequestStatus; org_id?: string;
+} = {}) => apiClient.get<SupportQueue>("/platform/support-requests", { params }).then((r) => r.data);
+
+export const getPlatformSupportRequest = (id: string) =>
+  apiClient.get<SupportRequestDetail>(`/platform/support-requests/${id}`).then((r) => r.data);
+
+/** Replying notifies the customer and hands the thread back to them. */
+export const replyAsOperator = (id: string, body: string) =>
+  apiClient
+    .post<SupportRequestDetail>(`/platform/support-requests/${id}/replies`, { body })
+    .then((r) => r.data);
+
+export const updateSupportRequest = (
+  id: string,
+  data: { status?: SupportRequestStatus; priority?: SupportRequestPriority },
+) =>
+  apiClient
+    .patch<SupportRequestSummary>(`/platform/support-requests/${id}`, data)
+    .then((r) => r.data);
+
+// Global problem→solution knowledge applied to every organization. The same rows are
+// ASTRA's customer-facing help articles when they carry a category or an error code.
+export const listGlobalKnowledge = () =>
+  apiClient.get<HelpArticleAdmin[]>("/platform/knowledge").then((r) => r.data);
+
+export const createGlobalKnowledge = (data: {
+  title: string;
+  content: string;
+  help_category?: string | null;
+  error_code?: string | null;
+}) => apiClient.post<HelpArticleAdmin>("/platform/knowledge", data).then((r) => r.data);
+
+/** Partial edit. Sending a key as null clears it; omitting it leaves it alone — which is
+ *  why callers must not spread a whole form object in here. */
+export const updateGlobalKnowledge = (
+  id: string,
+  data: Partial<{
+    title: string;
+    content: string;
+    help_category: string | null;
+    error_code: string | null;
+    published: boolean;
+  }>,
+) => apiClient.patch<HelpArticleAdmin>(`/platform/knowledge/${id}`, data).then((r) => r.data);
 
 export const deleteGlobalKnowledge = (id: string) =>
   apiClient.delete(`/platform/knowledge/${id}`).then((r) => r.data);

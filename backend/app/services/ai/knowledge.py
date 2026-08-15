@@ -88,7 +88,8 @@ class KnowledgeBaseService:
     # -- Global (platform-operator) articles, shared with every organization ----
 
     async def create_global(
-        self, *, title: str, content: str, actor_user_id: uuid.UUID | None = None
+        self, *, title: str, content: str, actor_user_id: uuid.UUID | None = None,
+        help_category: str | None = None, error_code: str | None = None,
     ) -> KnowledgeArticle:
         aliases = await self.aliases.for_article(title=title, content=content)
         vector = await self.embed.embed(
@@ -104,8 +105,65 @@ class KnowledgeBaseService:
                 aliases_generated_at=utcnow() if aliases is not None else None,
                 source=KnowledgeSource.MANUAL, created_by_user_id=actor_user_id,
                 published_at=utcnow(),
+                help_category=help_category, error_code=error_code,
             )
         )
+        await self.session.commit()
+        return article
+
+    async def update_global(
+        self, *, article_id: uuid.UUID, title: str | None = None, content: str | None = None,
+        help_category: str | None = None, error_code: str | None = None,
+        published: bool | None = None, clear_category: bool = False,
+        clear_error_code: bool = False,
+    ) -> KnowledgeArticle:
+        """Edit an operator-authored article.
+
+        The embedding is rebuilt whenever the words change, and only then. Skipping it
+        would leave the article findable by its old text and invisible under its new one —
+        a silent failure, because the article still exists and still looks correct in the
+        console.
+        """
+        article = await self.repo.get(article_id)
+        if article is None or article.org_id is not None:
+            raise NotFoundError("Global knowledge article not found")
+
+        words_changed = False
+        if title is not None and title != article.title:
+            article.title = title
+            words_changed = True
+        if content is not None and content != article.content:
+            article.content = content
+            words_changed = True
+
+        # A category or code is cleared by asking explicitly. Absent means "leave it
+        # alone", which is not the same as "remove it", and the two collapse into one if
+        # None carries both meanings.
+        if clear_category:
+            article.help_category = None
+        elif help_category is not None:
+            article.help_category = help_category
+        if clear_error_code:
+            article.error_code = None
+        elif error_code is not None:
+            article.error_code = error_code
+
+        if published is not None:
+            # Withdrawing hides it from the help centre AND stops the assistant answering
+            # from it, because both read this one column.
+            article.published_at = utcnow() if published else None
+
+        if words_changed:
+            aliases = await self.aliases.for_article(
+                title=article.title, content=article.content
+            )
+            article.embedding = await self.embed.embed(
+                embedding_text(article.title, article.content, aliases), purpose="document"
+            )
+            article.embedding_model = self.embed.name
+            article.symptom_samples = aliases
+            article.aliases_generated_at = utcnow() if aliases is not None else None
+
         await self.session.commit()
         return article
 

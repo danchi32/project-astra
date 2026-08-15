@@ -4,7 +4,7 @@ This is the one service that intentionally crosses org boundaries, so every
 mutation is audited under the target org.
 """
 import uuid
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,8 @@ from app.models import (
     AuditLog,
     Conversation,
     Device,
+    Invoice,
+    InvoiceStatus,
     Message,
     Organization,
     RemediationTask,
@@ -35,12 +37,15 @@ from app.schemas.platform import (
     OrganizationCreate,
     OrganizationUpdate,
     OrgDeviceStat,
+    OrgHealthRow,
+    PlatformAnalytics,
     PlatformAuditRead,
     PlatformBilling,
     PlatformBillingRow,
     PlatformOverview,
     PlatformReports,
     ProviderStat,
+    RevenueMonth,
     ViewAsToken,
 )
 from app.services.audit import AuditService
@@ -63,6 +68,46 @@ def _with_entitlements(org) -> OrganizationAdminRead:
     read.entitlements = sorted(features_for(org.plan, org.entitlement_overrides))
     read.entitlement_overrides = org.entitlement_overrides or None
     return read
+
+
+def _recent_months(now, count: int) -> list[str]:
+    """The last `count` calendar months as "YYYY-MM", oldest first, including this one."""
+    months: list[str] = []
+    y, m = now.year, now.month
+    for _ in range(count):
+        months.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    months.reverse()
+    return months
+
+
+def _month_start(month: str) -> date:
+    y, m = month.split("-")
+    return date(int(y), int(m), 1)
+
+
+def _coerce_dt(value):
+    """Normalise a timestamp to an aware UTC datetime.
+
+    `func.max()` over a DateTime column bypasses SQLAlchemy's result processing on SQLite,
+    which hands back a string where PostgreSQL hands back a datetime. Both reach this.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return as_utc(value)
+
+
+def _latest(*values):
+    """The most recent of several optional timestamps, or None if there are none."""
+    present = [v for v in values if v is not None]
+    return max(present) if present else None
 
 
 class PlatformService:
@@ -453,6 +498,343 @@ class PlatformService:
             conversations_30d=conversations_30d,
             messages_30d=messages_30d,
         )
+
+    # Health weights. Connectivity and engagement carry the most because a fleet that
+    # quietly stopped reporting is the earliest visible form of a customer leaving — it
+    # shows up months before the subscription status does.
+    _W_CONNECTIVITY = 35
+    _W_ENGAGEMENT = 25
+    _W_ADOPTION = 20
+    _W_RELIABILITY = 20
+
+    #: Beyond this many days with no telemetry, no conversation and no audit entry, an
+    #: account scores zero for engagement.
+    _QUIET_LIMIT_DAYS = 30
+
+    async def analytics(self) -> PlatformAnalytics:
+        """Revenue history and per-customer health.
+
+        `overview()` answers "what is true right now". This answers "where is this going",
+        which needs invoices rather than a live seat count, and per-org scoring rather than
+        platform totals.
+
+        Every per-org figure is fetched with ONE grouped query per metric, so the cost is
+        flat in the number of customers rather than one round trip each.
+        """
+        from app.services.entitlements import normalise_plan  # local: avoids an import cycle
+
+        now = utcnow()
+        cutoff_30d = now - timedelta(days=30)
+        platform_ids = await self._platform_org_ids()
+
+        orgs = [
+            o for o in (await self.session.execute(
+                select(Organization).order_by(Organization.created_at)
+            )).scalars().all()
+            if o.id not in platform_ids
+        ]
+        org_ids = [o.id for o in orgs]
+
+        # ---- per-org aggregates (one grouped query each) -------------------------------
+        online_cutoff = now - ONLINE_THRESHOLD
+        devices_by_org: dict[uuid.UUID, tuple[int, int, object]] = {}
+        users_by_org: dict[uuid.UUID, int] = {}
+        rem_by_org: dict[uuid.UUID, tuple[int, int]] = {}
+        last_conv: dict[uuid.UUID, object] = {}
+        last_audit: dict[uuid.UUID, object] = {}
+
+        if org_ids:
+            devices_by_org = {
+                r[0]: (r[1], int(r[2] or 0), r[3])
+                for r in (await self.session.execute(
+                    select(
+                        Device.org_id,
+                        func.count(),
+                        func.sum(case((Device.last_seen_at >= online_cutoff, 1), else_=0)),
+                        func.max(Device.last_seen_at),
+                    ).where(Device.org_id.in_(org_ids)).group_by(Device.org_id)
+                )).all()
+            }
+            users_by_org = dict((await self.session.execute(
+                select(User.org_id, func.count())
+                .where(User.org_id.in_(org_ids)).group_by(User.org_id)
+            )).all())
+            rem_by_org = {
+                r[0]: (r[1], int(r[2] or 0))
+                for r in (await self.session.execute(
+                    select(
+                        RemediationTask.org_id,
+                        func.count(),
+                        func.sum(case((RemediationTask.status == RemediationStatus.FAILED, 1), else_=0)),
+                    )
+                    .where(
+                        RemediationTask.org_id.in_(org_ids),
+                        RemediationTask.created_at >= cutoff_30d,
+                    )
+                    .group_by(RemediationTask.org_id)
+                )).all()
+            }
+            last_conv = dict((await self.session.execute(
+                select(Conversation.org_id, func.max(Conversation.created_at))
+                .where(Conversation.org_id.in_(org_ids)).group_by(Conversation.org_id)
+            )).all())
+            last_audit = dict((await self.session.execute(
+                select(AuditLog.org_id, func.max(AuditLog.created_at))
+                .where(AuditLog.org_id.in_(org_ids)).group_by(AuditLog.org_id)
+            )).all())
+
+        # ---- revenue -------------------------------------------------------------------
+        (
+            revenue_currency, other_currencies, revenue_by_month,
+            collected_90d, outstanding,
+        ) = await self._revenue(org_ids, now)
+
+        # ---- commercial ratios ---------------------------------------------------------
+        price = get_settings().price_per_seat_cents
+        paying = {
+            SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, SubscriptionStatus.SUSPENDED,
+        }
+        active = [o for o in orgs if o.subscription_status == SubscriptionStatus.ACTIVE]
+        canceled = [o for o in orgs if o.subscription_status == SubscriptionStatus.CANCELED]
+
+        total_mrr = 0
+        if price is not None:
+            total_mrr = sum(
+                round((o.license_count or 0) * price * (100 - (o.discount_percent or 0)) / 100)
+                for o in active
+            )
+        arpa_cents = round(total_mrr / len(active)) if (price is not None and active) else None
+
+        # Only trials that have actually run out can be said to have converted or not —
+        # counting trials still in flight as failures would understate the rate every day.
+        finished_trials = [
+            o for o in orgs
+            if o.trial_ends_at is not None and as_utc(o.trial_ends_at) < now
+        ]
+        converted = [o for o in finished_trials if o.subscription_status in paying]
+        trial_conversion_rate = (
+            round(len(converted) * 100 / len(finished_trials), 1) if finished_trials else None
+        )
+
+        ever_paying = len(canceled) + len([o for o in orgs if o.subscription_status in paying])
+        churn_rate = round(len(canceled) * 100 / ever_paying, 1) if ever_paying else None
+
+        # ---- per-customer health -------------------------------------------------------
+        rows: list[OrgHealthRow] = []
+        for org in orgs:
+            devices, online, last_seen = devices_by_org.get(org.id, (0, 0, None))
+            rem_total, rem_failed = rem_by_org.get(org.id, (0, 0))
+            last_activity = _latest(
+                _coerce_dt(last_seen),
+                _coerce_dt(last_conv.get(org.id)),
+                _coerce_dt(last_audit.get(org.id)),
+            )
+            days_quiet = (now - last_activity).days if last_activity else None
+            licenses = org.license_count or 0
+            online_pct = round(online * 100 / devices, 1) if devices else None
+            seat_utilisation = round(devices / licenses, 3) if licenses else None
+            trial_days_left = (
+                max(0, (as_utc(org.trial_ends_at) - now).days)
+                if org.trial_ends_at and org.subscription_status == SubscriptionStatus.TRIALING
+                else None
+            )
+            mrr = (
+                round(licenses * price * (100 - (org.discount_percent or 0)) / 100)
+                if price is not None and org.subscription_status == SubscriptionStatus.ACTIVE
+                else (0 if price is not None else None)
+            )
+
+            score, band, reasons = self._score(
+                status=org.subscription_status,
+                devices=devices, online_pct=online_pct, days_quiet=days_quiet,
+                licenses=licenses, seat_utilisation=seat_utilisation,
+                rem_total=rem_total, rem_failed=rem_failed,
+                trial_days_left=trial_days_left,
+            )
+
+            rows.append(OrgHealthRow(
+                org_id=org.id, org_name=org.name, plan=org.plan,
+                plan_tier=normalise_plan(org.plan),
+                subscription_status=org.subscription_status,
+                licenses=licenses, users=users_by_org.get(org.id, 0),
+                devices=devices, online_devices=online, online_pct=online_pct,
+                seat_utilisation=seat_utilisation,
+                last_activity_at=last_activity, days_quiet=days_quiet,
+                remediation_total_30d=rem_total, remediation_failed_30d=rem_failed,
+                mrr_cents=mrr, trial_days_left=trial_days_left,
+                health_score=score, health_band=band, risk_reasons=reasons,
+            ))
+
+        # Worst first: this table exists to be acted on from the top down.
+        rows.sort(key=lambda r: (r.health_score, -(r.mrr_cents or 0)))
+        health_counts: dict[str, int] = {"healthy": 0, "watch": 0, "at_risk": 0}
+        for r in rows:
+            health_counts[r.health_band] += 1
+
+        return PlatformAnalytics(
+            revenue_currency=revenue_currency,
+            other_currencies=other_currencies,
+            revenue_by_month=revenue_by_month,
+            collected_90d_cents=collected_90d,
+            outstanding_cents=outstanding,
+            arpa_cents=arpa_cents,
+            trial_conversion_rate=trial_conversion_rate,
+            churn_rate=churn_rate,
+            canceled_orgs=len(canceled),
+            org_health=rows,
+            health_counts=health_counts,
+        )
+
+    async def _revenue(
+        self, org_ids: list[uuid.UUID], now
+    ) -> tuple[str | None, list[str], list[RevenueMonth], int, int]:
+        """Twelve months of invoiced-vs-collected, in a single currency.
+
+        ASTRA bills on Razorpay (INR) and Paddle (USD). Adding paise to cents produces a
+        number that looks like money and is not, so the trend covers whichever currency
+        carries the most invoices and names the rest rather than folding them in.
+        """
+        months = _recent_months(now, 12)
+        empty = [RevenueMonth(month=m, invoiced_cents=0, collected_cents=0, invoice_count=0)
+                 for m in months]
+        if not org_ids:
+            return None, [], empty, 0, 0
+
+        # Which currency the trend is denominated in — decided by invoice volume.
+        currency_rows = (await self.session.execute(
+            select(Invoice.currency, func.count())
+            .where(Invoice.org_id.in_(org_ids))
+            .group_by(Invoice.currency)
+            .order_by(func.count().desc())
+        )).all()
+        if not currency_rows:
+            return None, [], empty, 0, 0
+        currency = currency_rows[0][0]
+        others = sorted(c for c, _ in currency_rows[1:])
+
+        # Bounded window: an invoice issued before it can only matter here if it was paid
+        # inside it, and a 90-day grace covers that comfortably.
+        window_start = _month_start(months[0])
+        rows = (await self.session.execute(
+            select(Invoice.issued_on, Invoice.paid_at, Invoice.status, Invoice.total_cents)
+            .where(
+                Invoice.org_id.in_(org_ids),
+                Invoice.currency == currency,
+                Invoice.issued_on >= window_start - timedelta(days=90),
+            )
+        )).all()
+
+        buckets = {m: {"invoiced": 0, "collected": 0, "count": 0} for m in months}
+        countable = {InvoiceStatus.OPEN, InvoiceStatus.PAID, InvoiceStatus.FAILED,
+                     InvoiceStatus.REFUNDED}
+        for issued_on, paid_at, status, total in rows:
+            if status in countable:
+                key = f"{issued_on.year:04d}-{issued_on.month:02d}"
+                if key in buckets:
+                    buckets[key]["invoiced"] += total or 0
+                    buckets[key]["count"] += 1
+            if status == InvoiceStatus.PAID and paid_at is not None:
+                paid = _coerce_dt(paid_at)
+                key = f"{paid.year:04d}-{paid.month:02d}"
+                if key in buckets:
+                    buckets[key]["collected"] += total or 0
+
+        by_month = [
+            RevenueMonth(
+                month=m, invoiced_cents=buckets[m]["invoiced"],
+                collected_cents=buckets[m]["collected"], invoice_count=buckets[m]["count"],
+            )
+            for m in months
+        ]
+        collected_90d = sum(b.collected_cents for b in by_month[-3:])
+
+        outstanding = (await self.session.execute(
+            select(func.coalesce(func.sum(Invoice.total_cents), 0)).where(
+                Invoice.org_id.in_(org_ids),
+                Invoice.currency == currency,
+                Invoice.status == InvoiceStatus.OPEN,
+            )
+        )).scalar_one()
+
+        return currency, others, by_month, collected_90d, int(outstanding)
+
+    def _score(
+        self, *, status, devices: int, online_pct: float | None, days_quiet: int | None,
+        licenses: int, seat_utilisation: float | None, rem_total: int, rem_failed: int,
+        trial_days_left: int | None,
+    ) -> tuple[int, str, list[str]]:
+        """Score one customer 0-100 and say, in plain words, what is wrong.
+
+        Scoring lives here rather than in the portal because it is a commercial judgement
+        the platform makes, and two clients disagreeing about who is at risk is worse than
+        either answer alone.
+        """
+        reasons: list[str] = []
+
+        # Connectivity — are the devices they bought actually reporting in?
+        if devices == 0:
+            connectivity = 0.0
+            reasons.append("No devices enrolled")
+        else:
+            connectivity = self._W_CONNECTIVITY * (online_pct or 0) / 100
+            if (online_pct or 0) < 50:
+                reasons.append(f"Only {online_pct:g}% of {devices} devices online")
+
+        # Engagement — is anyone using it?
+        if days_quiet is None:
+            engagement = 0.0
+            reasons.append("No recorded activity")
+        else:
+            engagement = self._W_ENGAGEMENT * max(
+                0.0, 1 - days_quiet / self._QUIET_LIMIT_DAYS
+            )
+            if days_quiet >= 7:
+                reasons.append(f"Quiet for {days_quiet} days")
+
+        # Adoption — did they deploy what they paid for? With no licenses sold there is
+        # nothing promised, so this dimension cannot be failed.
+        if licenses == 0 or seat_utilisation is None:
+            adoption = float(self._W_ADOPTION)
+        else:
+            adoption = self._W_ADOPTION * min(1.0, seat_utilisation)
+            if seat_utilisation < 0.5:
+                reasons.append(f"{devices} of {licenses} licensed seats deployed")
+
+        # Reliability — is the product working for them? Nothing attempted is not a fault.
+        if rem_total == 0:
+            reliability = float(self._W_RELIABILITY)
+        else:
+            reliability = self._W_RELIABILITY * (rem_total - rem_failed) / rem_total
+            fail_pct = round(rem_failed * 100 / rem_total)
+            if fail_pct >= 25:
+                reasons.append(f"{fail_pct}% of fixes failed in the last 30 days")
+
+        score = round(connectivity + engagement + adoption + reliability)
+
+        # Billing trouble is not a score input — it is a fact that overrides the score.
+        # A perfectly healthy fleet that stopped paying is still an at-risk account.
+        forced = False
+        if status == SubscriptionStatus.PAST_DUE:
+            reasons.insert(0, "Payment past due")
+            forced = True
+        elif status == SubscriptionStatus.SUSPENDED:
+            reasons.insert(0, "Account suspended")
+            forced = True
+        elif status == SubscriptionStatus.CANCELED:
+            reasons.insert(0, "Subscription canceled")
+            forced = True
+        elif trial_days_left is not None and trial_days_left <= 7:
+            reasons.insert(0, f"Trial ends in {trial_days_left} day{'' if trial_days_left == 1 else 's'}")
+
+        if forced:
+            band = "at_risk"
+        elif score >= 75:
+            band = "healthy"
+        elif score >= 50:
+            band = "watch"
+        else:
+            band = "at_risk"
+        return score, band, reasons
 
     async def audit_feed(self, *, limit: int = 100) -> list[PlatformAuditRead]:
         """What the operator did, across every org — the platform.* audit trail."""

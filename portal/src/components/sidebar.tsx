@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Users, Radar,
   BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield, ShieldCheck,
-  CreditCard, Building2, ScrollText,
+  CreditCard, Building2, ScrollText, LifeBuoy,
 } from "lucide-react";
 import { logout, getMe } from "@/lib/api/auth";
 import { getUnreadCount } from "@/lib/api/notifications";
@@ -25,6 +25,9 @@ const NAV = [
   { href: "/notifications", icon: Bell, label: "Notifications" },
   { href: "/audit", icon: Shield, label: "Audit Logs" },
   { href: "/settings", icon: Settings, label: "Settings" },
+  // Last on purpose: people look for help at the bottom of a sidebar, and it is the one
+  // entry every role gets regardless of what else they can reach.
+  { href: "/help", icon: LifeBuoy, label: "Help & Support" },
 ];
 
 // The operator console — business-focused sections spanning ALL organizations.
@@ -33,6 +36,7 @@ const PLATFORM_NAV = [
   { href: "/platform", icon: ShieldCheck, label: "Overview" },
   { href: "/platform/organizations", icon: Building2, label: "Organizations" },
   { href: "/platform/billing", icon: CreditCard, label: "Billing" },
+  { href: "/platform/support", icon: LifeBuoy, label: "Support queue" },
   { href: "/platform/reports", icon: BarChart3, label: "Reports" },
   { href: "/platform/audit", icon: ScrollText, label: "Audit trail" },
   { href: "/platform/knowledge", icon: BookOpen, label: "Global knowledge" },
