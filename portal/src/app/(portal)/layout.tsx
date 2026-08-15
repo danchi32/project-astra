@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
+import { Topbar } from "@/components/topbar";
 import { ViewAsBanner } from "@/components/view-as-banner";
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <ViewAsBanner />
+        <Topbar />
         <main className="flex-1 overflow-y-auto p-6" style={{ background: "var(--bg)" }}>
           {children}
         </main>

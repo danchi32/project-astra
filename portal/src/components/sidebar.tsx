@@ -5,12 +5,10 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Users, Radar,
-  BookOpen, Zap, BarChart3, Bell, Settings, LogOut, Shield, ShieldCheck,
+  BookOpen, Zap, BarChart3, Shield, ShieldCheck,
   CreditCard, Building2, ScrollText, LifeBuoy,
 } from "lucide-react";
-import { logout, getMe } from "@/lib/api/auth";
-import { getUnreadCount } from "@/lib/api/notifications";
-import { useRouter } from "next/navigation";
+import { getMe } from "@/lib/api/auth";
 import { getViewAs } from "@/lib/viewAs";
 
 const NAV = [
@@ -22,12 +20,10 @@ const NAV = [
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/self-healing", icon: Zap, label: "Self Healing" },
   { href: "/reports", icon: BarChart3, label: "Reports" },
-  { href: "/notifications", icon: Bell, label: "Notifications" },
   { href: "/audit", icon: Shield, label: "Audit Logs" },
-  { href: "/settings", icon: Settings, label: "Settings" },
-  // Last on purpose: people look for help at the bottom of a sidebar, and it is the one
-  // entry every role gets regardless of what else they can reach.
-  { href: "/help", icon: LifeBuoy, label: "Help & Support" },
+  // Notifications, Settings, Help & Support and Sign out are not here any more — they moved
+  // to the top bar's icon strip and profile menu, where they are the same on every page and
+  // don't scroll away at the foot of a long nav.
 ];
 
 // The operator console — business-focused sections spanning ALL organizations.
@@ -41,17 +37,11 @@ const PLATFORM_NAV = [
   { href: "/platform/audit", icon: ScrollText, label: "Audit trail" },
   { href: "/platform/knowledge", icon: BookOpen, label: "Global knowledge" },
   { href: "/platform/fixes", icon: Zap, label: "Auto-fixes" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+  // Settings moved to the top bar's profile menu (see NAV above).
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { data: unreadCount } = useQuery({
-    queryKey: ["unread-notifications"],
-    queryFn: getUnreadCount,
-    refetchInterval: 30_000,
-  });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
 
   // "View as organization": while active, the operator browses the VIEWED org, so
@@ -81,11 +71,6 @@ export function Sidebar() {
           ...(me?.role === "admin" ? [{ href: "/billing", icon: CreditCard, label: "Billing" }] : []),
         ];
 
-  async function handleLogout() {
-    await logout();
-    router.push("/login");
-  }
-
   return (
     <aside
       className="flex flex-col w-56 h-screen py-4 shrink-0"
@@ -114,29 +99,10 @@ export function Sidebar() {
             >
               <Icon size={16} />
               <span className="flex-1">{label}</span>
-              {href === "/notifications" && !!unreadCount && (
-                <span
-                  className="text-xs font-semibold px-1.5 py-0.5 rounded-full leading-none"
-                  style={{ background: "#ef4444", color: "white" }}
-                >
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
             </Link>
           );
         })}
       </nav>
-
-      {/* Logout */}
-      <div className="px-2 mt-4 shrink-0">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-red-500/10 hover:text-red-500"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          <LogOut size={16} /> Sign out
-        </button>
-      </div>
     </aside>
   );
 }
