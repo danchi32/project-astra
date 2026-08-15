@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LifeBuoy, Settings, LogOut, Monitor, Sun, Moon } from "lucide-react";
+import { Bell, LifeBuoy, Settings, LogOut, Monitor, Sun, Moon, Download } from "lucide-react";
 import { getMe, logout } from "@/lib/api/auth";
 import { getUnreadCount } from "@/lib/api/notifications";
 import { getTheme, setTheme, type Theme } from "@/lib/theme";
@@ -103,6 +103,19 @@ export function Topbar() {
       className="shrink-0 flex items-center justify-end gap-1 px-4 h-14"
       style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
     >
+      {/* Get installer sits first — it is the one action a new admin comes here to do, and
+          keeping it left of the notification bell puts it where the eye lands before the
+          icon cluster. Admin-only, because only an admin can enrol a device. */}
+      {me?.role === "admin" && (
+        <Link
+          href="/install"
+          className="inline-flex items-center gap-1.5 px-3 py-2 mr-1 rounded-lg text-sm font-medium text-white shrink-0"
+          style={{ background: "var(--accent)" }}
+        >
+          <Download size={16} /> Get installer
+        </Link>
+      )}
+
       <IconButton label="Notifications" href="/notifications" badge={unread}>
         <Bell size={18} />
       </IconButton>

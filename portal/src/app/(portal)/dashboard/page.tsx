@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getMe } from "@/lib/api/auth";
 import {
   Monitor, AlertTriangle, RefreshCw, Package,
-  Zap, Bell, History, ArrowRight, CheckCircle2, XCircle, Clock, Download,
+  Zap, Bell, History, ArrowRight, CheckCircle2, XCircle, Clock,
 } from "lucide-react";
 import { getDashboardSummary, getDevices } from "@/lib/api/dashboard";
 import { getAssetSummary } from "@/lib/api/assets";
@@ -180,15 +180,6 @@ export default function DashboardPage() {
             Real-time overview of your IT environment
           </p>
         </div>
-        {me?.role === "admin" && (
-          <Link
-            href="/install"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white shrink-0"
-            style={{ background: "var(--accent)" }}
-          >
-            <Download size={16} /> Get installer
-          </Link>
-        )}
       </div>
 
       {/* What needs doing, before any measurement. Someone opens this page to find out
