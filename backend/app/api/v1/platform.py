@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.models import User
 from app.models.invoice import InvoiceStatus
 from app.models.organization import SubscriptionStatus
+from app.models.support_request import SupportRequestStatus
 from app.repositories.devices import DeviceRepository
 from app.repositories.remediation import RemediationRepository
 from app.repositories.telemetry import TelemetryRepository
@@ -19,7 +20,11 @@ from app.schemas.asset import AssetRead
 from app.schemas.billing_profile import BillingProfileRead, InvoiceRead
 from app.schemas.devices import DeviceRead
 from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build
-from app.schemas.knowledge import KnowledgeArticleCreate, KnowledgeArticleRead
+from app.schemas.help_centre import (
+    HelpArticleAdminRead,
+    HelpArticleCreate,
+    HelpArticleUpdate,
+)
 from app.schemas.platform import (
     DiscountRequest,
     GlobalFixCreate,
@@ -27,6 +32,7 @@ from app.schemas.platform import (
     OrganizationAdminRead,
     OrganizationCreate,
     OrganizationUpdate,
+    PlatformAnalytics,
     PlatformAuditRead,
     PlatformBilling,
     PlatformOverview,
@@ -35,6 +41,13 @@ from app.schemas.platform import (
     ViewAsToken,
 )
 from app.schemas.remediation import RemediationTaskRead
+from app.schemas.support_request import (
+    SupportQueue,
+    SupportReplyCreate,
+    SupportRequestRead,
+    SupportRequestSummary,
+    SupportRequestUpdate,
+)
 from app.schemas.users import UserRead
 from app.services.ai.knowledge import KnowledgeBaseService
 from app.services.ai.learned import LearnedFixStore
@@ -42,7 +55,9 @@ from app.services.assets import AssetService
 from app.services.billing_profile import BillingProfileService
 from app.services.exceptions import NotFoundError
 from app.services.platform import PlatformService
+from app.services.support_requests import SupportRequestService
 from app.services.remediation.actions import ACTIONS
+from app.api.v1.support import thread_detail
 
 
 def _fix_read(entry) -> GlobalFixRead:
@@ -86,6 +101,20 @@ async def platform_billing(
     session: AsyncSession = Depends(get_db),
 ) -> PlatformBilling:
     return await PlatformService(session).billing()
+
+
+@router.get(
+    "/analytics",
+    response_model=PlatformAnalytics,
+    summary="Revenue history and per-customer health scoring (platform admin)",
+)
+async def platform_analytics(
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> PlatformAnalytics:
+    """Invoice-backed revenue trend, conversion and churn ratios, and a health score per
+    customer with the reasons behind it. Read-only, so nothing is audited here."""
+    return await PlatformService(session).analytics()
 
 
 @router.get(
@@ -286,33 +315,143 @@ async def organization_assets(
     return await AssetService(session).list_for_org(org_id=org_id)
 
 
+# ── Support requests: customers asking ASTRA itself for help ──────────────────
+@router.get(
+    "/support-requests",
+    response_model=SupportQueue,
+    summary="Support requests from every organization (platform admin)",
+)
+async def platform_support_queue(
+    request_status: SupportRequestStatus | None = None,
+    org_id: uuid.UUID | None = None,
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> SupportQueue:
+    """Ordered by whose turn it is, then priority, then how long it has waited — a thread
+    parked on the customer is not something we owe anybody."""
+    rows, counts, org_names = await SupportRequestService(session).queue(
+        status=request_status, org_id=org_id
+    )
+    requests = []
+    for r in rows:
+        summary = SupportRequestSummary.model_validate(r)
+        summary.org_name = org_names.get(str(r.org_id))
+        requests.append(summary)
+    return SupportQueue(requests=requests, counts_by_status=counts)
+
+
+@router.get(
+    "/support-requests/{request_id}",
+    response_model=SupportRequestRead,
+    summary="Read one support thread from any organization (platform admin)",
+)
+async def platform_support_thread(
+    request_id: uuid.UUID,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> SupportRequestRead:
+    return await thread_detail(
+        SupportRequestService(session), actor=actor, request_id=request_id, operator=True
+    )
+
+
+@router.post(
+    "/support-requests/{request_id}/replies",
+    response_model=SupportRequestRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Answer a customer's support request (platform admin)",
+)
+async def platform_support_reply(
+    request_id: uuid.UUID,
+    body: SupportReplyCreate,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> SupportRequestRead:
+    """Replying notifies the customer and hands the thread back to them."""
+    service = SupportRequestService(session)
+    await service.reply(
+        actor=actor, request_id=request_id, body=body.body, from_operator=True
+    )
+    return await thread_detail(service, actor=actor, request_id=request_id, operator=True)
+
+
+@router.patch(
+    "/support-requests/{request_id}",
+    response_model=SupportRequestSummary,
+    summary="Set a support request's status or priority (platform admin)",
+)
+async def platform_support_update(
+    request_id: uuid.UUID,
+    body: SupportRequestUpdate,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> SupportRequestSummary:
+    updated = await SupportRequestService(session).update(
+        actor=actor, request_id=request_id,
+        status=body.status, priority=body.priority,
+    )
+    return SupportRequestSummary.model_validate(updated)
+
+
 # ── Global knowledge: problem→solution articles shared with EVERY organization ──
 @router.get(
     "/knowledge",
-    response_model=list[KnowledgeArticleRead],
-    summary="List global knowledge articles (platform admin)",
+    response_model=list[HelpArticleAdminRead],
+    summary="List support articles, published and withdrawn (platform admin)",
 )
 async def list_global_knowledge(
     _: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_db),
-) -> list[KnowledgeArticleRead]:
-    return await KnowledgeBaseService(session).list_global()
+) -> list[HelpArticleAdminRead]:
+    """Every global article, published or not — this is the authoring view."""
+    return [
+        HelpArticleAdminRead.model_validate(a)
+        for a in await KnowledgeBaseService(session).list_global()
+    ]
 
 
 @router.post(
     "/knowledge",
-    response_model=KnowledgeArticleRead,
+    response_model=HelpArticleAdminRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add a global problem+solution applied to all organizations (platform admin)",
+    summary="Publish a support article to every organization (platform admin)",
 )
 async def create_global_knowledge(
-    body: KnowledgeArticleCreate,
+    body: HelpArticleCreate,
     actor: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_db),
-) -> KnowledgeArticleRead:
-    return await KnowledgeBaseService(session).create_global(
-        title=body.title, content=body.content, actor_user_id=actor.id
+) -> HelpArticleAdminRead:
+    """Creates it published. An article written and left invisible helps nobody, and the
+    operator can withdraw it in one call if it was not ready."""
+    article = await KnowledgeBaseService(session).create_global(
+        title=body.title, content=body.content, actor_user_id=actor.id,
+        help_category=body.help_category, error_code=body.error_code,
     )
+    return HelpArticleAdminRead.model_validate(article)
+
+
+@router.patch(
+    "/knowledge/{article_id}",
+    response_model=HelpArticleAdminRead,
+    summary="Edit, publish or withdraw a support article (platform admin)",
+)
+async def update_global_knowledge(
+    article_id: uuid.UUID,
+    body: HelpArticleUpdate,
+    _: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> HelpArticleAdminRead:
+    sent = body.model_fields_set
+    article = await KnowledgeBaseService(session).update_global(
+        article_id=article_id,
+        title=body.title, content=body.content,
+        help_category=body.help_category, error_code=body.error_code,
+        published=body.published,
+        # Sending the key as null means "remove this"; leaving it out means "don't touch".
+        clear_category="help_category" in sent and body.help_category is None,
+        clear_error_code="error_code" in sent and body.error_code is None,
+    )
+    return HelpArticleAdminRead.model_validate(article)
 
 
 @router.delete(

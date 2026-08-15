@@ -205,6 +205,125 @@ export interface PlatformOverview {
   remediation_pending: number;
 }
 
+// ── Operator analytics: revenue history + per-customer health ──────────────
+
+export interface RevenueMonth {
+  month: string;               // "2026-07"
+  invoiced_cents: number;
+  collected_cents: number;
+  invoice_count: number;
+}
+
+export type HealthBand = "healthy" | "watch" | "at_risk";
+
+/** One customer, scored on whether they're getting value — a leading indicator that
+ *  moves before the subscription status does. Scoring happens server-side. */
+export interface OrgHealthRow {
+  org_id: string;
+  org_name: string;
+  plan: string;
+  plan_tier: string;
+  subscription_status: SubscriptionStatus;
+
+  licenses: number;
+  users: number;
+  devices: number;
+  online_devices: number;
+  online_pct: number | null;
+  seat_utilisation: number | null;
+
+  last_activity_at: string | null;
+  days_quiet: number | null;
+
+  remediation_total_30d: number;
+  remediation_failed_30d: number;
+
+  mrr_cents: number | null;
+  trial_days_left: number | null;
+
+  health_score: number;
+  health_band: HealthBand;
+  risk_reasons: string[];
+}
+
+export interface PlatformAnalytics {
+  /** The trend is denominated in ONE currency — ASTRA bills in both INR and USD, and
+   *  adding paise to cents produces a number that means nothing. */
+  revenue_currency: string | null;
+  other_currencies: string[];
+  revenue_by_month: RevenueMonth[];
+  collected_90d_cents: number;
+  outstanding_cents: number;
+
+  arpa_cents: number | null;
+  trial_conversion_rate: number | null;
+  churn_rate: number | null;
+  canceled_orgs: number;
+
+  org_health: OrgHealthRow[];          // worst first
+  health_counts: Record<HealthBand, number>;
+}
+
+// ── Help centre: ASTRA's own support documentation ─────────────────────────
+
+export interface HelpArticleSummary {
+  id: string;
+  title: string;
+  help_category: string | null;
+  error_code: string | null;
+  created_at: string;
+}
+
+export interface HelpArticle extends HelpArticleSummary {
+  content: string;
+}
+
+/** The operator's view — includes drafts, so publication state travels with it. */
+export interface HelpArticleAdmin extends HelpArticle {
+  published_at: string | null;
+}
+
+// ── Support requests: a customer asking ASTRA for help ─────────────────────
+
+export type SupportRequestStatus =
+  | "open" | "in_progress" | "waiting_customer" | "resolved" | "closed";
+
+export type SupportRequestPriority = "low" | "normal" | "high" | "urgent";
+
+export interface SupportMessage {
+  id: string;
+  body: string;
+  from_operator: boolean;
+  author_email: string | null;
+  created_at: string;
+}
+
+export interface SupportRequestSummary {
+  id: string;
+  reference: string;
+  subject: string;
+  category: string | null;
+  status: SupportRequestStatus;
+  priority: SupportRequestPriority;
+  created_at: string;
+  last_reply_at: string | null;
+  org_id?: string | null;
+  org_name?: string | null;
+}
+
+export interface SupportRequestDetail extends SupportRequestSummary {
+  /** The fleet snapshot captured when the request was raised. Shown to the customer as
+   *  well as the operator — a form that quietly attaches this is one nobody should trust. */
+  diagnostics: Record<string, unknown> | null;
+  resolved_at: string | null;
+  messages: SupportMessage[];
+}
+
+export interface SupportQueue {
+  requests: SupportRequestSummary[];
+  counts_by_status: Record<string, number>;
+}
+
 // ── Per-org email sending (DNS-verified) ───────────────────────────────────
 
 export type EmailVerificationStatus = "unconfigured" | "pending" | "verified" | "failed";
@@ -309,8 +428,13 @@ export interface PlatformBilling {
   rows: PlatformBillingRow[];
 }
 
+export interface MonthCount {
+  month: string;               // "2026-07"
+  count: number;
+}
+
 export interface PlatformReports {
-  signups_by_month: { month: string; count: number }[];
+  signups_by_month: MonthCount[];
   remediation_total_30d: number;
   remediation_succeeded_30d: number;
   remediation_failed_30d: number;

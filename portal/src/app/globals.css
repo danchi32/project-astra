@@ -9,6 +9,19 @@
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --accent: #9a2fbb;
+
+  /* Chart series. Two slots only, and deliberately purple/orange rather than two
+     neighbouring hues: the pair was validated for deuteranopia separation against both
+     surfaces, and adjacent purples fail that badly while looking fine to most people. */
+  --chart-series-1: #b246d4;
+  --chart-series-2: #c2620a;
+  --chart-grid: #ecdcf5;
+
+  /* Status. Reserved for state — never borrowed as a third series colour. These are the
+     text-weight steps; the tinted backgrounds they sit on are mixed from them at use. */
+  --health-good: #15803d;
+  --health-warn: #b45309;
+  --health-bad: #b91c1c;
 }
 
 .dark {
@@ -18,6 +31,16 @@
   --text-primary: #f5f1fb;
   --text-secondary: #b6abcb;
   --accent: #c86ce7;
+
+  /* Re-stepped for the dark surface rather than reused — the light steps sit outside the
+     dark lightness band and lose contrast against #16112a. */
+  --chart-series-1: #b96be0;
+  --chart-series-2: #cf7d1f;
+  --chart-grid: #322350;
+
+  --health-good: #4ade80;
+  --health-warn: #fbbf24;
+  --health-bad: #f87171;
 }
 
 body {

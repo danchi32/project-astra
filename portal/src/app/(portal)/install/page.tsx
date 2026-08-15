@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { ChevronLeft, Download } from "lucide-react";
+import { ChevronLeft, Download, LifeBuoy } from "lucide-react";
 import { InstallAgentPanel } from "@/components/install-agent-panel";
 
 export default function InstallPage() {
@@ -21,6 +21,32 @@ export default function InstallPage() {
         </div>
       </div>
       <InstallAgentPanel defaultOpen />
+
+      {/* Installation is where people get stuck, and someone stuck here is not going to go
+          looking through a sidebar for the word "help". */}
+      <div
+        className="rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex items-center gap-2.5">
+          <LifeBuoy size={17} style={{ color: "var(--text-secondary)" }} />
+          <div>
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+              Install not working?
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              Search the guides by the error code you saw, or ask the ASTRA team.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/help"
+          className="px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+          style={{ border: "1px solid var(--border)", color: "var(--accent)" }}
+        >
+          Open help &amp; support
+        </Link>
+      </div>
     </div>
   );
 }

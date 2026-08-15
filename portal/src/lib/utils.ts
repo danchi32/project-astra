@@ -38,6 +38,52 @@ export function formatCurrency(n: number): string {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
+/** Format minor units (cents, paise) in their own currency, e.g. 125000 -> "$1,250".
+ *
+ * Money reaches the operator console in whatever currency it was billed in — ASTRA sells
+ * through Razorpay (INR) and Paddle (USD) — so the currency travels with the number
+ * instead of being assumed. A null currency means there was nothing to denominate. */
+export function formatMinor(cents: number | null | undefined, currency: string | null): string {
+  if (cents == null) return "—";
+  const amount = cents / 100;
+  if (!currency) return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return amount.toLocaleString(undefined, {
+    style: "currency", currency, maximumFractionDigits: 0,
+  });
+}
+
+/** A short money label for chart axes, e.g. 1_250_00 -> "$1.3k". Axis ticks have no room
+ *  for grouped thousands, and an unreadable axis is worse than a rounded one. */
+export function formatMinorCompact(cents: number, currency: string | null): string {
+  const amount = cents / 100;
+  const symbol = currency
+    ? (0).toLocaleString(undefined, { style: "currency", currency, maximumFractionDigits: 0 })
+        .replace(/[\d\s.,]/g, "")
+    : "";
+  const abs = Math.abs(amount);
+  if (abs >= 1_000_000) return `${symbol}${(amount / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${symbol}${(amount / 1_000).toFixed(1)}k`;
+  return `${symbol}${Math.round(amount)}`;
+}
+
+/** "2026-07" -> "Jul". Chart axes label the month; the year lives in the tooltip. */
+export function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return month;
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, {
+    month: "short", timeZone: "UTC",
+  });
+}
+
+/** "2026-07" -> "July 2026", for tooltips where the full date is worth the space. */
+export function monthLabelLong(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  if (!y || !m) return month;
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, {
+    month: "long", year: "numeric", timeZone: "UTC",
+  });
+}
+
 /** Format an ISO timestamp as a short relative time, e.g. "5m ago", "3d ago". */
 export function formatRelativeTime(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();

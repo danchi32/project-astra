@@ -28,6 +28,12 @@ from app.models.refresh_token import RefreshToken
 from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
 from app.models.semantic_cache import SemanticCacheEntry
 from app.models.support_escalation import EscalationState, SupportEscalation
+from app.models.support_request import (
+    SupportRequest,
+    SupportRequestMessage,
+    SupportRequestPriority,
+    SupportRequestStatus,
+)
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
@@ -84,6 +90,10 @@ __all__ = [
     "HelpdeskSettings",
     "SemanticCacheEntry",
     "SupportEscalation",
+    "SupportRequest",
+    "SupportRequestMessage",
+    "SupportRequestPriority",
+    "SupportRequestStatus",
     "TelemetryDailyRollup",
     "TelemetrySnapshot",
     "User",

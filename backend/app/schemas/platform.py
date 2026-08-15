@@ -142,6 +142,75 @@ class PlatformReports(BaseModel):
     messages_30d: int
 
 
+class RevenueMonth(BaseModel):
+    """One calendar month of billing, taken from invoices rather than from a live
+    seat-count estimate.
+
+    `invoiced` is what was billed in the month; `collected` is what was actually paid in it.
+    They are deliberately separate series — a month can bill well and collect badly, and that
+    gap is the number worth watching.
+    """
+    month: str                        # "2026-07"
+    invoiced_cents: int
+    collected_cents: int
+    invoice_count: int
+
+
+class OrgHealthRow(BaseModel):
+    """One customer, scored on whether they are actually getting value.
+
+    The subscription status says whether they are paying. This says whether they are likely
+    to keep doing so, which is a different and earlier question.
+    """
+    org_id: uuid.UUID
+    org_name: str
+    plan: str
+    plan_tier: str
+    subscription_status: SubscriptionStatus
+
+    licenses: int
+    users: int
+    devices: int
+    online_devices: int
+    online_pct: float | None          # None when nothing is enrolled to be online
+    seat_utilisation: float | None    # devices / licenses; None when no licenses sold
+
+    last_activity_at: datetime | None
+    days_quiet: int | None            # None when the org has never done anything
+
+    remediation_total_30d: int
+    remediation_failed_30d: int
+
+    mrr_cents: int | None
+    trial_days_left: int | None
+
+    health_score: int                 # 0-100
+    health_band: str                  # "healthy" | "watch" | "at_risk"
+    risk_reasons: list[str]           # plain-language, ordered most severe first
+
+
+class PlatformAnalytics(BaseModel):
+    """The operator console's analytical layer: real revenue history and per-customer
+    health, as opposed to the point-in-time counters on /platform/overview."""
+
+    # Revenue is denominated in ONE currency. ASTRA bills on Razorpay (INR) and Paddle
+    # (USD), and adding paise to cents produces a number that means nothing — so the trend
+    # covers the currency most invoices are in, and names any others it left out.
+    revenue_currency: str | None
+    other_currencies: list[str]
+    revenue_by_month: list[RevenueMonth]      # last 12 months, oldest first
+    collected_90d_cents: int
+    outstanding_cents: int                    # issued and still unpaid
+
+    arpa_cents: int | None                    # average revenue per active account
+    trial_conversion_rate: float | None       # % of finished trials that became active
+    churn_rate: float | None                  # % of ever-paying orgs now canceled
+    canceled_orgs: int
+
+    org_health: list[OrgHealthRow]            # worst health first
+    health_counts: dict[str, int]             # band -> number of orgs
+
+
 class PlatformAuditRead(BaseModel):
     """A platform-operator action, resolved with org and actor names."""
     id: uuid.UUID
