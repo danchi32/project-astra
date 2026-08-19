@@ -19,6 +19,7 @@ Placeholders are substituted with str.replace (not str.format) so PowerShell's
 own braces need no escaping.
 """
 import io
+import json
 import zipfile
 from pathlib import Path
 
@@ -27,6 +28,17 @@ _DOWNLOADS = Path(__file__).resolve().parents[2] / "downloads"
 PORTABLE_ZIP = _DOWNLOADS / "agent-portable.zip"
 # Org-agnostic uninstaller (Uninstall-AstraAgent.bat + .ps1), offered as a separate download.
 UNINSTALLER_ZIP = _DOWNLOADS / "agent-uninstaller.zip"
+
+# Single-file .exe installer, built by agent/install/Build-Installer.ps1. Unlike the
+# zip it is NOT generated per organization: the Inno Setup compiler is Windows-only
+# and this backend runs on Linux, so one prebuilt exe is served to everyone and the
+# per-org enrollment key travels in the filename it is served under. The sidecar
+# records which backend it was compiled against — see setup_exe_path().
+SETUP_EXE = _DOWNLOADS / "AstraAgent-Setup.exe"
+SETUP_MANIFEST = _DOWNLOADS / "AstraAgent-Setup.json"
+# Must match KeyPrefix in agent/install/AstraAgent.iss — that script parses the key
+# back out of its own filename, so the two spellings have to agree exactly.
+SETUP_EXE_PREFIX = "AstraAgent-Setup-"
 
 # Optional IP the portable installer pins the backend hostname to, for networks whose
 # DNS can't resolve it. Empty = no pin, which is correct whenever the backend is on a
@@ -306,6 +318,41 @@ def build_portable_install_script(
         .replace("@@TOKEN@@", enrollment_token)
         .replace("@@BACKEND_IP@@", backend_ip)
     )
+
+
+def setup_exe_path(server_url: str) -> Path:
+    """The prebuilt .exe installer, if this deployment can legitimately serve it.
+
+    The backend URL is compiled into the exe, so an exe built for one deployment
+    would silently enrol devices into another. Rather than hand that out, refuse it
+    and let the caller fall back to the .zip, which is always built to match.
+    """
+    if not SETUP_EXE.is_file() or not SETUP_MANIFEST.is_file():
+        raise FileNotFoundError(
+            "The .exe installer is not bundled with this deployment. Build it with "
+            "agent/install/Build-Installer.ps1 and commit backend/downloads/."
+        )
+    try:
+        built_for = str(json.loads(SETUP_MANIFEST.read_text())["server_url"]).rstrip("/")
+    except (ValueError, KeyError, OSError) as exc:
+        raise FileNotFoundError(f"{SETUP_MANIFEST.name} is unreadable: {exc}") from exc
+
+    if built_for != server_url.rstrip("/"):
+        raise FileNotFoundError(
+            f"The bundled .exe installer points at {built_for}, but this deployment "
+            f"is {server_url}. Rebuild it with -ServerUrl {server_url}."
+        )
+    return SETUP_EXE
+
+
+def setup_exe_filename(enrollment_key: str) -> str:
+    """The name the .exe must be served under, since that is where it reads the key.
+
+    Enrollment keys are secrets.token_urlsafe, so they contain only characters that
+    are safe in a filename and in a Content-Disposition header. Anything else would
+    be a bug upstream, and the installer would reject it anyway.
+    """
+    return f"{SETUP_EXE_PREFIX}{enrollment_key}.exe"
 
 
 def build_offline_bundle_zip(

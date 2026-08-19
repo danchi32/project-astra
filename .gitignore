@@ -63,3 +63,7 @@ agent/install/dist-fd/
 agent/install/dist-tray/
 agent/install/AstraAgent-Portable.zip
 agent/install/dist-tray-new/
+# Staged by stage_installer_payload.py on every .exe build, straight out of
+# backend/downloads/agent-portable.zip — never edited by hand.
+agent/install/payload/
+agent/install/payload-manifest.json

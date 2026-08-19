@@ -42,6 +42,11 @@ class InstallerRead(BaseModel):
     enrollment_key: str
     server_url: str
     filename: str
+    # Name the one-click .exe installer must be downloaded as — it reads the
+    # enrollment key back out of its own filename. None when this deployment has no
+    # usable .exe (not bundled, or built for a different backend), which is also the
+    # portal's signal to offer only the .zip.
+    exe_filename: str | None = None
 
 
 class EnrollRequest(BaseModel):

@@ -2,7 +2,13 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Copy, Check, RefreshCw } from "lucide-react";
-import { getInstaller, rotateEnrollmentKey, downloadOfflineInstaller, downloadUninstaller } from "@/lib/api/devices";
+import {
+  getInstaller,
+  rotateEnrollmentKey,
+  downloadOfflineInstaller,
+  downloadExeInstaller,
+  downloadUninstaller,
+} from "@/lib/api/devices";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -22,6 +28,7 @@ function CopyButton({ text }: { text: string }) {
 export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
+  const [exeBusy, setExeBusy] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [uninstallBusy, setUninstallBusy] = useState(false);
   const [rotating, setRotating] = useState(false);
@@ -35,6 +42,15 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
   });
 
   const runCmd = "powershell -ExecutionPolicy Bypass -File .\\Install-AstraAgent.ps1";
+
+  async function downloadExe(filename: string) {
+    setExeBusy(true); setError("");
+    try {
+      await downloadExeInstaller(filename);
+    } catch (err) {
+      setError((err as Error)?.message || "Couldn't download the .exe installer. Try again.");
+    } finally { setExeBusy(false); }
+  }
 
   async function downloadOffline() {
     setOfflineBusy(true); setError("");
@@ -106,22 +122,54 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
                   1. On the target Windows machine, download the installer
                 </p>
                 <div className="flex flex-wrap gap-2">
+                  {installer.exe_filename && (
+                    <button onClick={() => downloadExe(installer.exe_filename!)} disabled={exeBusy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                      style={{ background: "var(--accent)" }}>
+                      <Download size={15} /> {exeBusy ? "Preparing…" : "Download installer (.exe)"}
+                    </button>
+                  )}
                   <button onClick={downloadOffline} disabled={offlineBusy}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-                    style={{ background: "var(--accent)" }}>
-                    <Download size={15} /> {offlineBusy ? "Preparing…" : "Download installer (.zip)"}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                    style={installer.exe_filename
+                      ? { background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }
+                      : { background: "var(--accent)", color: "white" }}>
+                    <Download size={15} /> {offlineBusy ? "Preparing…" : ".zip (mass deployment)"}
                   </button>
                 </div>
+                {installer.exe_filename && (
+                  // The key travels in the filename, so a rename breaks enrolment — the
+                  // installer then has to ask for the key by hand. Say so before it happens.
+                  <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
+                    Save the .exe under the name it downloads as — your enrollment key is part of it.
+                    Then just double-click; there is nothing to extract and nothing to type.
+                  </p>
+                )}
                 <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
-                  Your server URL and enrollment key are already baked in — nothing to type. Extract the
-                  .zip and double-click <span className="font-mono">Install.bat</span> (or run the command below).
+                  The .zip is for Intune/SCCM/GPO rollouts, or any machine where you would rather
+                  run the script yourself.
+                </p>
+              </div>
+
+              {/* Honest about the one rough edge, rather than letting an admin hit it cold
+                  on a user's machine and assume the installer is broken. */}
+              <div className="rounded-lg p-3" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.35)" }}>
+                <p className="text-xs font-medium" style={{ color: "#f59e0b" }}>Windows will warn the first time</p>
+                <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                  The agent is not code-signed yet, so SmartScreen shows{" "}
+                  <span className="font-medium">“Windows protected your PC”</span> — click{" "}
+                  <span className="font-medium">More info → Run anyway</span>. On PCs with{" "}
+                  <span className="font-medium">Smart App Control</span> switched on, the agent is blocked
+                  outright and that setting has to be turned off first. Both go away once we ship a
+                  signed build.
                 </p>
               </div>
 
               {/* Step 2 — run */}
               <div className="rounded-lg p-3 space-y-2" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
                 <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-                  2. Right-click → <span className="font-semibold">Run with PowerShell</span> (approve the prompt), or run:
+                  2. Approve the admin prompt. Using the .zip instead? Extract it and double-click{" "}
+                  <span className="font-mono">Install.bat</span>, or run:
                 </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs font-mono px-2 py-1.5 rounded truncate" style={{ background: "var(--surface)", color: "var(--text-primary)" }}>{runCmd}</code>

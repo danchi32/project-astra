@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
@@ -77,6 +78,30 @@ async def generate_offline_installer(
         status_code=status.HTTP_201_CREATED,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/exe-installer",
+    summary="One-click Windows installer (.exe, admin only)",
+    responses={200: {"content": {"application/vnd.microsoft.portable-executable": {}}}},
+)
+async def download_exe_installer(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> FileResponse:
+    """The same prebuilt exe for every organization — the enrollment key is carried
+    by the filename, which is why the name here is not cosmetic. Clients must save it
+    verbatim (GET /devices/installer reports it as `exe_filename`)."""
+    try:
+        filename, path = await DeviceService(session).exe_installer(actor=actor)
+    except FileNotFoundError as exc:
+        # Same contract as the zip: say why rather than returning a bare 500.
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+    return FileResponse(
+        path,
+        media_type="application/vnd.microsoft.portable-executable",
+        filename=filename,
     )
 
 

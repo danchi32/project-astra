@@ -57,6 +57,20 @@ export const downloadOfflineInstaller = async () => {
   }
 };
 
+// Downloads the one-click .exe installer. The filename is NOT cosmetic: the exe is the
+// same prebuilt file for every organization and reads the enrollment key back out of its
+// own name, so it must be saved exactly as the server named it. That name comes from
+// getInstaller().exe_filename rather than being rebuilt here, so the convention lives in
+// one place — the backend, next to the installer that parses it.
+export const downloadExeInstaller = async (filename: string) => {
+  try {
+    const res = await apiClient.post("/devices/exe-installer", undefined, { responseType: "blob" });
+    triggerDownload(res.data as Blob, filename);
+  } catch (err) {
+    throw new Error(await blobErrorMessage(err, "Couldn't download the .exe installer."));
+  }
+};
+
 // Org-agnostic uninstaller (Uninstall-AstraAgent.bat + .ps1), offered as a separate download.
 export const downloadUninstaller = async () => {
   const res = await apiClient.get("/downloads/uninstaller", { responseType: "blob" });

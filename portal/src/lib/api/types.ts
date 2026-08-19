@@ -806,7 +806,11 @@ export interface Installer {
   enrollment_key: string;
   server_url: string;
   filename: string;
-  script: string;
+  // Name the .exe installer must be saved as — it recovers the enrollment key from its
+  // own filename. null when this deployment has no usable .exe, which is the signal to
+  // offer only the .zip. (`script` used to be here; the API stopped sending it when the
+  // self-downloading installer was removed, and nothing read it.)
+  exe_filename: string | null;
 }
 
 export interface OrganizationSettings {

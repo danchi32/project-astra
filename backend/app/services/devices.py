@@ -1,5 +1,6 @@
 import uuid
 from datetime import timedelta
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,11 @@ from app.schemas.devices import (
     HeartbeatRequest,
     InstallerRead,
 )
-from app.services.agent_installer import build_offline_bundle_zip
+from app.services.agent_installer import (
+    build_offline_bundle_zip,
+    setup_exe_filename,
+    setup_exe_path,
+)
 from app.services.audit import AuditService
 from app.services.exceptions import AuthenticationError, NotFoundError, ValidationError
 from app.services.settings import SettingsService
@@ -85,10 +90,18 @@ class DeviceService:
         portal displays alongside it."""
         org = await self._ensure_enrollment_key(actor.org_id)
         server_url = get_settings().public_api_url.rstrip("/")
+        try:
+            setup_exe_path(server_url)
+        except FileNotFoundError:
+            # No usable .exe for this deployment; the portal then offers only the zip.
+            exe_filename = None
+        else:
+            exe_filename = setup_exe_filename(org.agent_enrollment_key)
         return InstallerRead(
             enrollment_key=org.agent_enrollment_key,
             server_url=server_url,
             filename="Install-AstraAgent.ps1",
+            exe_filename=exe_filename,
         )
 
     async def rotate_enrollment_key(self, *, actor: User) -> InstallerRead:
@@ -123,6 +136,18 @@ class DeviceService:
             backend_ip=settings.agent_backend_ip.strip(),
         )
         return "AstraAgent-Portable.zip", content
+
+    async def exe_installer(self, *, actor: User) -> tuple[str, Path]:
+        """The one-click .exe installer and the filename it must be served under.
+
+        Returns a path, not bytes: the exe is the same prebuilt file for every
+        organization (only the name differs), so there is nothing to generate and no
+        reason to read ~3 MB into memory on each download.
+        """
+        org = await self._ensure_enrollment_key(actor.org_id)
+        server_url = get_settings().public_api_url.rstrip("/")
+        path = setup_exe_path(server_url)  # FileNotFoundError -> 503, as for the zip
+        return setup_exe_filename(org.agent_enrollment_key), path
 
     async def list_enrollment_tokens(self, *, actor: User) -> list[EnrollmentToken]:
         return await self.enrollment_tokens.list_by_org(actor.org_id)
