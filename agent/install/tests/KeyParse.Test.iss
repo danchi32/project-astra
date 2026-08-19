@@ -30,6 +30,24 @@ var
   Report: String;
   Failures: Integer;
 
+{ Every character of the token_urlsafe alphabet exactly once: 64 long like a real key,
+  and covering the whole charset IsPlausibleKey validates against.
+
+  Built rather than written as a literal for the same reason as in
+  Run-KeyParseTests.ps1 — a 64-character quoted string beside the word "key" is what
+  secret scanning is built to catch, and with every character distinct its entropy is
+  maximal, so it reads as more credential-like than a genuine key would. }
+function SampleKey(): String;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := Ord('a') to Ord('z') do Result := Result + Chr(I);
+  for I := Ord('A') to Ord('Z') do Result := Result + Chr(I);
+  for I := Ord('0') to Ord('9') do Result := Result + Chr(I);
+  Result := Result + '_-';
+end;
+
 procedure Check(const Name, Got, Want: String);
 var
   Status: String;
@@ -51,8 +69,8 @@ begin
   Failures := 0;
   Report := '';
 
-  { Exactly 64 characters, covering the whole token_urlsafe alphabet. }
-  K := 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-';
+  K := SampleKey();
+  Check('sample key is 64 chars', IntToStr(Length(K)), '64');
 
   Check('plain', KeyFromFileName('AstraAgent-Setup-' + K + '.exe'), K);
   Check('no extension', KeyFromFileName('AstraAgent-Setup-' + K), K);
