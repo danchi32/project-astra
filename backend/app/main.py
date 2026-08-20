@@ -172,12 +172,17 @@ async def validation_error_handler(request: Request, exc: ValidationError) -> JS
 
 @app.get("/health", tags=["system"], summary="Liveness probe")
 async def health() -> dict[str, object]:
+    from app.services.ai.provider import last_auth_error
     from app.services.email import EmailService
 
-    # Minimal, non-sensitive liveness signal (booleans only — no secrets/values).
+    # Minimal, non-sensitive liveness signal (booleans and a timestamp — no secrets).
     return {
         "status": "ok",
         "service": settings.app_name,
         "email_enabled": EmailService().enabled,
         "ai_enabled": bool(settings.anthropic_api_key),  # False -> AI runs on the stub
+        # A key can be configured and still be refused, which is exactly what happened:
+        # ai_enabled stayed true for weeks while every call came back 401. This is when
+        # this process last saw that, so "configured" and "working" can be told apart.
+        "ai_auth_error_at": last_auth_error(),
     }

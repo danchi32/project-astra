@@ -11,6 +11,7 @@ import pytest
 
 from app.core.config import get_settings
 from app.services.ai.knowledge import KnowledgeBaseService
+from app.services.ai.provider import LLMResponse
 from app.services.ai.support_bot import SupportBot, _recent
 
 pytestmark = pytest.mark.anyio if False else []  # tests run under the project's asyncio mode
@@ -292,3 +293,120 @@ def test_the_public_scope_has_no_way_to_name_an_organization():
 
     signature = inspect.signature(SupportBot.answer)
     assert set(signature.parameters) == {"self", "question", "history", "org_id"}
+
+
+# -- knowing the product -------------------------------------------------------
+#
+# The website bot's whole job. It went live answering "I don't have anything on that" to
+# questions the pricing page answers in a glance, because it could only speak from what
+# retrieval happened to match. These are the questions it has to get right.
+
+
+class _Recorder:
+    """A provider that answers with a fixed string and keeps what it was asked."""
+
+    def __init__(self, text: str = "answered") -> None:
+        self.text = text
+        self.system = None
+        self.messages = None
+
+    async def generate(self, *, system, messages, tools):
+        self.system, self.messages = system, messages
+        return LLMResponse(text=self.text)
+
+
+class _Broken:
+    """A provider whose key has expired — the state production was actually in."""
+
+    async def generate(self, *, system, messages, tools):
+        import anthropic  # noqa: F401  (only to make the shape of the failure realistic)
+
+        raise RuntimeError("Error code: 401 - API key is invalid")
+
+
+async def test_the_public_bot_quotes_real_prices(client):
+    response = await client.post(PUBLIC, json={"message": "how much does astra cost?"})
+    answer = response.json()["answer"]
+
+    # The numbers the pricing page shows, not a paraphrase of "contact sales".
+    assert "$5.99" in answer and "$4.49" in answer and "$8.99" in answer
+
+
+async def test_the_public_bot_can_list_what_the_product_does(client):
+    response = await client.post(PUBLIC, json={"message": "what features does it have?"})
+    body = response.json()
+
+    assert body["grounded"] is True
+    assert "self-healing" in body["answer"].lower()
+
+
+async def test_a_pricing_question_does_not_surface_a_troubleshooting_guide(
+    client, session_factory
+):
+    """What the live site did: asked about price, answered with "An application is not
+    responding". A weak semantic match is not an answer, it is an embarrassment."""
+    await _global_article(
+        session_factory,
+        title="An application is not responding or will not open",
+        content="Restart the application from the tray assistant.",
+    )
+
+    response = await client.post(PUBLIC, json={"message": "how much does it cost?"})
+    titles = [s["title"] for s in response.json()["sources"]]
+
+    assert "An application is not responding or will not open" not in titles
+
+
+async def test_the_model_gets_the_whole_product_brief(session_factory, org):
+    """Retrieval cannot anticipate every question, so the product travels in the prompt."""
+    from app.services.ai.public_faq import PRODUCT_BRIEF
+
+    for org_id in (None, org.id):
+        recorder = _Recorder()
+        async with session_factory() as s:
+            await SupportBot(s, provider=recorder).answer(
+                question="can it patch 200 laptops overnight?", org_id=org_id
+            )
+        assert PRODUCT_BRIEF in recorder.system[0]["text"]
+        # One cached block, so the brief is billed once per window rather than per visitor.
+        assert recorder.system[0]["cache_control"] == {"type": "ephemeral"}
+
+
+async def test_an_invalid_api_key_still_gets_the_visitor_an_answer(session_factory):
+    """The regression that made the live widget useless: the key was rejected, and every
+    reply became an apology while the FAQ sat right there, retrieved and unused."""
+    async with session_factory() as s:
+        reply = await SupportBot(s, provider=_Broken()).answer(
+            question="is there a free trial?", org_id=None
+        )
+
+    assert "free trial" in reply.answer.lower()
+    assert "unavailable" not in reply.answer.lower()
+    assert reply.sources
+
+
+async def test_a_question_with_no_document_still_reaches_the_model(session_factory):
+    """It can answer from the brief — but it is flagged ungrounded, because a question
+    nothing matched is the one most worth putting in front of a person."""
+    recorder = _Recorder(text="Yes, through Intune.")
+    async with session_factory() as s:
+        reply = await SupportBot(s, provider=recorder).answer(
+            question="zxqv unmatched phrasing", org_id=None
+        )
+
+    assert recorder.messages is not None, "the model must still be asked"
+    assert reply.answer == "Yes, through Intune."
+    assert reply.grounded is False
+
+
+async def test_a_rejected_api_key_is_visible_on_the_health_check(client, monkeypatch):
+    """`ai_enabled` says a key is configured, which stayed true for weeks while every call
+    was refused. Configured and working have to be distinguishable from outside."""
+    import app.services.ai.provider as provider
+
+    monkeypatch.setattr(provider, "_last_auth_error", None)
+    assert (await client.get("/health")).json()["ai_auth_error_at"] is None
+
+    monkeypatch.setattr(provider, "_last_auth_error", "2026-08-20T12:00:00+00:00")
+    body = (await client.get("/health")).json()
+    assert body["ai_auth_error_at"] == "2026-08-20T12:00:00+00:00"

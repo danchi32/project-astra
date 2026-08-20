@@ -57,6 +57,21 @@ class LLMProvider(Protocol):
         ...
 
 
+#: When Anthropic last rejected our credentials, as a UTC ISO string, or None.
+#:
+#: Module-level and per process, which is enough for what it is for. The production key
+#: was rejected on every call for weeks and nothing said so: /health reported the key was
+#: CONFIGURED, which it was, and the assistants degraded politely to "the AI service is
+#: temporarily unavailable" — a sentence that reads like a blip, not like an outage. The
+#: only trace was a stack trace in the logs nobody had reason to read. So the fact is
+#: recorded where a health check can see it.
+_last_auth_error: str | None = None
+
+
+def last_auth_error() -> str | None:
+    return _last_auth_error
+
+
 class AnthropicProvider:
     """Calls Claude via the official Anthropic SDK."""
 
@@ -72,16 +87,32 @@ class AnthropicProvider:
         self, *, system: SystemPrompt, messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> LLMResponse:
+        import anthropic
+
         # The support chatbot has no tools at all, and the API rejects an empty list
         # rather than reading it as "none" — so the parameter is omitted in that case.
         extra = {"tools": tools} if tools else {}
-        response = await self._client.messages.create(
-            model=self._model,
-            max_tokens=self._max_tokens,
-            system=system,
-            messages=messages,
-            **extra,
-        )
+        try:
+            response = await self._client.messages.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                system=system,
+                messages=messages,
+                **extra,
+            )
+        except anthropic.AuthenticationError:
+            # Distinct from every other failure: nothing retries its way out of a revoked
+            # key, and no caller can degrade around it. Recorded, said loudly once here,
+            # and re-raised for the caller to handle as it always did.
+            global _last_auth_error
+            from app.models.base import utcnow
+
+            _last_auth_error = utcnow().isoformat()
+            logger.error(
+                "Anthropic rejected the API key — every AI feature is down until "
+                "ASTRA_ANTHROPIC_API_KEY is replaced with a valid key"
+            )
+            raise
         # A tool-use turn re-sends the whole brief and every tool schema on each pass of the
         # loop, so the same few thousand tokens are billed three to five times per
         # conversation unless they are cached. Whether they actually were is not something

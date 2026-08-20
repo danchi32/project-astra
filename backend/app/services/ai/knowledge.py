@@ -13,6 +13,12 @@ from app.services.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 
+#: Below this cosine similarity an article is not an answer, just a shared word or two.
+#: The long-standing default for in-product search; the public website assistant passes a
+#: higher one, because the cost of a near miss there is a prospect being shown the wrong
+#: thing rather than a technician skimming past it.
+MIN_RELEVANCE = 0.2
+
 
 class KnowledgeBaseService:
     def __init__(
@@ -192,19 +198,27 @@ class KnowledgeBaseService:
         candidates += await self.repo.list_global()
         return await self._rank(query=query, candidates=candidates, limit=limit)
 
-    async def search_global(self, *, query: str, limit: int = 3) -> list[KnowledgeArticle]:
+    async def search_global(
+        self, *, query: str, limit: int = 3, min_score: float = MIN_RELEVANCE
+    ) -> list[KnowledgeArticle]:
         """The operator's own articles only — never an organization's runbooks.
 
         The public website assistant answers out of this and nothing else, so the tenant
         filter is the choice of method rather than an argument: there is no value a caller
         can pass that widens it to somebody's internal documentation.
+
+        `min_score` is raised by callers who would rather have nothing than a near miss —
+        a prospect asking about price is worse off with a loosely-related runbook than
+        with no article at all.
         """
         return await self._rank(
-            query=query, candidates=await self.repo.list_global(), limit=limit
+            query=query, candidates=await self.repo.list_global(), limit=limit,
+            min_score=min_score,
         )
 
     async def _rank(
-        self, *, query: str, candidates: list[KnowledgeArticle], limit: int
+        self, *, query: str, candidates: list[KnowledgeArticle], limit: int,
+        min_score: float = MIN_RELEVANCE,
     ) -> list[KnowledgeArticle]:
         """Score candidates against the query and return the best, best-first."""
         query_vec = await self.embed.embed(query, purpose="query")
@@ -243,7 +257,7 @@ class KnowledgeBaseService:
 
         scored = [(cosine_similarity(query_vec, a.embedding), a) for a in usable]
         # Keep only somewhat-relevant matches, best first.
-        scored = [pair for pair in scored if pair[0] > 0.2]
+        scored = [pair for pair in scored if pair[0] > min_score]
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [article for _, article in scored[:limit]]
 
