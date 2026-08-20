@@ -288,6 +288,26 @@ class StubProvider:
                 )],
             )
 
+        # A RECURRING Office failure → repair the install. Checked before the app-restart
+        # rule below, which would otherwise answer "Outlook keeps crashing" by relaunching
+        # it for the third time.
+        office_app = self._match_office_repair(user_text)
+        if office_app is not None:
+            return LLMResponse(
+                text=f"{office_app} failing repeatedly usually means the Office installation "
+                     "itself is damaged, which a restart won't fix. I've asked your IT team to "
+                     "approve a repair — it closes every Office app while it runs, so save your "
+                     "work. You'll see it start once they approve.",
+                tool_calls=[ToolCall(
+                    id="stub-office-repair", name="propose_remediation",
+                    input={
+                        "action_id": "office_repair",
+                        "reason": f"User reports {office_app} failing repeatedly; "
+                                  "restarting it has not resolved it.",
+                    },
+                )],
+            )
+
         # A direct "clear my cache / clean temp files" request → the matching safe action.
         cleanup = self._match_explicit_cleanup(user_text)
         if cleanup is not None:
@@ -378,6 +398,8 @@ class StubProvider:
         LLM when one is configured."""
         text = user_text.lower()
         if self._is_greeting(text):
+            return True
+        if self._match_office_repair(text) is not None:
             return True
         if self._match_timezone_change(text) is not None:
             return True
@@ -495,6 +517,50 @@ class StubProvider:
 
     _TIMEZONE_WORDS = ("timezone", "time zone", "time-zone", "tz")
     _TIMEZONE_VERBS = ("change", "set", "switch", "update", "correct", "move", "badal", "kar do")
+
+    # Office apps by the names people use for them. "word" is the loose one — it is an
+    # ordinary English word — but a repair signal is required as well, and the action is
+    # approval-gated, so a stray match costs a declined approval rather than a repair.
+    _OFFICE_APPS = (
+        "outlook", "winword", "excel", "powerpoint", "powerpnt", "onenote",
+        "ms word", "microsoft word", "ms excel", "microsoft excel", "word",
+        "microsoft office", "ms office", "office 365", "microsoft 365", "o365", "office",
+    )
+    # What separates "restart it" from "repair it". A single hang is cleared by relaunching
+    # the app, which is instant and costs nothing; it is RECURRENCE that says the install
+    # itself is damaged, and an Office repair force-closes every Office app to fix it.
+    _REPAIR_SIGNALS = (
+        "keeps crashing", "keeps closing", "keeps freezing", "keeps hanging",
+        "keeps restarting", "crashes every time", "crashing every time", "every time",
+        "again and again", "repeatedly", "over and over", "still crashing",
+        "still crashes", "still closing", "won't start at all", "wont start at all",
+        "corrupt", "corrupted", "repair",
+        # Hinglish — how these actually arrive.
+        "bar bar", "baar baar", "har baar", "band ho rahi", "band ho raha",
+        "band ho jata", "band ho jati", "phir se band", "roz band",
+    )
+
+    def _match_office_repair(self, text: str) -> str | None:
+        """A recurring Office failure → repair the install. Returns the app to name, or None.
+
+        Deliberately NOT triggered by a one-off complaint: "Outlook won't open" is answered
+        by restarting Outlook, which is immediate and disruptive to nobody. Repair is the
+        answer to "it keeps happening", and it is approval-gated because it force-closes
+        every Office app and takes unsaved work with them.
+        """
+        if not mentions(text, self._OFFICE_APPS):
+            return None
+        if not mentions(text, self._REPAIR_SIGNALS):
+            return None
+
+        for alias, label in (
+            ("outlook", "Outlook"), ("excel", "Excel"), ("powerpoint", "PowerPoint"),
+            ("powerpnt", "PowerPoint"), ("onenote", "OneNote"), ("winword", "Word"),
+            ("word", "Word"),
+        ):
+            if mentions(text, (alias,)):
+                return label
+        return "Microsoft Office"
 
     def _match_timezone_change(self, text: str) -> str | None:
         """A request to change the time zone → the Windows identifier to set, or None.

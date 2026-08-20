@@ -279,6 +279,16 @@ async def _propose_remediation(
     # request came back as "A time zone is required" for a message that had named one.
     # Reading the catalogue means adding a parameter to an action is enough.
     action = ACTIONS.get(action_id)
+    # Admin-only actions are withheld from the model by the schema enum. That constrains
+    # what it is offered, not what it can emit, so refuse them here too — the guard is
+    # supposed to hold against prompt-injected content, and injected content is exactly
+    # what would try an id that was never on the list.
+    if action is not None and action.tier is RemediationTier.ADMIN_ONLY:
+        return json.dumps({
+            "error": f"'{action_id}' is an admin-only action and cannot be requested from "
+                     "the assistant. Tell the user to raise it with their IT administrator.",
+        })
+
     params: dict[str, Any] = {
         name: tool_input[name]
         for name in (action.params if action else ())

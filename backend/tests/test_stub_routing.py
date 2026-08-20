@@ -162,3 +162,64 @@ async def test_the_rules_propose_set_timezone_with_the_resolved_id(stub):
     call = next(c for c in response.tool_calls if c.name == "propose_remediation")
     assert call.input["action_id"] == "set_timezone"
     assert call.input["timezone_id"] == "India Standard Time"
+
+
+# ── Repairing Office, without an LLM ───────────────────────────────────────
+#
+# The built-in rules could not propose office_repair at all: "outlook keeps crashing"
+# restarted Outlook and "repair office" matched nothing whatsoever. So on a Basic plan
+# the fix for a damaged Office install was unreachable however the user phrased it.
+
+
+@pytest.mark.parametrize("message,app", [
+    ("outlook keeps crashing", "Outlook"),
+    ("MS Word keeps closing", "Word"),
+    ("powerpoint crashes every time", "PowerPoint"),
+    ("outlook still crashing after restart", "Outlook"),
+    ("my office install is corrupted", "Microsoft Office"),
+    # Asked for by name.
+    ("repair office", "Microsoft Office"),
+    # Hinglish, which is how these actually arrive.
+    ("excel bar bar band ho rahi hai", "Excel"),
+    ("onenote har baar band ho jata hai", "OneNote"),
+])
+def test_a_recurring_office_failure_proposes_a_repair(stub, message, app):
+    assert stub._match_office_repair(message.lower()) == app
+
+
+@pytest.mark.parametrize("message,expected_restart", [
+    ("outlook won't open", "restart_outlook"),
+    ("excel is not responding", "restart_application"),
+    ("word is frozen", "restart_application"),
+])
+def test_a_one_off_office_problem_still_just_restarts_the_app(stub, message, expected_restart):
+    """Recurrence is what separates the two. Relaunching an app is instant and disruptive to
+    nobody; an Office repair force-closes every Office app and takes minutes. Answering a
+    single hang with a repair would cost someone their unsaved work to fix nothing."""
+    assert stub._match_office_repair(message.lower()) is None
+    assert stub._match_app_fix(message.lower())[1] == expected_restart
+
+
+@pytest.mark.parametrize("message", [
+    # "word" is an ordinary English word; requiring a repair signal as well is what keeps
+    # it from firing on ordinary sentences.
+    "in other words my wifi keeps dropping",
+    "how do I install office",
+    "change my timezone to IST",
+])
+def test_the_repair_does_not_fire_on_ordinary_mentions(stub, message):
+    assert stub._match_office_repair(message.lower()) is None
+
+
+async def test_the_repair_is_proposed_for_approval_and_warns_about_open_apps(stub):
+    """It stays approval-gated on purpose, and the reply has to say why the wait exists —
+    and that work will be lost when it does run."""
+    response = await stub.generate(
+        system="You are ASTRA, acting for the logged-in user of device 'LSI-1322'.",
+        messages=[{"role": "user", "content": "outlook keeps crashing"}],
+        tools=[],
+    )
+    call = next(c for c in response.tool_calls if c.name == "propose_remediation")
+    assert call.input["action_id"] == "office_repair"
+    assert "approve" in response.text.lower()
+    assert "save your work" in response.text.lower()

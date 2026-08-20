@@ -359,10 +359,12 @@ async def test_ai_applies_automatic_fix_from_device_chat(client, admin_headers):
     enroll = await _enroll(client, admin_headers)
     device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
 
-    # The stub proposes restart_outlook when a user reports Outlook crashing.
+    # A ONE-OFF failure: restart the app. ("outlook keeps crashing" is deliberately not
+    # used here any more — recurrence now escalates to an Office repair instead, which is
+    # approval-gated and therefore not claimable straight away. See the test below.)
     chat = await client.post(
         "/api/v1/agent/chat",
-        json={"content": "outlook keeps crashing, can you fix it?"},
+        json={"content": "outlook won't open, can you fix it?"},
         headers=device_headers,
     )
     assert chat.status_code == 200
@@ -373,6 +375,43 @@ async def test_ai_applies_automatic_fix_from_device_chat(client, admin_headers):
     claim = await client.get("/api/v1/agent/tasks", headers=device_headers)
     assert len(claim.json()) == 1
     assert claim.json()[0]["action_id"] == "restart_outlook"
+
+
+async def test_a_recurring_office_crash_waits_for_approval_instead_of_restarting(
+    client, admin_headers
+):
+    """Recurrence means the install is damaged, not that the app needs relaunching again.
+
+    The escalation is approval-gated on purpose: the repair force-closes every Office app
+    and takes unsaved work with it. So nothing reaches the device until a human agrees —
+    which is the difference between this and every automatic fix.
+    """
+    enroll = await _enroll(client, admin_headers)
+    device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
+
+    chat = await client.post(
+        "/api/v1/agent/chat",
+        json={"content": "outlook keeps crashing"},
+        headers=device_headers,
+    )
+    assert chat.status_code == 200
+
+    # Nothing to run yet, in either context — it is waiting on a person.
+    assert (await client.get("/api/v1/agent/tasks?context=user", headers=device_headers)).json() == []
+    assert (await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)).json() == []
+
+    pending = (await client.get("/api/v1/remediations", headers=admin_headers)).json()
+    task = next(t for t in (pending.get("items", pending)) if t["action_id"] == "office_repair")
+    assert task["status"] == "pending_approval"
+
+    approved = await client.post(
+        f"/api/v1/remediations/{task['id']}/approve", headers=admin_headers
+    )
+    assert approved.status_code == 200
+
+    # Only now, and only to the elevated service that can actually run it.
+    claimed = await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)
+    assert [t["action_id"] for t in claimed.json()] == ["office_repair"]
 
 
 async def test_a_timezone_request_in_chat_ends_as_a_queued_set_timezone(client, admin_headers):
