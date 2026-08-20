@@ -116,6 +116,58 @@ public class ElevatedRemediationTests
         Assert.Contains("culture=en-us", plan.Arguments);
     }
 
+    // ---- Did the repair actually happen? ---------------------------------------------
+    //
+    // The first version decided from OfficeClickToRun.exe's exit code. That executable is a
+    // launcher: it hands the work to the Click-to-Run service and exits 0 within seconds, so
+    // a user was told "components were re-registered and damaged files replaced" while
+    // nothing at all had happened on their PC. Office records what it last did; that record
+    // is the evidence, and this is the function that reads it.
+
+    [Fact]
+    public void A_recorded_successful_repair_is_a_success()
+    {
+        var (ok, msg) = OfficeRepair.Verdict("REPAIR", "Success");
+        Assert.True(ok);
+        Assert.Contains("completed", msg);
+    }
+
+    [Fact]
+    public void A_recorded_failure_says_what_office_reported()
+    {
+        var (ok, msg) = OfficeRepair.Verdict("REPAIR", "Failure");
+        Assert.False(ok);
+        Assert.Contains("Failure", msg);
+        Assert.Contains("Settings", msg);   // where to do it by hand
+    }
+
+    [Fact]
+    public void No_record_of_a_repair_is_a_failure_not_a_success()
+    {
+        // The exact case that was reported: the launcher returned 0 and nothing ran.
+        var (ok, msg) = OfficeRepair.Verdict(null, null);
+        Assert.False(ok);
+        Assert.Contains("did not run", msg);
+    }
+
+    [Fact]
+    public void Some_other_office_activity_does_not_count_as_a_repair()
+    {
+        // An update or install recorded here is not evidence that a repair happened.
+        var (ok, msg) = OfficeRepair.Verdict("UPDATE", "Success");
+        Assert.False(ok);
+        Assert.Contains("UPDATE", msg);
+    }
+
+    [Fact]
+    public void An_unconfirmable_repair_is_reported_as_failure()
+    {
+        // Being unable to evidence it is indistinguishable from it never having run, and
+        // claiming the good case is what caused the original complaint.
+        var (ok, _) = OfficeRepair.Verdict("REPAIR", null);
+        Assert.False(ok);
+    }
+
     // ---- Which network adapter to bounce ----------------------------------------------
 
     private static NetworkRemediation.AdapterInfo Nic(

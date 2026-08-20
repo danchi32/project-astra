@@ -14,7 +14,6 @@ public sealed class ChatForm : Form
     private readonly FlowLayoutPanel _messages;
     private readonly TextBox _input;
     private readonly Button _send;
-    private bool _historyLoaded;
 
     // How many server-side messages we've already rendered. After the AI queues a fix,
     // the backend appends the real "✅ done" / "⚠️ couldn't" line once the agent runs it;
@@ -86,6 +85,14 @@ public sealed class ChatForm : Form
         Controls.Add(_messages);
         Controls.Add(composer);
 
+        ShowGreeting();
+    }
+
+    /// <summary>Reset the transcript to a brand-new chat.</summary>
+    private void ShowGreeting()
+    {
+        _messages.Controls.Clear();
+        _serverMsgCount = 0;
         AddBubble(
             "Hi! I'm ASTRA, your IT assistant. Tell me what's going wrong with your computer "
             + "and I'll take a look.",
@@ -103,12 +110,13 @@ public sealed class ChatForm : Form
         Activate();
         _input.Focus();
 
-        // Restore the prior conversation the first time the window is shown.
-        if (!_historyLoaded)
-        {
-            _historyLoaded = true;
-            _ = LoadHistoryAsync();
-        }
+        // Re-read the conversation EVERY time the window opens, not once per tray process.
+        //
+        // The window is hidden rather than disposed on close, so its bubbles survive. Loading
+        // once meant that after the server ended an idle conversation the person still saw
+        // the whole previous one sitting there — and their next message, which the server had
+        // put in a fresh conversation, was appended underneath it as if it continued.
+        _ = LoadHistoryAsync();
     }
 
     private async Task LoadHistoryAsync()
@@ -117,14 +125,21 @@ public sealed class ChatForm : Form
         {
             var history = await _client.LoadHistoryAsync(CancellationToken.None);
             if (history.Count == 0)
-                return;   // keep the friendly greeting for a brand-new chat
+            {
+                // No live conversation: either this device has never chatted, or the server
+                // ended the last one after it went idle. Both mean a fresh window — leaving
+                // the old transcript up would show a conversation the next message will not
+                // continue.
+                ShowGreeting();
+                return;
+            }
 
             _messages.Controls.Clear();   // drop the placeholder greeting
             foreach (var (role, content) in history)
                 AddBubble(content, fromUser: role == "user");
             _serverMsgCount = history.Count;
         }
-        catch { /* leave the greeting in place if history can't be loaded */ }
+        catch { /* leave whatever is on screen if history can't be loaded */ }
     }
 
     // Hide on close instead of disposing, so the conversation stays visible next time.

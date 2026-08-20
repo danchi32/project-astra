@@ -95,6 +95,63 @@ public static class OfficeRepair
         }
     }
 
+    /// <summary>What Office says it last did, and how that went.
+    ///
+    /// Click-to-Run records the outcome of each maintenance run here. That record is the only
+    /// honest evidence a repair happened: OfficeClickToRun.exe is a launcher that hands the
+    /// work to the Click-to-Run service and exits 0 immediately, so its exit code says the
+    /// request was accepted, not that anything was repaired.</summary>
+    public static (string? Scenario, string? Result) ReadLastScenario()
+    {
+        try
+        {
+            using var key = RegistryKey
+                .OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64)
+                .OpenSubKey(ConfigKey);
+            if (key is null) return (null, null);
+            return (key.GetValue("LastScenario") as string,
+                    key.GetValue("LastScenarioResult") as string);
+        }
+        catch
+        {
+            return (null, null);
+        }
+    }
+
+    /// <summary>Turns what Office recorded into a verdict.
+    ///
+    /// Pure, and separate from running the repair, because deciding this from the launcher's
+    /// exit code is exactly how a user was told "components were re-registered and damaged
+    /// files replaced" while nothing whatsoever had happened on their PC.
+    ///
+    /// Not being able to confirm is reported as FAILURE, not success. A repair that cannot be
+    /// evidenced is indistinguishable from one that never ran, and claiming the good case is
+    /// what caused the original complaint.</summary>
+    public static (bool Success, string Message) Verdict(string? scenario, string? result)
+    {
+        var didRepair = string.Equals(scenario, "REPAIR", StringComparison.OrdinalIgnoreCase);
+        var succeeded = string.Equals(result, "Success", StringComparison.OrdinalIgnoreCase);
+
+        if (didRepair && succeeded)
+            return (true,
+                "Office's quick repair completed — Windows recorded it as successful. Any Office "
+                + "apps that were open were closed by the repair and can be reopened now. If the "
+                + "crashes continue, a full (online) repair is the next step.");
+
+        if (didRepair && !string.IsNullOrWhiteSpace(result))
+            return (false,
+                $"Office ran the repair but recorded the result as '{result}'. Office was not "
+                + "repaired. Running Repair from Settings > Apps > Microsoft Office > Modify "
+                + "will show the reason.");
+
+        // Nothing recorded, or Office recorded some other activity: the repair never took.
+        // The usual cause is Click-to-Run declining to run a silent repair in this context.
+        return (false,
+            "The repair did not run — Office recorded no repair having taken place"
+            + (string.IsNullOrWhiteSpace(scenario) ? "" : $" (its last action was '{scenario}')")
+            + ". Repair it from Settings > Apps > Microsoft Office > Modify on the device.");
+    }
+
     public static (bool Success, string Output) Repair()
     {
         var exe = FindClickToRun();
@@ -112,27 +169,42 @@ public static class OfficeRepair
             };
             foreach (var arg in plan.Arguments) psi.ArgumentList.Add(arg);
 
+            // What Office had last recorded, so a stale "Repair/Success" from weeks ago cannot
+            // be mistaken for this run's outcome.
+            var before = ReadLastScenario();
+
             using var process = Process.Start(psi);
             if (process is null) return (false, "Could not start Office's repair tool.");
 
-            if (!process.WaitForExit((int)RepairTimeout.TotalMilliseconds))
-            {
-                // Leave it running rather than killing a half-finished repair, which is how an
-                // Office install ends up in a worse state than it started.
-                return (false,
-                    $"Office repair was still running after {RepairTimeout.TotalMinutes:0} minutes. "
-                    + "It has been left to finish on its own — check Office again shortly.");
-            }
-
+            // This exits within seconds regardless: it hands the work to the Click-to-Run
+            // service. Waiting on it proves only that the request was accepted.
+            process.WaitForExit(120_000);
             if (process.ExitCode != 0)
                 return (false,
-                    $"Office's repair tool exited with code {process.ExitCode}. Office was not "
-                    + "repaired; running Repair from Settings > Apps will show the reason.");
+                    $"Office's repair tool would not start (exit code {process.ExitCode}). "
+                    + "Repair it from Settings > Apps > Microsoft Office > Modify on the device.");
 
-            return (true,
-                "Ran Office's quick repair — its components were re-registered and damaged files "
-                + "replaced. Any Office apps that were open were closed by the repair and can be "
-                + "reopened now. If the crashes continue, a full (online) repair is the next step.");
+            // The actual repair runs behind that. Watch Office's own record until it changes,
+            // which is the only thing that distinguishes a repair from a launcher exiting 0.
+            var deadline = DateTime.UtcNow + RepairTimeout;
+            var after = before;
+            while (DateTime.UtcNow < deadline)
+            {
+                System.Threading.Thread.Sleep(10_000);
+                after = ReadLastScenario();
+                var settled = !string.IsNullOrWhiteSpace(after.Result)
+                              && string.Equals(after.Scenario, "REPAIR", StringComparison.OrdinalIgnoreCase);
+                if (settled && after != before)
+                    break;
+            }
+
+            if (after == before)
+                return (false,
+                    $"Office reported nothing after {RepairTimeout.TotalMinutes:0} minutes — its "
+                    + "record of the last maintenance run is unchanged, so the repair did not "
+                    + "take. Repair it from Settings > Apps > Microsoft Office > Modify.");
+
+            return Verdict(after.Scenario, after.Result);
         }
         catch (Exception ex)
         {
