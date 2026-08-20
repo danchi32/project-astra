@@ -1,9 +1,17 @@
 import type { Config } from "tailwindcss";
 import typography from "@tailwindcss/typography";
+import { join } from "path";
+
+// Resolved from this file's directory (jiti provides __dirname) rather than
+// process.cwd(): launched from the monorepo root, a "./src/**" glob matches nothing and
+// Tailwind emits no utilities at all, so the dev site renders as unstyled HTML while the
+// production build — run from this directory — looks fine. Forward slashes are required
+// by fast-glob. Same fix as portal/tailwind.config.ts.
+const srcGlob = join(__dirname, "src/**/*.{js,ts,jsx,tsx,mdx}").replace(/\\/g, "/");
 
 const config: Config = {
   darkMode: "class",
-  content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
+  content: [srcGlob],
   theme: {
     extend: {
       colors: {
