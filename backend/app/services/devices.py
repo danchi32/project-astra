@@ -6,7 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.security import generate_opaque_token, hash_opaque_token
+from app.core.security import (
+    generate_installer_ticket,
+    generate_opaque_token,
+    hash_opaque_token,
+)
 from app.models import Device, EnrollmentToken, Organization, User
 from app.models.base import as_utc, utcnow
 from app.repositories.devices import DeviceRepository
@@ -94,14 +98,17 @@ class DeviceService:
             setup_exe_path(server_url)
         except FileNotFoundError:
             # No usable .exe for this deployment; the portal then offers only the zip.
-            exe_filename = None
+            exe_available = False
+            exe_ticket_days = None
         else:
-            exe_filename = setup_exe_filename(org.agent_enrollment_key)
+            exe_available = True
+            exe_ticket_days = (await self.settings.ensure(actor.org_id)).enrollment_token_default_days
         return InstallerRead(
             enrollment_key=org.agent_enrollment_key,
             server_url=server_url,
             filename="Install-AstraAgent.ps1",
-            exe_filename=exe_filename,
+            exe_available=exe_available,
+            exe_ticket_days=exe_ticket_days,
         )
 
     async def rotate_enrollment_key(self, *, actor: User) -> InstallerRead:
@@ -137,17 +144,76 @@ class DeviceService:
         )
         return "AstraAgent-Portable.zip", content
 
+    # Name minted installer tickets carry, so they are identifiable in the token list
+    # and can be revoked as a group.
+    EXE_TICKET_NAME = "One-click .exe installer"
+
     async def exe_installer(self, *, actor: User) -> tuple[str, Path]:
         """The one-click .exe installer and the filename it must be served under.
 
         Returns a path, not bytes: the exe is the same prebuilt file for every
         organization (only the name differs), so there is nothing to generate and no
         reason to read ~3 MB into memory on each download.
+
+        The name carries a freshly minted, expiring, revocable enrollment ticket —
+        NOT the organization's permanent key. A filename is exposed in ways a secret
+        should not be: the downloads folder, browser history, a shared screen. The
+        permanent key would be unrevocable-without-collateral there (rotating it kills
+        every installer already distributed), so it never leaves the portal.
+
+        A new ticket per download is not laziness — only the hash is stored, so an
+        earlier one cannot be recovered and reissued. Existing downloads keep working
+        until they expire on their own.
         """
-        org = await self._ensure_enrollment_key(actor.org_id)
         server_url = get_settings().public_api_url.rstrip("/")
         path = setup_exe_path(server_url)  # FileNotFoundError -> 503, as for the zip
-        return setup_exe_filename(org.agent_enrollment_key), path
+
+        raw = generate_installer_ticket()
+        days = (await self.settings.ensure(actor.org_id)).enrollment_token_default_days
+        await self.enrollment_tokens.add(
+            EnrollmentToken(
+                org_id=actor.org_id,
+                name=self.EXE_TICKET_NAME,
+                token_hash=hash_opaque_token(raw),
+                expires_at=utcnow() + timedelta(days=days),
+                created_by=actor.id,
+            )
+        )
+        await self.audit.record(
+            org_id=actor.org_id,
+            actor_id=actor.id,
+            action="installer.exe_download",
+            target_type="organization",
+            target_id=str(actor.org_id),
+            detail={"expires_in_days": days},
+        )
+        await self.session.commit()
+        return setup_exe_filename(raw), path
+
+    async def revoke_exe_installers(self, *, actor: User) -> int:
+        """Kill every .exe installer handed out so far (break-glass if one leaks).
+
+        Only the .exe tickets — the org's permanent key and any .zip installers built
+        from it are untouched, which is the point of having separated the two.
+        """
+        revoked = 0
+        for record in await self.enrollment_tokens.list_by_org(actor.org_id):
+            if record.name != self.EXE_TICKET_NAME or record.revoked_at is not None:
+                continue
+            if as_utc(record.expires_at) <= utcnow():
+                continue  # already dead; revoking adds nothing
+            record.revoked_at = utcnow()
+            revoked += 1
+        await self.audit.record(
+            org_id=actor.org_id,
+            actor_id=actor.id,
+            action="installer.exe_revoke",
+            target_type="organization",
+            target_id=str(actor.org_id),
+            detail={"revoked": revoked},
+        )
+        await self.session.commit()
+        return revoked
 
     async def list_enrollment_tokens(self, *, actor: User) -> list[EnrollmentToken]:
         return await self.enrollment_tokens.list_by_org(actor.org_id)

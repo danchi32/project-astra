@@ -3,10 +3,10 @@
 The portal hands an admin a ready-to-run installer with their organization's
 enrollment key already in it. Two shapes, same agent, same install logic:
 
-| Download | For | How the key gets in |
+| Download | For | How it authenticates |
 |---|---|---|
-| `AstraAgent-Setup-<key>.exe` | One machine at a time — download, double-click | The filename |
-| `AstraAgent-Portable.zip` | Intune / SCCM / GPO rollouts | Baked into the script inside |
+| `AstraAgent-Setup-<ticket>.exe` | One machine at a time — download, double-click | Expiring ticket in the filename |
+| `AstraAgent-Portable.zip` | Intune / SCCM / GPO rollouts | Permanent org key, baked into the script inside |
 
 Both install the framework-dependent build and run it through the trusted `dotnet`
 host. That indirection is deliberate: it survives locked-down machines where ASR
@@ -17,13 +17,30 @@ blocks unsigned executables outright.
 The `.zip` is assembled per request by the backend (`app/services/agent_installer.py`).
 The `.exe` cannot be: Inno Setup's compiler is Windows-only and the backend runs on
 Linux. So one exe is compiled ahead of time and served **byte-identically** to every
-organization, with the key travelling in the filename it is served under.
+organization, with the credential travelling in the filename it is served under.
 
-That is also exactly what Authenticode needs — a signature covers fixed bytes — so the
-constraint that forces this design is the same one that makes signing a drop-in later.
+Nor can the backend inject a key into the prebuilt exe. Inno verifies a CRC over every
+file it packs, so patching a placeholder yields a "corrupted installer"; and appending
+to the end would break Authenticode, which is the one thing that actually gets the agent
+past Defender. Fixed bytes are the price of being signable, and signing is worth more
+than a shorter filename.
 
-If the filename is changed after download the installer asks for the key instead, so a
-rename is annoying, never silently broken.
+### Why a ticket and not the org's enrollment key
+
+A filename is exposed in ways a secret should not be — the downloads folder, browser
+history, a shared screen. The org's enrollment key is permanent and unrevocable without
+collateral: rotating it kills every `.zip` installer already distributed. So it never
+goes in a filename.
+
+Each `.exe` download instead mints its own enrollment ticket (`secrets.token_urlsafe(16)`,
+22 characters), which expires after the org's configured token lifetime and can be
+revoked on its own — **Get installer → Downloaded .exe installers → Invalidate** — without
+touching the key or the `.zip`. A new ticket per download is forced rather than chosen:
+only the hash is stored, so an earlier one cannot be recovered and reissued.
+
+If the filename is changed after download the installer asks for a key instead, so a
+rename is annoying, never silently broken. `IsPlausibleKey` in `keyparse.iss` accepts
+both lengths, since an admin may paste the permanent key by hand.
 
 ## Building the .exe
 
@@ -64,10 +81,21 @@ runs it under a set of filenames. Installs nothing.
 The binaries are **unsigned**, which is why:
 
 - SmartScreen shows *"Windows protected your PC"* on first run (More info → Run anyway).
-- **Smart App Control**, where enabled, blocks the agent outright. There is no exclusion
-  for SAC — it has to be switched off on that machine, and Windows will not let it be
-  switched back on afterwards.
+- On managed PCs the `.exe` may not run at all. The ASR rule *Block executable files from
+  running unless they meet a prevalence, age, or trusted list criterion*
+  (`01443614-CD74-433A-B99E-2ECDC07BFC25`) kills Inno's own temp bootstrap, surfacing as
+  **"Unable to execute file in the temporary directory. Error 5: Access is denied."**
+  It is deployed by Intune, so it cannot be excluded locally, and Tamper Protection
+  prevents working around it. Look for Event ID 1121 in
+  *Microsoft-Windows-Windows Defender/Operational* to confirm.
+- **Smart App Control**, where enabled, blocks the agent the same way. There is no
+  exclusion for SAC — it must be switched off, and Windows will not let it be switched
+  back on afterwards.
 - Defender occasionally quarantines `AstraAgent.Service.dll`.
+
+**The `.zip` is unaffected by all of this** and is the fallback for such machines: it
+launches no new executable, only Windows' own signed `cmd.exe` and `powershell.exe` with
+a script as an argument. That was the reason for its design, and it holds up.
 
 A certificate fixes all three at once. Nothing in the build needs restructuring for it:
 

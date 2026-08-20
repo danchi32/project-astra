@@ -57,18 +57,51 @@ export const downloadOfflineInstaller = async () => {
   }
 };
 
-// Downloads the one-click .exe installer. The filename is NOT cosmetic: the exe is the
-// same prebuilt file for every organization and reads the enrollment key back out of its
-// own name, so it must be saved exactly as the server named it. That name comes from
-// getInstaller().exe_filename rather than being rebuilt here, so the convention lives in
-// one place — the backend, next to the installer that parses it.
-export const downloadExeInstaller = async (filename: string) => {
+// Pulls the filename out of a Content-Disposition header. The backend mints a fresh
+// enrollment ticket per download and puts it in the name, so the name only exists once
+// the response comes back — and saving the file under any other name leaves the
+// installer with no ticket to enrol with.
+function filenameFromDisposition(header: unknown): string | null {
+  if (typeof header !== "string") return null;
+  // RFC 5987 form first (filename*=UTF-8''…), then the plain quoted form.
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim());
+    } catch {
+      /* malformed encoding — fall through to the plain form */
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1].trim() : null;
+}
+
+// Downloads the one-click .exe installer, saved under the name the server chose.
+export const downloadExeInstaller = async () => {
   try {
     const res = await apiClient.post("/devices/exe-installer", undefined, { responseType: "blob" });
-    triggerDownload(res.data as Blob, filename);
+    const name = filenameFromDisposition(res.headers?.["content-disposition"]);
+    if (!name) {
+      // Without the real name the download would be useless — it would carry no
+      // ticket. Fail loudly rather than saving a file that cannot enrol. The usual
+      // cause is Content-Disposition not being exposed to the browser by CORS.
+      throw new Error(
+        "The server did not say what to name the installer, so it would not be able " +
+          "to enrol this device. Use the .zip installer, or try again.",
+      );
+    }
+    triggerDownload(res.data as Blob, name);
   } catch (err) {
+    if (err instanceof Error && err.message.startsWith("The server did not say")) throw err;
     throw new Error(await blobErrorMessage(err, "Couldn't download the .exe installer."));
   }
+};
+
+// Break-glass: kill every .exe installer handed out so far. Leaves the permanent
+// enrollment key (and so any .zip installers) working — rotateEnrollmentKey does those.
+export const revokeExeInstallers = async (): Promise<number> => {
+  const res = await apiClient.post("/devices/exe-installer/revoke");
+  return (res.data as { revoked: number }).revoked;
 };
 
 // Org-agnostic uninstaller (Uninstall-AstraAgent.bat + .ps1), offered as a separate download.

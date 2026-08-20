@@ -90,9 +90,13 @@ async def download_exe_installer(
     actor: User = Depends(admin_required),
     session: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    """The same prebuilt exe for every organization — the enrollment key is carried
-    by the filename, which is why the name here is not cosmetic. Clients must save it
-    verbatim (GET /devices/installer reports it as `exe_filename`)."""
+    """The same prebuilt exe for every organization; only the name differs.
+
+    That name carries a freshly minted, expiring enrollment ticket, so it is not
+    cosmetic — clients must save the file exactly as Content-Disposition names it, or
+    the installer will have no ticket to enrol with. The name cannot be known before
+    this call, which is why it is not part of GET /devices/installer.
+    """
     try:
         filename, path = await DeviceService(session).exe_installer(actor=actor)
     except FileNotFoundError as exc:
@@ -103,6 +107,20 @@ async def download_exe_installer(
         media_type="application/vnd.microsoft.portable-executable",
         filename=filename,
     )
+
+
+@router.post(
+    "/exe-installer/revoke",
+    summary="Invalidate every .exe installer handed out so far (admin only)",
+)
+async def revoke_exe_installers(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Break-glass for a leaked .exe. Leaves the permanent enrollment key — and so any
+    .zip installers built from it — working; use enrollment-key/rotate for those."""
+    revoked = await DeviceService(session).revoke_exe_installers(actor=actor)
+    return {"revoked": revoked}
 
 
 # Legacy enrollment-token endpoints (kept for backward compatibility with any

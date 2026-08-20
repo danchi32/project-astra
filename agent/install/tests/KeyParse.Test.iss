@@ -78,6 +78,16 @@ begin
   Check('browser dedup (12)', KeyFromFileName('AstraAgent-Setup-' + K + ' (12).exe'), K);
   Check('prefix case-insensitive', KeyFromFileName('astraagent-setup-' + K + '.exe'), K);
 
+  { The everyday case: a 22-character token_urlsafe(16) installer ticket, which is
+    what the backend actually puts in the filename. The 64-character key above is the
+    permanent one, only ever pasted by hand. }
+  Check('installer ticket (22 chars)',
+        KeyFromFileName('AstraAgent-Setup-a7Kd93mN2pQxR4tYuV8wZq.exe'),
+        'a7Kd93mN2pQxR4tYuV8wZq');
+  Check('ticket with dedup suffix',
+        KeyFromFileName('AstraAgent-Setup-a7Kd93mN2pQxR4tYuV8wZq (1).exe'),
+        'a7Kd93mN2pQxR4tYuV8wZq');
+
   Check('no key at all', KeyFromFileName('AstraAgent-Setup.exe'), '');
   Check('key too short', KeyFromFileName('AstraAgent-Setup-abc123.exe'), '');
   Check('wrong prefix', KeyFromFileName('Something-Else-' + K + '.exe'), '');

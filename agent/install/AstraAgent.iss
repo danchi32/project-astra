@@ -11,17 +11,22 @@
 ;
 ;   That is also precisely what Authenticode needs — a signature covers fixed
 ;   bytes — so the same constraint that forces this design today is the one that
-;   makes signing a drop-in later. The key therefore has to arrive from OUTSIDE
-;   the file. It does, in the file's own name:
+;   makes signing a drop-in later. The credential therefore has to arrive from
+;   OUTSIDE the file. It does, in the file's own name:
 ;
-;       AstraAgent-Setup-<enrollment key>.exe
+;       AstraAgent-Setup-<enrollment ticket>.exe
 ;
-;   The backend serves one static exe under a per-org filename; this script reads
-;   that name back. If the name carries no usable key (renamed by hand, say), the
-;   wizard asks for one instead of installing an agent that could never enrol.
+;   A *ticket*, not the organization's enrollment key. A filename is exposed in
+;   ways a secret should not be — the downloads folder, browser history, a shared
+;   screen — and that key is permanent, so recovering from a leak would mean
+;   rotating it and breaking every .zip installer already distributed. The backend
+;   mints a fresh, expiring, individually revocable ticket for each download
+;   instead; this script reads it back out of the name. If the name carries nothing
+;   usable (renamed by hand, say), the wizard asks rather than installing an agent
+;   that could never enrol.
 ;
 ;   Silent/managed deployment:
-;       AstraAgent-Setup.exe /VERYSILENT /KEY=<enrollment key>
+;       AstraAgent-Setup.exe /VERYSILENT /KEY=<ticket or enrollment key>
 ;
 ; The install itself is NOT reimplemented here. Install-AstraAgent.ps1 — the same
 ; script the .zip ships, staged from the single source of truth in

@@ -9,19 +9,23 @@
 
 [Code]
 
-{ Enrollment keys are secrets.token_urlsafe(48) — 64 characters drawn only from
-  A-Z a-z 0-9 _ and -. Validating that charset is not merely a typo check: the key
-  is interpolated into a generated command line, and restricting it to this set is
-  what makes that safe. Anything outside it is rejected rather than escaped.
-  The length bound is deliberately loose so a future change to the key size does
-  not silently break every installer already in the field. }
+{ What arrives here is normally an installer ticket — secrets.token_urlsafe(16), 22
+  characters — but an admin may also paste the organization's permanent enrollment
+  key, which is token_urlsafe(48) at 64. Both draw only from A-Z a-z 0-9 _ and -.
+
+  Validating that charset is not merely a typo check: the value is interpolated into
+  a generated command line, and restricting it to this set is what makes that safe.
+  Anything outside it is rejected rather than escaped.
+
+  The length bound is deliberately loose at both ends, so changing either token size
+  server-side cannot silently break every installer already in the field. }
 function IsPlausibleKey(const S: String): Boolean;
 var
   I: Integer;
   C: Char;
 begin
   Result := False;
-  if (Length(S) < 32) or (Length(S) > 128) then
+  if (Length(S) < 16) or (Length(S) > 128) then
     Exit;
   for I := 1 to Length(S) do
   begin

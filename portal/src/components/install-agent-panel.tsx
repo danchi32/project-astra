@@ -7,6 +7,7 @@ import {
   rotateEnrollmentKey,
   downloadOfflineInstaller,
   downloadExeInstaller,
+  revokeExeInstallers,
   downloadUninstaller,
 } from "@/lib/api/devices";
 
@@ -29,6 +30,7 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
   const [exeBusy, setExeBusy] = useState(false);
+  const [revokeBusy, setRevokeBusy] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [uninstallBusy, setUninstallBusy] = useState(false);
   const [rotating, setRotating] = useState(false);
@@ -43,13 +45,28 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
 
   const runCmd = "powershell -ExecutionPolicy Bypass -File .\\Install-AstraAgent.ps1";
 
-  async function downloadExe(filename: string) {
-    setExeBusy(true); setError("");
+  async function downloadExe() {
+    setExeBusy(true); setError(""); setNotice("");
     try {
-      await downloadExeInstaller(filename);
+      await downloadExeInstaller();
     } catch (err) {
       setError((err as Error)?.message || "Couldn't download the .exe installer. Try again.");
     } finally { setExeBusy(false); }
+  }
+
+  async function revokeExe() {
+    if (!confirm(
+      "Invalidate every .exe installer downloaded so far?\n\nAny copy you have already distributed stops enrolling new machines. Already-enrolled devices, the .zip installer and your enrollment key are unaffected."
+    )) return;
+    setRevokeBusy(true); setError(""); setNotice("");
+    try {
+      const n = await revokeExeInstallers();
+      setNotice(n === 0
+        ? "No .exe installers were live — nothing to invalidate."
+        : `Invalidated ${n} .exe installer${n === 1 ? "" : "s"}. Download a fresh one for any new machine.`);
+    } catch {
+      setError("Couldn't invalidate the .exe installers. Try again.");
+    } finally { setRevokeBusy(false); }
   }
 
   async function downloadOffline() {
@@ -122,8 +139,8 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
                   1. On the target Windows machine, download the installer
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {installer.exe_filename && (
-                    <button onClick={() => downloadExe(installer.exe_filename!)} disabled={exeBusy}
+                  {installer.exe_available && (
+                    <button onClick={downloadExe} disabled={exeBusy}
                       className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
                       style={{ background: "var(--accent)" }}>
                       <Download size={15} /> {exeBusy ? "Preparing…" : "Download installer (.exe)"}
@@ -131,18 +148,21 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
                   )}
                   <button onClick={downloadOffline} disabled={offlineBusy}
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-                    style={installer.exe_filename
+                    style={installer.exe_available
                       ? { background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }
                       : { background: "var(--accent)", color: "white" }}>
                     <Download size={15} /> {offlineBusy ? "Preparing…" : ".zip (mass deployment)"}
                   </button>
                 </div>
-                {installer.exe_filename && (
-                  // The key travels in the filename, so a rename breaks enrolment — the
-                  // installer then has to ask for the key by hand. Say so before it happens.
+                {installer.exe_available && (
+                  // A one-time ticket rides in the filename, so a rename breaks enrolment
+                  // and the installer falls back to asking for a key. Say so up front —
+                  // and say when it stops working, before copies are handed around.
                   <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
-                    Save the .exe under the name it downloads as — your enrollment key is part of it.
-                    Then just double-click; there is nothing to extract and nothing to type.
+                    Save the .exe under the name it downloads as, then double-click — nothing to
+                    extract, nothing to type. Each download carries its own one-time enrollment
+                    ticket{installer.exe_ticket_days ? ` that stops working after ${installer.exe_ticket_days} days` : ""};
+                    your permanent key is never put in the filename.
                   </p>
                 )}
                 <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>
@@ -158,10 +178,16 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
                 <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
                   The agent is not code-signed yet, so SmartScreen shows{" "}
                   <span className="font-medium">“Windows protected your PC”</span> — click{" "}
-                  <span className="font-medium">More info → Run anyway</span>. On PCs with{" "}
-                  <span className="font-medium">Smart App Control</span> switched on, the agent is blocked
-                  outright and that setting has to be turned off first. Both go away once we ship a
-                  signed build.
+                  <span className="font-medium">More info → Run anyway</span>.
+                </p>
+                <p className="text-xs mt-1.5" style={{ color: "var(--text-secondary)" }}>
+                  On a managed PC it may not run at all. Setup aborting with{" "}
+                  <span className="font-medium">“Unable to execute file in the temporary directory”</span>{" "}
+                  means an Intune policy is blocking unsigned, low-prevalence executables;{" "}
+                  <span className="font-medium">Smart App Control</span> blocks it the same way.
+                  Neither can be excluded locally —{" "}
+                  <span className="font-medium">use the .zip on those machines</span>, which runs only
+                  Windows&apos; own signed tools and is unaffected. A signed build removes all of this.
                 </p>
               </div>
 
@@ -195,9 +221,34 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
                   <CopyButton text={installer.enrollment_key} />
                 </div>
                 <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                  Never expires. Rotate only if an installer leaks — old installers stop working; already-enrolled devices are unaffected.
+                  Never expires, and is only ever used by the .zip. Rotating it stops every .zip
+                  installer you have distributed; already-enrolled devices are unaffected.
                 </p>
               </div>
+
+              {/* .exe installers are revocable on their own, precisely so a leaked one does
+                  not force a key rotation that would break every .zip as well. */}
+              {installer.exe_available && (
+                <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                        Downloaded .exe installers
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                        Each carries its own ticket
+                        {installer.exe_ticket_days ? `, valid ${installer.exe_ticket_days} days` : ""}. Invalidate them if
+                        one ends up somewhere it should not — your key and the .zip keep working.
+                      </p>
+                    </div>
+                    <button onClick={revokeExe} disabled={revokeBusy}
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg shrink-0 disabled:opacity-50"
+                      style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "#f59e0b" }}>
+                      <RefreshCw size={12} /> {revokeBusy ? "Invalidating…" : "Invalidate"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Uninstaller — separate download, not part of the installer bundle */}
               <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>

@@ -345,14 +345,16 @@ def setup_exe_path(server_url: str) -> Path:
     return SETUP_EXE
 
 
-def setup_exe_filename(enrollment_key: str) -> str:
-    """The name the .exe must be served under, since that is where it reads the key.
+def setup_exe_filename(ticket: str) -> str:
+    """The name the .exe must be served under, since that is where it reads its ticket.
 
-    Enrollment keys are secrets.token_urlsafe, so they contain only characters that
-    are safe in a filename and in a Content-Disposition header. Anything else would
-    be a bug upstream, and the installer would reject it anyway.
+    Callers pass a freshly minted, expiring enrollment ticket — never the org's
+    permanent key, which must not appear in a filename (see DeviceService.exe_installer).
+    Tickets come from secrets.token_urlsafe, so they contain only characters that are
+    safe in a filename and in a Content-Disposition header; anything else would be a bug
+    upstream, and the installer would reject it on arrival anyway.
     """
-    return f"{SETUP_EXE_PREFIX}{enrollment_key}.exe"
+    return f"{SETUP_EXE_PREFIX}{ticket}.exe"
 
 
 def build_offline_bundle_zip(

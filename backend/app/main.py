@@ -62,6 +62,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # allow_headers governs the REQUEST side; a browser cannot read a response header
+    # unless it is exposed. The portal needs Content-Disposition to save the .exe
+    # installer under the name the server chose — that name carries the enrollment
+    # ticket, so getting it wrong produces an installer that cannot enrol.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(api_router, prefix="/api/v1")

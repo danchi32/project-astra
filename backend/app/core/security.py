@@ -66,6 +66,18 @@ def generate_opaque_token() -> str:
     return secrets.token_urlsafe(48)
 
 
+def generate_installer_ticket() -> str:
+    """A short-lived enrollment ticket for the one-click .exe installer.
+
+    Deliberately shorter than generate_opaque_token: this value is carried in the
+    installer's *filename*, where 64 characters are unwieldy and conspicuous. 16
+    bytes is 128 bits — far beyond guessing — and the ticket also expires and can be
+    revoked, unlike the organization's permanent enrollment key, which is exactly why
+    that key is never put in a filename.
+    """
+    return secrets.token_urlsafe(16)
+
+
 def hash_opaque_token(token: str) -> str:
     # Opaque secrets (refresh, enrollment, device tokens): only the SHA-256 digest is stored.
     return hashlib.sha256(token.encode()).hexdigest()

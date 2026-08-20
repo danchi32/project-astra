@@ -806,11 +806,14 @@ export interface Installer {
   enrollment_key: string;
   server_url: string;
   filename: string;
-  // Name the .exe installer must be saved as — it recovers the enrollment key from its
-  // own filename. null when this deployment has no usable .exe, which is the signal to
-  // offer only the .zip. (`script` used to be here; the API stopped sending it when the
-  // self-downloading installer was removed, and nothing read it.)
-  exe_filename: string | null;
+  // Whether this deployment can offer the one-click .exe; false means show only the
+  // .zip. The exe's filename is not here on purpose — it carries a ticket minted at
+  // download time, so it comes back on that response instead. (`script` used to be
+  // here; the API stopped sending it when the self-downloading installer was removed,
+  // and nothing read it.)
+  exe_available: boolean;
+  // How many days a downloaded .exe keeps working before its ticket expires.
+  exe_ticket_days: number | null;
 }
 
 export interface OrganizationSettings {

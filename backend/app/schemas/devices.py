@@ -42,11 +42,16 @@ class InstallerRead(BaseModel):
     enrollment_key: str
     server_url: str
     filename: str
-    # Name the one-click .exe installer must be downloaded as — it reads the
-    # enrollment key back out of its own filename. None when this deployment has no
-    # usable .exe (not bundled, or built for a different backend), which is also the
-    # portal's signal to offer only the .zip.
-    exe_filename: str | None = None
+    # Whether this deployment can offer the one-click .exe (bundled, and built for this
+    # backend). False is the portal's signal to show only the .zip.
+    #
+    # The exe's filename is deliberately NOT here: it carries a single-use enrollment
+    # ticket minted at download time, so it does not exist until the download happens.
+    # The client takes it from the response's Content-Disposition instead.
+    exe_available: bool = False
+    # How long a downloaded .exe keeps working, so the portal can say so before the
+    # admin distributes one. None when no exe is on offer.
+    exe_ticket_days: int | None = None
 
 
 class EnrollRequest(BaseModel):
