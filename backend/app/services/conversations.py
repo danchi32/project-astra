@@ -2,6 +2,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import update
@@ -17,6 +18,7 @@ from app.models import (
     RemediationTask,
     User,
 )
+from app.models.base import as_utc, utcnow
 from app.repositories.conversations import ConversationRepository, MessageRepository
 from app.repositories.organizations import OrganizationRepository
 from app.services.ai.cache import SemanticCache
@@ -136,14 +138,15 @@ class ConversationService:
             conversation = await self.conversations.get(conversation_id)
             if conversation is None or conversation.device_id != device.id:
                 raise NotFoundError("Conversation not found")
+            # Idle long enough and this is a new visit, not a continuation. Carrying the old
+            # thread made the assistant answer the OLD problem: someone whose cache had been
+            # cleared an hour earlier came back to ask about their time zone and was told
+            # about the cache again. Enforced here rather than in the tray so it applies to
+            # every agent version already in the field.
+            if await self._has_gone_idle(conversation):
+                conversation = await self._start_device_conversation(device)
         else:
-            conversation = await self.conversations.add(
-                Conversation(
-                    org_id=device.org_id,
-                    device_id=device.id,
-                    title=f"{device.hostname} support",
-                )
-            )
+            conversation = await self._start_device_conversation(device)
 
         # Gate on subscription: chat works only for a writable org (active plan or a
         # live trial). Suspended / past-due / canceled / expired-trial orgs get a
@@ -201,12 +204,39 @@ class ConversationService:
         self, *, device: Device
     ) -> tuple[uuid.UUID | None, list[tuple[str, str]]]:
         """The device's most recent conversation and its messages, so the tray can
-        restore the chat when the user reopens it."""
+        restore the chat when the user reopens it.
+
+        Only while that conversation is still live. Past the idle window the window opens
+        empty, which is the visible half of the rule device_chat enforces — restoring a
+        transcript the next message would not continue would be worse than showing none.
+        """
         conversation = await self.conversations.latest_for_device(device.id)
-        if conversation is None:
+        if conversation is None or await self._has_gone_idle(conversation):
             return None, []
         messages = await self.messages.list_by_conversation(conversation.id)
         return conversation.id, [(m.role.value, m.content) for m in messages]
+
+    async def _start_device_conversation(self, device: Device) -> Conversation:
+        return await self.conversations.add(
+            Conversation(
+                org_id=device.org_id,
+                device_id=device.id,
+                title=f"{device.hostname} support",
+            )
+        )
+
+    async def _has_gone_idle(self, conversation: Conversation) -> bool:
+        """Whether nothing has been said in this conversation for the idle window.
+
+        Measured from the last MESSAGE, not the conversation row: a long back-and-forth
+        stays live as long as it is active, however old the thread itself is.
+        """
+        minutes = get_settings().device_chat_idle_minutes
+        if minutes <= 0:
+            return False   # an explicit opt-out: never reset
+        messages = await self.messages.list_by_conversation(conversation.id)
+        last_at = as_utc(messages[-1].created_at) if messages else as_utc(conversation.created_at)
+        return last_at is not None and (utcnow() - last_at) > timedelta(minutes=minutes)
 
     async def _version_reply(self, device: Device) -> str:
         """A plain answer to 'what version are you?' — the device's real agent version, and

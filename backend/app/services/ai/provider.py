@@ -8,6 +8,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Protocol
 
 from app.core.config import get_settings
@@ -104,6 +105,31 @@ class AnthropicProvider:
             elif block.type == "tool_use":
                 tool_calls.append(ToolCall(id=block.id, name=block.name, input=dict(block.input)))
         return LLMResponse(text="".join(text_parts), tool_calls=tool_calls)
+
+
+@lru_cache(maxsize=256)
+def _word_start_matcher(phrases: tuple[str, ...]) -> re.Pattern[str]:
+    """Compile keyword phrases so each only matches at the START of a word.
+
+    These lists used to be tested with a plain `phrase in text`, which matched inside
+    unrelated words. "hang" is inside "c-hang-e" and "ex-chang-e"; "ram" is inside
+    "prog-ram", "diag-ram" and "pa-ram-eter". So "change my timezone", "change my
+    password" and "my Exchange mailbox is full" were all read as problem reports, the
+    built-in rules answered them with a cleanup, and — because can_handle() gates
+    routing — the message never reached the LLM at all. A user asking to change their
+    time zone was told their cache had been cleared.
+
+    Anchored only at the START, not at both ends: several entries are stems on purpose.
+    "khul" has to reach "khulta", "freez" has to reach "freezing". Requiring a boundary
+    at the end too would silently drop those.
+    """
+    alternatives = "|".join(re.escape(p.strip()) for p in phrases if p.strip())
+    return re.compile(rf"\b(?:{alternatives})", re.IGNORECASE)
+
+
+def mentions(text: str, phrases: tuple[str, ...]) -> bool:
+    """Whether `text` uses any of `phrases` as a word (or as the start of one)."""
+    return bool(_word_start_matcher(tuple(phrases)).search(text))
 
 
 class StubProvider:
@@ -236,11 +262,29 @@ class StubProvider:
 
         # A how-to / knowledge question → search the knowledge base (checked before app
         # matching, so "how to set up Teams" searches docs rather than restarting Teams).
-        if any(trigger in user_text for trigger in self._KB_TRIGGERS):
+        if mentions(user_text, self._KB_TRIGGERS):
             return LLMResponse(
                 text="Let me check our knowledge base for that.",
                 tool_calls=[ToolCall(
                     id="stub-kb", name="search_knowledge_base", input={"query": user_text},
+                )],
+            )
+
+        # "change my timezone to IST" → set it. Handled here rather than left to the LLM
+        # because it is a common, unambiguous request and the built-in path is the only one
+        # a Basic (non-AI-Pro) organization has.
+        zone = self._match_timezone_change(user_text)
+        if zone is not None:
+            return LLMResponse(
+                text=f"Sure — setting this PC's time zone to {zone}. The clock corrects itself "
+                     "straight away.",
+                tool_calls=[ToolCall(
+                    id="stub-timezone", name="propose_remediation",
+                    input={
+                        "action_id": "set_timezone",
+                        "timezone_id": zone,
+                        "reason": "User asked to change the time zone.",
+                    },
                 )],
             )
 
@@ -287,7 +331,7 @@ class StubProvider:
                 )],
             )
 
-        if any(kw in user_text for kw in self._DIAGNOSTIC_KEYWORDS):
+        if mentions(user_text, self._DIAGNOSTIC_KEYWORDS):
             # In a tray chat we know exactly whose device this is — inspect that one
             # device's telemetry rather than listing the whole organization.
             if hostname:
@@ -305,7 +349,7 @@ class StubProvider:
 
         # A problem report that didn't name a specific app → gather evidence on this
         # device before answering, instead of dead-ending.
-        if hostname and any(w in user_text for w in self._PROBLEM_WORDS):
+        if hostname and mentions(user_text, self._PROBLEM_WORDS):
             return LLMResponse(
                 text="Let me take a look at your device to see what's going on.",
                 tool_calls=[ToolCall(
@@ -335,15 +379,17 @@ class StubProvider:
         text = user_text.lower()
         if self._is_greeting(text):
             return True
+        if self._match_timezone_change(text) is not None:
+            return True
         if self._match_explicit_cleanup(text) is not None:
             return True
         if self._match_app_fix(text) is not None:
             return True
         if self._match_network_fix(text) is not None:
             return True
-        if any(kw in text for kw in self._DIAGNOSTIC_KEYWORDS):
+        if mentions(text, self._DIAGNOSTIC_KEYWORDS):
             return True
-        if hostname and any(w in text for w in self._PROBLEM_WORDS):
+        if hostname and mentions(text, self._PROBLEM_WORDS):
             return True
         return False
 
@@ -358,40 +404,135 @@ class StubProvider:
     def _match_app_fix(self, text: str) -> tuple[str, str, str | None] | None:
         """If the user named an app and the message reads like a problem, return
         (app_label, action_id, process_name-or-None)."""
-        if not any(w in text for w in self._PROBLEM_WORDS):
+        if not mentions(text, self._PROBLEM_WORDS):
             return None
         for app, (action_id, process_name) in self._APP_ACTIONS.items():
-            if app in text:
+            if mentions(text, (app,)):
                 return (app.title(), action_id, process_name)
         return None
 
     def _match_network_fix(self, text: str) -> tuple[str, str] | None:
         """A connectivity complaint → a safe automatic network fix. Returns
         (action_id, what to say), or None if it isn't clearly a network problem."""
-        if not any(t in text for t in self._NETWORK_TRIGGERS):
+        if not mentions(text, self._NETWORK_TRIGGERS):
             return None
         # Require an actual problem signal, so "what's my wifi name" isn't a fix.
         if not (
-            any(p in text for p in self._PROBLEM_WORDS)
-            or "load" in text or "connect" in text or "down" in text
+            mentions(text, self._PROBLEM_WORDS)
+            # "disconnect" is listed separately: anchoring at the word start means
+            # "connect" no longer reaches it, and a dropped link is the clearest
+            # network complaint there is.
+            or mentions(text, ("load", "connect", "disconnect", "down"))
         ):
             return None
         # A dropped/disconnected link → reset the adapter; otherwise treat it as
         # names-not-resolving → flush DNS (the least-disruptive first fix).
-        if any(w in text for w in
-               ("wifi", "wi-fi", "adapter", "disconnect", "dropped", "no connection", "no internet")):
+        if mentions(text, ("wifi", "wi-fi", "adapter", "disconnect", "dropped",
+                           "no connection", "no internet")):
             return ("restart_network_adapter",
                     "Let me reset your network adapter to restore the connection — doing that now.")
         return ("flush_dns",
                 "Let me flush the DNS cache so websites load properly — doing that now.")
 
+    # Spoken names -> the Windows identifier tzutil actually wants. People say "IST" and
+    # "change me to New York time"; Windows only accepts "India Standard Time". Every value
+    # here must exist in SAFE_TIMEZONES, which a test enforces — an id that fails validation
+    # server-side would turn a working request into an error the user cannot act on.
+    _TIMEZONE_ALIASES: dict[str, str] = {
+        "ist": "India Standard Time", "india": "India Standard Time",
+        "kolkata": "India Standard Time", "calcutta": "India Standard Time",
+        "delhi": "India Standard Time", "mumbai": "India Standard Time",
+        "bengaluru": "India Standard Time", "bangalore": "India Standard Time",
+        "est": "Eastern Standard Time", "eastern": "Eastern Standard Time",
+        "new york": "Eastern Standard Time", "edt": "Eastern Standard Time",
+        "cst": "Central Standard Time", "chicago": "Central Standard Time",
+        "mst": "Mountain Standard Time", "mountain": "Mountain Standard Time",
+        "denver": "Mountain Standard Time",
+        "pst": "Pacific Standard Time", "pacific": "Pacific Standard Time",
+        "pdt": "Pacific Standard Time", "los angeles": "Pacific Standard Time",
+        "california": "Pacific Standard Time", "san francisco": "Pacific Standard Time",
+        "seattle": "Pacific Standard Time",
+        "atlantic": "Atlantic Standard Time",
+        "alaska": "Alaskan Standard Time", "hawaii": "Hawaiian Standard Time",
+        "utc": "UTC", "gmt": "GMT Standard Time", "london": "GMT Standard Time",
+        "uk": "GMT Standard Time", "bst": "GMT Standard Time",
+        "cet": "W. Europe Standard Time", "berlin": "W. Europe Standard Time",
+        "amsterdam": "W. Europe Standard Time", "germany": "W. Europe Standard Time",
+        "paris": "Romance Standard Time", "madrid": "Romance Standard Time",
+        "central europe": "Central Europe Standard Time",
+        "eastern europe": "E. Europe Standard Time",
+        "moscow": "Russian Standard Time", "turkey": "Turkey Standard Time",
+        "istanbul": "Turkey Standard Time", "israel": "Israel Standard Time",
+        "dubai": "Arabian Standard Time", "gst": "Arabian Standard Time",
+        "uae": "Arabian Standard Time", "riyadh": "Arab Standard Time",
+        "pkt": "Pakistan Standard Time", "pakistan": "Pakistan Standard Time",
+        "karachi": "Pakistan Standard Time",
+        "dhaka": "Bangladesh Standard Time", "bangladesh": "Bangladesh Standard Time",
+        "colombo": "Sri Lanka Standard Time", "sri lanka": "Sri Lanka Standard Time",
+        "nepal": "Nepal Standard Time", "kathmandu": "Nepal Standard Time",
+        "singapore": "Singapore Standard Time", "sgt": "Singapore Standard Time",
+        "bangkok": "SE Asia Standard Time", "jakarta": "SE Asia Standard Time",
+        "manila": "SE Asia Standard Time", "vietnam": "SE Asia Standard Time",
+        "china": "China Standard Time", "beijing": "China Standard Time",
+        "shanghai": "China Standard Time", "hong kong": "China Standard Time",
+        "jst": "Tokyo Standard Time", "japan": "Tokyo Standard Time",
+        "tokyo": "Tokyo Standard Time",
+        "kst": "Korea Standard Time", "korea": "Korea Standard Time",
+        "seoul": "Korea Standard Time",
+        "aest": "AUS Eastern Standard Time", "sydney": "AUS Eastern Standard Time",
+        "melbourne": "AUS Eastern Standard Time", "perth": "W. Australia Standard Time",
+        "darwin": "AUS Central Standard Time",
+        "auckland": "New Zealand Standard Time", "new zealand": "New Zealand Standard Time",
+        "johannesburg": "South Africa Standard Time",
+        "south africa": "South Africa Standard Time",
+        "nairobi": "E. Africa Standard Time", "lagos": "W. Central Africa Standard Time",
+        "sao paulo": "E. South America Standard Time",
+        "brazil": "E. South America Standard Time",
+        "argentina": "Argentina Standard Time", "buenos aires": "Argentina Standard Time",
+        "mexico": "Central Standard Time (Mexico)",
+        "toronto": "Eastern Standard Time", "vancouver": "Pacific Standard Time",
+    }
+
+    _TIMEZONE_WORDS = ("timezone", "time zone", "time-zone", "tz")
+    _TIMEZONE_VERBS = ("change", "set", "switch", "update", "correct", "move", "badal", "kar do")
+
+    def _match_timezone_change(self, text: str) -> str | None:
+        """A request to change the time zone → the Windows identifier to set, or None.
+
+        Requires the words "time zone" AND a change verb. A bare "IST" or a message that
+        merely mentions New York must not silently repoint someone's clock — and moving a
+        time zone moves every appointment in their calendar with it.
+
+        Picking the TARGET is the subtle part: "change from EST to IST" names two zones, and
+        acting on the first would set exactly the one they are trying to leave. Anything
+        after the last "to" wins; otherwise the last one named does.
+        """
+        if not mentions(text, self._TIMEZONE_WORDS):
+            return None
+        if not mentions(text, self._TIMEZONE_VERBS):
+            return None
+
+        # Longest alias first: "central europe" must beat the "central" inside it.
+        aliases = sorted(self._TIMEZONE_ALIASES, key=len, reverse=True)
+        pattern = re.compile(rf"\b(?:{'|'.join(re.escape(a) for a in aliases)})\b")
+        found = [(m.start(), self._TIMEZONE_ALIASES[m.group(0)]) for m in pattern.finditer(text)]
+        if not found:
+            return None
+
+        marker = text.rfind(" to ")
+        if marker != -1:
+            after = [tz for pos, tz in found if pos > marker]
+            if after:
+                return after[0]
+        return found[-1][1]
+
     def _match_explicit_cleanup(self, text: str) -> tuple[str, str] | None:
         """Direct cleanup requests → (action_id, what to say). All safe/automatic and
         never touch user data (browser cache = HTTP cache only, not history/passwords)."""
-        cleanup_verb = any(v in text for v in ("clear", "clean", "delete", "flush", "free up", "wipe"))
-        wants_cache = "cache" in text
-        wants_browser = any(w in text for w in self._BROWSER_WORDS)
-        wants_temp = "temp" in text or "temporary" in text or "junk" in text
+        cleanup_verb = mentions(text, ("clear", "clean", "delete", "flush", "free up", "wipe"))
+        wants_cache = mentions(text, ("cache",))
+        wants_browser = mentions(text, self._BROWSER_WORDS)
+        wants_temp = mentions(text, ("temp", "temporary", "junk"))
 
         if wants_cache and wants_browser:
             return ("clear_browser_cache",
@@ -415,7 +556,7 @@ class StubProvider:
     ) -> LLMResponse | None:
         """After gathering telemetry for a vague "it's slow" complaint, take the safe
         automatic action (clear temp files) rather than just reporting numbers back."""
-        if not any(w in complaint for w in self._PERF_WORDS):
+        if not mentions(complaint, self._PERF_WORDS):
             return None
         for raw in tool_results:
             try:
@@ -428,7 +569,7 @@ class StubProvider:
                 ram = data.get("ram_percent", 0)
                 # If the complaint is browser-specific, the safe first fix is the browser
                 # cache; otherwise a general temp-file cleanup.
-                if any(w in complaint for w in self._BROWSER_WORDS):
+                if mentions(complaint, self._BROWSER_WORDS):
                     return LLMResponse(
                         text=(
                             f"Your system is at {cpu}% CPU and {ram}% memory. Since it's the "

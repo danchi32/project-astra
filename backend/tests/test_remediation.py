@@ -375,6 +375,50 @@ async def test_ai_applies_automatic_fix_from_device_chat(client, admin_headers):
     assert claim.json()[0]["action_id"] == "restart_outlook"
 
 
+async def test_a_timezone_request_in_chat_ends_as_a_queued_set_timezone(client, admin_headers):
+    """The user's whole request, from what they typed to what the device will run.
+
+    Every link had a way to fail on its own: "change" read as "hang" so the message was
+    answered with a cleanup; the model was never told the `timezone_id` parameter existed;
+    and a task pointed at the wrong execution context is refused by the Tray. Each is
+    tested where it lives, but only following the message the whole way proves a person
+    asking for this actually gets it.
+
+    "from IST to EST" names two zones, and the one that must be set is the one they are
+    moving TO — setting the other would leave the clock exactly where they did not want it.
+    """
+    enroll = await _enroll(client, admin_headers)
+    device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
+
+    chat = await client.post(
+        "/api/v1/agent/chat",
+        json={"content": "change time zone from IST to EST"},
+        headers=device_headers,
+    )
+    assert chat.status_code == 200, chat.text
+
+    # AUTOMATIC tier: nobody has to approve their own machine's time zone.
+    claim = await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)
+    tasks = claim.json()
+    assert len(tasks) == 1, tasks
+    assert tasks[0]["action_id"] == "set_timezone"
+    assert tasks[0]["params"]["timezone_id"] == "Eastern Standard Time"
+
+
+async def test_a_timezone_task_is_not_offered_to_the_tray(client, admin_headers):
+    """Setting the clock is machine-wide and needs elevation. Handed to the user-session
+    Tray it would be refused, and the fix would evaporate after being promised."""
+    enroll = await _enroll(client, admin_headers)
+    device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
+    await client.post(
+        "/api/v1/agent/chat",
+        json={"content": "change my timezone to IST"},
+        headers=device_headers,
+    )
+    tray = await client.get("/api/v1/agent/tasks?context=user", headers=device_headers)
+    assert tray.json() == []
+
+
 async def test_actions_catalogue_lists_tiers(client, user_headers):
     resp = await client.get("/api/v1/remediations/actions", headers=user_headers)
     assert resp.status_code == 200

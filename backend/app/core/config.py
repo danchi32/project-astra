@@ -138,6 +138,10 @@ class Settings(BaseSettings):
     ai_intent_gate_enabled: bool = True
     ai_cache_enabled: bool = True
     ai_cache_similarity_threshold: float = 0.85
+    # How long a tray chat may sit idle before the next message starts a NEW conversation.
+    # A support chat is a visit, not a mailbox: someone who comes back an hour later has a
+    # different problem, and carrying the old thread means the assistant answers the old one.
+    device_chat_idle_minutes: int = 5
 
     # Embeddings — "auto" uses Voyage when a key is present and the offline hashing
     # provider otherwise; "voyage" refuses to start without a key rather than silently

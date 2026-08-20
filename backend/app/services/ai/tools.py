@@ -15,7 +15,12 @@ from app.repositories.devices import DeviceRepository
 from app.repositories.telemetry import TelemetryRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
-from app.services.remediation.actions import ACTIONS, RemediationTier
+from app.services.remediation.actions import (
+    ACTIONS,
+    SAFE_SERVICES,
+    SAFE_TIMEZONES,
+    RemediationTier,
+)
 from app.services.remediation.service import (
     AlreadyQueuedError,
     RemediationError,
@@ -92,6 +97,29 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "service_name": {
                     "type": "string",
                     "description": "Only for restart_service: the Windows service to restart.",
+                    "enum": sorted(SAFE_SERVICES),
+                },
+                "timezone_id": {
+                    "type": "string",
+                    "description": "Only for set_timezone: the WINDOWS time zone identifier, not "
+                    "an abbreviation — 'India Standard Time', never 'IST'. When the user says "
+                    "'change to EST' they mean 'Eastern Standard Time'.",
+                    "enum": sorted(SAFE_TIMEZONES),
+                },
+                "printer_path": {
+                    "type": "string",
+                    "description": "Only for add_network_printer: the shared printer's UNC path, "
+                    r"e.g. \\print-srv\HP-2ndFloor.",
+                },
+                "app_name": {
+                    "type": "string",
+                    "description": "Only for uninstall_application: the application's display "
+                    "name as it appears in Installed Apps, e.g. 'Google Chrome'.",
+                },
+                "kb_article_id": {
+                    "type": "string",
+                    "description": "Only for windows_update_install: one KB to install, e.g. "
+                    "KB5034123. Omit to install every pending update.",
                 },
                 "process_name": {
                     "type": "string",
@@ -245,15 +273,17 @@ async def _propose_remediation(
 
     action_id = tool_input.get("action_id", "")
     reason = tool_input.get("reason", "Requested via the device assistant.")
-    params: dict[str, Any] = {}
-    if tool_input.get("service_name"):
-        params["service_name"] = tool_input["service_name"]
-    if tool_input.get("process_name"):
-        params["process_name"] = tool_input["process_name"]
-    if tool_input.get("from_address"):
-        params["from_address"] = tool_input["from_address"]
-    if tool_input.get("folder_name"):
-        params["folder_name"] = tool_input["folder_name"]
+    # Forward exactly what the chosen action declares, rather than a hand-kept list of
+    # field names. The list version silently dropped timezone_id, printer_path, app_name
+    # and kb_article_id: the model sent them, they never reached the service, and the
+    # request came back as "A time zone is required" for a message that had named one.
+    # Reading the catalogue means adding a parameter to an action is enough.
+    action = ACTIONS.get(action_id)
+    params: dict[str, Any] = {
+        name: tool_input[name]
+        for name in (action.params if action else ())
+        if tool_input.get(name)
+    }
 
     try:
         task = await RemediationService(session).create_task(

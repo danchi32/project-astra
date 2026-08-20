@@ -16,6 +16,7 @@ someone is about to ship the gap again.
 import re
 from pathlib import Path
 
+from app.services.ai.tools import TOOL_SCHEMAS
 from app.services.remediation.actions import ACTIONS, SAFE_SERVICES
 
 AGENT = Path(__file__).resolve().parents[2] / "agent" / "src"
@@ -81,3 +82,43 @@ def test_removed_actions_stay_removed():
     ids = set(ACTIONS)
     assert "registry_fix" not in ids
     assert "driver_update" not in ids
+
+
+def test_every_action_parameter_is_declared_to_the_model():
+    """An action's parameters have to appear in the tool schema, or the model cannot
+    supply them.
+
+    set_timezone declares `timezone_id`, but the schema listed only four fields and that
+    was not one of them — so the model had to invent the name, and had no idea which
+    values were accepted. add_network_printer, uninstall_application and
+    windows_update_install were in the same position. An action the assistant can name
+    but cannot parameterise is one it cannot actually use.
+    """
+    schema = next(t for t in TOOL_SCHEMAS if t["name"] == "propose_remediation")
+    declared = set(schema["input_schema"]["properties"])
+    # Only what the model is actually offered. Admin-only actions are withheld from it on
+    # purpose, so that prompt-injected content cannot nudge it toward a high-privilege
+    # action — their parameters are meant to be absent here.
+    offered = set(schema["input_schema"]["properties"]["action_id"]["enum"])
+
+    missing = sorted(
+        f"{action.id}.{param}"
+        for action in ACTIONS.values()
+        if action.id in offered
+        for param in action.params
+        if param not in declared
+    )
+    assert not missing, (
+        f"These action parameters are not in propose_remediation's schema, so the model "
+        f"cannot pass them: {missing}"
+    )
+
+
+def test_the_model_is_told_which_timezones_are_accepted():
+    """Server-side validation rejects anything outside SAFE_TIMEZONES. Without the list in
+    the schema the model guesses 'EST', gets an error, and burns a turn correcting itself
+    — every time."""
+    from app.services.remediation.actions import SAFE_TIMEZONES
+
+    schema = next(t for t in TOOL_SCHEMAS if t["name"] == "propose_remediation")
+    assert set(schema["input_schema"]["properties"]["timezone_id"]["enum"]) == set(SAFE_TIMEZONES)
