@@ -283,7 +283,10 @@ async def test_the_built_in_rules_teach_the_base_nothing(
     for _ in range(3):
         chat = await client.post(
             "/api/v1/agent/chat",
-            json={"content": "outlook is not responding again"},
+            # Deliberately without "again": recurrence now escalates to an Office repair,
+            # which waits for approval and so claims nothing. This test is about a keyword
+            # rule that FIXES something, so it needs the automatic restart path.
+            json={"content": "outlook is not responding"},
             headers=device_headers,
         )
         assert chat.status_code == 200, chat.text

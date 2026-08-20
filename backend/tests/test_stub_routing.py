@@ -172,6 +172,15 @@ async def test_the_rules_propose_set_timezone_with_the_resolved_id(stub):
 
 
 @pytest.mark.parametrize("message,app", [
+    # "keep", not "keeps". The first version of this rule listed whole phrases, so a user
+    # who wrote "outlook keep crashing" got a restart — the exact wording decided whether
+    # the feature existed. Recurrence and failure are matched as separate words now.
+    ("outlook keep crashing", "Outlook"),
+    ("outlook keeps on crashing", "Outlook"),
+    ("word keeps closing again and again", "Word"),
+    ("excel crashes every time I open it", "Excel"),
+    ("powerpoint hangs constantly", "PowerPoint"),
+    ("outlook crashed 3 times today, always same error", "Outlook"),
     ("outlook keeps crashing", "Outlook"),
     ("MS Word keeps closing", "Word"),
     ("powerpoint crashes every time", "PowerPoint"),
@@ -189,6 +198,8 @@ def test_a_recurring_office_failure_proposes_a_repair(stub, message, app):
 
 @pytest.mark.parametrize("message,expected_restart", [
     ("outlook won't open", "restart_outlook"),
+    # A crash reported ONCE is still a restart — recurrence is the whole distinction.
+    ("outlook crashed", "restart_outlook"),
     ("excel is not responding", "restart_application"),
     ("word is frozen", "restart_application"),
 ])
@@ -206,6 +217,8 @@ def test_a_one_off_office_problem_still_just_restarts_the_app(stub, message, exp
     "in other words my wifi keeps dropping",
     "how do I install office",
     "change my timezone to IST",
+    # "keep" is a recurrence word, but nothing here is failing.
+    "keep the excel file in my folder",
 ])
 def test_the_repair_does_not_fire_on_ordinary_mentions(stub, message):
     assert stub._match_office_repair(message.lower()) is None

@@ -526,19 +526,29 @@ class StubProvider:
         "ms word", "microsoft word", "ms excel", "microsoft excel", "word",
         "microsoft office", "ms office", "office 365", "microsoft 365", "o365", "office",
     )
-    # What separates "restart it" from "repair it". A single hang is cleared by relaunching
-    # the app, which is instant and costs nothing; it is RECURRENCE that says the install
-    # itself is damaged, and an Office repair force-closes every Office app to fix it.
-    _REPAIR_SIGNALS = (
-        "keeps crashing", "keeps closing", "keeps freezing", "keeps hanging",
-        "keeps restarting", "crashes every time", "crashing every time", "every time",
-        "again and again", "repeatedly", "over and over", "still crashing",
-        "still crashes", "still closing", "won't start at all", "wont start at all",
-        "corrupt", "corrupted", "repair",
+    # What separates "restart it" from "repair it": RECURRENCE. A single hang is cleared by
+    # relaunching the app, which is instant and costs nothing; repetition is what says the
+    # install itself is damaged, and a repair force-closes every Office app to fix it.
+    #
+    # Two independent axes rather than whole phrases. The first attempt listed exact
+    # wordings — "keeps crashing" — and a user who wrote "outlook keep crashing" got a
+    # restart, because "keeps crashing" does not match "keep crashing". People write this a
+    # dozen ways; requiring one word from each list covers them without trying to enumerate
+    # the combinations. Word-start matching does the rest: "keep" reaches keeps/keeping,
+    # "crash" reaches crashes/crashing.
+    _RECURRENCE_WORDS = (
+        "keep", "again", "every time", "each time", "everytime", "repeated", "repeatedly",
+        "over and over", "still", "constantly", "always", "frequently", "multiple times",
+        "second time", "third time",
         # Hinglish — how these actually arrive.
-        "bar bar", "baar baar", "har baar", "band ho rahi", "band ho raha",
-        "band ho jata", "band ho jati", "phir se band", "roz band",
+        "bar bar", "baar baar", "har baar", "hamesha", "roz", "phir se", "dobara", "fir se",
     )
+    _FAILURE_WORDS = (
+        "crash", "clos", "freez", "hang", "restart", "not respond", "unresponsive",
+        "quit", "stuck", "shut down", "shutting down", "band", "error",
+    )
+    # Enough on their own: these name the remedy, or the cause a repair addresses.
+    _EXPLICIT_REPAIR_WORDS = ("repair", "corrupt", "reinstall", "damaged", "broken install")
 
     def _match_office_repair(self, text: str) -> str | None:
         """A recurring Office failure → repair the install. Returns the app to name, or None.
@@ -550,7 +560,9 @@ class StubProvider:
         """
         if not mentions(text, self._OFFICE_APPS):
             return None
-        if not mentions(text, self._REPAIR_SIGNALS):
+        explicit = mentions(text, self._EXPLICIT_REPAIR_WORDS)
+        recurring = mentions(text, self._RECURRENCE_WORDS) and mentions(text, self._FAILURE_WORDS)
+        if not (explicit or recurring):
             return None
 
         for alias, label in (
