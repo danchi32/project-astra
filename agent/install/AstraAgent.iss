@@ -67,7 +67,16 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName={#AppName}
-UninstallDisplayIcon={app}\Agent\AstraAgent.Service.dll
+
+; The tray chat's own icon, so the installer, the wizard and the Add/Remove Programs
+; entry all show the same ASTRA mark.
+;
+; UninstallDisplayIcon points at the .ico installed below rather than at a program
+; binary: the agent ships framework-dependent, so what lands on disk is
+; AstraAgent.Service.dll — a library, which carries no icon resource. Windows finds
+; nothing to draw and leaves the entry blank.
+SetupIconFile=payload\astra.ico
+UninstallDisplayIcon={app}\astra.ico
 
 ; Code signing is not wired up yet (see docs). Build-Installer.ps1 defines SIGN and
 ; passes /Sastra=<command> once a certificate exists; until then this compiles to an
@@ -92,6 +101,9 @@ Source: "payload\dist-tray\*"; DestDir: "{tmp}\astra\dist-tray"; Flags: recurses
 Source: "payload\Install-AstraAgent.ps1"; DestDir: "{tmp}\astra"; Flags: ignoreversion
 ; The uninstaller script persists — Add/Remove Programs calls it below.
 Source: "payload\Uninstall-AstraAgent.ps1"; DestDir: "{app}"; Flags: ignoreversion
+; Must outlive the install: Add/Remove Programs reads this icon every time it draws
+; the list, not just once at install time (see UninstallDisplayIcon above).
+Source: "payload\astra.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \

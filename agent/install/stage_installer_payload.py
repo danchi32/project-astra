@@ -33,6 +33,9 @@ INSTALLER_DIR = REPO / "agent" / "install"
 PAYLOAD_DIR = INSTALLER_DIR / "payload"
 PORTABLE_ZIP = REPO / "backend" / "downloads" / "agent-portable.zip"
 UNINSTALL_SCRIPT = INSTALLER_DIR / "Uninstall-AstraAgent.ps1"
+# The tray chat's icon, reused for the installer and the Add/Remove Programs entry so
+# ASTRA looks like one product wherever Windows shows it.
+BRAND_ICON = REPO / "agent" / "src" / "AstraAgent.Tray" / "astra.ico"
 SERVICE_CSPROJ = REPO / "agent" / "src" / "AstraAgent.Service" / "AstraAgent.Service.csproj"
 AGENT_INSTALLER_MODULE = REPO / "backend" / "app" / "services" / "agent_installer.py"
 
@@ -123,6 +126,10 @@ def main() -> int:
     if not UNINSTALL_SCRIPT.is_file():
         raise SystemExit(f"Missing {UNINSTALL_SCRIPT}")
     shutil.copy2(UNINSTALL_SCRIPT, PAYLOAD_DIR / "Uninstall-AstraAgent.ps1")
+
+    if not BRAND_ICON.is_file():
+        raise SystemExit(f"Missing {BRAND_ICON}")
+    shutil.copy2(BRAND_ICON, PAYLOAD_DIR / "astra.ico")
 
     version = agent_version()
     # The exe is byte-identical for every organization, so the backend it points at
