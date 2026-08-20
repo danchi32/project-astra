@@ -189,8 +189,8 @@ async def test_technician_can_approve_approval_required_but_not_admin_only(
     # admin_only → technician CANNOT approve
     ao = await client.post(
         "/api/v1/remediations",
-        json={"device_id": device_id, "action_id": "registry_fix", "params": {"fix_id": "x"},
-              "reason": "registry"},
+        json={"device_id": device_id, "action_id": "reset_windows_update_components",
+              "reason": "updates keep failing"},
         headers=admin_headers,
     )
     denied = await client.post(
@@ -333,7 +333,7 @@ async def test_actions_catalogue_lists_tiers(client, user_headers):
     by_id = {a["id"]: a for a in resp.json()}
     assert by_id["flush_dns"]["tier"] == "automatic"
     assert by_id["office_repair"]["tier"] == "approval_required"
-    assert by_id["registry_fix"]["tier"] == "admin_only"
+    assert by_id["reset_windows_update_components"]["tier"] == "admin_only"
 
 
 async def test_inline_approval_skips_the_pending_state_and_its_notification(

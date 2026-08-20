@@ -216,8 +216,6 @@ public sealed class RemediationExecutor
             }
         }
 
-        var mb = freed / 1024d / 1024d;
-
         // Name the folder and the account. %TEMP% is per-user, so "freed 332 MB" is
         // unverifiable — and actively misleading — unless you can see WHOSE temp was
         // emptied. If this process isn't running as the signed-in user (for example it was
@@ -226,13 +224,12 @@ public sealed class RemediationExecutor
         // change at all. Saying which path and which identity makes that self-evident
         // instead of a mystery.
         var who = Environment.UserName;
-        var where = cleaned.Count > 0 ? string.Join(", ", cleaned) : "(no temp folder found)";
-        var msg = $"Cleared temporary files for {who} — freed {mb:0.#} MB across {deleted} file(s) "
-                + $"in {where}.";
-        if (inUse > 0)
-            msg += $" {inUse} file(s) were in use by running apps and were skipped "
-                 + "(close those apps and run it again to remove the rest).";
-        return (true, msg);
+        return ClearVerdict(
+            $"temporary files for {who}",
+            cleaned.Count > 0 ? $" in {string.Join(", ", cleaned)}" : "",
+            deleted, inUse, freed,
+            foundAnything: cleaned.Count > 0,
+            blockedBy: "");
     }
 
     private static (bool, string) ClearBrowserCache()
@@ -304,12 +301,63 @@ public sealed class RemediationExecutor
             }
         }
 
-        var mb = freed / 1024d / 1024d;
-        var msg = $"Cleared browser cache — freed {mb:0.#} MB across {deleted} file(s).";
-        if (inUse > 0)
-            msg += $" {inUse} file(s) were locked by an open browser and were skipped "
-                 + "(close the browser and run it again to clear the rest).";
+        return ClearVerdict("browser cache", "", deleted, inUse, freed,
+                            foundAnything: true, blockedBy: RunningBrowsers());
+    }
+
+    /// <summary>Whether a file-clearing action actually achieved anything, and what to say.
+    ///
+    /// Pure, and deliberately separate from the deleting, because this judgement is the part
+    /// that was wrong: both clearing actions used to return success unconditionally. With a
+    /// browser open every cache delete fails — Chromium memory-maps those files — so the
+    /// ordinary case produced "freed 0 MB across 0 file(s)" and still reported a fix. Having
+    /// run without crashing is not the same as having cleared anything.</summary>
+    /// <param name="what">Noun for the message, e.g. "browser cache".</param>
+    /// <param name="where">Optional location clause, already spaced, e.g. " in C:\Temp".</param>
+    /// <param name="foundAnything">False when there was nothing on disk to clear at all —
+    /// genuinely nothing to do, which is a success, unlike being unable to do it.</param>
+    /// <param name="blockedBy">What holds the files, when known, e.g. "Google Chrome".</param>
+    public static (bool Success, string Message) ClearVerdict(
+        string what, string where, int deleted, int lockedOut, long freedBytes,
+        bool foundAnything, string blockedBy)
+    {
+        var holder = string.IsNullOrEmpty(blockedBy) ? "a running application" : blockedBy;
+
+        if (!foundAnything)
+            return (true, $"No {what} was found to clear.");
+
+        // Nothing removed and everything locked: the action did not happen. Saying so is the
+        // only way the user learns what to do about it.
+        if (deleted == 0 && lockedOut > 0)
+            return (false,
+                $"Could not clear the {what} — all {lockedOut} file(s){where} are locked by "
+                + $"{holder}. Close it and run this again.");
+
+        var mb = freedBytes / 1024d / 1024d;
+        var msg = $"Cleared the {what} — freed {mb:0.#} MB across {deleted} file(s){where}.";
+        if (lockedOut > 0)
+            msg += $" {lockedOut} file(s) were locked by {holder} and were skipped "
+                 + "(close it and run this again to clear the rest).";
         return (true, msg);
+    }
+
+    /// <summary>Names the browsers running right now, so "close it and try again" can say
+    /// which one. Empty when none are — the caller then falls back to a generic phrase.</summary>
+    private static string RunningBrowsers()
+    {
+        var known = new[]
+        {
+            ("chrome", "Google Chrome"), ("msedge", "Microsoft Edge"),
+            ("brave", "Brave"), ("firefox", "Firefox"),
+        };
+        var found = new System.Collections.Generic.List<string>();
+        foreach (var (process, label) in known)
+        {
+            // Enumeration races process exit; a name that vanishes is not an error.
+            try { if (Process.GetProcessesByName(process).Length > 0) found.Add(label); }
+            catch { /* ignore */ }
+        }
+        return string.Join(" and ", found);
     }
 
     /// <summary>Enumerate every file under <paramref name="root"/> without throwing when a

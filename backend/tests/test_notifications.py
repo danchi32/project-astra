@@ -84,8 +84,8 @@ async def test_unread_count_and_mark_read(client, admin_headers):
     )
     await client.post(
         "/api/v1/remediations",
-        json={"device_id": enrolled["device_id"], "action_id": "registry_fix",
-              "reason": "y", "params": {"fix_id": "abc"}},
+        json={"device_id": enrolled["device_id"], "action_id": "reset_windows_update_components",
+              "reason": "y"},
         headers=admin_headers,
     )
 

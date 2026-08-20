@@ -23,6 +23,8 @@ public sealed class SystemRemediationExecutor
             "disable_local_account", "enable_local_account",
             "uninstall_application", "set_timezone",
             "block_usb_storage", "unblock_usb_storage",
+            "restart_service", "restart_network_adapter", "network_reset",
+            "office_repair", "reset_windows_update_components",
         };
 
     public (bool Success, string Output) Execute(
@@ -44,6 +46,14 @@ public sealed class SystemRemediationExecutor
                 "set_timezone" => SetTimeZone(GetParam(parameters, "timezone_id")),
                 "block_usb_storage" => UsbStorageManager.SetBlocked(true),
                 "unblock_usb_storage" => UsbStorageManager.SetBlocked(false),
+                // The service NAME is a parameter, unlike every other action here where the
+                // target is implied by the id. ServiceRestarter's allowlist is what makes that
+                // safe — see the note there.
+                "restart_service" => ServiceRestarter.Restart(GetParam(parameters, "service_name")),
+                "restart_network_adapter" => NetworkRemediation.RestartAdapter(),
+                "network_reset" => NetworkRemediation.ResetNetworkStack(),
+                "office_repair" => OfficeRepair.Repair(),
+                "reset_windows_update_components" => WindowsUpdateComponents.Reset(),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),

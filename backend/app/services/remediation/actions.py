@@ -86,10 +86,14 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     RemediationAction("restart_edge", "Restart Microsoft Edge", RemediationTier.AUTOMATIC,
                       "Closes and reopens Microsoft Edge. Edge restores the previous tabs."),
     RemediationAction("restart_network_adapter", "Restart network adapter", RemediationTier.AUTOMATIC,
-                      "Disables and re-enables the network adapter to recover a dropped connection."),
+                      "Disables and re-enables the network adapter to recover a dropped connection. "
+                      "Briefly drops all connectivity, including the agent's own; it reports once "
+                      "the link returns.",
+                      execution_context="system"),
     RemediationAction("restart_service", "Restart a Windows service", RemediationTier.AUTOMATIC,
-                      "Restarts an allowlisted Windows service (e.g. Print Spooler, Windows Search).",
-                      params=("service_name",)),
+                      "Restarts an allowlisted Windows service (e.g. Print Spooler, Windows Search). "
+                      "Stops and restarts dependent services with it.",
+                      params=("service_name",), execution_context="system"),
     RemediationAction("create_outlook_rule", "Create an Outlook inbox rule", RemediationTier.AUTOMATIC,
                       "Creates a rule in the user's DESKTOP Outlook that moves incoming mail from a "
                       "given sender address into a folder (creating the folder if it doesn't exist). "
@@ -98,11 +102,15 @@ _ACTIONS: tuple[RemediationAction, ...] = (
 
     # ── Approval required: impactful but routine, needs IT sign-off ──────────
     RemediationAction("office_repair", "Repair Microsoft Office", RemediationTier.APPROVAL_REQUIRED,
-                      "Runs an Office quick/online repair. Disruptive; needs IT approval."),
-    RemediationAction("driver_update", "Update a device driver", RemediationTier.APPROVAL_REQUIRED,
-                      "Updates a hardware driver. Needs IT approval.", params=("device_class",)),
+                      "Runs Office's built-in quick repair for apps that crash or won't start "
+                      "(Outlook, Word, Excel). FORCE-CLOSES every open Office app, losing unsaved "
+                      "work — that is what the approval is for. Click-to-Run installs only "
+                      "(Microsoft 365 / Office 2016+); older MSI installs are refused.",
+                      execution_context="system"),
     RemediationAction("network_reset", "Reset network stack", RemediationTier.APPROVAL_REQUIRED,
-                      "Resets Winsock/TCP-IP. Drops all connections; needs IT approval."),
+                      "Resets Winsock and the TCP/IP stack for corruption that survives an adapter "
+                      "restart. REQUIRES A REBOOT to take effect. Needs IT approval.",
+                      execution_context="system"),
     RemediationAction("windows_update_install", "Install pending Windows updates", RemediationTier.APPROVAL_REQUIRED,
                       "Installs pending Windows updates via the elevated service. Pass kb_article_id "
                       "to install one specific update, or omit it to install all pending. Never "
@@ -110,11 +118,24 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       params=("kb_article_id",), execution_context="system"),
 
     # ── Admin only: high-risk, admin approval mandatory ─────────────────────
-    RemediationAction("registry_fix", "Apply a registry fix", RemediationTier.ADMIN_ONLY,
-                      "Applies an approved registry change. Admin approval only.", params=("fix_id",)),
+    #
+    # `registry_fix` and `driver_update` used to be here. Both were catalogued but never
+    # implemented by the agent, so the engine could propose one, an admin could approve it,
+    # and the device would then refuse it — spending a human's approval on nothing. They are
+    # gone rather than implemented, because neither can be made safe as a generic action:
+    #   * registry_fix amounted to "write whatever the model decided" into the registry. An
+    #     approver could not see what would be written, which makes the approval meaningless,
+    #     and it is the opposite of the allowlisted-actions rule the rest of this file keeps.
+    #   * driver_update has no safe vendor-neutral mechanism, and the failure mode is a
+    #     machine that will not boot.
+    # Specific, named registry fixes can be added as their own actions, where the approver can
+    # see exactly what each one does.
     RemediationAction("reset_windows_update_components", "Reset Windows Update components",
                       RemediationTier.ADMIN_ONLY,
-                      "Rebuilds the Windows Update component store. Admin approval only."),
+                      "Renames the SoftwareDistribution and catroot2 caches so Windows rebuilds "
+                      "them — for updates that fail or download endlessly. Discards in-flight "
+                      "downloads; the next update check is slow. Admin approval only.",
+                      execution_context="system"),
 
     # ── Secure offboarding (elevated, admin-only): lock a local Windows account ──
     RemediationAction("disable_local_account", "Disable a local user account", RemediationTier.ADMIN_ONLY,
