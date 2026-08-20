@@ -29,6 +29,54 @@ async def _device_id(client, admin_headers):
     return devices.json()[0]["id"]
 
 
+async def test_office_repair_reaches_the_agent_only_after_someone_approves_it(
+    client, admin_headers
+):
+    """The whole promise of an approval-gated fix, end to end.
+
+    This is the shape that failed in the field: office_repair was catalogued, so the
+    engine offered it and an admin could approve it — and the device then refused the
+    work, because no executor implemented it. Approval without execution spends a
+    person's decision on nothing and tells the user a fix is coming that never arrives.
+
+    Checked as one chain rather than as separate facts, because every link has to hold
+    for the feature to exist at all: gated before approval, withheld from the
+    user-session Tray that cannot elevate, and delivered to the Service that can.
+    """
+    enroll = await _enroll(client, admin_headers)
+    device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
+    device_id = await _device_id(client, admin_headers)
+
+    created = await client.post(
+        "/api/v1/remediations",
+        json={"device_id": device_id, "action_id": "office_repair",
+              "reason": "Outlook and Word keep crashing"},
+        headers=admin_headers,
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    assert created.json()["status"] == "pending_approval"
+
+    # Nothing runs on the strength of the AI having asked for it.
+    early = await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)
+    assert [t["id"] for t in early.json()] == []
+
+    approved = await client.post(
+        f"/api/v1/remediations/{task_id}/approve", headers=admin_headers
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    # The Tray runs as the signed-in user and cannot repair Office. Handing it the task
+    # would take it away from the Service, and it would fail there — which is precisely
+    # how an approved fix used to evaporate.
+    tray = await client.get("/api/v1/agent/tasks?context=user", headers=device_headers)
+    assert [t["id"] for t in tray.json()] == []
+
+    elevated = await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)
+    assert task_id in [t["id"] for t in elevated.json()]
+
+
 # ── Tier enforcement (the security core) ──────────────────────────────────
 
 
