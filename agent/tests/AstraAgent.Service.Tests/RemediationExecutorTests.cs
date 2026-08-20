@@ -19,8 +19,11 @@ public class RemediationExecutorTests
     // All of these ARE implemented now — in the elevated service, which is the point. The
     // Tray runs in the user's session and must still refuse them, so a misrouted task fails
     // closed rather than being half-attempted without the privileges it needs.
+    //
+    // office_repair is deliberately NOT here: it moved the other way. Office's repair needs
+    // an interactive desktop, which session 0 has not got, so the Tray is the only process
+    // that can open it — see OfficeRepairLauncher.
     [Theory]
-    [InlineData("office_repair")]
     [InlineData("restart_service")]
     [InlineData("network_reset")]
     [InlineData("restart_network_adapter")]
@@ -47,6 +50,9 @@ public class RemediationExecutorTests
                 // LocalSystem can see.
                 "add_network_printer",
                 "clear_browser_cache", "clear_temp", "create_outlook_rule", "flush_dns",
+                // Elevates itself through a UAC prompt rather than running as SYSTEM: the
+                // repair needs the user's desktop, not more privilege.
+                "office_repair",
                 "restart_application", "restart_chrome", "restart_edge", "restart_explorer",
                 "restart_outlook", "restart_teams", "restart_zoom",
             },

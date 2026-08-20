@@ -102,11 +102,13 @@ _ACTIONS: tuple[RemediationAction, ...] = (
 
     # ── Approval required: impactful but routine, needs IT sign-off ──────────
     RemediationAction("office_repair", "Repair Microsoft Office", RemediationTier.APPROVAL_REQUIRED,
-                      "Runs Office's built-in quick repair for apps that crash or won't start "
-                      "(Outlook, Word, Excel). FORCE-CLOSES every open Office app, losing unsaved "
-                      "work — that is what the approval is for. Click-to-Run installs only "
-                      "(Microsoft 365 / Office 2016+); older MSI installs are refused.",
-                      execution_context="system"),
+                      "OPENS Office's own repair on the device for apps that crash or won't "
+                      "start (Outlook, Word, Excel) — the same window as Control Panel's Change "
+                      "button. Someone at the PC must approve an administrator prompt and then "
+                      "click through it; the repair closes every Office app and takes unsaved "
+                      "work with them. Runs in the user's session, because Office's repair "
+                      "needs a desktop and session 0 has none.",
+                      execution_context="user"),
     RemediationAction("network_reset", "Reset network stack", RemediationTier.APPROVAL_REQUIRED,
                       "Resets Winsock and the TCP/IP stack for corruption that survives an adapter "
                       "restart. REQUIRES A REBOOT to take effect. Needs IT approval.",

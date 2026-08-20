@@ -19,7 +19,7 @@ public sealed class RemediationExecutor
             "restart_explorer", "restart_outlook", "restart_teams", "restart_zoom",
             "restart_chrome", "restart_edge", "restart_application",
             "flush_dns", "clear_temp", "clear_browser_cache",
-            "create_outlook_rule", "add_network_printer",
+            "create_outlook_rule", "add_network_printer", "office_repair",
         };
 
     public async Task<(bool Success, string Output)> ExecuteAsync(
@@ -36,6 +36,10 @@ public sealed class RemediationExecutor
                     parameters is not null && parameters.TryGetValue("printer_path", out var pp) ? pp : null, ct),
                 "clear_temp" => ClearTemp(),
                 "clear_browser_cache" => ClearBrowserCache(),
+                // Runs HERE, not in the elevated service: Office's repair needs an
+                // interactive desktop, which session 0 does not have. See
+                // OfficeRepairLauncher for what that cost to learn.
+                "office_repair" => OfficeRepairLauncher.Launch(),
                 "restart_explorer" => RestartApp(new[] { "explorer" }, "explorer.exe"),
                 "restart_outlook" => RestartApp(new[] { "OUTLOOK" }, "outlook.exe"),
                 "restart_teams" => RestartApp(new[] { "ms-teams", "Teams" }, "ms-teams.exe"),

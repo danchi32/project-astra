@@ -40,8 +40,8 @@ async def test_office_repair_reaches_the_agent_only_after_someone_approves_it(
     person's decision on nothing and tells the user a fix is coming that never arrives.
 
     Checked as one chain rather than as separate facts, because every link has to hold
-    for the feature to exist at all: gated before approval, withheld from the
-    user-session Tray that cannot elevate, and delivered to the Service that can.
+    for the feature to exist at all: gated before approval, withheld from the elevated
+    service that has no desktop to open it on, and delivered to the tray that has.
     """
     enroll = await _enroll(client, admin_headers)
     device_headers = {"Authorization": f"Bearer {enroll['device_token']}"}
@@ -58,7 +58,7 @@ async def test_office_repair_reaches_the_agent_only_after_someone_approves_it(
     assert created.json()["status"] == "pending_approval"
 
     # Nothing runs on the strength of the AI having asked for it.
-    early = await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)
+    early = await client.get("/api/v1/agent/tasks?context=user", headers=device_headers)
     assert [t["id"] for t in early.json()] == []
 
     approved = await client.post(
@@ -67,14 +67,15 @@ async def test_office_repair_reaches_the_agent_only_after_someone_approves_it(
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
 
-    # The Tray runs as the signed-in user and cannot repair Office. Handing it the task
-    # would take it away from the Service, and it would fail there — which is precisely
-    # how an approved fix used to evaporate.
-    tray = await client.get("/api/v1/agent/tasks?context=user", headers=device_headers)
-    assert [t["id"] for t in tray.json()] == []
-
+    # It goes to the TRAY, not the elevated service. Office's repair puts a window up, and
+    # session 0 has no desktop to put it on — running it as LocalSystem silently did nothing
+    # at all, which is how this shipped once already. The tray has the user's session and
+    # elevates through a UAC prompt instead.
     elevated = await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)
-    assert task_id in [t["id"] for t in elevated.json()]
+    assert [t["id"] for t in elevated.json()] == []
+
+    tray = await client.get("/api/v1/agent/tasks?context=user", headers=device_headers)
+    assert task_id in [t["id"] for t in tray.json()]
 
 
 # ── Tier enforcement (the security core) ──────────────────────────────────
@@ -409,8 +410,8 @@ async def test_a_recurring_office_crash_waits_for_approval_instead_of_restarting
     )
     assert approved.status_code == 200
 
-    # Only now, and only to the elevated service that can actually run it.
-    claimed = await client.get("/api/v1/agent/tasks?context=system", headers=device_headers)
+    # Only now, and only to the tray — the one process with a desktop to open the repair on.
+    claimed = await client.get("/api/v1/agent/tasks?context=user", headers=device_headers)
     assert [t["action_id"] for t in claimed.json()] == ["office_repair"]
 
 

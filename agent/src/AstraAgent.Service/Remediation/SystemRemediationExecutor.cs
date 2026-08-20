@@ -24,7 +24,7 @@ public sealed class SystemRemediationExecutor
             "uninstall_application", "set_timezone",
             "block_usb_storage", "unblock_usb_storage",
             "restart_service", "restart_network_adapter", "network_reset",
-            "office_repair", "reset_windows_update_components",
+            "reset_windows_update_components",
         };
 
     public (bool Success, string Output) Execute(
@@ -52,7 +52,6 @@ public sealed class SystemRemediationExecutor
                 "restart_service" => ServiceRestarter.Restart(GetParam(parameters, "service_name")),
                 "restart_network_adapter" => NetworkRemediation.RestartAdapter(),
                 "network_reset" => NetworkRemediation.ResetNetworkStack(),
-                "office_repair" => OfficeRepair.Repair(),
                 "reset_windows_update_components" => WindowsUpdateComponents.Reset(),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "

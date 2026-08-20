@@ -1,5 +1,6 @@
 using System.Linq;
 using AstraAgent.Service.Remediation;
+using AstraAgent.Tray.Remediation;
 using Xunit;
 
 namespace AstraAgent.Service.Tests;
@@ -74,98 +75,58 @@ public class ElevatedRemediationTests
         Assert.NotNull(refusal);
     }
 
-    // ---- Office repair ---------------------------------------------------------------
-
-    [Fact]
-    public void Office_repair_runs_a_silent_quick_repair()
-    {
-        var (plan, refusal) = OfficeRepair.PlanFor(@"C:\CTR\OfficeClickToRun.exe", "x64", "en-us");
-
-        Assert.Null(refusal);
-        Assert.Equal(@"C:\CTR\OfficeClickToRun.exe", plan!.FileName);
-        Assert.Contains("scenario=Repair", plan.Arguments);
-        Assert.Contains("RepairType=QuickRepair", plan.Arguments);
-        // Session 0 has no desktop: a repair waiting on an invisible dialog would hang until
-        // the timeout with nothing to show for it.
-        Assert.Contains("DisplayLevel=False", plan.Arguments);
-        Assert.Contains("platform=x64", plan.Arguments);
-        Assert.Contains("culture=en-us", plan.Arguments);
-    }
-
-    [Fact]
-    public void An_msi_office_install_is_refused_rather_than_guessed_at()
-    {
-        // Repairing MSI Office needs a product code, and the wrong one repairs — or removes —
-        // a different product. Better to say so than to guess.
-        var (plan, refusal) = OfficeRepair.PlanFor(null, "x64", "en-us");
-
-        Assert.Null(plan);
-        Assert.Contains("Click-to-Run", refusal);
-        Assert.Contains("Settings", refusal);   // tells the admin where to repair it by hand
-    }
-
-    [Fact]
-    public void Missing_registry_values_fall_back_rather_than_failing()
-    {
-        // Platform/culture are only hints to stop OfficeClickToRun prompting; an install that
-        // did not record them is still repairable.
-        var (plan, refusal) = OfficeRepair.PlanFor(@"C:\CTR\OfficeClickToRun.exe", null, null);
-
-        Assert.Null(refusal);
-        Assert.Contains("platform=x64", plan!.Arguments);
-        Assert.Contains("culture=en-us", plan.Arguments);
-    }
-
-    // ---- Did the repair actually happen? ---------------------------------------------
+    // ---- Opening Office's repair ------------------------------------------------------
     //
-    // The first version decided from OfficeClickToRun.exe's exit code. That executable is a
-    // launcher: it hands the work to the Click-to-Run service and exits 0 within seconds, so
-    // a user was told "components were re-registered and damaged files replaced" while
-    // nothing at all had happened on their PC. Office records what it last did; that record
-    // is the evidence, and this is the function that reads it.
+    // The command is READ from the registry, never composed, and these are the real strings
+    // from the machine where this was diagnosed. The first implementation built its own
+    // command with two arguments Control Panel does not pass — RepairType=QuickRepair and
+    // DisplayLevel=False — and nothing happened, from any context. Parsing what Windows
+    // recorded is the whole fix, so parsing it correctly is what these hold.
+
+    private const string M365Modify =
+        @"""C:\Program Files\Common Files\Microsoft Shared\ClickToRun\OfficeClickToRun.exe"" "
+        + "scenario=repair platform=x64 culture=en-us";
 
     [Fact]
-    public void A_recorded_successful_repair_is_a_success()
+    public void The_office_modify_command_is_split_into_exe_and_arguments()
     {
-        var (ok, msg) = OfficeRepair.Verdict("REPAIR", "Success");
-        Assert.True(ok);
-        Assert.Contains("completed", msg);
+        var (exe, args) = OfficeRepairLauncher.ParseModifyPath(M365Modify);
+
+        Assert.Equal(@"C:\Program Files\Common Files\Microsoft Shared\ClickToRun\OfficeClickToRun.exe", exe);
+        Assert.Equal(new[] { "scenario=repair", "platform=x64", "culture=en-us" }, args);
+        // Nothing added. The two arguments that were invented last time are the reason this
+        // assertion is exact rather than a Contains.
+        Assert.DoesNotContain("DisplayLevel=False", args);
+        Assert.DoesNotContain("RepairType=QuickRepair", args);
+    }
+
+    [Theory]
+    [InlineData("MsiExec.exe /X{90160000-008C-0000-1000-0000000FF1CE}")]  // an Office component
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData(@"C:\no\quotes\here.exe scenario=repair")]
+    public void Anything_that_is_not_a_quoted_executable_is_refused(string? modifyPath)
+    {
+        // An MSI product code here would uninstall a component instead of repairing Office.
+        var (exe, _) = OfficeRepairLauncher.ParseModifyPath(modifyPath);
+        Assert.Null(exe);
     }
 
     [Fact]
-    public void A_recorded_failure_says_what_office_reported()
+    public void The_office_suite_is_told_apart_from_its_add_ins()
     {
-        var (ok, msg) = OfficeRepair.Verdict("REPAIR", "Failure");
-        Assert.False(ok);
-        Assert.Contains("Failure", msg);
-        Assert.Contains("Settings", msg);   // where to do it by hand
-    }
+        // A real machine carries several entries matching "Office". Repairing the wrong one
+        // does nothing at best.
+        Assert.True(OfficeRepairLauncher.IsOfficeSuite(
+            "Microsoft 365 Apps for business - en-us", M365Modify));
 
-    [Fact]
-    public void No_record_of_a_repair_is_a_failure_not_a_success()
-    {
-        // The exact case that was reported: the launcher returned 0 and nothing ran.
-        var (ok, msg) = OfficeRepair.Verdict(null, null);
-        Assert.False(ok);
-        Assert.Contains("did not run", msg);
-    }
-
-    [Fact]
-    public void Some_other_office_activity_does_not_count_as_a_repair()
-    {
-        // An update or install recorded here is not evidence that a repair happened.
-        var (ok, msg) = OfficeRepair.Verdict("UPDATE", "Success");
-        Assert.False(ok);
-        Assert.Contains("UPDATE", msg);
-    }
-
-    [Fact]
-    public void An_unconfirmable_repair_is_reported_as_failure()
-    {
-        // Being unable to evidence it is indistinguishable from it never having run, and
-        // claiming the good case is what caused the original complaint.
-        var (ok, _) = OfficeRepair.Verdict("REPAIR", null);
-        Assert.False(ok);
+        Assert.False(OfficeRepairLauncher.IsOfficeSuite(
+            "Office 16 Click-to-Run Extensibility Component",
+            "MsiExec.exe /X{90160000-008C-0000-1000-0000000FF1CE}"));
+        Assert.False(OfficeRepairLauncher.IsOfficeSuite(
+            "Microsoft Teams Meeting Add-in for Microsoft Office",
+            "MsiExec.exe /I{A7AB73A3-CB10-4AA5-9D38-6AEFFBDE4C91}"));
+        Assert.False(OfficeRepairLauncher.IsOfficeSuite("Google Chrome", M365Modify));
     }
 
     // ---- Which network adapter to bounce ----------------------------------------------
