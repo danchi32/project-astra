@@ -188,9 +188,26 @@ class KnowledgeBaseService:
         has since collapsed, are not returned. They still exist and staff can still see
         them; they are just not presented to a user as an answer.
         """
-        query_vec = await self.embed.embed(query, purpose="query")
         candidates = await self.repo.list_by_org(org_id)
         candidates += await self.repo.list_global()
+        return await self._rank(query=query, candidates=candidates, limit=limit)
+
+    async def search_global(self, *, query: str, limit: int = 3) -> list[KnowledgeArticle]:
+        """The operator's own articles only — never an organization's runbooks.
+
+        The public website assistant answers out of this and nothing else, so the tenant
+        filter is the choice of method rather than an argument: there is no value a caller
+        can pass that widens it to somebody's internal documentation.
+        """
+        return await self._rank(
+            query=query, candidates=await self.repo.list_global(), limit=limit
+        )
+
+    async def _rank(
+        self, *, query: str, candidates: list[KnowledgeArticle], limit: int
+    ) -> list[KnowledgeArticle]:
+        """Score candidates against the query and return the best, best-first."""
+        query_vec = await self.embed.embed(query, purpose="query")
         candidates = [
             a for a in candidates
             if a.published_at is not None and learning.is_recommendable(a)

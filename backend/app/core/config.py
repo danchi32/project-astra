@@ -72,6 +72,25 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # The marketing site is a static export on shared hosting: it has no server of its own
+    # to proxy through, so its chat widget calls this API straight from the browser and
+    # needs its origin allowed. Kept apart from `cors_origins` (which is the portal's, and
+    # is set per environment) so that adding a preview URL for the portal cannot silently
+    # drop the public site, and so the default works in production without a deploy-time
+    # env var — a comma inside a JSON array does not survive `gcloud --set-env-vars`.
+    marketing_origins: list[str] = [
+        "https://technomateai.com",
+        "https://www.technomateai.com",
+        "http://localhost:3200",  # `npm run dev` in website/
+    ]
+
+    # The website chatbot is open to anyone, and every question it cannot answer from the
+    # FAQ alone costs a model call. 12 questions per 10 minutes per IP is more than a real
+    # pre-sales conversation needs and far less than a script would want. ENFORCED, unlike
+    # the agent limiter above: there is no heartbeat to lose here, only spend.
+    public_assistant_rate_limit_requests: int = 12
+    public_assistant_rate_limit_window_seconds: int = 600
+
     # Self-service signup is for organisations, so a personal/free/disposable provider
     # (gmail, outlook, mailinator…) is rejected — see app/core/email_domains.py. Kept as a
     # switch rather than hardcoded: a genuine small-business prospect on a personal address

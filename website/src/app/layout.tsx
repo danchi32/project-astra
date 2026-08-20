@@ -6,6 +6,7 @@ import { ContentProvider } from "@/lib/content";
 import { SiteJsonLd } from "@/components/JsonLd";
 import { Analytics } from "@/components/Analytics";
 import { ConversionTracker } from "@/components/ConversionTracker";
+import { SupportChat } from "@/components/SupportChat";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -86,6 +87,9 @@ export default function RootLayout({
           <Navbar />
           <main>{children}</main>
           <Footer />
+          {/* Floats above every page. Reads the same content layer as the rest of the
+              site, so it answers with what the pages already say. */}
+          <SupportChat />
         </ContentProvider>
         <Analytics />
         <ConversionTracker />

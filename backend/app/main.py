@@ -48,7 +48,13 @@ logging.getLogger("astra.startup").info(
 # reporting even when the org is read-only for its human users), and billing
 # (a read-only org must still be able to reach Checkout to pay and reactivate).
 _WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-_UNGATED_PREFIXES = ("/api/v1/auth", "/api/v1/platform", "/api/v1/agent", "/api/v1/billing")
+# `/help` is a POST only because the support assistant takes a question in a body; it
+# creates nothing. Locking it behind the subscription gate would take the help widget away
+# from exactly the organization most likely to need it — the one whose trial just ended and
+# who is trying to find out what to do about it.
+_UNGATED_PREFIXES = (
+    "/api/v1/auth", "/api/v1/platform", "/api/v1/agent", "/api/v1/billing", "/api/v1/help",
+)
 
 app = FastAPI(
     title=settings.app_name,
@@ -58,7 +64,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    # The portal's origin plus the marketing site's — the latter calls /api/v1/public/*
+    # directly from the browser, having no server of its own to proxy through.
+    allow_origins=[*settings.cors_origins, *settings.marketing_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

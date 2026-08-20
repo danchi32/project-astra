@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 import { ViewAsBanner } from "@/components/view-as-banner";
+import { SupportChat } from "@/components/support-chat";
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -38,6 +39,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         <main className="flex-1 overflow-y-auto p-6" style={{ background: "var(--bg)" }}>
           {children}
         </main>
+        {/* Every organization, every page. Someone stuck on the devices screen should not
+            have to find their way to Help & support to ask what a status means. */}
+        <SupportChat />
       </div>
     </div>
   );

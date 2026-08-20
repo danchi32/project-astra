@@ -71,12 +71,15 @@ class AnthropicProvider:
         self, *, system: SystemPrompt, messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> LLMResponse:
+        # The support chatbot has no tools at all, and the API rejects an empty list
+        # rather than reading it as "none" — so the parameter is omitted in that case.
+        extra = {"tools": tools} if tools else {}
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=self._max_tokens,
             system=system,
             messages=messages,
-            tools=tools,
+            **extra,
         )
         # A tool-use turn re-sends the whole brief and every tool schema on each pass of the
         # loop, so the same few thousand tokens are billed three to five times per

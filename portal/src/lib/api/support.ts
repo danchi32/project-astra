@@ -1,7 +1,7 @@
 import { apiClient } from "./client";
 import type {
-  HelpArticle, HelpArticleSummary, SupportRequestDetail, SupportRequestPriority,
-  SupportRequestStatus, SupportRequestSummary,
+  AssistantReply, HelpArticle, HelpArticleSummary, SupportRequestDetail,
+  SupportRequestPriority, SupportRequestStatus, SupportRequestSummary,
 } from "./types";
 
 // ── Help centre ───────────────────────────────────────────────────────────
@@ -49,3 +49,12 @@ export const replyToSupportRequest = (id: string, body: string) =>
   apiClient
     .post<SupportRequestDetail>(`/support/requests/${id}/replies`, { body })
     .then((r) => r.data);
+
+// ── Support assistant ─────────────────────────────────────────────────────
+// Stateless by design: the server keeps no transcript, so the widget replays the turns
+// it holds. Only the tail is used — the server caps how far back it reads.
+
+export const askAssistant = (data: {
+  message: string;
+  history: { role: "user" | "assistant"; content: string }[];
+}) => apiClient.post<AssistantReply>("/help/assistant", data).then((r) => r.data);

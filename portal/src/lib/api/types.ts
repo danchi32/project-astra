@@ -854,3 +854,25 @@ export interface Notification {
   is_read: boolean;
   created_at: string;
 }
+
+// ── Support assistant ─────────────────────────────────────────────────────
+// The help widget's chatbot. Its answers are written from documents, so every reply
+// carries the documents it used — a claim with nothing behind it is the failure mode
+// these are here to make visible.
+
+export type AssistantSourceKind = "help" | "knowledge" | "faq";
+
+export interface AssistantSource {
+  title: string;
+  kind: AssistantSourceKind;
+  /** Only help centre articles have a page to open; runbooks and FAQ entries do not. */
+  article_id: string | null;
+}
+
+export interface AssistantReply {
+  answer: string;
+  sources: AssistantSource[];
+  /** False when the documentation did not cover the question — the widget then offers
+   *  the human path instead of leaving someone to re-phrase a hopeless question. */
+  grounded: boolean;
+}
