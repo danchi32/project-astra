@@ -52,8 +52,8 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
             ZipFile.ExtractToDirectory(zipPath, staging);
             TryDelete(zipPath);
 
-            // The combined release package carries the service under agent\ (the tray, under
-            // tray\, self-updates from its own live copy). Sanity-check the service binary.
+            // The combined release package carries the service under agent\ and the tray under
+            // tray\. Sanity-check the service binary.
             var servicePayload = Path.Combine(staging, "agent");
             if (!File.Exists(Path.Combine(servicePayload, "AstraAgent.Service.dll")))
             {
@@ -61,7 +61,22 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
                 return false;
             }
 
-            LaunchApplyScript(servicePayload);
+            // The tray SEED in Program Files must move with us. The tray runs from a per-user live
+            // copy that re-seeds itself only when the seed is newer, so a seed left behind freezes
+            // every user's tray at whatever version the installer wrote — the service marches on
+            // and the tray silently does not, which is how devices ended up running a service that
+            // knew an action the tray had never heard of. Absent from older packages, hence the
+            // existence check rather than a hard failure.
+            var trayPayload = Path.Combine(staging, "tray");
+            if (!File.Exists(Path.Combine(trayPayload, "AstraAgent.Tray.dll")))
+            {
+                logger.LogWarning(
+                    "Update {Version}: package has no tray payload; the tray seed will not be refreshed.",
+                    manifest.Version);
+                trayPayload = null;
+            }
+
+            LaunchApplyScript(servicePayload, trayPayload);
             logger.LogInformation(
                 "Update {Version} staged; restarting to apply.", manifest.Version);
 
@@ -100,7 +115,7 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
         }
     }
 
-    private void LaunchApplyScript(string servicePayload)
+    private void LaunchApplyScript(string servicePayload, string? trayPayload)
     {
         // The service is hosted by dotnet.exe, so the PID we wait on is that host — we must
         // match on the PID NUMBER, not an image name (the image is "dotnet.exe", not "Astra…").
@@ -109,6 +124,19 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
         var excludes = string.Join(" ", PreservedFiles.Select(f => $"\"{f}\""));
         // Clean up the whole extracted version dir (…\staging\<ver>, the parent of agent\).
         var stagingRoot = Path.GetDirectoryName(servicePayload.TrimEnd('\\')) ?? servicePayload;
+
+        // …\Astra\Tray, a sibling of the service's own …\Astra\Agent.
+        var trayDir = Path.Combine(
+            Path.GetDirectoryName(_installDir) ?? _installDir, "Tray");
+        // /E (not /MIR) so the installer's own launch-tray.vbs survives, and appsettings.json is
+        // excluded because the installer wrote the real ServerUrl/ProxyUrl into it — the payload
+        // copy carries only build defaults and would point the tray at localhost. Only refresh a
+        // seed that already exists; a service-only install has no tray to update.
+        var trayCopy = trayPayload is null
+            ? ""
+            : $"""
+                if exist "{trayDir}" robocopy "{trayPayload}" "{trayDir}" /E /R:3 /W:2 /XF "appsettings.json" >nul
+                """;
 
         // The script polls (via CSV output that reliably contains the PID field) until our host
         // process exits and unlocks the files, mirrors the new files in while preserving local
@@ -124,6 +152,7 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
                 goto wait
             )
             robocopy "{servicePayload}" "{_installDir}" /E /R:3 /W:2 /XF {excludes} >nul
+            {trayCopy}
             set /a tries=0
             :startsvc
             sc start {ServiceName} >nul 2>&1

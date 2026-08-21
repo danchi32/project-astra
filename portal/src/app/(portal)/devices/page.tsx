@@ -28,6 +28,7 @@ const FIELDS: Field[] = [
   { key: "online", label: "Online status", get: (d) => (d.status === "online" ? "Online" : "Offline") },
   { key: "os", label: "OS", get: (d) => d.os_version },
   { key: "agent", label: "Agent version", get: (d) => d.agent_version },
+  { key: "tray", label: "Chat tray version", get: (d) => d.tray_version ?? "—" },
   { key: "manufacturer", label: "Manufacturer", get: (d) => d.manufacturer },
   { key: "model", label: "Model", get: (d) => d.model },
   { key: "cpu", label: "CPU", get: (d) => d.cpu_name },

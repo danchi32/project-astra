@@ -310,6 +310,10 @@ class DeviceService:
         # allowed must be able to move the flag from blocked to allowed.
         if data.usb_storage_blocked is not None:
             device.usb_storage_blocked = data.usb_storage_blocked
+        # Same rule again: only when reported. A tray-less device sends null and must not
+        # overwrite a version an earlier beat recorded.
+        if data.tray_version:
+            device.tray_version = data.tray_version
         await self.session.commit()
 
     # -- Portal-facing (staff/admin) -------------------------------------------

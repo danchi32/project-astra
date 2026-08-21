@@ -486,6 +486,9 @@ export interface Device {
   os_version: string;
   serial_number: string | null;
   agent_version: string;
+  // The chat tray updates on its own track from the service, so this can lag agent_version.
+  // Null until an agent new enough to report it has checked in.
+  tray_version: string | null;
   logged_in_user: string | null;
   status: DeviceStatus;
   last_seen_at: string | null;

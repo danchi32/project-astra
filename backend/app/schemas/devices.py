@@ -80,6 +80,9 @@ class HeartbeatRequest(BaseModel):
     # "allowed" — that would flip a genuinely blocked device to allowed on its next beat. The
     # ingest only writes this when it is present.
     usb_storage_blocked: bool | None = None
+    # Reported by agents new enough to look. Optional, and written only when present, so an
+    # older agent's silence never blanks a value a newer one recorded.
+    tray_version: str | None = Field(default=None, min_length=1, max_length=20)
     # Opt-in: when true, the heartbeat response carries this device's approved
     # system-context tasks, so the elevated Service needs no separate poll.
     #
@@ -117,6 +120,7 @@ class DeviceRead(BaseModel):
     os_version: str
     serial_number: str | None
     agent_version: str
+    tray_version: str | None
     logged_in_user: str | None
     status: Literal["online", "offline"]
     last_seen_at: datetime | None
@@ -145,6 +149,7 @@ class DeviceRead(BaseModel):
             os_version=device.os_version,
             serial_number=device.serial_number,
             agent_version=device.agent_version,
+            tray_version=device.tray_version,
             logged_in_user=device.logged_in_user,
             status="online" if online else "offline",
             last_seen_at=device.last_seen_at,

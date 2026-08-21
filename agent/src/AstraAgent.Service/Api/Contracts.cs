@@ -27,7 +27,11 @@ public sealed record HeartbeatRequest(
     // The device's actual USB mass-storage state, read from the registry each beat. Null
     // when it could not be read, so the backend leaves the last known value alone rather
     // than flipping a blocked device to allowed on a transient read failure.
-    [property: JsonPropertyName("usb_storage_blocked")] bool? UsbStorageBlocked = null);
+    [property: JsonPropertyName("usb_storage_blocked")] bool? UsbStorageBlocked = null,
+    // The tray updates on its own track and used to report nothing at all, so a portal showing
+    // an up-to-date agent could be sitting on a tray several releases behind — invisible until a
+    // user hit an action the tray had never heard of. Null when no tray is installed.
+    [property: JsonPropertyName("tray_version")] string? TrayVersion = null);
 
 public sealed record HeartbeatResponse(
     [property: JsonPropertyName("status")] string Status,

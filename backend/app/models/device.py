@@ -21,6 +21,11 @@ class Device(TimestampMixin, Base):
     os_version: Mapped[str] = mapped_column(String(100), nullable=False)
     serial_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     agent_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    # The tray SEED version the elevated service sees next to itself. The tray updates on a
+    # separate track from the service, so this can legitimately lag agent_version between an
+    # update landing and each user's tray re-seeding. NULL means no agent new enough to
+    # report it has checked in, or the device has no tray installed.
+    tray_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
     logged_in_user: Mapped[str | None] = mapped_column(String(100), nullable=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

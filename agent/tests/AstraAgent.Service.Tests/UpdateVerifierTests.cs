@@ -171,7 +171,7 @@ public class UpdateApplicabilityTests
     [InlineData("0.8.4", "0.8.5", "0.8.5", false)]
     public void IsApplicable_AcceptsNewer_RefusesReplays(
         string current, string manifestVersion, string floor, bool expected)
-        => Assert.Equal(expected, AstraAgent.Service.Workers.UpdateWorker.IsApplicable(
+        => Assert.Equal(expected, UpdatePolicy.IsApplicable(
             current, manifestVersion, floor));
 
     /// <summary>The regression that stranded a device on 0.8.4: an offered version must stay
@@ -194,20 +194,20 @@ public class UpdateApplicabilityTests
             {
                 floor.Raise(running);
                 Assert.True(
-                    AstraAgent.Service.Workers.UpdateWorker.IsApplicable(running, offered, floor.Current()),
+                    UpdatePolicy.IsApplicable(running, offered, floor.Current()),
                     $"attempt {attempt}: 0.8.5 must stay applicable after a failed apply");
             }
 
             // The rollback protection the floor exists for is still intact.
             Assert.Equal(running, floor.Current());
             Assert.False(
-                AstraAgent.Service.Workers.UpdateWorker.IsApplicable(running, "0.8.3", floor.Current()),
+                UpdatePolicy.IsApplicable(running, "0.8.3", floor.Current()),
                 "a replayed older manifest must still be refused");
 
             // Contrast: recording the mere OFFER is what deadlocks it.
             floor.Raise(offered);
             Assert.False(
-                AstraAgent.Service.Workers.UpdateWorker.IsApplicable(running, offered, floor.Current()),
+                UpdatePolicy.IsApplicable(running, offered, floor.Current()),
                 "floor == offered version is unrecoverable — never write it for an un-run version");
         }
         finally
@@ -226,13 +226,13 @@ public class UpdateApplicabilityTests
     public void MinVersion_IsPersistedOnlyWhenBelowTheOffer(
         string offered, string minVersion, bool shouldPersist)
     {
-        var persists = SemVer.IsNewer(offered, minVersion);
+        var persists = UpdatePolicy.ShouldPersistMinVersion(offered, minVersion);
         Assert.Equal(shouldPersist, persists);
 
         // Whatever the manifest claims, the offer itself must survive the decision.
         var floor = persists ? minVersion : "0.0.0";
         Assert.True(
-            AstraAgent.Service.Workers.UpdateWorker.IsApplicable("0.8.6", offered, floor),
+            UpdatePolicy.IsApplicable("0.8.6", offered, floor),
             "a mandatory release must remain installable");
     }
 }
@@ -249,4 +249,40 @@ public class SemVerTests
     [InlineData("garbage", "0.1.0", false)] // unparseable never looks newer
     public void IsNewer_Works(string candidate, string current, bool expected)
         => Assert.Equal(expected, SemVer.IsNewer(candidate, current));
+}
+
+public class UpdatePolicySharingTests
+{
+    /// <summary>The tray updater used to carry its own copy of this arithmetic, and its copy
+    /// raised the floor to the offered version before comparing against it — which made the
+    /// comparison unsatisfiable, so the tray never self-updated on any device. Both updaters now
+    /// go through UpdatePolicy; this pins the shape that broke.</summary>
+    [Fact]
+    public void RaisingTheFloorToTheOffer_MakesEveryUpdateImpossible()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"floor-{Guid.NewGuid():N}.txt");
+        try
+        {
+            var floor = new UpdateFloorStore(path);
+
+            // The old tray sequence: raise to the offer, THEN ask if the offer is applicable.
+            foreach (var offered in new[] { "0.8.5", "0.8.6", "1.0.0" })
+            {
+                floor.Raise(offered);
+                Assert.False(
+                    UpdatePolicy.IsApplicable("0.8.4", offered, floor.Current()),
+                    $"{offered}: raising the floor to the offer can never be applicable");
+            }
+
+            // The corrected sequence: the floor only tracks what is running, so the offer stands.
+            var good = new UpdateFloorStore(
+                Path.Combine(Path.GetTempPath(), $"floor-{Guid.NewGuid():N}.txt"));
+            good.Raise("0.8.4");
+            Assert.True(UpdatePolicy.IsApplicable("0.8.4", "0.8.5", good.Current()));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
 }

@@ -91,11 +91,10 @@ public sealed class UpdateWorker(
         // strictly below what's on offer. A manifest that sets min_version to its own version (the
         // natural way to say "everyone must be at least here") still works: installing it raises
         // the floor to exactly that version on the next start, via ExecuteAsync.
-        if (!string.IsNullOrEmpty(manifest.MinVersion)
-            && SemVer.IsNewer(manifest.Version, manifest.MinVersion!))
+        if (UpdatePolicy.ShouldPersistMinVersion(manifest.Version, manifest.MinVersion))
             _floor.Raise(manifest.MinVersion!);
 
-        if (!IsApplicable(AgentVersion.Current, manifest.Version, _floor.Current()))
+        if (!UpdatePolicy.IsApplicable(AgentVersion.Current, manifest.Version, _floor.Current()))
         {
             // Newer than we run but not above the floor ⇒ a superseded/replayed manifest.
             if (SemVer.IsNewer(manifest.Version, AgentVersion.Current))
@@ -118,15 +117,4 @@ public sealed class UpdateWorker(
         return await installer.ApplyAsync(manifest, lifetime, ct);
     }
 
-    /// <summary>Pure decision: may we apply <paramref name="manifestVersion"/> given the running
-    /// version and the current anti-replay floor? The offered version must be strictly newer than
-    /// both. Crucially, <paramref name="floorNow"/> must NOT already include the offered version —
-    /// otherwise the agent refuses its own update (the bug this replaced).</summary>
-    internal static bool IsApplicable(string currentVersion, string manifestVersion, string floorNow)
-    {
-        var floor = floorNow;
-        if (SemVer.Compare(currentVersion, floor) > 0)
-            floor = currentVersion;
-        return SemVer.IsNewer(manifestVersion, floor);
-    }
 }

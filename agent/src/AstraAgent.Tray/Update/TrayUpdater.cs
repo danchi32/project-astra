@@ -44,6 +44,9 @@ public sealed class TrayUpdater : IDisposable
         if (_verifier is null || !TrayPaths.RunningFromLiveDir())
             return;
         try { Directory.CreateDirectory(TrayPaths.UpdateWorkDir); } catch { /* floor persistence is best-effort */ }
+        // The only place a tray version enters the floor: what we are actually running. Mirrors
+        // the service updater so the floor can never outrun reality and block a real update.
+        _floor.Raise(AgentVersion.Current);
         _ = RunAsync(_cts.Token);
     }
 
@@ -96,14 +99,14 @@ public sealed class TrayUpdater : IDisposable
         if (manifest is null)
             return false;
 
-        // Same monotonic anti-replay floor as the service updater.
-        _floor.Raise(manifest.Version);
-        if (!string.IsNullOrEmpty(manifest.MinVersion))
+        // Same monotonic anti-replay floor as the service updater, and now literally the same
+        // decision — see UpdatePolicy. The floor is never raised to the offered version: doing
+        // that here made the strictly-newer test unsatisfiable, so this updater never once
+        // reached ApplyAsync on any device.
+        if (UpdatePolicy.ShouldPersistMinVersion(manifest.Version, manifest.MinVersion))
             _floor.Raise(manifest.MinVersion!);
-        var floor = _floor.Current();
-        if (SemVer.Compare(AgentVersion.Current, floor) > 0)
-            floor = AgentVersion.Current;
-        if (!SemVer.IsNewer(manifest.Version, floor))
+
+        if (!UpdatePolicy.IsApplicable(AgentVersion.Current, manifest.Version, _floor.Current()))
             return false;
 
         return await ApplyAsync(manifest, ct);

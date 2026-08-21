@@ -49,6 +49,28 @@ public sealed class HeartbeatWorker(
         catch { return null; }   // never let naming the OS stop the device reporting in
     });
 
+    /// <summary>The tray SEED next to our own install dir (…\Astra\Tray), read fresh each beat
+    /// because the update we apply can replace it underneath us. This is the machine-wide copy
+    /// each user's tray re-seeds from, so it is the version the fleet converges on — and the one
+    /// worth surfacing. Null when no tray is installed or the file can't be read.</summary>
+    private string? ReadTrayVersion()
+    {
+        try
+        {
+            var installDir = AppContext.BaseDirectory.TrimEnd('\\');
+            var dll = Path.Combine(
+                Path.GetDirectoryName(installDir) ?? installDir, "Tray", "AstraAgent.Tray.dll");
+            if (!File.Exists(dll))
+                return null;
+            var v = System.Diagnostics.FileVersionInfo.GetVersionInfo(dll).FileVersion;
+            return string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        }
+        catch
+        {
+            return null;   // never let naming the tray stop the device reporting in
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var interval = TimeSpan.FromSeconds(options.Value.HeartbeatIntervalSeconds);
@@ -97,7 +119,8 @@ public sealed class HeartbeatWorker(
             LoggedInUserResolver.GetConsoleUser(),
             IncludeTasks: !busy,
             OsVersion: _osVersion.Value,
-            UsbStorageBlocked: Remediation.UsbStorageManager.IsBlocked());
+            UsbStorageBlocked: Remediation.UsbStorageManager.IsBlocked(),
+            TrayVersion: ReadTrayVersion());
         var result = await api.HeartbeatAsync(token, request, ct);
 
         if (result.Status == HeartbeatStatus.Unauthorized)

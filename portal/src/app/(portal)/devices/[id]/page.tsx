@@ -453,6 +453,12 @@ export default function DeviceDetailPage() {
                 <DeviceStatusBadge status={device.status} />
                 <Pill icon={Cpu}>{device.os_version}</Pill>
                 <Pill>agent {device.agent_version}</Pill>
+                {/* The tray runs the user-facing chat fixes. When it trails the service the
+                    device can refuse an action the portal looks new enough to support, so say
+                    so here rather than leaving it to be discovered by a failing remediation. */}
+                {device.tray_version && device.tray_version !== device.agent_version && (
+                  <Pill color="#f59e0b">tray {device.tray_version}</Pill>
+                )}
                 {asset?.assigned_to_name && <Pill icon={User}>{asset.assigned_to_name}</Pill>}
                 {asset?.location && <Pill icon={MapPin}>{asset.location}</Pill>}
                 {stateLabel && stateColor && <Pill color={stateColor}>{stateLabel}</Pill>}
@@ -507,6 +513,7 @@ export default function DeviceDetailPage() {
                 <Row label="RAM" value={formatRam(device.total_ram_mb)} />
                 <Row label="Storage" value={formatStorage(device.total_storage_gb)} />
                 <Row label="Agent version" value={device.agent_version} />
+                <Row label="Chat tray version" value={device.tray_version} />
                 <Row label="Logged-in user" value={device.logged_in_user} />
                 <Row label="Last seen" value={device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "—"} />
               </Section>
