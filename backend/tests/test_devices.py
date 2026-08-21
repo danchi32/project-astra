@@ -336,3 +336,59 @@ async def test_admin_deletes_device(client, admin_headers):
 async def test_unknown_device_is_404(client, admin_headers):
     response = await client.get(f"/api/v1/devices/{uuid.uuid4()}", headers=admin_headers)
     assert response.status_code == 404
+
+
+async def test_heartbeat_records_tray_version_in_the_agents_three_part_form(client, admin_headers):
+    """The tray version arrives as a Windows FileVersion, which always has four components:
+    a build stamped 0.8.7 reports "0.8.7.0". Stored raw it would never equal agent_version,
+    so every device would read as drifted and the drift signal would be worthless."""
+    token = await create_enrollment_token(client, admin_headers)
+    enrolled = await enroll_device(client, token["token"])
+
+    beat = await client.post(
+        "/api/v1/agent/heartbeat",
+        json={"agent_version": "0.8.7", "tray_version": "0.8.7.0"},
+        headers={"Authorization": f"Bearer {enrolled['device_token']}"},
+    )
+    assert beat.status_code == 200
+
+    after = await client.get(f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)
+    body = after.json()
+    assert body["tray_version"] == "0.8.7"
+    # An in-sync device must be indistinguishable from its agent version — this equality is
+    # exactly what the portal tests to decide whether to warn about a stale tray.
+    assert body["tray_version"] == body["agent_version"]
+
+
+async def test_heartbeat_keeps_a_lagging_tray_version_visible(client, admin_headers):
+    """The case worth surfacing: the service updated, the tray did not."""
+    token = await create_enrollment_token(client, admin_headers)
+    enrolled = await enroll_device(client, token["token"])
+
+    await client.post(
+        "/api/v1/agent/heartbeat",
+        json={"agent_version": "0.8.7", "tray_version": "0.8.2.0"},
+        headers={"Authorization": f"Bearer {enrolled['device_token']}"},
+    )
+    body = (await client.get(
+        f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)).json()
+    assert body["tray_version"] == "0.8.2"
+    assert body["tray_version"] != body["agent_version"]
+
+
+async def test_heartbeat_without_tray_version_keeps_the_last_known_one(client, admin_headers):
+    """A device with no tray, or an agent too old to look, sends nothing — which must not
+    erase a version an earlier beat recorded."""
+    token = await create_enrollment_token(client, admin_headers)
+    enrolled = await enroll_device(client, token["token"])
+    headers = {"Authorization": f"Bearer {enrolled['device_token']}"}
+
+    await client.post(
+        "/api/v1/agent/heartbeat",
+        json={"agent_version": "0.8.7", "tray_version": "0.8.7.0"}, headers=headers)
+    await client.post(
+        "/api/v1/agent/heartbeat", json={"agent_version": "0.8.7"}, headers=headers)
+
+    body = (await client.get(
+        f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)).json()
+    assert body["tray_version"] == "0.8.7"

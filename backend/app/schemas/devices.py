@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import Device
 from app.models.base import as_utc, utcnow
@@ -83,6 +83,25 @@ class HeartbeatRequest(BaseModel):
     # Reported by agents new enough to look. Optional, and written only when present, so an
     # older agent's silence never blanks a value a newer one recorded.
     tray_version: str | None = Field(default=None, min_length=1, max_length=20)
+
+    @field_validator("tray_version")
+    @classmethod
+    def _normalize_tray_version(cls, v: str | None) -> str | None:
+        """Trim Windows' four-part file version to the three-part form agent_version uses.
+
+        The agent reads this out of the tray DLL, and a Windows FileVersion always carries a
+        fourth component: a build stamped `0.8.7` reports `0.8.7.0`. Stored raw, that never
+        string-equals the agent version, so every device would look like it had drifted — the
+        opposite of the point. Normalizing here rather than in the agent fixes the agents
+        already deployed, which cannot be changed without the very update this is meant to
+        surface.
+        """
+        if v is None:
+            return None
+        parts = v.strip().split(".")
+        if len(parts) == 4 and all(p.isdigit() for p in parts):
+            return ".".join(parts[:3])
+        return v.strip() or None
     # Opt-in: when true, the heartbeat response carries this device's approved
     # system-context tasks, so the elevated Service needs no separate poll.
     #
