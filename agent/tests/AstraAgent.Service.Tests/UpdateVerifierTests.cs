@@ -286,3 +286,35 @@ public class UpdatePolicySharingTests
         }
     }
 }
+
+public class AgentVersionTests
+{
+    /// <summary>The version is no longer typed out by hand — it is read off the assembly, which
+    /// MSBuild stamps from src/Directory.Build.props (or the release tag in CI). That removes the
+    /// old failure where the constant and the csproj could disagree, but it introduces one worth
+    /// pinning: if the derivation ever returned nothing useful, every device would compare against
+    /// a bogus version instead of failing loudly.</summary>
+    [Fact]
+    public void Current_IsARealThreePartVersion()
+    {
+        var v = AstraAgent.Service.AgentVersion.Current;
+
+        Assert.Matches(@"^\d+\.\d+\.\d+$", v);
+        // The four-part assembly form must not leak out: the heartbeat reports this string, and
+        // the portal compares it against the tray's version for drift.
+        Assert.Equal(3, v.Split('.').Length);
+        // "0.0.0" is the fallback for an assembly with no version. Shipping it would mean losing
+        // every SemVer comparison — the agent would never accept an update again.
+        Assert.NotEqual("0.0.0", v);
+    }
+
+    /// <summary>Whatever the build stamped, the agent must agree with it — this is the equality
+    /// the release workflow checks against the tag, from the other side.</summary>
+    [Fact]
+    public void Current_MatchesTheAssemblyItWasBuiltFrom()
+    {
+        var asm = typeof(AstraAgent.Service.AgentVersion).Assembly.GetName().Version;
+        Assert.NotNull(asm);
+        Assert.Equal($"{asm!.Major}.{asm.Minor}.{asm.Build}", AstraAgent.Service.AgentVersion.Current);
+    }
+}

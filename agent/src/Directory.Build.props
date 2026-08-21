@@ -1,0 +1,16 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- THE agent version. One number for the whole agent product, because the service and the
+         tray ship inside a single signed package under a single manifest `version`, and both
+         updaters decide whether to act by comparing what they run against that one number. A
+         component-only bump would leave the manifest unchanged, so nothing would ever apply and
+         the change would never reach a device.
+
+         This is the only place it is written. MSBuild hands it to both projects, the binaries
+         report it back at runtime (see AgentVersion), and the release workflow refuses to publish
+         if it disagrees with the tag being released. Bump it here, commit, then tag agent-vX.Y.Z. -->
+    <Version>0.8.8</Version>
+  </PropertyGroup>
+
+</Project>

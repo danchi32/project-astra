@@ -36,7 +36,8 @@ UNINSTALL_SCRIPT = INSTALLER_DIR / "Uninstall-AstraAgent.ps1"
 # The tray chat's icon, reused for the installer and the Add/Remove Programs entry so
 # ASTRA looks like one product wherever Windows shows it.
 BRAND_ICON = REPO / "agent" / "src" / "AstraAgent.Tray" / "astra.ico"
-SERVICE_CSPROJ = REPO / "agent" / "src" / "AstraAgent.Service" / "AstraAgent.Service.csproj"
+# The single source of truth for the agent version; both csprojs inherit it from here.
+VERSION_PROPS = REPO / "agent" / "src" / "Directory.Build.props"
 AGENT_INSTALLER_MODULE = REPO / "backend" / "app" / "services" / "agent_installer.py"
 
 DEFAULT_SERVER_URL = "https://api.astra.technomateai.com"
@@ -59,9 +60,9 @@ def load_install_script_builder():
 
 
 def agent_version() -> str:
-    match = re.search(r"<Version>([^<]+)</Version>", SERVICE_CSPROJ.read_text(encoding="utf-8"))
+    match = re.search(r"<Version>([^<]+)</Version>", VERSION_PROPS.read_text(encoding="utf-8"))
     if not match:
-        raise RuntimeError(f"No <Version> in {SERVICE_CSPROJ}")
+        raise RuntimeError(f"No <Version> in {VERSION_PROPS}")
     return match.group(1).strip()
 
 

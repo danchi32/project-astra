@@ -29,5 +29,22 @@ public sealed class AgentOptions
 
 public static class AgentVersion
 {
-    public const string Current = "0.8.8";
+    /// <summary>The version this binary was built as, read from the assembly rather than written
+    /// out by hand. It used to be a literal that had to be kept in step with two csproj
+    /// <c>&lt;Version&gt;</c> elements; nothing enforced that at build time, so the constant and
+    /// the assembly could disagree and an installer could be stamped with one version while
+    /// carrying binaries of another. Deriving it removes that class of mistake entirely — the
+    /// number now has exactly one source, src/Directory.Build.props.
+    ///
+    /// Three components only: the fourth in a .NET assembly version is always zero here, and
+    /// SemVer ignores it anyway.</summary>
+    public static readonly string Current = Resolve();
+
+    private static string Resolve()
+    {
+        var v = typeof(AgentVersion).Assembly.GetName().Version;
+        // 0.0.0 is deliberately unusable: it loses every SemVer comparison, so a build that
+        // somehow lost its version can never look newer than what a device already runs.
+        return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
+    }
 }

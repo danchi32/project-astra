@@ -53,13 +53,16 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing agent version: $VERSION"
 
-      - name: Verify the binary's self-version matches the release
+      - name: Verify the declared version matches the release
         run: |
-          SRC_VER=$(grep -oP 'Current\s*=\s*"\K[^"]+' agent/src/AstraAgent.Service/AgentOptions.cs)
-          echo "AgentVersion.Current = $SRC_VER ; releasing ${{ steps.ver.outputs.version }}"
+          # One number, one file: both csprojs inherit it, and the binaries report it back at
+          # runtime. This guard exists so a local installer build — which reads the same file and
+          # is NOT tag-driven — can never be cut from a different version than the release.
+          SRC_VER=$(grep -oP '<Version>\K[^<]+' agent/src/Directory.Build.props)
+          echo "Directory.Build.props <Version> = $SRC_VER ; releasing ${{ steps.ver.outputs.version }}"
           if [ "$SRC_VER" != "${{ steps.ver.outputs.version }}" ]; then
-            echo "::error::AgentVersion.Current ($SRC_VER) != release ${{ steps.ver.outputs.version }}."
-            echo "::error::Bump AgentVersion.Current (and the csproj <Version>) to match, then re-tag."
+            echo "::error::agent/src/Directory.Build.props <Version> ($SRC_VER) != release ${{ steps.ver.outputs.version }}."
+            echo "::error::Bump it there — it is the only place the version is written — then re-tag."
             exit 1
           fi
 
@@ -86,6 +89,23 @@ jobs:
             -c Release -r win-x64 --self-contained false \
             -p:Version=${{ steps.ver.outputs.version }} \
             -o publish/tray
+
+      # Check what was actually BUILT, not what the source claimed. An installer stamped with one
+      # version while carrying binaries of another has happened here before, and it is invisible
+      # in a build log — the only honest evidence is the artifact.
+      - name: Verify the published binaries carry the release version
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          for pair in "agent:AstraAgent.Service" "tray:AstraAgent.Tray"; do
+            DIR="${pair%%:*}"; NAME="${pair##*:}"
+            if ! grep -q "\"$NAME/$VERSION\"" "publish/$DIR/$NAME.deps.json"; then
+              echo "::error::publish/$DIR/$NAME.deps.json does not report version $VERSION."
+              grep -o "\"$NAME/[^\"]*\"" "publish/$DIR/$NAME.deps.json" | head -1
+              exit 1
+            fi
+            echo "publish/$DIR/$NAME -> $VERSION"
+          done
 
       - name: Package AstraAgent.zip
         run: |
