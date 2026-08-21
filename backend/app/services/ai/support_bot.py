@@ -31,7 +31,10 @@ from app.services.ai.provider import (
     StubProvider,
     get_provider,
 )
-from app.services.ai.public_faq import PRODUCT_BRIEF, FaqEntry, search_faq
+from app.services.ai.embeddings import normalise
+from app.services.ai.faq import FaqEntry, search as search_faq
+from app.services.ai.portal_faq import PORTAL_BRIEF as PORTAL_MANUAL, PORTAL_FAQ
+from app.services.ai.public_faq import PRODUCT_BRIEF, PUBLIC_FAQ
 
 logger = logging.getLogger("astra.support_bot")
 
@@ -174,7 +177,9 @@ class SupportBot:
         # Handing back the best document verbatim is a worse answer than the model's but
         # an honest one, and it keeps local runs, tests and the demo environment usable.
         if isinstance(self.provider, (StubProvider, LearnedActionProvider)):
-            return BotReply(answer=_fallback(docs, scope), sources=sources, grounded=grounded)
+            return BotReply(
+                answer=_fallback(docs, scope, question), sources=sources, grounded=grounded
+            )
 
         system: list[dict[str, Any]] = [
             {
@@ -202,12 +207,14 @@ class SupportBot:
             # The retrieved documentation is still right there, so it gets served.
             logger.exception("support bot provider call failed (scope=%s)", scope)
             return BotReply(
-                answer=_fallback(docs, scope), sources=sources, grounded=grounded
+                answer=_fallback(docs, scope, question), sources=sources, grounded=grounded
             )
 
         text = response.text.strip()
         if not text:
-            return BotReply(answer=_fallback(docs, scope), sources=sources, grounded=grounded)
+            return BotReply(
+                answer=_fallback(docs, scope, question), sources=sources, grounded=grounded
+            )
         return BotReply(answer=text, sources=sources, grounded=grounded)
 
     # -- retrieval -------------------------------------------------------------
@@ -229,7 +236,16 @@ class SupportBot:
         for article in await self._articles_by_code(question):
             if all(doc.source.article_id != str(article.id) for doc in docs):
                 docs.insert(0, _from_article(article))
-        return docs[:5]
+
+        # ASTRA's own support manual, always available. A written knowledge base and a
+        # published help centre are things an organization ACQUIRES; this is what the
+        # widget knows on day one, when both are empty, and what it still knows when no
+        # model can be reached to write prose from them.
+        docs += [
+            _from_faq(entry)
+            for entry in search_faq(PORTAL_FAQ + PUBLIC_FAQ, question, limit=3)
+        ]
+        return docs[:6]
 
     async def _public_docs(self, *, question: str) -> list[_Doc]:
         """ASTRA's published help articles plus the FAQ — and nothing owned by a customer.
@@ -250,7 +266,7 @@ class SupportBot:
             query=question, limit=2, min_score=_PUBLIC_ARTICLE_FLOOR
         )
         docs = [_from_article(a) for a in articles]
-        docs += [_from_faq(entry) for entry in search_faq(question, limit=4)]
+        docs += [_from_faq(entry) for entry in search_faq(PUBLIC_FAQ, question, limit=4)]
         return docs[:5]
 
     async def _articles_by_code(self, question: str) -> list:
@@ -339,7 +355,24 @@ def _recent(history: list[dict[str, str]] | None) -> list[dict[str, str]]:
     return clean
 
 
-def _fallback(docs: list[_Doc], scope: Scope) -> str:
+#: How much of a document the no-model answer may quote. Long enough for a whole runbook,
+#: short enough that nobody is handed a wall of text in a chat bubble.
+_EXTRACT_CHARS = 1400
+
+#: Internal vocabulary in the seeded runbooks: "(action_id: restart_outlook, runs
+#: automatically)". A model paraphrases straight past it; quoting the document verbatim
+#: does not, and "action_id: restart_outlook" means nothing to the person reading it.
+_ACTION_AUTO_RE = re.compile(r"\s*\(action_id:[^)]*runs automatically\)")
+_ACTION_RE = re.compile(r"\s*\(action_id:[^)]*\)")
+
+
+def _humanise(text: str) -> str:
+    """Strip the runbooks' internal markers out of anything shown to a person."""
+    text = _ACTION_AUTO_RE.sub(" — ASTRA can run this automatically", text)
+    return _ACTION_RE.sub("", text)
+
+
+def _fallback(docs: list[_Doc], scope: Scope, question: str = "") -> str:
     """The answer when no model wrote one — the key is bad, the provider is down, or this
     is a local run with no key at all.
 
@@ -348,16 +381,43 @@ def _fallback(docs: list[_Doc], scope: Scope) -> str:
     """
     if not docs:
         return _NO_DOCS_PORTAL if scope == "portal" else _NO_DOCS_PUBLIC
-    return _extract(docs[0])
+    return _extract(docs[0], question)
 
 
-def _extract(doc: _Doc) -> str:
-    """The no-model answer: the top document, trimmed, said plainly.
+def _extract(doc: _Doc, question: str = "") -> str:
+    """The no-model answer: the part of the top document that answers the question.
+
+    Not the first N characters. A runbook opens with "Symptoms: …", and somebody who
+    asked how to fix the thing has already read the symptoms — they want step 3. So for a
+    document too long to quote whole, the paragraphs are scored against the question and
+    the best run of them is returned.
 
     Plain text, no markdown — both widgets render the reply as text, so asterisks meant
     as bold would reach the reader as asterisks.
     """
-    body = doc.body.strip()
-    if len(body) > 900:
-        body = body[:900].rsplit(" ", 1)[0] + " …"
-    return f"{doc.title}\n\n{body}"
+    body = _humanise(doc.body.strip())
+    if len(body) <= _EXTRACT_CHARS:
+        return f"{doc.title}\n\n{body}"
+
+    paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+    wanted = set(normalise(question))
+    best, best_overlap = 0, -1
+    for index, paragraph in enumerate(paragraphs):
+        overlap = len(wanted & set(normalise(paragraph)))
+        if overlap > best_overlap:
+            best, best_overlap = index, overlap
+
+    passage: list[str] = []
+    used = 0
+    for paragraph in paragraphs[best:]:
+        if passage and used + len(paragraph) > _EXTRACT_CHARS:
+            break
+        passage.append(paragraph)
+        used += len(paragraph)
+
+    quoted = "\n\n".join(passage)
+    if best > 0:
+        quoted = "… " + quoted
+    if best + len(passage) < len(paragraphs):
+        quoted += "\n\n(There's more in the full guide.)"
+    return f"{doc.title}\n\n{quoted}"

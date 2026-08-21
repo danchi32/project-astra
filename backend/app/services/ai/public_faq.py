@@ -19,13 +19,9 @@ one: `website/src/components/PricingPlans.tsx` (and its runtime override,
 `website/public/pricing.json`) for the numbers, and `website/src/app/astra/AstraContent.tsx`
 for the feature list.
 
-Retrieval is lexical, not semantic: the corpus is small and its wording is ours, so word
-overlap is both free and predictable, where an embedding call would add a network round
-trip to every message a visitor sends.
+Retrieval lives in `faq.py`, which the portal's corpus shares.
 """
-from dataclasses import dataclass
-
-from app.services.ai.embeddings import normalise
+from app.services.ai.faq import FaqEntry
 
 #: Everything the assistant is expected to know cold. Kept dense on purpose — it is
 #: re-sent on every question, and it sits inside the cached prefix of the prompt, so its
@@ -110,23 +106,6 @@ HTTPS only, encryption in transit and at rest, certificate-based agent enrolment
 audit log entry for every mutation and every command sent to a device. The agent executes
 only allowlisted, approved actions.
 """
-
-
-@dataclass(frozen=True)
-class FaqEntry:
-    question: str
-    answer: str
-    #: Words a visitor might use that appear in neither the question nor the answer.
-    #: Without them "cost" scores zero against an entry that only ever says "priced".
-    keywords: tuple[str, ...] = ()
-
-    def prose(self) -> str:
-        """What the entry actually says."""
-        return f"{self.question} {self.answer}"
-
-    def routing(self) -> str:
-        """The words that mean 'this entry, not its neighbour'."""
-        return " ".join(self.keywords)
 
 
 PUBLIC_FAQ: tuple[FaqEntry, ...] = (
@@ -457,40 +436,3 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "password", "ticket", "support", "help", "issue", "problem"),
     ),
 )
-
-#: Below this, the best entry is not about the question — it merely shares a common word.
-#: Low, deliberately: the brief carries the product anyway, so a marginal FAQ hit adds
-#: detail rather than being the difference between an answer and a refusal.
-_MIN_SCORE = 0.15
-
-#: A keyword hit counts for this many prose hits. Keywords are the curated statement of
-#: what an entry is FOR, while prose overlap is an accident of vocabulary — "employee"
-#: appears in half these answers, but only one of them is about employee monitoring.
-#: Without the weighting, "do you monitor employees" landed on the feature list.
-_ROUTING_WEIGHT = 2.0
-
-
-def search_faq(query: str, *, limit: int = 4) -> list[FaqEntry]:
-    """The FAQ entries a question is actually about, best first.
-
-    Scored by how much of the *question* is covered, not how much of the entry: a long
-    answer must not be penalised for containing words the visitor did not type. Order
-    matters beyond the model's benefit — with no model reachable, the top entry IS the
-    answer the visitor reads.
-    """
-    wanted = set(normalise(query))
-    if not wanted:
-        return []
-
-    scored: list[tuple[float, int, FaqEntry]] = []
-    for index, entry in enumerate(PUBLIC_FAQ):
-        prose = wanted & set(normalise(entry.prose()))
-        routing = wanted & set(normalise(entry.routing()))
-        score = (len(prose) + _ROUTING_WEIGHT * len(routing)) / len(wanted)
-        if score >= _MIN_SCORE:
-            # `index` keeps the sort total and stable — FaqEntry is not orderable, so two
-            # entries tying on score would otherwise raise rather than pick one.
-            scored.append((score, index, entry))
-
-    scored.sort(key=lambda triple: (-triple[0], triple[1]))
-    return [entry for _, _, entry in scored[:limit]]

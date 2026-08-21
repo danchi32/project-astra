@@ -103,12 +103,15 @@ async def test_another_organizations_runbook_is_never_used(
     )
     assert response.status_code == 200, response.text
     assert "globex" not in response.text.lower()
-    assert response.json()["grounded"] is False
+    # The built-in manual may well have something to say about access and roles. What must
+    # never appear is another tenant's runbook.
+    assert all(s["kind"] != "knowledge" for s in response.json()["sources"])
 
 
 async def test_an_undocumented_question_offers_a_human_instead_of_guessing(
     client, user_headers
 ):
+    """Nothing in ASTRA's manual is about expense claims, and saying so is the answer."""
     response = await client.post(
         PORTAL, json={"message": "how do I claim expenses"}, headers=user_headers
     )
@@ -410,3 +413,98 @@ async def test_a_rejected_api_key_is_visible_on_the_health_check(client, monkeyp
     monkeypatch.setattr(provider, "_last_auth_error", "2026-08-20T12:00:00+00:00")
     body = (await client.get("/health")).json()
     assert body["ai_auth_error_at"] == "2026-08-20T12:00:00+00:00"
+
+
+# -- the portal's own manual ---------------------------------------------------
+#
+# The organization bot has three sources and only one of them is guaranteed: a new
+# organization has an empty knowledge base, an operator may have published no help
+# articles, and — as production has been for weeks — there may be no working model. What
+# it can answer in that state is what these cover.
+
+
+PORTAL_QUESTIONS = [
+    ("how do I install the agent", "installer"),
+    ("why is a device showing offline", "heartbeat"),
+    ("who can approve a fix", "technician"),
+    ("what firewall rules does the agent need", "443"),
+    ("our antivirus quarantined the agent", "exclusion"),
+    ("what can a technician do", "technician"),
+    ("how are we billed", "seat"),
+    ("what is in the audit log", "audit"),
+    ("how do I push windows updates", "update"),
+    ("someone is leaving the company", "offboarding"),
+    ("how do I connect freshservice", "helpdesk"),
+    ("does the agent update itself", "signed"),
+    ("what telemetry do you collect", "keystroke"),
+    ("how do I get help from the astra team", "request"),
+]
+
+
+@pytest.mark.parametrize("question,expected", PORTAL_QUESTIONS)
+async def test_the_portal_bot_answers_without_a_model_or_a_knowledge_base(
+    client, user_headers, question, expected
+):
+    """No API key (conftest forces the stub), no articles, no runbooks — and it answers."""
+    response = await client.post(PORTAL, json={"message": question}, headers=user_headers)
+    body = response.json()
+
+    assert body["grounded"] is True, question
+    assert expected in body["answer"].lower(), f"{question!r} -> {body['answer']!r}"
+
+
+NONSENSE = [
+    "how do I claim expenses",
+    "write a poem about the sea",
+    "what is the capital of france",
+    "book a flight to dubai",
+]
+
+
+@pytest.mark.parametrize("question", NONSENSE)
+async def test_it_does_not_answer_questions_it_has_nothing_on(client, user_headers, question):
+    """The other half of the calibration. Matching on a shared word and presenting the
+    result as an answer is worse than admitting the gap — "write a poem" once matched the
+    knowledge-base entry, because that entry lists the keyword "write"."""
+    response = await client.post(PORTAL, json={"message": question}, headers=user_headers)
+    body = response.json()
+
+    assert body["grounded"] is False, f"{question!r} -> {body['answer']!r}"
+    assert body["sources"] == []
+
+
+async def test_a_runbooks_internal_markers_never_reach_the_reader(session_factory, org):
+    """Seeded runbooks carry "(action_id: restart_outlook, runs automatically)" for the
+    engine's benefit. A model paraphrases past it; quoting the document verbatim does
+    not."""
+    await _org_article(
+        session_factory, org_id=org.id, title="Mail client is stuck",
+        content="Restart the mail client (action_id: restart_outlook, runs automatically).",
+    )
+
+    async with session_factory() as s:
+        reply = await SupportBot(s).answer(question="mail client is stuck", org_id=org.id)
+
+    assert "action_id" not in reply.answer
+    assert "automatically" in reply.answer
+
+
+async def test_a_long_runbook_is_quoted_where_the_answer_is(session_factory, org):
+    """Not the first paragraph — somebody who asked how to fix it has read the symptoms."""
+    # Topical filler: the article has to be retrievable, or this tests retrieval rather
+    # than the passage it quotes.
+    filler = "The badge reader is mounted by the door and is powered over ethernet. " * 30
+    await _org_article(
+        session_factory, org_id=org.id, title="Badge reader setup",
+        content=(
+            "Symptoms: the badge reader does not beep.\n\n" + filler + "\n\n"
+            "To pair a new badge reader, hold the button for ten seconds until it flashes."
+        ),
+    )
+
+    async with session_factory() as s:
+        reply = await SupportBot(s).answer(
+            question="how do I pair a new badge reader", org_id=org.id
+        )
+
+    assert "hold the button for ten seconds" in reply.answer
