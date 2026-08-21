@@ -28,6 +28,12 @@ public sealed class UpdateWorker(
             return;
         }
 
+        // The floor records versions this device has actually RUN — and this is the only place an
+        // agent version ever enters it. Recording what is running keeps the rollback protection
+        // (a replayed older manifest still loses to it) while making it impossible for the floor
+        // to outrun reality and block a genuine update. See CheckOnceAsync for why that matters.
+        _floor.Raise(AgentVersion.Current);
+
         var interval = TimeSpan.FromMinutes(Math.Max(5, options.Value.UpdateCheckIntervalMinutes));
 
         // Give enrollment a moment to settle before the first check.
@@ -75,14 +81,18 @@ public sealed class UpdateWorker(
             return false;
         }
 
-        // Anti-replay floor: the highest version we've applied before, the version we're running,
-        // and any signed min_version raise a monotonic floor. Refuse anything at or below it so a
-        // replayed older-but-signed manifest can't roll the agent back.
+        // Anti-replay floor: the version we're running and any signed min_version raise a
+        // monotonic floor. Refuse anything at or below it so a replayed older-but-signed manifest
+        // can't roll the agent back.
         //
-        // The manifest's OWN version must NOT raise the floor before this check — doing so makes
-        // the floor equal to the offered version, so the agent would refuse its own update. We
-        // record it only once we've decided to apply (below).
-        if (!string.IsNullOrEmpty(manifest.MinVersion))
+        // Nothing may raise the floor TO the offered version before the check below — that makes
+        // the floor equal to the offer, strictly-newer can never be satisfied, and the agent
+        // refuses its own update forever. So a signed min_version is persisted only when it sits
+        // strictly below what's on offer. A manifest that sets min_version to its own version (the
+        // natural way to say "everyone must be at least here") still works: installing it raises
+        // the floor to exactly that version on the next start, via ExecuteAsync.
+        if (!string.IsNullOrEmpty(manifest.MinVersion)
+            && SemVer.IsNewer(manifest.Version, manifest.MinVersion!))
             _floor.Raise(manifest.MinVersion!);
 
         if (!IsApplicable(AgentVersion.Current, manifest.Version, _floor.Current()))
@@ -95,13 +105,16 @@ public sealed class UpdateWorker(
             return false;
         }
 
-        // Decided to apply — now record this version so a later replay of an older signed manifest
-        // is refused even before the new build is running.
-        _floor.Raise(manifest.Version);
-
         logger.LogInformation(
             "Newer agent {New} available (running {Cur}); applying.",
             manifest.Version, AgentVersion.Current);
+
+        // The floor is deliberately NOT raised to manifest.Version here: an offer is not an
+        // install. ApplyAsync can fail (download, hash, DACL, malformed package), and the apply
+        // script it hands off to can fail after that. Recording the offered version would leave
+        // the floor EQUAL to the version still being offered — and IsApplicable requires strictly
+        // newer — so the device would refuse that update forever and sit on the old build until a
+        // higher version shipped. Only versions we have actually run raise the floor (ExecuteAsync).
         return await installer.ApplyAsync(manifest, lifetime, ct);
     }
 

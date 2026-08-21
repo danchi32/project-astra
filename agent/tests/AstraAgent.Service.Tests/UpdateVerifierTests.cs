@@ -164,10 +164,77 @@ public class UpdateApplicabilityTests
     [InlineData("0.6.0", "0.6.0", "0.0.0", false)]  // already on the offered version
     [InlineData("0.5.1", "0.5.0", "0.0.0", false)]  // an older manifest is refused
     [InlineData("0.5.1", "0.6.0", "0.7.0", false)]  // floor above the offer (replay/rollback) refused
+    // A floor EQUAL to the offered version is a permanent deadlock: strictly-newer can never be
+    // satisfied, so the device sticks on `current` until a higher version ships. This is exactly
+    // the state a failed apply used to leave behind, and the reason the floor is now only ever
+    // raised to a version the agent has actually run.
+    [InlineData("0.8.4", "0.8.5", "0.8.5", false)]
     public void IsApplicable_AcceptsNewer_RefusesReplays(
         string current, string manifestVersion, string floor, bool expected)
         => Assert.Equal(expected, AstraAgent.Service.Workers.UpdateWorker.IsApplicable(
             current, manifestVersion, floor));
+
+    /// <summary>The regression that stranded a device on 0.8.4: an offered version must stay
+    /// applicable across *repeated failed applies*. Raising the floor only to the running version
+    /// (what UpdateWorker does now) keeps the offer alive; raising it to the offered version — the
+    /// old behaviour, reproduced here — locks the device out of that release permanently.</summary>
+    [Fact]
+    public void FailedApply_DoesNotStrandTheDeviceOnTheOldVersion()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"floor-{Guid.NewGuid():N}.txt");
+        try
+        {
+            const string running = "0.8.4";
+            const string offered = "0.8.5";
+            var floor = new UpdateFloorStore(path);
+
+            // Startup records what actually runs, then an apply is attempted and fails. Three
+            // times over, the update must still be on the table.
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                floor.Raise(running);
+                Assert.True(
+                    AstraAgent.Service.Workers.UpdateWorker.IsApplicable(running, offered, floor.Current()),
+                    $"attempt {attempt}: 0.8.5 must stay applicable after a failed apply");
+            }
+
+            // The rollback protection the floor exists for is still intact.
+            Assert.Equal(running, floor.Current());
+            Assert.False(
+                AstraAgent.Service.Workers.UpdateWorker.IsApplicable(running, "0.8.3", floor.Current()),
+                "a replayed older manifest must still be refused");
+
+            // Contrast: recording the mere OFFER is what deadlocks it.
+            floor.Raise(offered);
+            Assert.False(
+                AstraAgent.Service.Workers.UpdateWorker.IsApplicable(running, offered, floor.Current()),
+                "floor == offered version is unrecoverable — never write it for an un-run version");
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    /// <summary>A mandatory release names itself as the floor (`min_version == version`). Honouring
+    /// that literally would put the floor at the offered version and make the mandatory update
+    /// itself uninstallable, so only a min_version strictly below the offer may be persisted.</summary>
+    [Theory]
+    [InlineData("0.9.0", "0.9.0", false)]   // mandatory release — must NOT be persisted
+    [InlineData("0.9.0", "0.8.9", true)]    // revokes older builds — safe to persist
+    [InlineData("0.9.0", "0.9.1", false)]   // self-inconsistent (floor above its own offer)
+    public void MinVersion_IsPersistedOnlyWhenBelowTheOffer(
+        string offered, string minVersion, bool shouldPersist)
+    {
+        var persists = SemVer.IsNewer(offered, minVersion);
+        Assert.Equal(shouldPersist, persists);
+
+        // Whatever the manifest claims, the offer itself must survive the decision.
+        var floor = persists ? minVersion : "0.0.0";
+        Assert.True(
+            AstraAgent.Service.Workers.UpdateWorker.IsApplicable("0.8.6", offered, floor),
+            "a mandatory release must remain installable");
+    }
 }
 
 public class SemVerTests
