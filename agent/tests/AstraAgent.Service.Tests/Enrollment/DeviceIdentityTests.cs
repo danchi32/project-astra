@@ -36,6 +36,11 @@ public class DeviceIdentityTests
     public void OsVersion_DistinguishesWindows11From10()
     {
         if (!OperatingSystem.IsWindows()) return;
+        // Only a client SKU can be 10 or 11. CI runs on a Windows *Server* image, where the
+        // correct answer is "Windows Server 20xx" and asserting either would be asserting a fact
+        // about the runner rather than about this code. Skip there — OsVersion_NamesTheProduct-
+        // NotTheKernel still covers Server, and a developer machine still runs the check below.
+        if (!IsClientWindows()) return;
 
         var os = Provider().GetOsVersion();
         var expected = Environment.OSVersion.Version.Build >= 22000 ? "Windows 11" : "Windows 10";
@@ -44,6 +49,24 @@ public class DeviceIdentityTests
         // ProductName still says "Windows 10 Enterprise" on 11. Only the WMI caption (or the
         // build-number fallback) tells them apart.
         Assert.StartsWith(expected, os);
+    }
+
+    /// <summary>Client (Windows 10/11) vs Server, straight from the value Windows itself uses to
+    /// record which it installed. Reading it through the provider under test would be circular.</summary>
+    private static bool IsClientWindows()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            return string.Equals(
+                key?.GetValue("InstallationType") as string, "Client", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;   // unreadable — treat as "cannot claim client", i.e. skip
+        }
     }
 
     [Fact]
