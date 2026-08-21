@@ -15,14 +15,36 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release, e.g. 0.2.0 (must equal AgentVersion.Current)'
+        description: 'Version to release, e.g. 0.2.0 (must equal Directory.Build.props <Version>)'
         required: true
 
 permissions:
   contents: write   # needed to create the GitHub Release
 
 jobs:
+  # The agent's own suite, and the only gate in front of a fleet-wide auto-update. It covers the
+  # update path itself — the anti-replay floor, the applicability decision both updaters share,
+  # the tray re-seed — where a regression does not fail loudly on one machine but strands devices
+  # on an old build until someone notices weeks later.
+  #
+  # windows-latest, not the ubuntu runner the release job uses: the suite targets net8.0-windows
+  # and exercises DPAPI, the registry and the event log, so it can be cross-BUILT on Linux but
+  # not run there.
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Run the agent test suite
+        run: dotnet test agent/tests/AstraAgent.Service.Tests/AstraAgent.Service.Tests.csproj -c Release --nologo
+
   release:
+    needs: test        # never publish a release the suite has not passed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

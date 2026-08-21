@@ -19,6 +19,13 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # Runs before the build so a red suite is the first thing you see, not something buried
+      # under a successful publish. This is the gate on every push to main that touches agent/**;
+      # the release workflow runs the same suite again before it will publish a tag.
+      - name: Run the agent test suite
+        run: dotnet test agent/tests/AstraAgent.Service.Tests/AstraAgent.Service.Tests.csproj -c Release --nologo
+        shell: powershell
+
       - name: Publish self-contained agent
         run: |
           cd agent/install
