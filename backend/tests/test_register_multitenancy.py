@@ -18,6 +18,7 @@ async def _register(client, code: str, org: str, email: str):
     return await client.post(
         "/api/v1/auth/register",
         json={
+            "terms_accepted": True,
             "invite_code": code,
             "organization_name": org,
             "admin_name": f"{org} Admin",
@@ -41,7 +42,7 @@ async def test_register_creates_org_and_admin(client, session_factory):
 
 async def test_open_registration_without_invite(client):
     """New customers can self-serve sign up with no invite code."""
-    resp = await client.post("/api/v1/auth/register", json={
+    resp = await client.post("/api/v1/auth/register", json={"terms_accepted": True,
         "organization_name": "Walk-in Co",
         "admin_name": "Walk In",
         "admin_email": "founder@walkin.com",

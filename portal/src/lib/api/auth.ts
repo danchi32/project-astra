@@ -28,6 +28,9 @@ type SignupInput = {
   admin_name: string;
   admin_email: string;
   admin_password: string;
+  /** The clickwrap. The API rejects a signup without it — it is not optional here
+   *  either, so that a caller cannot forget it and get a 400 at runtime instead. */
+  terms_accepted: boolean;
 };
 
 // Step 1 of signup. When email is configured the server emails a code and returns

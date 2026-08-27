@@ -16,7 +16,7 @@ async def _register(client, session_factory, org="Bill Co", email="a@bill.com") 
     from app.services.invites import InviteService
     async with session_factory() as session:
         _, code = await InviteService(session).create(note="t", expires_in_days=30)
-    reg = await client.post("/api/v1/auth/register", json={
+    reg = await client.post("/api/v1/auth/register", json={"terms_accepted": True,
         "invite_code": code, "organization_name": org,
         "admin_name": "Admin", "admin_email": email, "admin_password": _PW,
     })

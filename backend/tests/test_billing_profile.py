@@ -25,7 +25,7 @@ async def _issue_invite(session_factory) -> str:
 async def _operator_headers(client, session_factory, email="billops@console.com"):
     """A platform admin, built the same way the console tests build one — there is no shared
     fixture for it, and inventing a second way to mint an operator is how the two drift."""
-    reg = await client.post("/api/v1/auth/register", json={
+    reg = await client.post("/api/v1/auth/register", json={"terms_accepted": True,
         "invite_code": await _issue_invite(session_factory),
         "organization_name": "Bill Ops Co", "admin_name": "Ops",
         "admin_email": email, "admin_password": USER_PASSWORD,

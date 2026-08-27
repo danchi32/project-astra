@@ -4,6 +4,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerStart, registerVerify } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
+
+// Policies live on the marketing site, which is where they are published and versioned.
+const TERMS_URL = "https://technomateai.com/terms/";
+const PRIVACY_URL = "https://technomateai.com/privacy/";
 import {
   AuthShell,
   SIGNUP_STEPS,
@@ -22,6 +26,8 @@ export default function RegisterPage() {
     admin_email: "",
     admin_password: "",
   });
+  // Unticked by default. A pre-ticked box is not acceptance of anything.
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [step, setStep] = useState<"details" | "code">("details");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -38,9 +44,15 @@ export default function RegisterPage() {
       setError("Password must be at least 8 characters.");
       return;
     }
+    // The server refuses this too. Checking here as well turns a 400 into an
+    // explanation the person can act on without a round trip.
+    if (!termsAccepted) {
+      setError("Please accept the Terms of Service and Privacy Policy to continue.");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await registerStart(form);
+      const res = await registerStart({ ...form, terms_accepted: termsAccepted });
       if (res.otp_required) {
         setStep("code");
       } else {
@@ -118,9 +130,31 @@ export default function RegisterPage() {
               className={authInputCls} style={authInputStyle} placeholder="At least 8 characters" />
           </div>
 
+          {/* Clickwrap. The acceptance, its version and the source address are recorded
+              against the organisation — see backend migration 0054. */}
+          <label className="flex items-start gap-2.5 text-xs leading-relaxed cursor-pointer"
+            style={{ color: "var(--text-secondary)" }}>
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded accent-brand-600"
+            />
+            <span>
+              I agree to the{" "}
+              <a href={TERMS_URL} target="_blank" rel="noopener noreferrer"
+                className="underline hover:text-brand-500">Terms of Service</a>{" "}
+              and{" "}
+              <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer"
+                className="underline hover:text-brand-500">Privacy Policy</a>{" "}
+              of Technomate IT-Solution Private Limited, and confirm I am authorised to
+              accept them for my organization.
+            </span>
+          </label>
+
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
-          <button type="submit" disabled={loading} className={authButtonCls}
+          <button type="submit" disabled={loading || !termsAccepted} className={authButtonCls}
             style={{ background: "var(--accent)" }}>
             {loading ? "Please wait…" : "Continue"}
           </button>

@@ -296,7 +296,7 @@ async def _register_org(client, session_factory, name, email):
 
     async with session_factory() as s:
         _, code = await InviteService(s).create(note="t", expires_in_days=30)
-    r = await client.post("/api/v1/auth/register", json={
+    r = await client.post("/api/v1/auth/register", json={"terms_accepted": True,
         "invite_code": code, "organization_name": name, "admin_name": "A",
         "admin_email": email, "admin_password": "Password12345",
     })

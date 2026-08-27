@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import client_ip, get_current_user
 from app.core.database import get_db
 from app.models import User
 from app.schemas.auth import (
@@ -27,8 +27,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     status_code=status.HTTP_201_CREATED,
     summary="Create a new organization + first admin (direct, no OTP)",
 )
-async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db)) -> TokenResponse:
-    access, refresh = await AuthService(session).register(body)
+async def register(
+    request: Request, body: RegisterRequest, session: AsyncSession = Depends(get_db)
+) -> TokenResponse:
+    access, refresh = await AuthService(session).register(body, accepted_ip=client_ip(request))
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 
@@ -38,9 +40,11 @@ async def register(body: RegisterRequest, session: AsyncSession = Depends(get_db
     summary="Begin signup — emails a verification code when email is configured",
 )
 async def register_start(
-    body: RegisterRequest, session: AsyncSession = Depends(get_db)
+    request: Request, body: RegisterRequest, session: AsyncSession = Depends(get_db)
 ) -> RegisterStartResponse:
-    otp_required, access, refresh = await AuthService(session).register_start(body)
+    otp_required, access, refresh = await AuthService(session).register_start(
+        body, accepted_ip=client_ip(request)
+    )
     return RegisterStartResponse(otp_required=otp_required, access_token=access, refresh_token=refresh)
 
 
@@ -51,9 +55,11 @@ async def register_start(
     summary="Confirm the emailed code and create the organization",
 )
 async def register_verify(
-    body: RegisterVerifyRequest, session: AsyncSession = Depends(get_db)
+    request: Request, body: RegisterVerifyRequest, session: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
-    access, refresh = await AuthService(session).register_verify(body)
+    access, refresh = await AuthService(session).register_verify(
+        body, accepted_ip=client_ip(request)
+    )
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 

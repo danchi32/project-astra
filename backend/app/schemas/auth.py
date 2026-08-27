@@ -15,6 +15,10 @@ class RegisterRequest(BaseModel):
     admin_name: str = Field(min_length=1, max_length=200)
     admin_email: EmailStr
     admin_password: str = Field(min_length=8)
+    #: The signup form's clickwrap. Defaults to False, so a client that omits it is
+    #: REJECTED rather than silently treated as agreeing — the whole point of the record
+    #: is that it proves a deliberate act, and a default of True would prove nothing.
+    terms_accepted: bool = False
 
 
 class RegisterVerifyRequest(BaseModel):
