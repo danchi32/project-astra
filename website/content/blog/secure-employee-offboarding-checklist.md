@@ -2,7 +2,7 @@
 title: "How to Securely Offboard Employees: The IT Checklist to Stop Data Theft"
 description: "A step-by-step IT offboarding checklist to lock down accounts, end active sessions and prevent data theft the moment an employee leaves."
 date: "2026-07-24"
-author: "Technomate IT Solution"
+author: "Technomate IT-Solution"
 keywords:
   - secure employee offboarding
   - IT offboarding checklist
@@ -56,9 +56,9 @@ What secure offboarding really needs is to be *instant* and *complete*: the mome
 
 > 📄 **Free download:** Get this as a one-page PDF your team can print and reuse for every leaver → **[The Secure Offboarding Checklist](/resources/offboarding-checklist/)**
 
-## Automating offboarding with Astra
+## Automating offboarding with ASTRA
 
-This is exactly the problem [Astra's secure offboarding](/astra/) was built for. In one click, Astra:
+This is exactly the problem [ASTRA's secure offboarding](/astra/) was built for. In one click, ASTRA:
 
 - **Disables the leaver's local account** so they can't sign back in
 - **Forces them out of their active Windows session** — not just the next login

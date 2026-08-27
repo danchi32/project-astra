@@ -1,4 +1,4 @@
-# Technomate IT Solution — Marketing Website
+# Technomate IT-Solution — Marketing Website
 
 Public marketing site for **technomateai.com**. Next.js 15 (App Router) + Tailwind CSS + framer-motion, sharing the ASTRA portal's design tokens (blue brand, Inter, dark/light).
 

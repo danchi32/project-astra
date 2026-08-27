@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Mail, Phone, MapPin, Linkedin, Twitter, Instagram } from "lucide-react";
-import { nav, site } from "@/lib/site";
+import { legalNav, nav, site } from "@/lib/site";
 import { BrandLogo } from "./BrandLogo";
 import { useContent, Rich } from "@/lib/content";
 
@@ -14,11 +14,12 @@ export function Footer() {
     "contactInfo.addressLines",
     site.contact.addressLines as unknown as string[],
   );
+  const { legal } = site;
 
   return (
     <footer className="border-t border-token bg-surface">
       <div className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
-        <div className="grid gap-10 md:grid-cols-4">
+        <div className="grid gap-10 md:grid-cols-5">
           <div className="md:col-span-2">
             <Link href="/" className="inline-flex items-center">
               <BrandLogo className="h-20 sm:h-24" />
@@ -27,7 +28,7 @@ export function Footer() {
               <Rich
                 text={c(
                   "brand.footerBlurb",
-                  "Managed IT services, laptops & hardware, and **Astra** — the AI System Administrator that resolves IT issues before your team even notices.",
+                  "Managed IT services, laptops & hardware, and **ASTRA** — the AI System Administrator that resolves IT issues before your team even notices.",
                 )}
               />
             </p>
@@ -90,6 +91,26 @@ export function Footer() {
             </ul>
           </div>
 
+          {/* Policy pages. Deliberately their own column rather than buried in the
+              bottom bar — a buyer's security reviewer looks for these first. */}
+          <div>
+            <h4 className="text-sm font-semibold">
+              {c("nav.legalHeading", "Legal")}
+            </h4>
+            <ul className="mt-4 space-y-2.5 text-sm">
+              {legalNav.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="text-secondary-token hover:text-brand-500"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           <div>
             <h4 className="text-sm font-semibold">
               {c("nav.contactHeading", "Contact")}
@@ -118,10 +139,42 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-token pt-6 text-sm text-muted-token sm:flex-row">
+        {/* Statutory disclosure. Companies Act 2013 s.12(3)(c) with Rule 26 of the
+            Companies (Incorporation) Rules 2014 requires the registered name, registered
+            office, CIN, telephone and email on official publications. GSTIN renders only
+            once it exists, so no empty label is shown before registration completes. */}
+        <div className="mt-12 border-t border-token pt-6 text-xs leading-relaxed text-muted-token">
+          <p className="font-medium text-secondary-token">{legal.displayName}</p>
+          <p className="mt-1">
+            Registered office: {legal.registeredOffice.join(", ")}
+          </p>
+          <p className="mt-1">
+            CIN: {legal.cin}
+            {legal.gstin ? <> &middot; GSTIN: {legal.gstin}</> : null}
+          </p>
+          <p className="mt-1">
+            <a href={`tel:${legal.phone.replace(/\s/g, "")}`} className="hover:text-brand-500">
+              {legal.phone}
+            </a>{" "}
+            &middot;{" "}
+            <a href={`mailto:${legal.email}`} className="hover:text-brand-500">
+              {legal.email}
+            </a>
+          </p>
+          <p className="mt-1">
+            Grievance Officer: {legal.grievanceOfficer.name} &middot;{" "}
+            <a
+              href={`mailto:${legal.grievanceOfficer.email}`}
+              className="hover:text-brand-500"
+            >
+              {legal.grievanceOfficer.email}
+            </a>
+          </p>
+        </div>
+
+        <div className="mt-6 flex flex-col items-center justify-between gap-3 border-t border-token pt-6 text-sm text-muted-token sm:flex-row">
           <p>
-            © {new Date().getFullYear()} {c("brand.company", site.company)}. All
-            rights reserved.
+            © {new Date().getFullYear()} {legal.displayName}. All rights reserved.
           </p>
           <p>{c("brand.footerProduct", `${site.product} — ${site.productTagline}`)}</p>
         </div>

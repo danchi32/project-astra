@@ -9,7 +9,7 @@ import { useContent, Rich } from "@/lib/content";
 type Faq = { q: string; a: string };
 const faqDefaults: Faq[] = [
   {
-    q: "How is Astra priced?",
+    q: "How is ASTRA priced?",
     a: "Per device, per month. Essential covers inventory, telemetry and patching; Professional adds the AI engine and automatic self-healing; Expert adds compliance, fleet-wide remediation and full audit. Annual billing saves about 17%.",
   },
   {
@@ -30,7 +30,7 @@ const faqDefaults: Faq[] = [
   },
   {
     q: "Do you supply the hardware too?",
-    a: "Yes — Technomate is also a laptop and hardware supplier. Bundle devices with Astra for a fully managed rollout.",
+    a: "Yes — Technomate is also a laptop and hardware supplier. Bundle devices with ASTRA for a fully managed rollout.",
   },
 ];
 

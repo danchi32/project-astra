@@ -6,9 +6,9 @@ import { site } from "@/lib/site";
 import { comparisons } from "@/lib/comparisons";
 
 export const metadata: Metadata = {
-  title: "Compare Astra — AI IT Automation vs RMM Tools",
+  title: "Compare ASTRA — AI IT Automation vs RMM Tools",
   description:
-    "See how Astra, the AI System Administrator, compares to popular IT automation and RMM tools like NinjaOne and Atera. Honest, side-by-side breakdowns.",
+    "See how ASTRA, the AI System Administrator, compares to popular IT automation and RMM tools like NinjaOne and Atera. Honest, side-by-side breakdowns.",
   alternates: { canonical: "/compare/" },
 };
 
@@ -20,7 +20,7 @@ export default function CompareIndexPage() {
           <Badge>Compare</Badge>
           <SectionHeading
             title={`How ${site.product} compares`}
-            subtitle="Honest, side-by-side breakdowns of Astra against popular IT automation and RMM tools — including where each one is the better fit."
+            subtitle="Honest, side-by-side breakdowns of ASTRA against popular IT automation and RMM tools — including where each one is the better fit."
           />
         </div>
 

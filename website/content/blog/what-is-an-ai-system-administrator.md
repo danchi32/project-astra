@@ -2,7 +2,7 @@
 title: "What Is an AI System Administrator? (And How It Differs from RMM)"
 description: "An AI System Administrator diagnoses and fixes IT issues autonomously, within human-approved safety tiers. Here's what that means and how it compares to RMM."
 date: "2026-07-25"
-author: "Technomate IT Solution"
+author: "Technomate IT-Solution"
 keywords:
   - AI system administrator
   - AI IT automation
@@ -55,4 +55,4 @@ That's what makes an AI System Administrator trustworthy: the boring majority he
 
 If your IT team spends most of its week on repetitive, resolvable issues — and you want automation you can actually trust — an AI System Administrator is worth a look.
 
-[Astra](/astra/) is exactly that: an AI System Administrator for Windows fleets that gathers evidence, heals issues within approval tiers, and logs everything. [Book a demo](/contact/) to see it work on a real device.
+[ASTRA](/astra/) is exactly that: an AI System Administrator for Windows fleets that gathers evidence, heals issues within approval tiers, and logs everything. [Book a demo](/contact/) to see it work on a real device.

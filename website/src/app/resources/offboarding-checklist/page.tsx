@@ -58,7 +58,7 @@ export default function OffboardingChecklistPage() {
 
             <p className="mt-8 rounded-xl border border-token bg-surface px-4 py-3 text-sm text-secondary-token">
               Built by <strong className="text-primary-token">Technomate</strong>,
-              makers of <strong className="text-primary-token">Astra</strong> — the
+              makers of <strong className="text-primary-token">ASTRA</strong> — the
               AI System Administrator that turns this whole checklist into one click.
             </p>
           </div>

@@ -27,7 +27,7 @@ const offeringDefaults = [
   },
   {
     title: "AI-Powered Operations",
-    desc: "With Astra, we bring AI-driven automation to IT support — detecting and healing issues across your fleet automatically.",
+    desc: "With ASTRA, we bring AI-driven automation to IT support — detecting and healing issues across your fleet automatically.",
   },
 ];
 
@@ -41,10 +41,10 @@ const valueDefaults = [
 
 type AStat = { value: string; label: string };
 const statDefaults: AStat[] = [
-  { value: "10+", label: "Years in IT services" },
-  { value: "500+", label: "Devices under management" },
-  { value: "24/7", label: "Monitoring with Astra" },
-  { value: "98%", label: "Client retention" },
+  { value: "23", label: "Automated remediation actions" },
+  { value: "3", label: "Approval tiers, enforced in code" },
+  { value: "60s", label: "Telemetry from every device" },
+  { value: "24/7", label: "Monitoring with ASTRA" },
 ];
 
 export function AboutContent() {
@@ -79,7 +79,7 @@ export function AboutContent() {
               <Rich
                 text={c(
                   "about.subtitle",
-                  "Technomate IT Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **Astra**.",
+                  "Technomate IT-Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **ASTRA**.",
                 )}
               />
             </p>
@@ -156,12 +156,12 @@ export function AboutContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "about.missionText",
-                    "Great IT shouldn't require a large in-house team. By combining hands-on service, quality hardware and Astra's AI automation, we give growing organizations the same resilience the largest enterprises enjoy — without the overhead.",
+                    "Great IT shouldn't require a large in-house team. By combining hands-on service, quality hardware and ASTRA's AI automation, we give growing organizations the same resilience the largest enterprises enjoy — without the overhead.",
                   )}
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Button href="/astra">
-                    {c("about.missionBtn1", "Discover Astra")}
+                    {c("about.missionBtn1", "Discover ASTRA")}
                   </Button>
                   <Button href="/contact" variant="secondary">
                     {c("about.missionBtn2", "Work with us")}
@@ -204,7 +204,7 @@ export function AboutContent() {
               <p className="max-w-xl text-secondary-token">
                 {c(
                   "about.supportText",
-                  "Whether you need a fleet of laptops, managed support, or a demo of Astra, our team is ready to help.",
+                  "Whether you need a fleet of laptops, managed support, or a demo of ASTRA, our team is ready to help.",
                 )}
               </p>
               <Button href="/contact">{c("about.supportBtn", "Contact us")}</Button>

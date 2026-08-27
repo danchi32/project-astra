@@ -250,8 +250,51 @@ class Settings(BaseSettings):
     # transient outage can't cause an indefinitely stale (rollback-adjacent) manifest to persist.
     agent_update_max_stale_seconds: int = 86400
 
+    # ── Company identity ────────────────────────────────────────────────────
+    # The registered entity behind ASTRA. Companies Act 2013 s.12(3)(c), read with
+    # Rule 26 of the Companies (Incorporation) Rules 2014, requires the name,
+    # registered office, CIN, telephone and email on business letters, billheads and
+    # official publications — so invoices and transactional email render these.
+    #
+    # Defaults are the real values rather than placeholders on purpose: an invoice
+    # that silently prints "example.com" is worse than one that fails to build. Every
+    # value can still be overridden by an ASTRA_-prefixed env var.
+    company_legal_name: str = "TECHNOMATE IT-SOLUTION PRIVATE LIMITED"
+    company_display_name: str = "Technomate IT-Solution Private Limited"
+    company_cin: str = "U62099UW2026PTC257827"
+    #: Empty until GST registration completes. Consumers must check for a non-empty
+    #: value: a tax invoice cannot be issued without it, and printing an empty GSTIN
+    #: label is worse than printing none.
+    company_gstin: str = ""
+    company_registered_office: str = (
+        "Ayodhya Ganj, Dadri, Gautam Budh Nagar, Uttar Pradesh 203207, India"
+    )
+    company_email: str = "danish@technomateai.com"
+    company_phone: str = "+91 97115 31786"
+    company_incorporated_on: str = "2026-08-25"
+
+    #: PAN and TAN are NOT public disclosures. They live here because invoicing and
+    #: TDS paperwork need them, and they must never be rendered on the marketing site,
+    #: the portal, or anything served to a browser. GSTIN above is different: it is
+    #: public and legally required on a tax invoice.
+    company_pan: str = "AANCT5458M"
+    company_tan: str = "MRTT08740E"
+
+    #: Published contact for data-protection complaints. Named officer, not a role
+    #: mailbox alone — the privacy notice has to identify a person.
+    grievance_officer_name: str = "Adeel Ahamad"
+    grievance_officer_email: str = "grievance@technomateai.com"
+
+    #: Where the customer-facing policies live. Referenced from emails and from the
+    #: terms-acceptance record so a stored acceptance can be traced to a document.
+    legal_terms_url: str = "https://technomateai.com/terms/"
+    legal_privacy_url: str = "https://technomateai.com/privacy/"
+    #: Bumped whenever the published terms change materially. Stored against each
+    #: organisation's acceptance so it is always clear WHICH version was agreed.
+    legal_terms_version: str = "2026-08-27"
+
     # Security contact published at /.well-known/security.txt (RFC 9116).
-    security_contact: str = "mailto:security@example.com"
+    security_contact: str = "mailto:security@technomateai.com"
     # Portal base URL that payment rails and email links redirect back to. Stored as the
     # ORIGIN only — redirects append their own path (/billing, /reset-password, …).
     public_app_url: str = "http://localhost:3000"

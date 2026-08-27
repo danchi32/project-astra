@@ -2,7 +2,7 @@
 title: "Self-Healing Endpoints: What They Are and Why IT Teams Are Adopting Them"
 description: "A plain-English guide to self-healing endpoints — how they detect, diagnose and fix issues automatically, and how they differ from traditional RMM scripts."
 date: "2026-07-20"
-author: "Technomate IT Solution"
+author: "Technomate IT-Solution"
 keywords:
   - self-healing endpoints
   - self-healing IT
@@ -57,6 +57,6 @@ This "human-in-the-loop" model is what lets you trust automation: the boring 80%
 
 You don't need to automate everything on day one. Start with the safe, high-volume, reversible fixes — the ones that already eat your queue — and expand as you build trust in the results.
 
-[Astra](/astra/) is built exactly this way: an AI System Administrator that detects issues from live telemetry, reasons about the cause, and heals them within these approval tiers, logging every action along the way.
+[ASTRA](/astra/) is built exactly this way: an AI System Administrator that detects issues from live telemetry, reasons about the cause, and heals them within these approval tiers, logging every action along the way.
 
 Want to see it fix a real issue on a real device? [Book a demo.](/contact/)

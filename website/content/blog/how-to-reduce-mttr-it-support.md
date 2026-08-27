@@ -2,7 +2,7 @@
 title: "How to Reduce MTTR (Mean Time to Resolution) in IT Support"
 description: "Practical ways to reduce MTTR in IT support — from gathering evidence faster to automating first-line fixes — plus how to measure it properly."
 date: "2026-07-21"
-author: "Technomate IT Solution"
+author: "Technomate IT-Solution"
 keywords:
   - reduce MTTR
   - mean time to resolution
@@ -54,4 +54,4 @@ A few tips so the number means something:
 
 The fastest way to reduce MTTR is to remove humans from the routine path entirely and hand them evidence for everything else. That's precisely what an [AI System Administrator](/blog/what-is-an-ai-system-administrator/) does.
 
-[Astra](/astra/) auto-resolves the repetitive tickets within safe approval tiers, gathers live evidence before it acts, and escalates the rest with the context already attached — cutting the wait, triage and evidence stages that drive most of your MTTR. [Book a demo](/contact/) to see it in action.
+[ASTRA](/astra/) auto-resolves the repetitive tickets within safe approval tiers, gathers live evidence before it acts, and escalates the rest with the context already attached — cutting the wait, triage and evidence stages that drive most of your MTTR. [Book a demo](/contact/) to see it in action.

@@ -22,7 +22,7 @@ export class WebGLBoundary extends Component<
 
   componentDidCatch(error: unknown) {
     // Non-fatal: the 2D fallback covers it. Log for debugging only.
-    console.warn("[Astra 3D] scene error, using fallback:", error);
+    console.warn("[ASTRA 3D] scene error, using fallback:", error);
   }
 
   render() {

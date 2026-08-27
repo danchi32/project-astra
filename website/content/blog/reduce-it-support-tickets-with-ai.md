@@ -2,7 +2,7 @@
 title: "How to Reduce IT Support Tickets with AI Automation"
 description: "A practical playbook for cutting IT support tickets with AI — which tickets to automate first, how it works, and how to measure the ROI."
 date: "2026-07-15"
-author: "Technomate IT Solution"
+author: "Technomate IT-Solution"
 keywords:
   - reduce IT support tickets
   - AI IT automation
@@ -63,6 +63,6 @@ Even a modest deflection rate on your top categories compounds quickly. If a thi
 3. Watch the results and expand coverage as trust grows.
 4. Route everything else to humans with evidence pre-attached.
 
-[Astra](/astra/) is an AI System Administrator built for exactly this: it watches every device, resolves the repetitive tickets automatically within safe approval tiers, and escalates the rest with the evidence already gathered.
+[ASTRA](/astra/) is an AI System Administrator built for exactly this: it watches every device, resolves the repetitive tickets automatically within safe approval tiers, and escalates the rest with the evidence already gathered.
 
 Curious what it would deflect in your environment? [Book a demo](/contact/) and we'll walk through your top ticket categories.
