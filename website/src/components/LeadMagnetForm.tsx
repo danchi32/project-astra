@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Download, Loader2, CheckCircle2, ArrowRight } from "lucide-react";
-import { bookDemo } from "@/lib/site";
+import { bookDemo, site } from "@/lib/site";
 import { getAttribution, trackEvent } from "@/lib/analytics";
 
 type Status = "idle" | "submitting" | "done";
@@ -169,8 +170,14 @@ export function LeadMagnetForm({
           </>
         )}
       </button>
-      <p className="mt-3 text-center text-[11px] text-muted-token">
-        No spam. We&apos;ll email you the checklist and the occasional IT-automation tip. Unsubscribe anytime.
+      <p className="mt-3 text-center text-[11px] leading-relaxed text-muted-token">
+        No spam. We&apos;ll email you the checklist and the occasional IT-automation tip.
+        Unsubscribe anytime. Your address is handled by {site.legal.displayName} as set
+        out in our{" "}
+        <Link href="/privacy/" className="underline hover:text-brand-500">
+          Privacy Policy
+        </Link>
+        .
       </p>
     </form>
   );

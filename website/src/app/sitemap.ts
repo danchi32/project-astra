@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { site } from "@/lib/site";
+import { legalNav, site } from "@/lib/site";
 import { comparisons } from "@/lib/comparisons";
 import { getAllPosts } from "@/lib/blog";
 
@@ -17,6 +17,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/resources/offboarding-checklist/", priority: 0.7, changeFrequency: "monthly" },
     { path: "/about/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/contact/", priority: 0.6, changeFrequency: "monthly" },
+    // Policy pages. Low priority but deliberately indexed — buyers' security reviewers
+    // and the payment rails both look for these at a public URL.
+    ...legalNav.map((l) => ({
+      path: `${l.href}/`,
+      priority: 0.3,
+      changeFrequency: "yearly" as const,
+    })),
     // One entry per comparison landing page.
     ...comparisons.map((c) => ({
       path: `/compare/${c.slug}/`,
