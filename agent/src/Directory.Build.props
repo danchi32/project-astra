@@ -11,6 +11,15 @@
          report it back at runtime (see AgentVersion), and the release workflow refuses to publish
          if it disagrees with the tag being released. Bump it here, commit, then tag agent-vX.Y.Z. -->
     <Version>0.8.8</Version>
+
+    <!-- Company identity, stamped into every assembly this solution builds. Windows
+         shows these in a file's Details tab, and a security team reviewing an unfamiliar
+         binary looks there first. The registered name is used, not a brand short form,
+         so it matches the installer's publisher and the code-signing certificate. -->
+    <Company>TECHNOMATE IT-SOLUTION PRIVATE LIMITED</Company>
+    <Product>ASTRA Agent</Product>
+    <Copyright>Copyright © 2026 Technomate IT-Solution Private Limited</Copyright>
+    <Authors>Technomate IT-Solution Private Limited</Authors>
   </PropertyGroup>
 
 </Project>
