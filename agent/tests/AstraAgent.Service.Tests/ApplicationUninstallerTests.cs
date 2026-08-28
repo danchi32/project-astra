@@ -79,6 +79,52 @@ public class ApplicationUninstallerTests
         Assert.Single(plan!.Arguments, a => a == "--force-uninstall");
     }
 
+    [Theory]
+    [InlineData(@"""C:\Program Files\Mozilla Firefox\uninstall\helper.exe""")]
+    [InlineData(@"""C:\Program Files (x86)\Mozilla Thunderbird\uninstall\helper.exe""")]
+    public void Mozillas_uninstaller_is_run_silently(string uninstallString)
+    {
+        // Reported from a real machine: Firefox was refused because its entry publishes no
+        // QuietUninstallString, even though Mozilla documents helper.exe /S. The refusal was
+        // correct given what the code knew — the fix is to teach it, not to loosen the rule.
+        var (plan, refusal) = ApplicationUninstaller.PlanFor(
+            "Mozilla Firefox (x64 en-US)", uninstallString, null);
+
+        Assert.Null(refusal);
+        Assert.NotNull(plan);
+        Assert.EndsWith(@"uninstall\helper.exe", plan!.FileName);
+        Assert.Contains("/S", plan.Arguments);
+    }
+
+    [Fact]
+    public void A_vendors_own_silent_command_still_wins_over_the_known_switch()
+    {
+        // Newer Firefox builds DO publish a QuietUninstallString. When the vendor has stated
+        // what silent means for their own product, that is better evidence than our list.
+        var (plan, _) = ApplicationUninstaller.PlanFor(
+            "Mozilla Firefox (x64 en-US)",
+            @"""C:\Program Files\Mozilla Firefox\uninstall\helper.exe""",
+            @"""C:\Program Files\Mozilla Firefox\uninstall\helper.exe"" /S /MaintenanceService=false");
+
+        Assert.Equal("vendor QuietUninstallString", plan!.How);
+        Assert.Contains("/MaintenanceService=false", plan.Arguments);
+    }
+
+    [Fact]
+    public void A_helper_exe_that_is_not_mozillas_is_still_refused()
+    {
+        // The marker is Mozilla's PATH, not the word "helper". Matching a bare executable name
+        // would hand /S to any vendor that happened to name theirs the same thing — a switch it
+        // may never have heard of, on a machine nobody is watching.
+        var (plan, refusal) = ApplicationUninstaller.PlanFor(
+            "Some Other Product",
+            @"""C:\Program Files\Vendor\helper.exe""",
+            null);
+
+        Assert.Null(plan);
+        Assert.Contains("no silent uninstall command", refusal);
+    }
+
     [Fact]
     public void An_installer_that_would_open_a_window_is_refused_not_run()
     {

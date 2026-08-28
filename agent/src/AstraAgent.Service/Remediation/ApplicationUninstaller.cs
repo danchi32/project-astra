@@ -46,6 +46,22 @@ public static class ApplicationUninstaller
     {
         // Chrome's system-level uninstaller prompts unless --force-uninstall is passed.
         ("--uninstall", new[] { "--force-uninstall" }, "Chrome-style silent uninstall"),
+
+        // Mozilla's uninstaller (Firefox, Thunderbird — both ship the same NSIS helper at
+        // uninstall\helper.exe) takes /S, which Mozilla documents. Older builds publish no
+        // QuietUninstallString at all, so without this entry a Firefox removal is refused on
+        // exactly the machines most likely to need it.
+        //
+        // The marker is the PATH of Mozilla's own helper, not the word "helper": matching a
+        // bare executable name would catch any vendor that happened to call theirs the same
+        // thing and hand it a switch it has never heard of. Keeping the marker specific is
+        // what makes this a claim about a known installer rather than a guess — see the
+        // class note.
+        //
+        // /S removes the application and leaves the user's profile (bookmarks, passwords)
+        // where it is. That is the right default for a policy removal: it is reversible by
+        // reinstalling, and nothing here should be quietly destroying someone's data.
+        (@"\uninstall\helper.exe", new[] { "/S" }, "Mozilla silent uninstall (/S)"),
     };
 
     /// <summary>Decides the command from what the registry recorded. Pure — no registry, no

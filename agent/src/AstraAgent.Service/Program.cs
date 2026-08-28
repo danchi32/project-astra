@@ -54,4 +54,18 @@ builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
 builder.Services.AddHostedService<UpdateWorker>();
 
-builder.Build().Run();
+var host = builder.Build();
+
+// Reconcile Control Panel's entry with what this binary actually is, before anything else
+// starts. An auto-update swaps the binaries but has never touched the Add/Remove Programs
+// key, so every updated device kept showing the version of the installer it was FIRST given —
+// and, on anything installed before 0.8.3, a blank icon that no update could repair.
+//
+// Done at start rather than after applying an update, so it also fixes the devices already in
+// that state. Silent when there is nothing to do, and it never throws.
+AstraAgent.Service.Update.AddRemoveProgramsSync.Run(
+    AppContext.BaseDirectory,
+    AstraAgent.Service.AgentVersion.Current,
+    host.Services.GetService<ILoggerFactory>()?.CreateLogger("AddRemoveProgramsSync"));
+
+host.Run();
