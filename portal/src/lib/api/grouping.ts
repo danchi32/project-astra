@@ -44,6 +44,33 @@ export const setGroupDevices = (id: string, deviceIds: string[]) =>
     .put<DeviceGroup>(`/grouping/groups/${id}/devices`, { device_ids: deviceIds })
     .then((r) => r.data);
 
+export interface GroupActionResult {
+  action_id: string;
+  /** "devices" or "sessions" — a session action fans out per signed-in session, so a
+   *  terminal server counts once per person on it, not once as a machine. */
+  fanned_over: string;
+  targets: number;
+  queued: number;
+  failed: number;
+  already_running: number;
+  error: string | null;
+}
+
+/**
+ * Push one action to everything in a group.
+ *
+ * Expert-plan only, same as the fleet-wide push — a 402 back means the plan, not the role.
+ * Tiers are still enforced per device, so a technician aiming an admin-only action at 200
+ * machines gets 200 refusals in `failed` rather than 200 sign-outs.
+ */
+export const runGroupAction = (
+  groupId: string,
+  body: { action_id: string; params?: Record<string, string>; message?: string; reason?: string },
+) =>
+  apiClient
+    .post<GroupActionResult>(`/grouping/groups/${groupId}/actions`, body)
+    .then((r) => r.data);
+
 export const listUserTeams = () =>
   apiClient.get<UserTeam[]>("/grouping/teams").then((r) => r.data);
 

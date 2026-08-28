@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Plus, Pencil, Trash2, X, Search, Users as UsersIcon, Monitor } from "lucide-react";
+import { Boxes, Plus, Pencil, Trash2, X, Search, Users as UsersIcon, Monitor, Zap } from "lucide-react";
 import {
   listDeviceGroups, createDeviceGroup, updateDeviceGroup, deleteDeviceGroup,
   getGroupDevices, setGroupDevices,
   listUserTeams, createUserTeam, updateUserTeam, deleteUserTeam,
-  getTeamUsers, setTeamUsers,
-  type DeviceGroup, type UserTeam,
+  getTeamUsers, setTeamUsers, runGroupAction,
+  type DeviceGroup, type UserTeam, type GroupActionResult,
 } from "@/lib/api/grouping";
 import { listDevicesPaged } from "@/lib/api/devices";
 import { listAllUsers } from "@/lib/api/users";
@@ -25,6 +25,88 @@ const COLOURS = [
 
 type Kind = "groups" | "teams";
 
+/**
+ * What can be pushed to a whole group.
+ *
+ * `tier` drives the grouping and the colour, and mirrors the backend registry — but it is
+ * a LABEL, not the rule. The server checks the tier per device, so a technician who reaches
+ * an admin-only action here gets refusals counted back, not a fleet of sign-outs.
+ *
+ * `scope` says what the push fans out over. A session action goes to each signed-in person,
+ * so on a terminal server with thirty users it is thirty actions — worth showing plainly
+ * before someone aims one at a group of servers.
+ *
+ * `destructive` is narrower than "admin-only" on purpose. Blocking USB is admin-only and
+ * completely reversible; signing everyone out destroys unsaved work and cannot be undone.
+ * Only the second kind demands the group name typed back.
+ */
+type BulkTier = "automatic" | "approval" | "admin";
+type BulkAction = {
+  id: string;
+  label: string;
+  tier: BulkTier;
+  scope: "devices" | "sessions";
+  destructive?: boolean;
+  params?: Record<string, string>;
+  /** Free-text parameter the operator must supply, if any. */
+  field?: { key: "app_name" | "message"; label: string; placeholder: string };
+  blurb: string;
+};
+
+const BULK_ACTIONS: BulkAction[] = [
+  { id: "flush_dns", label: "Flush DNS cache", tier: "automatic", scope: "devices",
+    blurb: "Clears the resolver cache on every device in the group." },
+  { id: "restart_explorer", label: "Restart Windows Explorer", tier: "automatic", scope: "devices",
+    blurb: "Restarts the shell. Open windows close; saved work is untouched." },
+  { id: "clear_temp", label: "Clear temporary files", tier: "automatic", scope: "devices",
+    blurb: "Removes each signed-in user's temp files to reclaim disk." },
+  { id: "clear_system_temp", label: "Deep clean system temp", tier: "automatic", scope: "devices",
+    blurb: "Machine-wide caches, Prefetch and the Windows Update download cache." },
+  { id: "clear_browser_cache", label: "Clear browser cache", tier: "automatic", scope: "devices",
+    blurb: "Chrome, Edge and Firefox HTTP caches. Leaves history and passwords alone." },
+  { id: "restart_network_adapter", label: "Restart network adapter", tier: "automatic", scope: "devices",
+    blurb: "Briefly drops connectivity on each device, including the agent's own." },
+  { id: "restart_service", label: "Restart Print Spooler", tier: "automatic", scope: "devices",
+    params: { service_name: "Spooler" }, blurb: "Restarts the spooler across the group." },
+
+  { id: "windows_update_install", label: "Install pending Windows updates", tier: "approval", scope: "devices",
+    blurb: "Installs everything pending. Never auto-reboots; reports when a restart is needed." },
+  { id: "office_repair", label: "Repair Microsoft Office", tier: "approval", scope: "devices",
+    blurb: "Opens Office's own repair. Someone at each PC must approve a prompt and click through it." },
+  { id: "network_reset", label: "Reset network stack", tier: "approval", scope: "devices",
+    blurb: "Winsock and TCP/IP. REQUIRES A REBOOT on every device to take effect." },
+  { id: "lock_session", label: "Lock every screen", tier: "approval", scope: "sessions",
+    blurb: "Locks each signed-in session. Work stays open; they type their password to return." },
+  { id: "message_session", label: "Message everyone", tier: "approval", scope: "sessions",
+    field: { key: "message", label: "Message", placeholder: "Saving your work now — these machines reboot in 10 minutes." },
+    blurb: "Shows a message box from IT on every signed-in desktop. One-way." },
+
+  { id: "block_usb_storage", label: "Block USB storage", tier: "admin", scope: "devices",
+    blurb: "Stops pen drives and portable disks. Reversible; keyboards and mice unaffected." },
+  { id: "unblock_usb_storage", label: "Allow USB storage", tier: "admin", scope: "devices",
+    blurb: "Reverses the block from the next time a drive is connected." },
+  { id: "reset_windows_update_components", label: "Reset Windows Update components", tier: "admin", scope: "devices",
+    blurb: "Rebuilds the update caches. Discards in-flight downloads." },
+  { id: "uninstall_application", label: "Uninstall an application", tier: "admin", scope: "devices",
+    destructive: true,
+    field: { key: "app_name", label: "Application name", placeholder: "uTorrent" },
+    blurb: "Removes the named application from every device in the group. Cannot be undone from ASTRA." },
+  { id: "logoff_session", label: "Sign everyone out", tier: "admin", scope: "sessions",
+    destructive: true,
+    blurb: "Signs out every session in the group. UNSAVED WORK IS LOST — Windows does not prompt." },
+];
+
+const TIER_LABEL: Record<BulkTier, string> = {
+  automatic: "Safe and reversible",
+  approval: "Needs technician or admin approval",
+  admin: "Admin only",
+};
+const TIER_COLOR: Record<BulkTier, string> = {
+  automatic: "#10b981",
+  approval: "#f59e0b",
+  admin: "#ef4444",
+};
+
 export default function GroupsPage() {
   const qc = useQueryClient();
   const [kind, setKind] = useState<Kind>("groups");
@@ -32,6 +114,7 @@ export default function GroupsPage() {
 
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isStaff = me?.role === "admin" || me?.role === "technician";
+  const isAdmin = me?.role === "admin";
 
   const { data: groups, isLoading: groupsLoading } = useQuery({
     queryKey: ["device-groups"], queryFn: listDeviceGroups,
@@ -49,6 +132,9 @@ export default function GroupsPage() {
   // conflating the two produced a form that was half about a name and half about 2,000
   // checkboxes.
   const [members, setMembers] = useState<{ id: string; name: string } | null>(null);
+  // The group a bulk action is being aimed at. Holds the whole row rather than an id,
+  // because the dialog puts the device count in front of the operator three times.
+  const [acting, setActing] = useState<DeviceGroup | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -187,11 +273,28 @@ export default function GroupsPage() {
                     {count} {kind === "groups" ? (count === 1 ? "device" : "devices") : (count === 1 ? "member" : "members")}
                   </span>
                   {isStaff && (
-                    <button onClick={() => setMembers({ id: row.id, name: row.name })}
-                      className="text-xs px-2 py-1 rounded-lg"
-                      style={{ border: "1px solid var(--border)", color: "var(--accent)" }}>
-                      Manage {kind === "groups" ? "devices" : "members"}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {/* Device groups only. A team is people, and a list of portal users is
+                          not a list of machines — pretending otherwise is how a "bulk action"
+                          reaches the wrong endpoints. */}
+                      {kind === "groups" && (
+                        <button
+                          onClick={() => setActing(row as DeviceGroup)}
+                          disabled={count === 0}
+                          title={count === 0
+                            ? "Add devices to this group first."
+                            : `Push one action to all ${count} device${count === 1 ? "" : "s"}`}
+                          className="text-xs px-2 py-1 rounded-lg inline-flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ border: "1px solid var(--border)", color: "var(--accent)" }}>
+                          <Zap size={11} /> Run action
+                        </button>
+                      )}
+                      <button onClick={() => setMembers({ id: row.id, name: row.name })}
+                        className="text-xs px-2 py-1 rounded-lg"
+                        style={{ border: "1px solid var(--border)", color: "var(--accent)" }}>
+                        Manage {kind === "groups" ? "devices" : "members"}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -247,6 +350,14 @@ export default function GroupsPage() {
         </div>
       )}
 
+      {acting && (
+        <BulkActionDialog
+          group={acting}
+          isAdmin={isAdmin}
+          onClose={() => setActing(null)}
+        />
+      )}
+
       {members && (
         <MembershipDialog
           kind={kind}
@@ -260,6 +371,204 @@ export default function GroupsPage() {
           onError={(text) => setMsg({ ok: false, text })}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Push one action to every device — or every signed-in session — in a group.
+ *
+ * The whole design problem here is blast radius. A single click can reach hundreds of
+ * machines, so the dialog never lets the operator forget how many: the count is in the
+ * heading, in the button, and in the confirmation. Destructive actions additionally require
+ * the group's name typed back, which is the only friction in the product that scales with
+ * consequence rather than with tier.
+ */
+function BulkActionDialog({
+  group, isAdmin, onClose,
+}: {
+  group: DeviceGroup;
+  isAdmin: boolean;
+  onClose: () => void;
+}) {
+  const [picked, setPicked] = useState<BulkAction | null>(null);
+  const [value, setValue] = useState("");
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<GroupActionResult | null>(null);
+  const [error, setError] = useState("");
+
+  // Admin-only actions are hidden from technicians rather than shown disabled. The server
+  // refuses them either way; a list of greyed rows reads as "broken" rather than "not yours".
+  const available = BULK_ACTIONS.filter((a) => a.tier !== "admin" || isAdmin);
+  const needsField = picked?.field;
+  const needsTyped = picked?.destructive;
+  const ready = picked
+    && (!needsField || value.trim().length > 0)
+    && (!needsTyped || typed.trim().toLowerCase() === group.name.trim().toLowerCase());
+
+  async function run() {
+    if (!picked || !ready) return;
+    setBusy(true); setError(""); setResult(null);
+    try {
+      const body: { action_id: string; params?: Record<string, string>; message?: string } = {
+        action_id: picked.id,
+      };
+      if (picked.params) body.params = { ...picked.params };
+      if (picked.field?.key === "message") body.message = value.trim();
+      if (picked.field?.key === "app_name") body.params = { ...body.params, app_name: value.trim() };
+      setResult(await runGroupAction(group.id, body));
+    } catch (e) {
+      setError(apiErrorMessage(e, "Couldn't push that to the group."));
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
+      onClick={() => !busy && onClose()}>
+      <div className="w-full max-w-lg rounded-xl p-5 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}
+        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+              Run an action on {group.name}
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              {group.device_count} device{group.device_count === 1 ? "" : "s"} in this group ·
+              tiers are still checked per device
+            </p>
+          </div>
+          <button onClick={onClose} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>
+        </div>
+
+        {result ? (
+          <div className="mt-4 flex flex-col gap-3">
+            <div className="rounded-lg p-3" style={{ background: "var(--bg)", border: "1px solid var(--border)" }}>
+              <p className="text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+                Pushed to {result.targets} {result.fanned_over === "sessions" ? "session" : "device"}
+                {result.targets === 1 ? "" : "s"}
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  { n: result.queued, label: "queued", color: "#10b981" },
+                  { n: result.already_running, label: "already running", color: "#f59e0b" },
+                  { n: result.failed, label: "refused", color: result.failed ? "#ef4444" : "var(--text-secondary)" },
+                ].map((c) => (
+                  <div key={c.label}>
+                    <div className="text-lg font-semibold" style={{ color: c.color }}>{c.n}</div>
+                    <div className="text-[11px]" style={{ color: "var(--text-secondary)" }}>{c.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {result.error && (
+              <p className="text-xs rounded-lg px-3 py-2" style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
+                {result.error}
+              </p>
+            )}
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              Track individual tasks under Self-Healing. Offline devices pick theirs up when
+              they next check in.
+            </p>
+            <div className="flex justify-end">
+              <button onClick={onClose} className="px-3 py-2 rounded-lg text-sm font-medium text-white"
+                style={{ background: "var(--accent)" }}>Done</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto mt-3 rounded-lg" style={{ border: "1px solid var(--border)" }}>
+              {(["automatic", "approval", "admin"] as BulkTier[]).map((tier) => {
+                const inTier = available.filter((a) => a.tier === tier);
+                if (!inTier.length) return null;
+                return (
+                  <div key={tier}>
+                    <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide font-medium sticky top-0"
+                      style={{ background: "var(--bg)", color: TIER_COLOR[tier], borderBottom: "1px solid var(--border)" }}>
+                      {TIER_LABEL[tier]}
+                    </div>
+                    {inTier.map((a) => {
+                      const on = picked?.id === a.id && picked?.label === a.label;
+                      return (
+                        <button key={a.id + a.label}
+                          onClick={() => { setPicked(a); setValue(""); setTyped(""); }}
+                          className="w-full text-left px-3 py-2 flex flex-col gap-0.5"
+                          style={{
+                            background: on ? "rgba(154,47,187,0.1)" : "transparent",
+                            borderBottom: "1px solid var(--border)",
+                          }}>
+                          <span className="text-sm font-medium flex items-center gap-1.5"
+                            style={{ color: on ? "var(--accent)" : "var(--text-primary)" }}>
+                            {a.label}
+                            {a.scope === "sessions" && (
+                              <span className="text-[10px] px-1.5 rounded-full"
+                                style={{ background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
+                                per session
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{a.blurb}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+
+            {needsField && (
+              <div className="mt-3">
+                <label className="text-xs" style={{ color: "var(--text-secondary)" }}>{needsField.label}</label>
+                {needsField.key === "message" ? (
+                  <textarea value={value} rows={3} maxLength={1000} autoFocus
+                    onChange={(e) => setValue(e.target.value)} placeholder={needsField.placeholder}
+                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                ) : (
+                  <input value={value} autoFocus maxLength={300}
+                    onChange={(e) => setValue(e.target.value)} placeholder={needsField.placeholder}
+                    className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
+                    style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+                )}
+              </div>
+            )}
+
+            {needsTyped && (
+              <div className="mt-3">
+                <p className="text-xs rounded-lg px-2 py-1.5 mb-2"
+                  style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
+                  This reaches {group.device_count} device{group.device_count === 1 ? "" : "s"} and
+                  cannot be undone from ASTRA.
+                </p>
+                <label className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  Type <span className="font-mono font-semibold">{group.name}</span> to confirm
+                </label>
+                <input value={typed} onChange={(e) => setTyped(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 rounded-lg text-sm outline-none"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+              </div>
+            )}
+
+            {error && (
+              <p className="text-xs mt-3 rounded-lg px-3 py-2"
+                style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>{error}</p>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={onClose} disabled={busy}
+                className="px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
+              <button onClick={run} disabled={busy || !ready}
+                className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ background: picked?.destructive ? "#ef4444" : "var(--accent)" }}>
+                {busy ? "Pushing…"
+                  : picked ? `Run on ${group.device_count} device${group.device_count === 1 ? "" : "s"}`
+                  : "Pick an action"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

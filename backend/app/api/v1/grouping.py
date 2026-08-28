@@ -3,18 +3,22 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_roles, requires
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.grouping import (
     DeviceGroupRead,
+    GroupActionRequest,
+    GroupActionResult,
     GroupWrite,
     MembershipWrite,
     TeamMembershipWrite,
     UserTeamRead,
 )
+from app.services.entitlements import FLEET_REMEDIATION
 from app.services.exceptions import ConflictError, NotFoundError
 from app.services.grouping import GroupingService
+from app.services.remediation.service import RemediationError
 
 router = APIRouter(prefix="/grouping", tags=["groups & teams"])
 
@@ -117,6 +121,38 @@ async def set_group_members(
         raise _handle(exc)
     groups = await service.list_groups(org_id=actor.org_id)
     return next(g for g in groups if g.id == group_id)
+
+
+@router.post("/groups/{group_id}/actions", response_model=GroupActionResult,
+             dependencies=[Depends(requires(FLEET_REMEDIATION))],
+             summary="Push one action to every device or session in a group")
+async def run_group_action(
+    group_id: uuid.UUID,
+    body: GroupActionRequest,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> GroupActionResult:
+    """Mass remediation, aimed at a group instead of a hand-picked list of devices.
+
+    Gated on the same entitlement as the fleet-wide push, because it is the same capability
+    with a nicer target selector — offering it here ungated would give away what that one is
+    sold on. The 402 is deliberate: the caller's role is fine, their plan is the problem.
+
+    Staff may call it; the ACTION's tier still decides what actually runs, per device. A
+    technician pushing an admin-only action to a group of 200 gets 200 refusals rather than
+    200 sign-outs, and the counts come back saying so.
+    """
+    try:
+        return await GroupingService(session).run_group_action(
+            actor=actor, group_id=group_id, action_id=body.action_id,
+            params=body.params, message=body.message, reason=body.reason,
+        )
+    except NotFoundError as exc:
+        raise _handle(exc)
+    except RemediationError as exc:
+        # A refusal that stopped the whole batch before it began — an unknown action, a bad
+        # parameter. Per-device refusals do not land here; they come back in the counts.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
 # ── User teams ─────────────────────────────────────────────────────────────

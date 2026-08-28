@@ -259,3 +259,165 @@ async def test_a_colour_that_is_not_a_colour_is_refused(client, admin_headers):
         json={"name": "Bad", "colour": "red; background:url(x)"},
     )
     assert response.status_code == 422
+
+
+# ── Bulk actions on a group ───────────────────────────────────────────────
+
+async def _set_plan(session_factory, org_id, plan):
+    """Group bulk actions are gated on the Expert plan, like the fleet-wide push.
+
+    The plan has to be set EXPLICITLY to test the gate at all: normalise_plan answers EXPERT
+    for an org whose plan is unset, so the fixture org gets every feature by default and a
+    naive test of the refusal would pass for the wrong reason."""
+    from sqlalchemy import select
+    from app.models import Organization
+    async with session_factory() as session:
+        org = (await session.execute(
+            select(Organization).where(Organization.id == org_id))).scalar_one()
+        org.plan = plan
+        await session.commit()
+
+
+async def test_a_device_action_fans_out_over_every_device(session_factory, admin_user):
+    async with session_factory() as session:
+        service = GroupingService(session)
+        group = await service.create_group(actor=admin_user, body=GroupWrite(name="HQ"))
+        ids = []
+        for host in ("HQ-01", "HQ-02", "HQ-03"):
+            ids.append((await _device(session, admin_user.org_id, host)).id)
+        await session.commit()
+        await service.set_group_members(actor=admin_user, group_id=group.id, device_ids=ids)
+
+        result = await service.run_group_action(
+            actor=admin_user, group_id=group.id, action_id="flush_dns")
+
+    assert result.fanned_over == "devices"
+    assert result.targets == 3
+    assert result.queued == 3
+    assert result.failed == 0
+
+
+async def test_a_session_action_fans_out_over_sessions_not_devices(session_factory, admin_user):
+    """The distinction that matters. A terminal server with three people signed in is three
+    sign-outs; treating it as one device would sign out whichever session the agent picked."""
+    async with session_factory() as session:
+        service = GroupingService(session)
+        group = await service.create_group(actor=admin_user, body=GroupWrite(name="Servers"))
+        server = await _device(session, admin_user.org_id, "SRV-01")
+        laptop = await _device(session, admin_user.org_id, "LT-01")
+        await session.commit()
+        await service.set_group_members(
+            actor=admin_user, group_id=group.id, device_ids=[server.id, laptop.id])
+
+        telemetry = TelemetryService(session)
+        await telemetry.ingest(device=server, data=_push([
+            _session(2, "ACME\\emma"), _session(3, "ACME\\mason"), _session(4, "ACME\\ava"),
+        ]))
+        await telemetry.ingest(device=laptop, data=_push([_session(1, "ACME\\liam")]))
+
+        result = await service.run_group_action(
+            actor=admin_user, group_id=group.id, action_id="lock_session")
+
+    assert result.fanned_over == "sessions"
+    # Four sessions across two devices — not two.
+    assert result.targets == 4
+    assert result.queued == 4
+
+
+async def test_a_session_with_nobody_signed_in_is_skipped(session_factory, admin_user):
+    """A machine at its logon screen. Locking an empty desktop is a no-op that would still
+    spend a task, an audit line and a round trip to the device."""
+    async with session_factory() as session:
+        service = GroupingService(session)
+        group = await service.create_group(actor=admin_user, body=GroupWrite(name="Floor"))
+        device = await _device(session, admin_user.org_id, "FLOOR-01")
+        await session.commit()
+        await service.set_group_members(
+            actor=admin_user, group_id=group.id, device_ids=[device.id])
+        await TelemetryService(session).ingest(device=device, data=_push([
+            _session(1, None), _session(2, "ACME\\olivia"),
+        ]))
+
+        result = await service.run_group_action(
+            actor=admin_user, group_id=group.id, action_id="lock_session")
+
+    assert result.targets == 1
+    assert result.queued == 1
+
+
+async def test_an_empty_group_does_nothing_rather_than_erroring(session_factory, admin_user):
+    async with session_factory() as session:
+        service = GroupingService(session)
+        group = await service.create_group(actor=admin_user, body=GroupWrite(name="Empty"))
+        result = await service.run_group_action(
+            actor=admin_user, group_id=group.id, action_id="flush_dns")
+
+    assert result.targets == 0
+    assert result.queued == 0
+    assert result.failed == 0
+
+
+async def test_tiers_are_still_enforced_per_device(session_factory, org, admin_user):
+    """The point of reusing the single-device path. A technician pushing an admin-only action
+    at a group of machines gets refusals, not sign-outs — and the counts say so rather than
+    the batch silently succeeding."""
+    from tests.conftest import _create_user
+    technician = await _create_user(
+        session_factory, org.id, "bulktech@acme.com", "TechPass123!", UserRole.TECHNICIAN)
+    async with session_factory() as session:
+        service = GroupingService(session)
+        group = await service.create_group(actor=admin_user, body=GroupWrite(name="Tiered"))
+        ids = [(await _device(session, admin_user.org_id, h)).id for h in ("T-01", "T-02")]
+        await session.commit()
+        await service.set_group_members(actor=admin_user, group_id=group.id, device_ids=ids)
+
+        result = await service.run_group_action(
+            actor=technician, group_id=group.id, action_id="block_usb_storage")
+
+    assert result.queued == 0
+    assert result.failed == 2
+
+
+async def test_a_bulk_push_is_audited_at_the_group_level(session_factory, admin_user):
+    """Per-task records say what happened to each machine. This one answers the question
+    actually asked after a bad push: who aimed what at which group, and how big was it."""
+    from sqlalchemy import select
+    from app.models import AuditLog
+    async with session_factory() as session:
+        service = GroupingService(session)
+        group = await service.create_group(actor=admin_user, body=GroupWrite(name="Audited"))
+        device = await _device(session, admin_user.org_id, "AUD-01")
+        await session.commit()
+        await service.set_group_members(
+            actor=admin_user, group_id=group.id, device_ids=[device.id])
+        await service.run_group_action(
+            actor=admin_user, group_id=group.id, action_id="flush_dns")
+
+        entry = (await session.execute(
+            select(AuditLog).where(AuditLog.action == "device_group.bulk_action")
+        )).scalars().first()
+
+    assert entry is not None
+    assert entry.detail["action_id"] == "flush_dns"
+    assert entry.detail["name"] == "Audited"
+    assert entry.detail["queued"] == 1
+
+
+async def test_group_bulk_is_expert_only(client, admin_headers, admin_user, session_factory):
+    """Same gating as the fleet-wide push: it is the same capability with a nicer target
+    selector. 402 rather than 403 — the role is fine, the plan is not."""
+    async with session_factory() as session:
+        group = await GroupingService(session).create_group(
+            actor=admin_user, body=GroupWrite(name="Gated"))
+        group_id = str(group.id)
+
+    await _set_plan(session_factory, admin_user.org_id, "essential")
+    denied = await client.post(f"/api/v1/grouping/groups/{group_id}/actions",
+                               headers=admin_headers, json={"action_id": "flush_dns"})
+    assert denied.status_code == 402
+
+    await _set_plan(session_factory, admin_user.org_id, "expert")
+    allowed = await client.post(f"/api/v1/grouping/groups/{group_id}/actions",
+                                headers=admin_headers, json={"action_id": "flush_dns"})
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["fanned_over"] == "devices"

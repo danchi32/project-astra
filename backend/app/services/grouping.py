@@ -24,9 +24,16 @@ from app.models import (
     UserTeam,
     UserTeamMember,
 )
-from app.schemas.grouping import DeviceGroupRead, GroupWrite, UserTeamRead
+from app.schemas.grouping import (
+    DeviceGroupRead,
+    GroupActionResult,
+    GroupWrite,
+    UserTeamRead,
+)
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError
+from app.services.remediation.service import AlreadyQueuedError, RemediationError
+from app.services.sessions import SESSION_ACTIONS
 
 
 class GroupingService:
@@ -177,6 +184,133 @@ class GroupingService:
         for device_id, name in rows:
             out.setdefault(device_id, []).append(name)
         return out
+
+    # ── Acting on a whole group ────────────────────────────────────────────
+
+    async def run_group_action(
+        self,
+        *,
+        actor: User,
+        group_id: uuid.UUID,
+        action_id: str,
+        params: dict[str, str] | None = None,
+        message: str | None = None,
+        reason: str | None = None,
+    ) -> GroupActionResult:
+        """Push one action to everything in a group.
+
+        Two fan-outs, chosen by what the action addresses rather than by what the caller
+        said. A device action goes to each DEVICE once. A session action is addressed to a
+        Windows session id, so it goes to each live SESSION — a terminal server with thirty
+        people on it is thirty sign-outs, not one, and treating it as one device would sign
+        out whichever session the agent happened to pick.
+
+        Nothing here bypasses the single-device path. Every task is created through
+        RemediationService, so the tier check, the approval record, the audit entry, the
+        duplicate guard and the org's fleet circuit breaker all still apply per device. This
+        method decides WHO to ask about; it does not decide what is allowed.
+        """
+        group = await self._owned_group(actor.org_id, group_id)
+        device_ids = await self.group_member_ids(org_id=actor.org_id, group_id=group_id)
+
+        base_reason = reason or f'Bulk "{action_id}" on group "{group.name}" from the portal'
+
+        if action_id in SESSION_ACTIONS:
+            result = await self._fan_over_sessions(
+                actor=actor, device_ids=device_ids, action_id=action_id,
+                message=message, reason=base_reason,
+            )
+        else:
+            result = await self._fan_over_devices(
+                actor=actor, device_ids=device_ids, action_id=action_id,
+                params=params, reason=base_reason,
+            )
+
+        # A group-level audit entry on top of the per-task ones. The individual records say
+        # what happened to each machine; this one answers "who pushed what, to which group,
+        # and how big was it" — the question actually asked after a bad bulk push.
+        await self.audit.record(
+            org_id=actor.org_id, actor_id=actor.id, action="device_group.bulk_action",
+            target_type="device_group", target_id=str(group.id),
+            detail={
+                "name": group.name, "action_id": action_id,
+                "fanned_over": result.fanned_over, "targets": result.targets,
+                "queued": result.queued, "failed": result.failed,
+                "already_running": result.already_running,
+            },
+        )
+        await self.session.commit()
+        return result
+
+    async def _fan_over_devices(
+        self, *, actor: User, device_ids: list[uuid.UUID], action_id: str,
+        params: dict[str, str] | None, reason: str,
+    ) -> GroupActionResult:
+        from app.services.fleet import FleetService
+
+        # Reuses the fleet path rather than reimplementing it. A second fan-out loop would be
+        # a second place for the already-running accounting and the circuit-breaker bail-out
+        # to drift apart, and those are exactly the behaviours nobody notices are wrong until
+        # a fleet-wide push goes badly.
+        bulk = await FleetService(self.session).bulk_remediate(
+            actor=actor, device_ids=device_ids, action_id=action_id,
+            params=params, reason=reason,
+        )
+        return GroupActionResult(
+            action_id=action_id, fanned_over="devices", targets=len(device_ids),
+            queued=bulk.queued, failed=bulk.failed,
+            already_running=bulk.already_running, error=bulk.error,
+        )
+
+    async def _fan_over_sessions(
+        self, *, actor: User, device_ids: list[uuid.UUID], action_id: str,
+        message: str | None, reason: str,
+    ) -> GroupActionResult:
+        from app.repositories.sessions import SessionRepository
+        from app.services.sessions import SessionService
+
+        sessions_repo = SessionRepository(self.session)
+        sessions = SessionService(self.session)
+
+        queued = failed = already = 0
+        targets = 0
+        error: str | None = None
+
+        for device_id in device_ids:
+            for row in await sessions_repo.for_device(device_id):
+                # A session with nobody signed into it is a machine at its logon screen.
+                # Locking or signing out an empty desktop is a no-op that still spends a
+                # task, an audit line and a round trip to the device.
+                if row.username is None:
+                    continue
+                targets += 1
+                try:
+                    await sessions.act(
+                        actor=actor, device_id=device_id, action_id=action_id,
+                        session_id=row.session_id, message=message,
+                        username=row.username, reason=reason,
+                    )
+                    queued += 1
+                except AlreadyQueuedError:
+                    already += 1
+                except RemediationError as exc:
+                    failed += 1
+                    error = str(exc)
+                    # The fleet safety limit stops the whole batch rather than grinding
+                    # through hundreds of sessions that will each be refused identically.
+                    if "safety limit" in str(exc).lower():
+                        return GroupActionResult(
+                            action_id=action_id, fanned_over="sessions", targets=targets,
+                            queued=queued, failed=failed, already_running=already, error=error,
+                        )
+                except Exception as exc:
+                    failed += 1
+                    error = str(exc)
+
+        return GroupActionResult(
+            action_id=action_id, fanned_over="sessions", targets=targets,
+            queued=queued, failed=failed, already_running=already, error=error,
+        )
 
     # ── User teams ─────────────────────────────────────────────────────────
 
