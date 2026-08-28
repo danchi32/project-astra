@@ -64,28 +64,6 @@ export function LegalPage({
             {children}
           </div>
 
-          {/* Repeated at the foot of every policy so a printed or PDF-exported copy
-              still carries the entity's statutory identification. */}
-          <div className="mt-14 border-t border-token pt-6 text-xs leading-relaxed text-muted-token">
-            <p className="font-medium text-secondary-token">{legal.displayName}</p>
-            <p className="mt-1">
-              Registered office: {legal.registeredOffice.join(", ")}
-            </p>
-            <p className="mt-1">
-              CIN: {legal.cin}
-              {legal.gstin ? <> &middot; GSTIN: {legal.gstin}</> : null}
-            </p>
-            <p className="mt-1">
-              {legal.phone} &middot;{" "}
-              <a href={`mailto:${legal.email}`}>{legal.email}</a>
-            </p>
-            <p className="mt-1">
-              Grievance Officer: {legal.grievanceOfficer.name} &middot;{" "}
-              <a href={`mailto:${legal.grievanceOfficer.email}`}>
-                {legal.grievanceOfficer.email}
-              </a>
-            </p>
-          </div>
         </div>
       </Container>
     </Section>

@@ -139,40 +139,7 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Statutory disclosure. Companies Act 2013 s.12(3)(c) with Rule 26 of the
-            Companies (Incorporation) Rules 2014 requires the registered name, registered
-            office, CIN, telephone and email on official publications. GSTIN renders only
-            once it exists, so no empty label is shown before registration completes. */}
-        <div className="mt-12 border-t border-token pt-6 text-xs leading-relaxed text-muted-token">
-          <p className="font-medium text-secondary-token">{legal.displayName}</p>
-          <p className="mt-1">
-            Registered office: {legal.registeredOffice.join(", ")}
-          </p>
-          <p className="mt-1">
-            CIN: {legal.cin}
-            {legal.gstin ? <> &middot; GSTIN: {legal.gstin}</> : null}
-          </p>
-          <p className="mt-1">
-            <a href={`tel:${legal.phone.replace(/\s/g, "")}`} className="hover:text-brand-500">
-              {legal.phone}
-            </a>{" "}
-            &middot;{" "}
-            <a href={`mailto:${legal.email}`} className="hover:text-brand-500">
-              {legal.email}
-            </a>
-          </p>
-          <p className="mt-1">
-            Grievance Officer: {legal.grievanceOfficer.name} &middot;{" "}
-            <a
-              href={`mailto:${legal.grievanceOfficer.email}`}
-              className="hover:text-brand-500"
-            >
-              {legal.grievanceOfficer.email}
-            </a>
-          </p>
-        </div>
-
-        <div className="mt-6 flex flex-col items-center justify-between gap-3 border-t border-token pt-6 text-sm text-muted-token sm:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-token pt-6 text-sm text-muted-token sm:flex-row">
           <p>
             © {new Date().getFullYear()} {legal.displayName}. All rights reserved.
           </p>
