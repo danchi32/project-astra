@@ -14,8 +14,9 @@
     "login": "Login",
     "signup": "Sign up",
     "companyHeading": "Company",
-    "contactHeading": "Contact",
-    "loginSignup": "Login / Sign up"
+    "loginSignup": "Login / Sign up",
+    "productHeading": "Product",
+    "resourcesHeading": "Resources"
   },
   "home": {
     "hero": {
@@ -503,5 +504,13 @@
       "Uttar Pradesh 203207",
       "India"
     ]
+  },
+  "footer": {
+    "platform": "Available for Windows",
+    "platformNote": "Windows 10 and 11 · 64-bit",
+    "callLabel": "Call us on",
+    "salesLabel": "For sales",
+    "supportLabel": "For support",
+    "followUs": "Follow us on:"
   }
 }
