@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Send, CheckCircle2, Loader2 } from "lucide-react";
 import { site } from "@/lib/site";
@@ -20,7 +21,7 @@ export function ContactForm() {
     email: "",
     company: "",
     phone: "",
-    interest: "Astra AI",
+    interest: "ASTRA AI",
     message: "",
     website: "", // honeypot — must stay empty
   });
@@ -175,7 +176,7 @@ export function ContactForm() {
           className={inputCls}
         >
           {list<string>("contact.form.interests", [
-            "Astra AI",
+            "ASTRA AI",
             "Managed IT Services",
             "Laptops & Hardware",
             "Partnership",
@@ -239,6 +240,17 @@ export function ContactForm() {
           </>
         )}
       </button>
+
+      {/* Transparency at the point of collection. The Privacy Policy explains what is
+          done with an enquiry; a link here is what makes that notice meaningful. */}
+      <p className="mt-3 text-xs leading-relaxed text-muted-token">
+        By sending this enquiry you agree that {site.legal.displayName} may use your
+        details to respond to you, as described in our{" "}
+        <Link href="/privacy/" className="underline hover:text-brand-500">
+          Privacy Policy
+        </Link>
+        .
+      </p>
     </form>
   );
 }

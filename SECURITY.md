@@ -1,11 +1,13 @@
 # Security Policy
 
+ASTRA is operated by **Technomate IT-Solution Private Limited** (CIN U62099UW2026PTC257827), Ayodhya Ganj, Dadri, Gautam Budh Nagar, Uttar Pradesh 203207, India.
+
 ASTRA runs commands on customer endpoints, so we treat the command path as the most
 sensitive code we own. We welcome and reward responsible disclosure.
 
 ## Reporting a vulnerability
 
-Please email **security@yourdomain.com** (update this to your real address) with:
+Please email **security@technomateai.com** with:
 
 - a description of the issue and its impact,
 - steps to reproduce (proof-of-concept if possible),

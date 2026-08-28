@@ -1,0 +1,138 @@
+ASTRA AGENT - END USER LICENCE AGREEMENT
+
+TECHNOMATE IT-SOLUTION PRIVATE LIMITED
+CIN: U62099UW2026PTC257827
+Registered office: Ayodhya Ganj, Dadri, Gautam Budh Nagar,
+Uttar Pradesh 203207, India
+
+Version 2026-08-27
+The current version is published at https://technomateai.com/eula/
+
+DRAFT - PENDING LEGAL REVIEW. Sections 9 and 10 are deliberately
+incomplete and must be settled by counsel before this software is
+distributed to customers.
+
+--------------------------------------------------------------------
+1. LICENCE
+--------------------------------------------------------------------
+Technomate IT-Solution Private Limited ("Technomate") grants you a
+non-exclusive, non-transferable, revocable licence to install and run
+the ASTRA Agent on devices you own or control, for the number of
+licences covered by your active subscription and for its duration.
+
+--------------------------------------------------------------------
+2. WHAT THIS SOFTWARE DOES - PLEASE READ
+--------------------------------------------------------------------
+The ASTRA Agent has two parts:
+
+  * a Windows service that runs with system privileges and performs
+    machine-level work; and
+  * a tray application that runs in the signed-in user's session and
+    provides the support chat.
+
+It reports device inventory, performance telemetry, installed
+software, services, Windows Update status and event log entries to the
+ASTRA platform.
+
+It EXECUTES REMEDIATION ACTIONS ON THIS DEVICE, drawn from a fixed
+catalogue built into the agent, at the approval tier configured by the
+organisation that enrolled it. Those tiers are:
+
+  automatic          safe, reversible actions that may run without a
+                     human approving each one, if your organisation
+                     enables automatic approval
+  approval required  runs only after one of your authorised people
+                     approves that specific action
+  admin only         higher-risk actions that only an administrator of
+                     your organisation may approve, and which are never
+                     dispatched automatically under any configuration
+
+The agent executes ACTION IDENTIFIERS from its own built-in allowlist.
+It does not accept or run arbitrary commands, and it rejects anything
+outside that list - including instructions from Technomate's own
+servers.
+
+--------------------------------------------------------------------
+3. WHAT THIS SOFTWARE DOES NOT DO
+--------------------------------------------------------------------
+It does not capture keystrokes, record the screen, read the contents
+of documents or email, monitor browsing history, or access personal
+files.
+
+--------------------------------------------------------------------
+4. DEPLOYMENT AND CONSENT
+--------------------------------------------------------------------
+This agent is deployed by the organisation that owns or controls this
+device. That organisation is responsible for giving its personnel the
+notice, and obtaining any consent, that applicable law requires.
+
+What is collected, where it is held and for how long is set out in the
+Privacy Policy at https://technomateai.com/privacy/
+
+--------------------------------------------------------------------
+5. AUTOMATIC UPDATES
+--------------------------------------------------------------------
+The agent checks for updates periodically and applies them
+automatically. Updates are cryptographically signed, and the agent
+verifies the signature against a public key built into the installed
+software before applying anything. An update that does not verify is
+refused.
+
+The private signing key is never held by the ASTRA backend, so a
+compromise of Technomate's servers cannot push software to your
+devices.
+
+--------------------------------------------------------------------
+6. RESTRICTIONS
+--------------------------------------------------------------------
+You must not:
+
+  * install the agent on any device you do not own or control;
+  * reverse engineer, decompile or modify the agent, except to the
+    extent applicable law expressly permits;
+  * tamper with the action allowlist, the signature verification, or
+    the approval-tier controls;
+  * redistribute, sublicense, rent or resell the agent.
+
+--------------------------------------------------------------------
+7. REMOVAL
+--------------------------------------------------------------------
+The agent can be removed at any time using the supplied uninstaller or
+standard Windows uninstall. Removing it stops all collection from this
+device.
+
+--------------------------------------------------------------------
+8. OWNERSHIP
+--------------------------------------------------------------------
+The agent is licensed, not sold. All intellectual property in it
+remains with Technomate IT-Solution Private Limited.
+
+--------------------------------------------------------------------
+9. WARRANTY AND LIABILITY
+--------------------------------------------------------------------
+[TO BE COMPLETED BY COUNSEL]
+
+This section must specifically address liability for the effects of a
+remediation action executed on a customer device, and for a defective
+agent release distributed through the automatic update channel. Those
+are the two ways this software can cause loss, and they should be
+addressed by name rather than left to a general disclaimer. The
+position must align with the Terms of Service and with the
+professional indemnity cover actually held.
+
+--------------------------------------------------------------------
+10. GOVERNING LAW
+--------------------------------------------------------------------
+[TO BE COMPLETED BY COUNSEL - to match the governing-law clause
+settled in the Terms of Service.]
+
+--------------------------------------------------------------------
+11. CONTACT
+--------------------------------------------------------------------
+Technomate IT-Solution Private Limited
+Ayodhya Ganj, Dadri, Gautam Budh Nagar, Uttar Pradesh 203207, India
+danish@technomateai.com  |  +91 97115 31786
+
+Terms of Service:  https://technomateai.com/terms/
+Privacy Policy:    https://technomateai.com/privacy/
+Security reports:  security@technomateai.com

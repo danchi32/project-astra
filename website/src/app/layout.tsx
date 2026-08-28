@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { ContentProvider } from "@/lib/content";
 import { SiteJsonLd } from "@/components/JsonLd";
 import { Analytics } from "@/components/Analytics";
+import { CookieConsent } from "@/components/CookieConsent";
 import { ConversionTracker } from "@/components/ConversionTracker";
 import { SupportChat } from "@/components/SupportChat";
 import { site } from "@/lib/site";
@@ -12,25 +13,25 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${site.domain}`),
   title: {
-    default: `${site.company} — IT Services, Hardware & Astra AI`,
+    default: `${site.company} — IT Services, Hardware & ASTRA AI`,
     template: `%s — ${site.company}`,
   },
   description:
-    "Technomate IT Solution delivers managed IT services, laptops & hardware, and Astra — an AI System Administrator that automates IT support with telemetry, self-healing and enterprise knowledge.",
+    "Technomate IT-Solution delivers managed IT services, laptops & hardware, and ASTRA — an AI System Administrator that automates IT support with telemetry, self-healing and enterprise knowledge.",
   keywords: [
     "IT services",
     "managed IT",
     "laptop supplier",
     "hardware provider",
     "AI IT automation",
-    "Astra",
+    "ASTRA",
     "self-healing IT",
     "Technomate",
   ],
   openGraph: {
-    title: `${site.company} — IT Services, Hardware & Astra AI`,
+    title: `${site.company} — IT Services, Hardware & ASTRA AI`,
     description:
-      "Managed IT services, hardware supply, and Astra — the AI System Administrator that fixes IT before your team even notices.",
+      "Managed IT services, hardware supply, and ASTRA — the AI System Administrator that fixes IT before your team even notices.",
     type: "website",
     url: `https://${site.domain}`,
     siteName: site.company,
@@ -46,9 +47,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${site.company} — IT Services, Hardware & Astra AI`,
+    title: `${site.company} — IT Services, Hardware & ASTRA AI`,
     description:
-      "Managed IT services, hardware supply, and Astra — the AI System Administrator that fixes IT before your team even notices.",
+      "Managed IT services, hardware supply, and ASTRA — the AI System Administrator that fixes IT before your team even notices.",
     images: ["/og.png"],
   },
   icons: {
@@ -93,6 +94,7 @@ export default function RootLayout({
         </ContentProvider>
         <Analytics />
         <ConversionTracker />
+        <CookieConsent />
       </body>
     </html>
   );

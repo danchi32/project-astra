@@ -36,6 +36,10 @@ UNINSTALL_SCRIPT = INSTALLER_DIR / "Uninstall-AstraAgent.ps1"
 # The tray chat's icon, reused for the installer and the Add/Remove Programs entry so
 # ASTRA looks like one product wherever Windows shows it.
 BRAND_ICON = REPO / "agent" / "src" / "AstraAgent.Tray" / "astra.ico"
+# The licence the wizard makes the installer accept before anything is written. Staged
+# like the icon and the uninstaller: payload/ is wiped and rebuilt on every run, so the
+# tracked source lives here and is copied in.
+EULA = INSTALLER_DIR / "EULA.txt"
 # The single source of truth for the agent version; both csprojs inherit it from here.
 VERSION_PROPS = REPO / "agent" / "src" / "Directory.Build.props"
 AGENT_INSTALLER_MODULE = REPO / "backend" / "app" / "services" / "agent_installer.py"
@@ -131,6 +135,12 @@ def main() -> int:
     if not BRAND_ICON.is_file():
         raise SystemExit(f"Missing {BRAND_ICON}")
     shutil.copy2(BRAND_ICON, PAYLOAD_DIR / "astra.ico")
+
+    # Hard failure, not a warning: AstraAgent.iss names this as its LicenseFile, so a
+    # missing EULA would stop the compile anyway — better to say why here.
+    if not EULA.is_file():
+        raise SystemExit(f"Missing {EULA}")
+    shutil.copy2(EULA, PAYLOAD_DIR / "EULA.txt")
 
     version = agent_version()
     # The exe is byte-identical for every organization, so the backend it points at

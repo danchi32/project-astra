@@ -107,7 +107,7 @@ export function CompareContent({ data }: { data: Comparison }) {
         </Container>
       </Section>
 
-      {/* Why Astra */}
+      {/* Why ASTRA */}
       <Section className="py-12">
         <Container>
           <SectionHeading

@@ -35,7 +35,7 @@ const pillarDefaults = [
     desc: "Business-grade laptops, desktops, workstations and networking gear — sourced, configured and delivered ready to work.",
   },
   {
-    title: "Astra — AI System Admin",
+    title: "ASTRA — AI System Admin",
     desc: "Our AI IT agent that watches every device, diagnoses issues, and self-heals them — with human approval where it matters.",
   },
 ];
@@ -75,7 +75,7 @@ export function HomeContent() {
   ]);
   const consoleBullets = list<string>("home.console.bullets", [
     "Live device health & telemetry",
-    "Astra activity stream in real time",
+    "ASTRA activity stream in real time",
     "Drill into any endpoint instantly",
   ]);
   const teaserBullets = list<string>("home.teaser.bullets", [
@@ -107,7 +107,7 @@ export function HomeContent() {
                   <Rich
                     text={c(
                       "home.hero.title",
-                      "IT that runs itself,\npowered by [[Astra AI]]",
+                      "IT that runs itself,\npowered by [[ASTRA AI]]",
                     )}
                   />
                 </h1>
@@ -117,7 +117,7 @@ export function HomeContent() {
                   <Rich
                     text={c(
                       "home.hero.subtitle",
-                      "Technomate IT Solution delivers managed IT services and business hardware — supercharged by **Astra**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
+                      "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **ASTRA**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
                     )}
                   />
                 </p>
@@ -126,7 +126,7 @@ export function HomeContent() {
                 <div className="mt-8 flex flex-wrap items-center gap-3">
                   <Magnetic>
                     <Button href="/astra">
-                      {c("home.hero.cta1", "Explore Astra")}{" "}
+                      {c("home.hero.cta1", "Explore ASTRA")}{" "}
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Magnetic>
@@ -147,7 +147,7 @@ export function HomeContent() {
               </Reveal>
             </div>
 
-            {/* 3D Astra core */}
+            {/* 3D ASTRA core */}
             <Reveal delay={0.15} className="flex justify-center">
               <Hero3D />
             </Reveal>
@@ -254,7 +254,7 @@ export function HomeContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "home.console.subtitle",
-                    "Every device, every metric, every action Astra takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
+                    "Every device, every metric, every action ASTRA takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
                   )}
                 </p>
                 <ul className="mt-6 space-y-3">
@@ -285,7 +285,7 @@ export function HomeContent() {
               <Reveal>
                 <Badge>
                   <Sparkles className="h-3.5 w-3.5 text-brand-500" />{" "}
-                  {c("home.teaser.badge", "Meet Astra")}
+                  {c("home.teaser.badge", "Meet ASTRA")}
                 </Badge>
               </Reveal>
               <Reveal delay={0.05}>
@@ -302,7 +302,7 @@ export function HomeContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "home.teaser.subtitle",
-                    "Astra follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
+                    "ASTRA follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
                   )}
                 </p>
               </Reveal>
@@ -320,7 +320,7 @@ export function HomeContent() {
                 <div className="mt-8">
                   <Magnetic>
                     <Button href="/astra">
-                      {c("home.teaser.cta", "See everything Astra does")}{" "}
+                      {c("home.teaser.cta", "See everything ASTRA does")}{" "}
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Magnetic>
@@ -336,7 +336,7 @@ export function HomeContent() {
         <Container>
           <Reveal>
             <SectionHeading
-              eyebrow={c("home.healingHead.eyebrow", "How Astra heals")}
+              eyebrow={c("home.healingHead.eyebrow", "How ASTRA heals")}
               title={c("home.healingHead.title", "Evidence before action — every single time")}
               subtitle={c(
                 "home.healingHead.subtitle",
@@ -365,7 +365,7 @@ export function HomeContent() {
                 <p className="mx-auto mt-4 max-w-xl text-white/85">
                   {c(
                     "home.cta.subtitle",
-                    "Talk to our team about managed IT, hardware, and deploying Astra across your organization.",
+                    "Talk to our team about managed IT, hardware, and deploying ASTRA across your organization.",
                   )}
                 </p>
                 <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -382,7 +382,7 @@ export function HomeContent() {
                     href={site.appUrl}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
                   >
-                    {c("home.cta.btn2", "Launch Astra")}
+                    {c("home.cta.btn2", "Launch ASTRA")}
                   </a>
                 </div>
               </div>

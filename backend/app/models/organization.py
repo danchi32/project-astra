@@ -85,3 +85,18 @@ class Organization(TimestampMixin, Base):
     ai_pro: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+
+    # -- Terms acceptance ------------------------------------------------------
+    # Proof that somebody agreed to the Terms of Service, and to WHICH version. An
+    # e-contract is enforceable only if acceptance can be demonstrated, so the record has
+    # to survive independently of the signup request that created it.
+    #
+    # All three are nullable because organisations created before this existed have no
+    # acceptance to record, and inventing one would be worse than admitting the gap —
+    # those accounts need re-acceptance, and a null is how that is found.
+    terms_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    #: Sized for IPv6. Recorded as evidence of the acceptance, not for tracking.
+    terms_accepted_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)

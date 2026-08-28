@@ -136,7 +136,7 @@ export function DashboardMockup() {
 
         <div className="rounded-xl border border-token bg-surface-2 p-3.5">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
-            <Sparkles className="h-4 w-4 text-brand-500" /> Astra activity
+            <Sparkles className="h-4 w-4 text-brand-500" /> ASTRA activity
           </div>
           <div className="relative h-[104px] overflow-hidden">
             <motion.div
@@ -350,7 +350,7 @@ export function AiConsole() {
   };
 
   return (
-    <Chrome title="Astra Assistant">
+    <Chrome title="ASTRA Assistant">
       <div className="mini-scroll flex h-[220px] flex-col gap-2 overflow-hidden">
         {lines.slice(0, n).map((l, i) => (
           <motion.div
@@ -363,7 +363,7 @@ export function AiConsole() {
           >
             {l.who === "astra" && (
               <span className="mb-0.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-violet-500">
-                <Sparkles className="h-3 w-3" /> Astra
+                <Sparkles className="h-3 w-3" /> ASTRA
               </span>
             )}
             {l.text}
@@ -402,7 +402,7 @@ export function ApprovalTiers() {
       name: "Approval required",
       color: "amber",
       icon: ShieldCheck,
-      desc: "A human approves before Astra acts.",
+      desc: "A human approves before ASTRA acts.",
       items: ["Office repair", "Driver update", "Network reset"],
     },
     {

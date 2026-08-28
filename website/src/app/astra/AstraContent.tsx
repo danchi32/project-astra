@@ -64,17 +64,17 @@ const featureDefaults = [
   { title: "Self-Healing", desc: "Allowlisted, tiered remediations that fix issues automatically — or with approval." },
   { title: "Patch Management", desc: "Push Windows Updates to any device — or the whole fleet — from the admin panel and watch rollout live." },
   { title: "Secure Offboarding", desc: "When someone leaves, lock down their account and force them out of their session in one click — before data can walk out." },
-  { title: "Conversational AI", desc: "Users describe problems in plain language; Astra investigates and resolves." },
+  { title: "Conversational AI", desc: "Users describe problems in plain language; ASTRA investigates and resolves." },
   { title: "Approval Tiers", desc: "Automatic, approval-required and admin-only — enforced in code, not just prompts." },
   { title: "Reporting", desc: "Fleet health, resolution and compliance reports ready for stakeholders." },
   { title: "Notifications", desc: "Proactive alerts the moment something needs a human decision." },
   { title: "Full Audit Trail", desc: "Every mutation and agent command is logged, attributable and reviewable." },
   { title: "Compliance & Security Posture", desc: "A live compliance dashboard scores your fleet's security posture and flags the devices that fall short." },
   { title: "Restricted Software Detection", desc: "Spot unapproved or risky applications across every device, so shadow IT surfaces before it becomes an incident." },
-  { title: "Fleet Correlation & Mass Remediation", desc: "Astra links the same fault across many devices, then fixes the whole affected group in one click instead of one by one." },
-  { title: "Helpdesk Integration", desc: "Connect Freshservice and let Astra raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees." },
-  { title: "Self-Learning Knowledge Base", desc: "Every confirmed fix teaches the knowledge base. Astra publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type." },
-  { title: "Asset Assignment & Acknowledgement", desc: "Hand a laptop to an employee and Astra emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record." },
+  { title: "Fleet Correlation & Mass Remediation", desc: "ASTRA links the same fault across many devices, then fixes the whole affected group in one click instead of one by one." },
+  { title: "Helpdesk Integration", desc: "Connect Freshservice and let ASTRA raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees." },
+  { title: "Self-Learning Knowledge Base", desc: "Every confirmed fix teaches the knowledge base. ASTRA publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type." },
+  { title: "Asset Assignment & Acknowledgement", desc: "Hand a laptop to an employee and ASTRA emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record." },
 ];
 
 const workflowIcons = [Search, BrainCircuit, Activity, Gauge, Wrench, BadgeCheck];
@@ -142,7 +142,7 @@ export function AstraContent() {
               <Reveal>
                 <Badge>
                   <Sparkles className="h-3.5 w-3.5 text-brand-500" />{" "}
-                  {c("astra.badge", "Meet Astra")}
+                  {c("astra.badge", "Meet ASTRA")}
                 </Badge>
               </Reveal>
               <Reveal delay={0.05}>
@@ -154,7 +154,7 @@ export function AstraContent() {
                 <p className="mt-6 max-w-xl text-lg leading-relaxed text-secondary-token">
                   {c(
                     "astra.subtitle",
-                    "Astra watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
+                    "ASTRA watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
                   )}
                 </p>
               </Reveal>
@@ -162,7 +162,7 @@ export function AstraContent() {
                 <div className="mt-8 flex flex-wrap gap-3">
                   <Magnetic>
                     <Button href={site.appUrl} external>
-                      {c("astra.cta1", "Launch Astra")}{" "}
+                      {c("astra.cta1", "Launch ASTRA")}{" "}
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Magnetic>
@@ -191,7 +191,7 @@ export function AstraContent() {
         <Container>
           <Reveal>
             <SectionHeading
-              eyebrow={c("astra.loopHead.eyebrow", "The Astra loop")}
+              eyebrow={c("astra.loopHead.eyebrow", "The ASTRA loop")}
               title={c("astra.loopHead.title", "An agentic workflow, not a black box")}
               subtitle={c(
                 "astra.loopHead.subtitle",
@@ -227,7 +227,7 @@ export function AstraContent() {
           <Reveal>
             <SectionHeading
               eyebrow={c("astra.capsHead.eyebrow", "Capabilities")}
-              title={c("astra.capsHead.title", "Everything Astra does out of the box")}
+              title={c("astra.capsHead.title", "Everything ASTRA does out of the box")}
               subtitle={c(
                 "astra.capsHead.subtitle",
                 "A complete AI operations platform for your Windows fleet.",
@@ -273,7 +273,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.inventory.desc",
-                    "The moment an agent enrolls, Astra builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
+                    "The moment an agent enrolls, ASTRA builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
                   )}
                 </p>
                 <ul className="mt-5 space-y-2.5">
@@ -311,7 +311,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.telemetry.desc",
-                    "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence Astra reasons over.",
+                    "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence ASTRA reasons over.",
                   )}
                 </p>
                 <div className="mt-6 grid grid-cols-2 gap-3">
@@ -342,7 +342,7 @@ export function AstraContent() {
               title={c("astra.healingHead.title", "Fixes that respect human control")}
               subtitle={c(
                 "astra.healingHead.subtitle",
-                "Astra never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt.",
+                "ASTRA never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt.",
               )}
             />
           </Reveal>
@@ -380,7 +380,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.patch.desc",
-                    "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. Astra orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
+                    "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. ASTRA orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
                   )}
                 </p>
                 <ul className="mt-5 space-y-2.5">
@@ -423,7 +423,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.offboarding.desc",
-                    "Offboarding is the riskiest moment for your data — a leaver with an open session can copy files long after HR says goodbye. With Astra, lock down their account and force them out of their active Windows session in one click. Instant, precise and fully audited.",
+                    "Offboarding is the riskiest moment for your data — a leaver with an open session can copy files long after HR says goodbye. With ASTRA, lock down their account and force them out of their active Windows session in one click. Instant, precise and fully audited.",
                   )}
                 </p>
                 <ul className="mt-5 space-y-2.5">
@@ -499,7 +499,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.assistant.desc",
-                    "Employees just describe the problem. Astra recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
+                    "Employees just describe the problem. ASTRA recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
                   )}
                 </p>
                 <div className="mt-6">
@@ -559,7 +559,7 @@ export function AstraContent() {
               <div className="absolute inset-0 grid-bg opacity-20" />
               <div className="relative">
                 <h2 className="text-3xl font-bold text-white sm:text-4xl">
-                  {c("astra.cta.title", "Deploy Astra across your fleet")}
+                  {c("astra.cta.title", "Deploy ASTRA across your fleet")}
                 </h2>
                 <p className="mx-auto mt-4 max-w-xl text-white/85">
                   {c(
@@ -572,7 +572,7 @@ export function AstraContent() {
                     href={site.appUrl}
                     className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-700 transition-transform hover:-translate-y-0.5"
                   >
-                    {c("astra.cta.btn1", "Launch Astra")}{" "}
+                    {c("astra.cta.btn1", "Launch ASTRA")}{" "}
                     <ArrowRight className="h-4 w-4" />
                   </a>
                   <a

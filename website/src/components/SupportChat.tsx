@@ -125,7 +125,7 @@ export function SupportChat() {
         className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-brand-600 pl-4 pr-5 py-3 text-sm font-semibold text-white shadow-xl shadow-brand-600/25 transition hover:bg-brand-500"
       >
         <MessageSquare className="h-4 w-4" />
-        Ask about Astra
+        Ask about ASTRA
       </button>
     );
   }

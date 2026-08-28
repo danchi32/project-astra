@@ -9,7 +9,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: `${site.company} — ${site.product} AI`,
     short_name: site.brandShort,
     description:
-      "Managed IT services, hardware, and Astra — the AI System Administrator that automates IT support.",
+      "Managed IT services, hardware, and ASTRA — the AI System Administrator that automates IT support.",
     start_url: "/",
     display: "standalone",
     background_color: "#0b1120",

@@ -28,7 +28,7 @@ def _code(msg) -> str:
 
 
 async def _start(client, org="OTP Co", email="otp@co.com"):
-    return await client.post("/api/v1/auth/register/start", json={
+    return await client.post("/api/v1/auth/register/start", json={"terms_accepted": True,
         "organization_name": org, "admin_name": "A", "admin_email": email, "admin_password": _PW})
 
 

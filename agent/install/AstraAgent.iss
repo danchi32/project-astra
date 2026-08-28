@@ -34,7 +34,14 @@
 ; can never drift apart in behaviour.
 
 #define AppName        "ASTRA Agent"
-#define AppPublisher   "Technomate AI"
+; The REGISTERED company name, not a brand short form. This string appears in the
+; wizard, in Add/Remove Programs and in the UAC elevation prompt, and it is what the
+; Authenticode certificate subject will read once code signing is live — the two
+; disagreeing is what makes a signed installer look wrong to a security team.
+#define AppPublisher   "TECHNOMATE IT-SOLUTION PRIVATE LIMITED"
+#define AppCopyright   "Copyright (C) 2026 Technomate IT-Solution Private Limited"
+#define AppUrl         "https://technomateai.com"
+#define SupportUrl     "https://technomateai.com/contact/"
 #define ServiceName    "AstraAgent"
 #define DefaultServer  "https://api.astra.technomateai.com"
 #define KeyPrefix      "AstraAgent-Setup-"
@@ -49,6 +56,15 @@ AppId={{8F3C61D4-6B2A-4E57-9A18-2D7E4C0B93A5}
 AppName={#AppName}
 AppVersion={#AgentVersion}
 AppPublisher={#AppPublisher}
+AppCopyright={#AppCopyright}
+AppPublisherURL={#AppUrl}
+AppSupportURL={#SupportUrl}
+AppUpdatesURL={#AppUrl}
+
+; Shown before installation and requiring acceptance. The agent runs with system
+; privileges and executes commands on the machine; a licence the installer never
+; displays is a licence nobody agreed to.
+LicenseFile=payload\EULA.txt
 VersionInfoVersion={#AgentVersion}
 VersionInfoDescription={#AppName} installer
 

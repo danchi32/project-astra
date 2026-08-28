@@ -1,14 +1,14 @@
 {
   "brand": {
-    "company": "Technomate IT Solution",
+    "company": "Technomate IT-Solution",
     "short": "Technomate",
     "tagline": "Automate today, innovate tomorrow",
-    "footerBlurb": "Managed IT services, laptops & hardware, and Astra — the AI System Administrator that resolves IT issues before your team even notices.",
-    "footerProduct": "Astra — Your AI System Administrator"
+    "footerBlurb": "Managed IT services, laptops & hardware, and ASTRA — the AI System Administrator that resolves IT issues before your team even notices.",
+    "footerProduct": "ASTRA — Your AI System Administrator"
   },
   "nav": {
     "about": "About Us",
-    "astra": "Astra",
+    "astra": "ASTRA",
     "pricing": "Pricing",
     "contact": "Contact",
     "login": "Login",
@@ -20,9 +20,9 @@
   "home": {
     "hero": {
       "badge": "IT Services · Hardware · AI Automation",
-      "title": "IT that runs itself,\npowered by [[Astra AI]]",
-      "subtitle": "Technomate IT Solution delivers managed IT services and business hardware — supercharged by **Astra**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
-      "cta1": "Explore Astra",
+      "title": "IT that runs itself,\npowered by [[ASTRA AI]]",
+      "subtitle": "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **ASTRA**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
+      "cta1": "Explore ASTRA",
       "cta2": "Sign up free",
       "checks": [
         "No manual triage",
@@ -81,64 +81,64 @@
         "desc": "Business-grade laptops, desktops, workstations and networking gear — sourced, configured and delivered ready to work."
       },
       {
-        "title": "Astra — AI System Admin",
+        "title": "ASTRA — AI System Admin",
         "desc": "Our AI IT agent that watches every device, diagnoses issues, and self-heals them — with human approval where it matters."
       }
     ],
     "console": {
       "badge": "One console",
       "title": "Your whole fleet, [[one live view]]",
-      "subtitle": "Every device, every metric, every action Astra takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
+      "subtitle": "Every device, every metric, every action ASTRA takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
       "bullets": [
         "Live device health & telemetry",
-        "Astra activity stream in real time",
+        "ASTRA activity stream in real time",
         "Drill into any endpoint instantly"
       ]
     },
     "teaser": {
-      "badge": "Meet Astra",
+      "badge": "Meet ASTRA",
       "title": "An AI teammate that fixes IT, [[not just tickets]]",
-      "subtitle": "Astra follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
+      "subtitle": "ASTRA follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
       "bullets": [
         "Understands issues in plain language",
         "Collects live telemetry across the fleet",
         "Self-heals with tiered approval controls",
         "Verifies and learns from every resolution"
       ],
-      "cta": "See everything Astra does"
+      "cta": "See everything ASTRA does"
     },
     "healingHead": {
-      "eyebrow": "How Astra heals",
+      "eyebrow": "How ASTRA heals",
       "title": "Evidence before action — every single time",
       "subtitle": "A transparent, auditable pipeline runs behind each resolution."
     },
     "cta": {
       "title": "Ready to put your IT on autopilot?",
-      "subtitle": "Talk to our team about managed IT, hardware, and deploying Astra across your organization.",
+      "subtitle": "Talk to our team about managed IT, hardware, and deploying ASTRA across your organization.",
       "btn1": "Get in touch",
-      "btn2": "Launch Astra"
+      "btn2": "Launch ASTRA"
     }
   },
   "about": {
     "badge": "About Technomate",
     "title": "Your technology partner for [[services, hardware & AI]]",
-    "subtitle": "Technomate IT Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **Astra**.",
+    "subtitle": "Technomate IT-Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **ASTRA**.",
     "stats": [
       {
-        "value": "10+",
-        "label": "Years in IT services"
+        "value": "23",
+        "label": "Automated remediation actions"
       },
       {
-        "value": "500+",
-        "label": "Devices under management"
+        "value": "3",
+        "label": "Approval tiers, enforced in code"
+      },
+      {
+        "value": "60s",
+        "label": "Telemetry from every device"
       },
       {
         "value": "24/7",
-        "label": "Monitoring with Astra"
-      },
-      {
-        "value": "98%",
-        "label": "Client retention"
+        "label": "Monitoring with ASTRA"
       }
     ],
     "whoHead": {
@@ -157,13 +157,13 @@
       },
       {
         "title": "AI-Powered Operations",
-        "desc": "With Astra, we bring AI-driven automation to IT support — detecting and healing issues across your fleet automatically."
+        "desc": "With ASTRA, we bring AI-driven automation to IT support — detecting and healing issues across your fleet automatically."
       }
     ],
     "missionEyebrow": "Our mission",
     "missionTitle": "Make enterprise-grade IT effortless for every business",
-    "missionText": "Great IT shouldn't require a large in-house team. By combining hands-on service, quality hardware and Astra's AI automation, we give growing organizations the same resilience the largest enterprises enjoy — without the overhead.",
-    "missionBtn1": "Discover Astra",
+    "missionText": "Great IT shouldn't require a large in-house team. By combining hands-on service, quality hardware and ASTRA's AI automation, we give growing organizations the same resilience the largest enterprises enjoy — without the overhead.",
+    "missionBtn1": "Discover ASTRA",
     "missionBtn2": "Work with us",
     "values": [
       {
@@ -184,17 +184,17 @@
       }
     ],
     "supportTitle": "Talk to a human — backed by an AI",
-    "supportText": "Whether you need a fleet of laptops, managed support, or a demo of Astra, our team is ready to help.",
+    "supportText": "Whether you need a fleet of laptops, managed support, or a demo of ASTRA, our team is ready to help.",
     "supportBtn": "Contact us"
   },
   "astra": {
-    "badge": "Meet Astra",
+    "badge": "Meet ASTRA",
     "title": "Your [[AI System Administrator]]",
-    "subtitle": "Astra watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
-    "cta1": "Launch Astra",
+    "subtitle": "ASTRA watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
+    "cta1": "Launch ASTRA",
     "cta2": "View pricing",
     "loopHead": {
-      "eyebrow": "The Astra loop",
+      "eyebrow": "The ASTRA loop",
       "title": "An agentic workflow, not a black box",
       "subtitle": "Each step is a tool the model calls — evidence before action, verification after."
     },
@@ -226,7 +226,7 @@
     ],
     "capsHead": {
       "eyebrow": "Capabilities",
-      "title": "Everything Astra does out of the box",
+      "title": "Everything ASTRA does out of the box",
       "subtitle": "A complete AI operations platform for your Windows fleet."
     },
     "features": [
@@ -252,7 +252,7 @@
       },
       {
         "title": "Conversational AI",
-        "desc": "Users describe problems in plain language; Astra investigates and resolves."
+        "desc": "Users describe problems in plain language; ASTRA investigates and resolves."
       },
       {
         "title": "Approval Tiers",
@@ -284,25 +284,25 @@
       },
       {
         "title": "Fleet Correlation & Mass Remediation",
-        "desc": "Astra links the same fault across many devices, then fixes the whole affected group in one click instead of one by one."
+        "desc": "ASTRA links the same fault across many devices, then fixes the whole affected group in one click instead of one by one."
       },
       {
         "title": "Helpdesk Integration",
-        "desc": "Connect Freshservice and let Astra raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees."
+        "desc": "Connect Freshservice and let ASTRA raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees."
       },
       {
         "title": "Self-Learning Knowledge Base",
-        "desc": "Every confirmed fix teaches the knowledge base. Astra publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type."
+        "desc": "Every confirmed fix teaches the knowledge base. ASTRA publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type."
       },
       {
         "title": "Asset Assignment & Acknowledgement",
-        "desc": "Hand a laptop to an employee and Astra emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record."
+        "desc": "Hand a laptop to an employee and ASTRA emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record."
       }
     ],
     "inventory": {
       "badge": "Inventory",
       "title": "Know every device, automatically",
-      "desc": "The moment an agent enrolls, Astra builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
+      "desc": "The moment an agent enrolls, ASTRA builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
       "bullets": [
         "Auto-discovery on enrollment",
         "Hardware, software & license tracking",
@@ -313,7 +313,7 @@
     "telemetry": {
       "badge": "Telemetry",
       "title": "Real-time evidence from every endpoint",
-      "desc": "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence Astra reasons over.",
+      "desc": "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence ASTRA reasons over.",
       "items": [
         "60-second heartbeat",
         "Offline-safe queue",
@@ -324,12 +324,12 @@
     "healingHead": {
       "eyebrow": "Self-healing",
       "title": "Fixes that respect human control",
-      "subtitle": "Astra never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt."
+      "subtitle": "ASTRA never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt."
     },
     "patch": {
       "badge": "Patch Management",
       "title": "Push Windows Updates [[from the admin panel]]",
-      "desc": "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. Astra orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
+      "desc": "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. ASTRA orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
       "bullets": [
         "One-click push to a device or whole fleet",
         "Live rollout status for every endpoint",
@@ -340,7 +340,7 @@
     "assistant": {
       "badge": "Conversational AI",
       "title": "Support that speaks human",
-      "desc": "Employees just describe the problem. Astra recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
+      "desc": "Employees just describe the problem. ASTRA recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
       "cta": "Try the assistant"
     },
     "securityHead": {
@@ -367,9 +367,9 @@
       }
     ],
     "cta": {
-      "title": "Deploy Astra across your fleet",
+      "title": "Deploy ASTRA across your fleet",
       "subtitle": "Get started in minutes, or talk to us about a guided rollout for your organization.",
-      "btn1": "Launch Astra",
+      "btn1": "Launch ASTRA",
       "btn2": "Book a demo"
     }
   },
@@ -431,7 +431,7 @@
     },
     "faqs": [
       {
-        "q": "How is Astra priced?",
+        "q": "How is ASTRA priced?",
         "a": "Per device, per month. Essential covers inventory, telemetry and patching; Professional adds the AI engine and automatic self-healing; Expert adds compliance, fleet-wide remediation and full audit. Annual billing saves about 17%."
       },
       {
@@ -452,7 +452,7 @@
       },
       {
         "q": "Do you supply the hardware too?",
-        "a": "Yes — Technomate is also a laptop and hardware supplier. Bundle devices with Astra for a fully managed rollout."
+        "a": "Yes — Technomate is also a laptop and hardware supplier. Bundle devices with ASTRA for a fully managed rollout."
       }
     ],
     "bulk": {
@@ -464,7 +464,7 @@
   "contact": {
     "badge": "Contact us",
     "title": "Let's talk about your [[IT & AI]]",
-    "subtitle": "Questions about Astra, managed services, or hardware? Send us a note and our team will get back to you.",
+    "subtitle": "Questions about ASTRA, managed services, or hardware? Send us a note and our team will get back to you.",
     "visitTitle": "Visit us",
     "emailTitle": "Email us",
     "callTitle": "Call us",
@@ -476,7 +476,7 @@
       "phone": "Phone",
       "interestLabel": "I'm interested in",
       "interests": [
-        "Astra AI",
+        "ASTRA AI",
         "Managed IT Services",
         "Laptops & Hardware",
         "Partnership",
@@ -497,9 +497,10 @@
     "phone": "+91 97115 31786",
     "hours": "Mon–Sat, 10:00 AM – 7:00 PM IST",
     "addressLines": [
-      "Technomate IT Solution",
+      "Technomate IT-Solution Private Limited",
       "Ayodhya Ganj, Dadri",
-      "Greater Noida, Uttar Pradesh 203207",
+      "Gautam Budh Nagar",
+      "Uttar Pradesh 203207",
       "India"
     ]
   }

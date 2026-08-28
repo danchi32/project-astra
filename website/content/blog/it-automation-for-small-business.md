@@ -2,7 +2,7 @@
 title: "IT Automation for Small and Mid-Sized Businesses: A Practical Guide"
 description: "A practical guide to IT automation for SMBs — what to automate first, how to keep it safe, and how to get results without a big IT team or budget."
 date: "2026-07-23"
-author: "Technomate IT Solution"
+author: "Technomate IT-Solution"
 keywords:
   - IT automation for small business
   - SMB IT automation
@@ -52,4 +52,4 @@ Done well, IT automation for an SMB typically means:
 
 Modern AI-driven tools are designed for exactly this situation: they do the first-line work automatically and escalate only what needs a person. That's what lets a small IT team — or a single admin — cover a whole fleet.
 
-[Astra](/astra/) is built for teams that need enterprise-grade IT operations without an enterprise-sized team. It watches every device, resolves the repetitive work automatically within safe tiers, and escalates the rest with evidence attached. See our [pricing](/pricing/) or [book a demo](/contact/).
+[ASTRA](/astra/) is built for teams that need enterprise-grade IT operations without an enterprise-sized team. It watches every device, resolves the repetitive work automatically within safe tiers, and escalates the rest with evidence attached. See our [pricing](/pricing/) or [book a demo](/contact/).

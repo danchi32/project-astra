@@ -26,10 +26,10 @@ from app.services.ai.faq import FaqEntry
 #: Everything the assistant is expected to know cold. Kept dense on purpose — it is
 #: re-sent on every question, and it sits inside the cached prefix of the prompt, so its
 #: cost is paid once per cache window rather than once per visitor.
-PRODUCT_BRIEF = """# ASTRA, by Technomate IT Solution — product brief
+PRODUCT_BRIEF = """# ASTRA, by Technomate IT-Solution — product brief
 
 ## The company
-Technomate IT Solution (technomateai.com) does three things: managed IT services
+Technomate IT-Solution (technomateai.com) does three things: managed IT services
 (proactive support, monitoring, patching, security, helpdesk — on-site and remote); supply
 of business-grade hardware (laptops, desktops, workstations, servers, networking, sourced
 and configured ready to deploy); and ASTRA, its AI operations product. Based in Ayodhya
@@ -417,10 +417,28 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "speak", "reach", "human", "someone", "book", "schedule"),
     ),
     FaqEntry(
+        question="Where can I find your privacy policy, terms and other legal documents?",
+        answer=(
+            "Privacy Policy: https://technomateai.com/privacy/ - Terms of Service: "
+            "https://technomateai.com/terms/ - Refund and Cancellation: "
+            "https://technomateai.com/refund-policy/ - Cookie Policy: "
+            "https://technomateai.com/cookies/ - Agent EULA: "
+            "https://technomateai.com/eula/ - Sub-processors: "
+            "https://technomateai.com/sub-processors/. For a Data Processing Agreement "
+            "or a security questionnaire, email privacy@technomateai.com."
+        ),
+        keywords=("privacy", "policy", "terms", "legal", "gdpr", "dpdp", "dpa",
+                  "data processing", "eula", "licence", "license", "refund",
+                  "cancellation", "cookie", "cookies", "subprocessor", "sub-processor",
+                  "compliance", "agreement", "contract"),
+    ),
+    FaqEntry(
         question="Where is Technomate based?",
         answer=(
-            "Ayodhya Ganj, Dadri, Greater Noida, Uttar Pradesh 203207, India. Office hours "
-            "are Mon-Sat, 10:00 AM - 7:00 PM IST."
+            "Technomate IT-Solution Private Limited is registered in India (CIN "
+            "U62099UW2026PTC257827) with its registered office at Ayodhya Ganj, Dadri, "
+            "Gautam Budh Nagar, Uttar Pradesh 203207, India. Office hours are Mon-Sat, "
+            "10:00 AM - 7:00 PM IST."
         ),
         keywords=("address", "location", "office", "india", "noida", "delhi", "where",
                   "based", "hours", "timing", "visit"),

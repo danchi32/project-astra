@@ -1,7 +1,7 @@
 import uuid
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,20 @@ from app.core.security import decode_access_token, hash_opaque_token
 from app.models import Device, User, UserRole
 from app.repositories.devices import DeviceRepository
 from app.repositories.users import UserRepository
+
+def client_ip(request: Request) -> str:
+    """The caller's address, as far as it can be known behind a proxy.
+
+    Cloud Run appends the real client to X-Forwarded-For, so the FIRST entry is the
+    client and the rest are proxies. A spoofed header can only make one caller look like
+    several; it cannot impersonate somebody else, because this value is only ever
+    recorded or counted, never trusted for authorisation.
+    """
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:45]
+    return request.client.host if request.client else "unknown"
+
 
 bearer_scheme = HTTPBearer(auto_error=False)
 

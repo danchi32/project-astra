@@ -17,7 +17,7 @@ async def _issue_invite(session_factory) -> str:
 
 
 async def _register(client, code: str, org: str, email: str):
-    return await client.post("/api/v1/auth/register", json={
+    return await client.post("/api/v1/auth/register", json={"terms_accepted": True,
         "invite_code": code, "organization_name": org,
         "admin_name": f"{org} Admin", "admin_email": email, "admin_password": _PW,
     })

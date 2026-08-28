@@ -249,8 +249,34 @@ class EmailService:
 
 
 def _shell(title: str, body_html: str) -> str:
+    """The branded wrapper every transactional email goes through.
+
+    The footer is not decoration. Companies Act 2013 s.12(3)(c) requires the registered
+    name, registered office, CIN, telephone and email on the company's business
+    correspondence, and these messages are exactly that. Values come from settings so
+    there is one place to change them — and so the GSTIN line appears by itself the day
+    registration completes, rather than needing a code change then.
+    """
+    settings = get_settings()
+    gstin = (
+        f" &middot; GSTIN: {settings.company_gstin}" if settings.company_gstin else ""
+    )
     return f"""<div style="font-family:Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
       <div style="font-size:22px;font-weight:700;color:#2563eb;margin-bottom:8px">⬡ ASTRA</div>
       <h1 style="font-size:18px;margin:0 0 16px">{title}</h1>
       {body_html}
+      <div style="margin-top:28px;padding-top:16px;border-top:1px solid #e5e7eb;
+                  font-size:11px;line-height:1.6;color:#6b7280">
+        <div style="font-weight:600;color:#4b5563">{settings.company_display_name}</div>
+        <div>{settings.company_registered_office}</div>
+        <div>CIN: {settings.company_cin}{gstin}</div>
+        <div>{settings.company_phone} &middot;
+          <a href="mailto:{settings.company_email}"
+             style="color:#6b7280">{settings.company_email}</a></div>
+        <div style="margin-top:6px">
+          <a href="{settings.legal_privacy_url}" style="color:#6b7280">Privacy Policy</a>
+          &middot;
+          <a href="{settings.legal_terms_url}" style="color:#6b7280">Terms of Service</a>
+        </div>
+      </div>
     </div>"""

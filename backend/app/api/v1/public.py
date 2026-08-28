@@ -17,6 +17,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import client_ip
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.rate_limit import FixedWindowLimiter, RateLimitExceeded, apply_limit
@@ -34,7 +35,7 @@ _settings = get_settings()
 #: voice of the in-product IT assistant, which is the wrong voice for a stranger on the
 #: marketing site who has never seen the product.
 _OFF_TOPIC_REPLY = (
-    "I can only help with questions about ASTRA and Technomate IT Solution — what the "
+    "I can only help with questions about ASTRA and Technomate IT-Solution — what the "
     "product does, pricing, rollout, security, or getting in touch with the team. "
     "Ask me one of those and I'll do my best."
 )
@@ -45,20 +46,6 @@ _assistant_limiter = FixedWindowLimiter(
     limit=_settings.public_assistant_rate_limit_requests,
     window_seconds=_settings.public_assistant_rate_limit_window_seconds,
 )
-
-
-def _client_ip(request: Request) -> str:
-    """The visitor's address, as far as it can be known behind a proxy.
-
-    Cloud Run appends the real client to X-Forwarded-For, so the FIRST entry is the
-    client and the rest are proxies. A spoofed header can only ever make one visitor look
-    like several, which weakens the limit but cannot be used to lock somebody else out —
-    the key is never used for anything but counting.
-    """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:45]
-    return request.client.host if request.client else "unknown"
 
 
 @router.post(
@@ -77,7 +64,7 @@ async def ask_public_assistant(
     asked.
     """
     try:
-        apply_limit(_assistant_limiter, _client_ip(request), enforce=True, label="ip")
+        apply_limit(_assistant_limiter, client_ip(request), enforce=True, label="ip")
     except RateLimitExceeded as exc:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

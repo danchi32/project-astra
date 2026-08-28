@@ -54,15 +54,24 @@ class AuthService:
 
     async def _provision_org(
         self, *, organization_name: str, admin_name: str, email: str, hashed_password: str,
-        email_domain: str | None = None,
+        email_domain: str | None = None, accepted_ip: str | None = None,
     ) -> tuple[Organization, User]:
-        """Create the org + its first admin (no commit). Shared by every signup path."""
+        """Create the org + its first admin (no commit). Shared by every signup path.
+
+        Terms acceptance is stamped here, in the one function every path goes through, so
+        an organisation cannot come into existence without it. `_require_terms` has
+        already refused the request if the box was not ticked; this records WHICH version
+        was agreed, when, and from where.
+        """
         org = await self.orgs.add(
             Organization(
                 name=organization_name.strip(),
                 trial_ends_at=utcnow() + timedelta(days=TRIAL_DAYS),
                 agent_enrollment_key=generate_opaque_token(),
                 email_domain=email_domain,
+                terms_version=settings.legal_terms_version,
+                terms_accepted_at=utcnow(),
+                terms_accepted_ip=accepted_ip,
             )
         )
         admin = await self.users.add(
@@ -84,6 +93,19 @@ class AuthService:
             detail={"name": org.name, "admin_email": email},
         )
         return org, admin
+
+    @staticmethod
+    def _require_terms(data: RegisterRequest) -> None:
+        """Refuse a signup that did not accept the terms.
+
+        Enforced in the service rather than the endpoint because THREE routes create an
+        organisation — /register, /register/start and /register/verify — and a check
+        living in one of them is a check the other two do not have.
+        """
+        if not data.terms_accepted:
+            raise ValidationError(
+                "You must accept the Terms of Service and Privacy Policy to create an account."
+            )
 
     async def _guard_org_domain(self, email: str) -> str | None:
         """Gate self-service signup on the email domain, and return the domain to record on
@@ -121,10 +143,11 @@ class AuthService:
         except Exception:  # welcome email must never fail the signup
             pass
 
-    async def register(self, data: RegisterRequest) -> tuple[str, str]:
+    async def register(self, data: RegisterRequest, accepted_ip: str | None = None) -> tuple[str, str]:
         """Create a NEW organization and its first admin (open self-service signup).
         One transaction: a partial org (no admin) can never exist. An invite code is
         optional — if supplied it must be valid and is consumed."""
+        self._require_terms(data)
         invite = None
         if data.invite_code:
             invite = await self.invites.get_by_hash(hash_opaque_token(data.invite_code))
@@ -139,7 +162,7 @@ class AuthService:
         org, admin = await self._provision_org(
             organization_name=data.organization_name, admin_name=data.admin_name,
             email=email, hashed_password=hash_password(data.admin_password),
-            email_domain=email_domain,
+            email_domain=email_domain, accepted_ip=accepted_ip,
         )
         if invite is not None:
             invite.used_at = utcnow()
@@ -151,10 +174,13 @@ class AuthService:
         await self._send_welcome(to=email, name=admin.full_name, org_name=org.name)
         return access, refresh
 
-    async def register_start(self, data: RegisterRequest) -> tuple[bool, str | None, str | None]:
+    async def register_start(
+        self, data: RegisterRequest, accepted_ip: str | None = None
+    ) -> tuple[bool, str | None, str | None]:
         """First step of signup. When email is configured, emails a 6-digit code and
         stores the pending signup (no org yet) -> (True, None, None). When email is
         off, creates the org immediately -> (False, access, refresh)."""
+        self._require_terms(data)
         email = data.admin_email.lower()
         if await self.users.get_by_email(email) is not None:
             raise ConflictError("A user with that email already exists")
@@ -162,7 +188,7 @@ class AuthService:
         await self._guard_org_domain(email)
 
         if not self.email.enabled:
-            access, refresh = await self.register(data)
+            access, refresh = await self.register(data, accepted_ip=accepted_ip)
             return False, access, refresh
 
         code = f"{secrets.randbelow(1_000_000):06d}"
@@ -191,7 +217,9 @@ class AuthService:
             )
         return True, None, None
 
-    async def register_verify(self, data: RegisterVerifyRequest) -> tuple[str, str]:
+    async def register_verify(
+        self, data: RegisterVerifyRequest, accepted_ip: str | None = None
+    ) -> tuple[str, str]:
         """Second step: confirm the code, then create the org + admin and log in."""
         email = data.admin_email.lower()
         pending = await self.pending.get_by_email(email)
@@ -214,7 +242,7 @@ class AuthService:
         org, admin = await self._provision_org(
             organization_name=pending.organization_name, admin_name=pending.admin_name,
             email=email, hashed_password=pending.hashed_password,
-            email_domain=email_domain,
+            email_domain=email_domain, accepted_ip=accepted_ip,
         )
         await self.pending.delete_by_email(email)
         access = create_access_token(user_id=admin.id, org_id=admin.org_id, role=admin.role.value)
