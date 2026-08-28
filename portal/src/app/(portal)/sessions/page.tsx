@@ -12,10 +12,10 @@ import {
 } from "@/lib/api/sessions";
 import { listDeviceGroups } from "@/lib/api/grouping";
 import { getMe } from "@/lib/api/auth";
-import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
+import { ScrollPanel, stickyHeadCell } from "@/components/scroll-panel";
 import { apiErrorMessage } from "@/lib/utils";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 // The tab strip. `state` and `connection` are separate filters on the backend, so a tab is
 // whichever of the two it sets — All clears both. Kept as data rather than five near-copies
@@ -73,6 +73,23 @@ function relative(iso: string | null): string {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+/**
+ * The name to show in the User column.
+ *
+ * A local account reports as `MACHINE\Person`, and the machine is already the next column
+ * along — so the prefix is pure repetition that pushed "DESKTOP-3T83JH6\Raj Pandey" onto three
+ * wrapped lines and made one row as tall as three. A DOMAIN prefix is kept, because there it
+ * carries real information: which directory the account lives in.
+ */
+function displayUser(username: string | null, hostname: string): string | null {
+  if (!username) return null;
+  const cut = username.lastIndexOf("\\");
+  if (cut < 0) return username;
+  const scope = username.slice(0, cut);
+  const account = username.slice(cut + 1);
+  return scope.toLowerCase() === hostname.toLowerCase() ? account : username;
 }
 
 function idleLabel(seconds: number | null): string {
@@ -183,17 +200,18 @@ export default function SessionsPage() {
   const spec = pending ? ACTIONS[pending.action] : null;
 
   return (
-    <div className={pageShell}>
-      <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
-          <Users size={18} />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Sessions</h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            Everyone signed in across the fleet — console and remote, connected and detached
-          </p>
-        </div>
+    // gap-3 rather than the shared pageShell's gap-6: on this page every 24px of chrome is a
+    // row of the table that isn't on screen, and the table is the entire point of the page.
+    <div className="flex flex-col gap-3 h-full min-h-0">
+      {/* Title sits inline with the count instead of owning a block of its own. The subtitle
+          that used to explain the page is gone — the column headers say the same thing, and it
+          was costing two rows of fleet to repeat it on every visit. */}
+      <div className="flex items-baseline gap-2.5 flex-wrap">
+        <Users size={17} style={{ color: "var(--accent)" }} className="self-center shrink-0" />
+        <h1 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Sessions</h1>
+        <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          {total} signed in across the fleet
+        </span>
       </div>
 
       {msg && (
@@ -207,12 +225,12 @@ export default function SessionsPage() {
       {/* Toolbar: search, tabs, group filter */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[240px]">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} />
+          <div className="relative w-[190px] shrink-0">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--text-secondary)" }} />
             <input
               value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search user, hostname or client…"
-              className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
+              placeholder="Search user or device…"
+              className="w-full pl-8 pr-2.5 py-1.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
               style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
           </div>
 
@@ -222,7 +240,7 @@ export default function SessionsPage() {
               const n = countFor(t.key);
               return (
                 <button key={t.key} onClick={() => setTab(t.key)}
-                  className="px-2.5 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1.5"
+                  className="px-2 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 shrink-0"
                   style={{
                     background: on ? "rgba(154,47,187,0.12)" : "var(--surface)",
                     border: "1px solid var(--border)",
@@ -239,7 +257,7 @@ export default function SessionsPage() {
           </div>
 
           <select value={groupId} onChange={(e) => setGroupId(e.target.value)}
-            className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
+            className="px-2 py-1.5 rounded-lg text-sm font-medium outline-none max-w-[170px] shrink-0"
             style={{
               background: groupId ? "rgba(154,47,187,0.1)" : "var(--surface)",
               border: "1px solid var(--border)",
@@ -253,7 +271,7 @@ export default function SessionsPage() {
 
           <label className="inline-flex items-center gap-1.5 text-sm cursor-pointer" style={{ color: "var(--text-secondary)" }}>
             <input type="checkbox" checked={onlineOnly} onChange={(e) => setOnlineOnly(e.target.checked)} className="accent-brand-500" />
-            Online devices only
+            Online only
           </label>
         </div>
 
@@ -286,11 +304,30 @@ export default function SessionsPage() {
           </div>
         )}
       >
-        <table className="w-full text-sm">
+        {/* table-fixed + a colgroup, so the columns are sized by the layout rather than by the
+            longest value in them. Before this the table set its own width from the content and
+            the panel scrolled sideways — which put the actions off-screen on the very rows an
+            operator opened the page to act on. Now User and Device absorb the slack and
+            everything else is pinned. */}
+        <table className="w-full text-sm table-fixed">
+          {/* Widths add up to ~816px of the ~1010px content area at a 1280px window, leaving
+              the User column the remainder. The actions column is sized for an admin's four
+              buttons (4 × 28px + gaps + padding); a technician sees two and the column simply
+              runs light rather than reflowing the table between roles. */}
+          <colgroup>
+            <col />                                  {/* User — takes the slack */}
+            <col style={{ width: "11rem" }} />       {/* Device */}
+            <col style={{ width: "7rem" }} />        {/* Session */}
+            <col style={{ width: "6.5rem" }} />      {/* State */}
+            <col style={{ width: "6rem" }} />        {/* Type */}
+            <col style={{ width: "5rem" }} />        {/* Idle */}
+            <col style={{ width: "6rem" }} />        {/* Last seen */}
+            <col style={{ width: "9.5rem" }} />      {/* Actions */}
+          </colgroup>
           <thead>
             <tr>
               {["User", "Device", "Session", "State", "Type", "Idle", "Last seen", ""].map((h, i) => (
-                <th key={i} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
+                <th key={i} className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide"
                   style={stickyHeadCell}>{h}</th>
               ))}
             </tr>
@@ -306,52 +343,65 @@ export default function SessionsPage() {
                   : "No sessions reported yet. Devices report who is signed in with each telemetry push — agents older than the sessions feature report nothing here."}
               </td></tr>
             )}
-            {rows.map((s) => (
+            {rows.map((s) => {
+              const who = displayUser(s.username, s.hostname);
+              return (
               <tr key={s.id} className="hover:bg-brand-500/5 transition-colors" style={{ borderBottom: "1px solid var(--border)" }}>
-                <td className="px-4 py-3">
-                  <div className="font-medium" style={{ color: s.username ? "var(--text-primary)" : "var(--text-secondary)" }}>
-                    {s.username ?? "(no user)"}
+                <td className="px-3 py-2">
+                  {/* title carries the full DOMAIN\user — the column shows the short form, so
+                      the unabbreviated value has to stay reachable on hover. */}
+                  <div className="font-medium truncate" title={s.username ?? undefined}
+                    style={{ color: s.username ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                    {who ?? "(no user)"}
                   </div>
                   {s.groups.length > 0 && (
-                    <div className="flex gap-1 mt-1 flex-wrap">
+                    <div className="flex gap-1 flex-wrap">
                       {s.groups.map((g) => (
-                        <span key={g} className="text-[10px] px-1.5 py-0.5 rounded-full"
+                        <span key={g} className="text-[10px] px-1.5 rounded-full truncate max-w-full"
                           style={{ background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>{g}</span>
                       ))}
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3">
-                  <Link href={`/devices/${s.device_id}`} className="hover:underline font-medium" style={{ color: "var(--accent)" }}>
+                <td className="px-3 py-2">
+                  <Link href={`/devices/${s.device_id}`} title={s.hostname}
+                    className="hover:underline font-medium truncate block" style={{ color: "var(--accent)" }}>
                     {s.hostname}
                   </Link>
                   {s.client_name && (
-                    <div className="text-xs" style={{ color: "var(--text-secondary)" }}>from {s.client_name}</div>
+                    <div className="text-xs truncate" title={s.client_name} style={{ color: "var(--text-secondary)" }}>
+                      from {s.client_name}
+                    </div>
                   )}
                 </td>
-                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+                <td className="px-3 py-2 font-mono text-xs truncate"
+                  title={s.station ? `${s.session_id} · ${s.station}` : String(s.session_id)}
+                  style={{ color: "var(--text-secondary)" }}>
                   {s.session_id}{s.station ? ` · ${s.station}` : ""}
                 </td>
-                <td className="px-4 py-3">
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{
+                <td className="px-3 py-2">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap" style={{
                     color: s.state === "active" ? "#10b981" : "#f59e0b",
                     background: s.state === "active" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
-                  }}>{s.state === "active" ? "Active" : "Disconnected"}</span>
+                  }}>{s.state === "active" ? "Active" : "Idle/Disc."}</span>
                 </td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                <td className="px-3 py-2">
+                  <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
                     {s.connection === "rdp" ? <MonitorSmartphone size={13} /> : <Monitor size={13} />}
                     {s.connection === "rdp" ? "RDP" : "Console"}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs" style={{ color: "var(--text-secondary)" }}>{idleLabel(s.idle_seconds)}</td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-3 py-2 text-xs truncate" style={{ color: "var(--text-secondary)" }}>{idleLabel(s.idle_seconds)}</td>
+                <td className="px-3 py-2 text-xs truncate">
                   <span style={{ color: s.device_online ? "#10b981" : "var(--text-secondary)" }}>
                     {s.device_online ? "online" : relative(s.device_last_seen_at)}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5 justify-end">
+                <td className="px-3 py-2">
+                  {/* Icon-only. Four labelled buttons were what actually forced the sideways
+                      scroll, and they repeat identically down every row — the label earns its
+                      width once, in a tooltip, not once per session. */}
+                  <div className="flex items-center gap-1 justify-end">
                     {(Object.keys(ACTIONS) as SessionActionId[]).map((id) => {
                       const a = ACTIONS[id];
                       // Admin-only actions are hidden from technicians rather than shown
@@ -365,20 +415,21 @@ export default function SessionsPage() {
                         : id === "logoff_session" ? LogOut
                         : id === "message_session" ? MessageSquare : KeyRound;
                       return (
-                        <button key={id} onClick={() => open(s, id)} title={a.blurb}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium"
+                        <button key={id} onClick={() => open(s, id)}
+                          title={`${a.label} — ${a.blurb}`} aria-label={a.label}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0"
                           style={{
                             background: "var(--bg)", border: "1px solid var(--border)",
                             color: a.destructive ? "#ef4444" : "var(--text-primary)",
                           }}>
-                          <Icon size={12} /> {a.label}
+                          <Icon size={13} />
                         </button>
                       );
                     })}
                   </div>
                 </td>
-              </tr>
-            ))}
+              </tr>);
+            })}
           </tbody>
         </table>
       </ScrollPanel>
