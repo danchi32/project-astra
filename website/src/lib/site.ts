@@ -75,6 +75,9 @@ export const site = {
   contact: {
     email: "astra@technomateai.com",
     sales: "sales@technomateai.com",
+    // Where existing customers write. Kept separate from `email` so a support request
+    // and a general enquiry can be routed to different people later without a code change.
+    support: "support@technomateai.com",
     phone: "+91 97115 31786",
     addressLines: [
       "Technomate IT-Solution Private Limited",

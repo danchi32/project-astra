@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Mail, Phone, Headset, Linkedin, Twitter, Instagram } from "lucide-react";
+import { Mail, MapPin, Phone, Headset, Linkedin, Twitter, Instagram } from "lucide-react";
 import { nav, site } from "@/lib/site";
 import { BrandLogo } from "./BrandLogo";
 import { useContent, Rich } from "@/lib/content";
@@ -57,7 +57,7 @@ function ContactItem({
 
 export function Footer() {
   const { c, list } = useContent();
-  const email = c("contactInfo.email", site.contact.email);
+  const support = c("contactInfo.support", site.contact.support);
   const phone = c("contactInfo.phone", site.contact.phone);
   const sales = c("contactInfo.sales", site.contact.sales);
   const hours = c("contactInfo.hours", site.contact.hours);
@@ -156,9 +156,6 @@ export function Footer() {
               ))}
             </div>
 
-            <p className="mt-8 text-xs leading-relaxed text-muted-token">
-              {addressLines.join(", ")}
-            </p>
           </div>
         </div>
 
@@ -187,13 +184,17 @@ export function Footer() {
             <ContactItem
               icon={<Headset className="h-4 w-4" />}
               label={c("footer.supportLabel", "For support")}
-              value={email}
-              href={`mailto:${email}`}
+              value={support}
+              href={`mailto:${support}`}
             />
           </div>
-          <p className="mt-5 border-t border-white/20 pt-4 text-xs text-white/80">
-            {hours}
-          </p>
+          <div className="mt-5 flex flex-col gap-2 border-t border-white/20 pt-4 text-xs text-white/80 sm:flex-row sm:items-start sm:justify-between">
+            <p className="flex items-start gap-2">
+              <MapPin className="mt-px h-3.5 w-3.5 shrink-0" />
+              <span>{addressLines.join(", ")}</span>
+            </p>
+            <p className="shrink-0 sm:text-right">{hours}</p>
+          </div>
         </div>
 
         {/* ── Bottom bar ───────────────────────────────────────────────── */}

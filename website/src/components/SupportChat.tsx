@@ -116,16 +116,25 @@ export function SupportChat() {
 
   if (!open) {
     return (
+      /* A circle at rest, not a pill. The wide version sat on top of whatever occupied
+         the bottom-right corner — on the home page that was the footer's policy links.
+         The label unrolls on hover and focus, so the affordance survives without the
+         button permanently occluding the page. */
       <button
         onClick={() => {
           setOpen(true);
           trackEvent("site_assistant_open", {});
         }}
         aria-label="Ask about ASTRA"
-        className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-brand-600 pl-4 pr-5 py-3 text-sm font-semibold text-white shadow-xl shadow-brand-600/25 transition hover:bg-brand-500"
+        title="Ask about ASTRA"
+        className="group fixed bottom-5 right-5 z-50 flex h-14 items-center gap-0 rounded-full bg-brand-600 px-[1.05rem] text-sm font-semibold text-white shadow-xl shadow-brand-600/25 transition-all duration-300 hover:gap-2 hover:bg-brand-500 hover:pl-5 hover:pr-6 focus-visible:gap-2 focus-visible:pl-5 focus-visible:pr-6"
       >
-        <MessageSquare className="h-4 w-4" />
-        Ask about ASTRA
+        <MessageSquare className="h-5 w-5 shrink-0" />
+        {/* Collapsed to zero width rather than unmounted, so the text is still in the
+            accessibility tree and the expansion can animate. */}
+        <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 group-hover:max-w-[10rem] group-hover:opacity-100 group-focus-visible:max-w-[10rem] group-focus-visible:opacity-100">
+          Ask about ASTRA
+        </span>
       </button>
     );
   }
