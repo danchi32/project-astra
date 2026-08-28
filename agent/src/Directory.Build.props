@@ -10,7 +10,7 @@
          This is the only place it is written. MSBuild hands it to both projects, the binaries
          report it back at runtime (see AgentVersion), and the release workflow refuses to publish
          if it disagrees with the tag being released. Bump it here, commit, then tag agent-vX.Y.Z. -->
-    <Version>0.9.0</Version>
+    <Version>0.9.1</Version>
 
     <!-- Company identity, stamped into every assembly this solution builds. Windows
          shows these in a file's Details tab, and a security team reviewing an unfamiliar
