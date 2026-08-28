@@ -51,6 +51,21 @@ class RemediationAction:
     # ever handed to the process that has the privilege to run it.
     execution_context: str = "user"
 
+    # Withheld from the reasoning engine even though its tier would otherwise offer it.
+    #
+    # The tier answers "how much trust does this need". This answers a different question:
+    # "is this a decision evidence can reach". Every other action in the registry fixes a
+    # FAULT, and telemetry can establish that the fault is there — a full disk, a stopped
+    # spooler, a failed update. These act on a PERSON: locking their screen, interrupting
+    # them with a dialog. Nothing the model can collect tells it that someone should be
+    # interrupted; only the human who knows why is in a position to say so.
+    #
+    # It also closes the cheapest prompt-injection payoff in the product. Text the model
+    # reads — an event log message, a knowledge article, a user's own chat — reaching an
+    # action that puts an attacker-chosen message box on someone's desktop, over IT's name,
+    # is a phishing primitive. Withholding costs the model nothing it can use.
+    operator_only: bool = False
+
 
 _ACTIONS: tuple[RemediationAction, ...] = (
     # ── Automatic: safe, reversible endpoint hygiene ────────────────────────
@@ -151,18 +166,22 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "sign in again with their existing password. Elevated + admin approval only.",
                       params=("username",), execution_context="system"),
 
-    # ── Remove software the organization has restricted (elevated, admin-only) ──
+    # ── Remove software (elevated, admin-only) ─────────────────────────────────
     # Unlike every other action here, the permitted targets are NOT a constant in this
-    # file: they are whatever the organization put on its own restricted-software list,
-    # which is the entire point. The service checks the name against that list per request,
-    # and against UNINSTALL_NEVER below, which no organization can override.
-    RemediationAction("uninstall_application", "Uninstall restricted software",
+    # file. Who may name what is decided per request in the service:
+    #   * proposed by the AI  → only what the org listed as restricted software;
+    #   * pushed by an admin  → anything, because they are looking at the device's own
+    #                           inventory and picked a row from it.
+    # UNINSTALL_NEVER below binds both, and no organization can override it.
+    RemediationAction("uninstall_application", "Uninstall software",
                       RemediationTier.ADMIN_ONLY,
-                      "Silently removes an application the organization has placed on its "
-                      "restricted-software list. Machine-wide installations only, and only "
-                      "where the vendor provides a silent uninstaller — an application that "
-                      "would open a window is reported rather than removed, because nobody "
-                      "would ever see that window. Elevated + admin approval only.",
+                      "Silently removes an installed application. ASTRA itself only proposes "
+                      "this for software the organization has restricted; an admin can remove "
+                      "any unprotected application from the device's Software tab. Machine-wide "
+                      "installations only, and only where the vendor provides a silent "
+                      "uninstaller — an application that would open a window is reported rather "
+                      "than removed, because nobody would ever see that window. Elevated + "
+                      "admin approval only.",
                       params=("app_name",), execution_context="system"),
 
     # ── Self-service: things a person could do themselves, done for them ────────
@@ -198,6 +217,46 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "Reverses block_usb_storage: USB pen drives and portable disks work again "
                       "from the next time one is connected. Elevated + admin approval only.",
                       execution_context="system"),
+
+    # ── Acting on one logon session (elevated) ─────────────────────────────────
+    #
+    # All four carry session_id and every one of them runs in the elevated service, not the
+    # tray. The tray runs inside ONE user's session and can only ever act on that one; a
+    # terminal server with thirty people signed in needs the caller to say which of the
+    # thirty, and only LocalSystem can reach across sessions to do it.
+    #
+    # None of these is AUTOMATIC, and the reason is the tier's other meaning: automatic is
+    # what the AI may do unattended, and it also carries no role requirement, so a plain
+    # user could push it. Nobody should be able to interrupt a colleague's desktop on their
+    # own say-so, and no model should decide on its own to sign someone out.
+    RemediationAction("lock_session", "Lock the screen", RemediationTier.APPROVAL_REQUIRED,
+                      "Locks one signed-in session, exactly as Win+L does. The person's work "
+                      "stays open and running; they type their password to come back. Use it "
+                      "for an unattended, unlocked machine. Needs technician or admin approval.",
+                      params=("session_id",), execution_context="system", operator_only=True),
+    RemediationAction("message_session", "Send a message", RemediationTier.APPROVAL_REQUIRED,
+                      "Shows a message box from IT on one signed-in session. Delivery only — "
+                      "there is no reply channel, so it is for telling someone something "
+                      "('saving your work now, this machine reboots in 10 minutes'), not for "
+                      "asking. Needs technician or admin approval.",
+                      params=("session_id", "message"), execution_context="system",
+                      operator_only=True),
+    RemediationAction("logoff_session", "Sign the user out", RemediationTier.ADMIN_ONLY,
+                      "Signs one session out of Windows. UNSAVED WORK IN THAT SESSION IS LOST — "
+                      "Windows gives the person no chance to save, because nobody is at the "
+                      "keyboard to answer the prompt. Send a message first if anyone might be "
+                      "there. Admin approval only.",
+                      params=("session_id",), execution_context="system"),
+    RemediationAction("reset_local_password", "Reset a local password",
+                      RemediationTier.ADMIN_ONLY,
+                      "Sets a new random password on a LOCAL Windows account and requires the "
+                      "person to change it at their next sign-in, for someone locked out of a "
+                      "machine that is not domain-joined. The agent generates the password — "
+                      "the portal never sends one — and returns it once in the task result. "
+                      "Domain/Entra accounts are refused: those are reset in AD or Entra, and "
+                      "an agent that pretended otherwise would report success having changed "
+                      "nothing. Elevated + admin approval only.",
+                      params=("session_id", "username"), execution_context="system"),
 )
 
 # Windows time-zone identifiers ASTRA may set. An allowlist rather than a format check,

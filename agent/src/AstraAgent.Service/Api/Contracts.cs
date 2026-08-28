@@ -86,6 +86,16 @@ public sealed record TelemetryWindowsUpdate(
     [property: JsonPropertyName("state")] string? State = null,
     [property: JsonPropertyName("error_code")] string? ErrorCode = null);
 
+public sealed record TelemetrySessionEntry(
+    [property: JsonPropertyName("session_id")] int SessionId,
+    [property: JsonPropertyName("username")] string? Username,
+    [property: JsonPropertyName("state")] string State,
+    [property: JsonPropertyName("connection")] string Connection,
+    [property: JsonPropertyName("station")] string? Station,
+    [property: JsonPropertyName("client_name")] string? ClientName,
+    [property: JsonPropertyName("logon_at")] DateTimeOffset? LogonAt,
+    [property: JsonPropertyName("idle_seconds")] int? IdleSeconds);
+
 public sealed record TelemetryHardware(
     [property: JsonPropertyName("manufacturer")] string? Manufacturer,
     [property: JsonPropertyName("model")] string? Model,
@@ -103,4 +113,9 @@ public sealed record TelemetryPush(
     [property: JsonPropertyName("event_logs")] IReadOnlyList<TelemetryEventLogEntry> EventLogs,
     [property: JsonPropertyName("installed_apps")] IReadOnlyList<TelemetryInstalledApp> InstalledApps,
     [property: JsonPropertyName("services")] IReadOnlyList<TelemetryServiceEntry> Services,
-    [property: JsonPropertyName("windows_updates")] IReadOnlyList<TelemetryWindowsUpdate> WindowsUpdates);
+    [property: JsonPropertyName("windows_updates")] IReadOnlyList<TelemetryWindowsUpdate> WindowsUpdates,
+    // Logon sessions, sent on EVERY push rather than with the hourly inventory — the
+    // Sessions view is only worth having if it is current. Null means this build could not
+    // enumerate them, which the backend treats as "leave what you have"; an empty list means
+    // nobody is signed in, which it treats as "clear the rows". Older backends ignore both.
+    [property: JsonPropertyName("sessions")] IReadOnlyList<TelemetrySessionEntry>? Sessions = null);

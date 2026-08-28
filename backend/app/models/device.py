@@ -59,3 +59,8 @@ class Device(TimestampMixin, Base):
     services_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     updates_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     events_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Logon sessions (see DeviceSession). These arrive on every telemetry push rather than
+    # hourly, because the point of the Sessions view is that it is current — so skipping the
+    # unchanged rewrite matters more here than anywhere else above: a fleet where nobody
+    # signs in or out for an hour should cost zero session writes in that hour.
+    sessions_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

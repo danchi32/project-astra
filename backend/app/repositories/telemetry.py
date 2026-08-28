@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import as_utc, utcnow
+from app.models.device_session import DeviceSession
 from app.models.telemetry import (
     UPDATE_INSTALLED,
     DeviceEventLog,
@@ -221,6 +222,27 @@ class TelemetryRepository:
             .order_by(DeviceService.display_name)
         )
         return list(result.scalars().all())
+
+    # ── Logon sessions ─────────────────────────────────────────────────────
+
+    async def replace_sessions(
+        self, device_id: uuid.UUID, entries: list[DeviceSession]
+    ) -> None:
+        """Swap this device's session rows for the set it just reported.
+
+        Delete-then-insert, like every other collection here, and for the same reason: the
+        agent sends the WHOLE set, so "what is missing from it" is as meaningful as what is
+        in it. A session that ended has to disappear, and a diff that only ever adds would
+        leave last week's signed-out users on the page forever.
+
+        The caller only reaches this when the fingerprint changed, so a fleet where nobody
+        signs in or out costs nothing.
+        """
+        await self.session.execute(
+            delete(DeviceSession).where(DeviceSession.device_id == device_id)
+        )
+        self.session.add_all(entries)
+        await self.session.flush()
 
     # ── Windows updates ────────────────────────────────────────────────────
 

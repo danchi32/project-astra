@@ -44,6 +44,7 @@ builder.Services.AddSingleton<IInstalledAppsCollector, InstalledAppsCollector>()
 builder.Services.AddSingleton<IServicesCollector, ServicesCollector>();
 builder.Services.AddSingleton<IWindowsUpdateCollector, WindowsUpdateCollector>();
 builder.Services.AddSingleton<IHardwareCollector, HardwareCollector>();
+builder.Services.AddSingleton<ISessionCollector, SessionCollector>();
 
 builder.Services.AddSingleton<AstraAgent.Service.Update.UpdateInstaller>();
 

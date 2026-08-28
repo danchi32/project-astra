@@ -30,8 +30,14 @@ from app.services.remediation.service import (
 # The assistant may only ever PROPOSE non-admin-only fixes. Admin-only actions (registry,
 # WU-component reset, and account offboarding) are deliberately withheld from the model so
 # prompt-injected content can never nudge it toward a high-privilege action.
+#
+# `operator_only` withholds a second, smaller set for a different reason: those actions
+# interrupt a PERSON rather than fix a fault, and no amount of telemetry can tell the model
+# that someone ought to be interrupted. See RemediationAction.operator_only.
 _ACTION_IDS = sorted(
-    aid for aid, action in ACTIONS.items() if action.tier is not RemediationTier.ADMIN_ONLY
+    aid
+    for aid, action in ACTIONS.items()
+    if action.tier is not RemediationTier.ADMIN_ONLY and not action.operator_only
 )
 
 # Anthropic tool schemas advertised to the model.
@@ -287,6 +293,15 @@ async def _propose_remediation(
         return json.dumps({
             "error": f"'{action_id}' is an admin-only action and cannot be requested from "
                      "the assistant. Tell the user to raise it with their IT administrator.",
+        })
+    # Same reasoning, second list: locking someone's screen or putting a dialog on it is a
+    # decision about a person, and the injected content that would try an unlisted id is
+    # precisely the content that wants to show a message box signed "IT".
+    if action is not None and action.operator_only:
+        return json.dumps({
+            "error": f"'{action_id}' can only be pushed by a technician from the portal's "
+                     "Sessions view — it interrupts the person at the machine, which is not "
+                     "something to decide from telemetry. Tell the user to ask their IT team.",
         })
 
     params: dict[str, Any] = {

@@ -11,6 +11,7 @@ from app.api.v1 import (
     devices,
     downloads,
     fleet,
+    grouping,
     help_centre,
     knowledge,
     locations,
@@ -19,6 +20,7 @@ from app.api.v1 import (
     public,
     remediation,
     reports,
+    sessions,
     settings,
     support,
     telemetry,
@@ -32,6 +34,8 @@ api_router.include_router(devices.router)
 api_router.include_router(assets.router)
 api_router.include_router(compliance.router)
 api_router.include_router(fleet.router)
+api_router.include_router(sessions.router)
+api_router.include_router(grouping.router)
 api_router.include_router(agent.router)
 api_router.include_router(telemetry.router)
 api_router.include_router(conversations.router)

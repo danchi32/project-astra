@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Device, User
+from app.models.device_session import DeviceSession
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
@@ -180,6 +181,41 @@ class TelemetryService:
                     ],
                 )
                 device.updates_hash = digest
+
+        # Sessions. `is not None` rather than a truthiness test, because an empty list is a
+        # real answer here — "nobody is signed in" — and every other collection above uses
+        # truthiness precisely because an empty inventory from those means "not collected".
+        if data.sessions is not None:
+            # idle_seconds is excluded on purpose. It changes on literally every push by
+            # definition, so including it would make the fingerprint miss every time and
+            # rewrite the table each minute — which is the exact cost this exists to avoid.
+            # The price is that idle time is only as fresh as the last real session change;
+            # it is a soft signal ("been away a while"), not one anyone acts on to the second.
+            digest = _fingerprint(
+                data.sessions,
+                ("session_id", "username", "state", "connection", "station",
+                 "client_name", "logon_at"),
+            )
+            if digest != device.sessions_hash:
+                await self.repo.replace_sessions(
+                    device.id,
+                    [
+                        DeviceSession(
+                            device_id=device.id,
+                            org_id=device.org_id,
+                            session_id=s.session_id,
+                            username=s.username,
+                            state=s.state,
+                            connection=s.connection,
+                            station=s.station,
+                            client_name=s.client_name,
+                            logon_at=s.logon_at,
+                            idle_seconds=s.idle_seconds,
+                        )
+                        for s in data.sessions
+                    ],
+                )
+                device.sessions_hash = digest
 
         await self.session.commit()
 

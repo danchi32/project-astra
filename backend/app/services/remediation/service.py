@@ -150,6 +150,48 @@ def _validate_username(value: Any) -> str:
     return name
 
 
+def _validate_session_id(value: Any) -> str:
+    """Windows' own session id, carried as a string like every other parameter.
+
+    Range-checked rather than merely parsed. Session 0 is the services session — it has no
+    desktop and nobody is signed into it, so every action addressed to it is a mistake, and
+    on a machine where the caller meant "the console" it is a mistake that does nothing
+    while reporting success. The upper bound is not a Windows limit; it is a sanity bound
+    that keeps an obviously-wrong number from reaching the agent at all.
+    """
+    raw = str(value).strip() if value is not None else ""
+    if not raw.isdigit():
+        raise RemediationError("A numeric Windows session id is required.")
+    session_id = int(raw)
+    if session_id == 0:
+        raise RemediationError(
+            "Session 0 is the Windows services session — nobody is signed into it."
+        )
+    if session_id > 65535:
+        raise RemediationError("That is not a valid Windows session id.")
+    return str(session_id)
+
+
+def _validate_message(value: Any) -> str:
+    """The text of a message box shown on someone's desktop.
+
+    Control characters are stripped rather than rejected. They cannot do harm here — the
+    destination is WTSSendMessage, a native dialog, not a shell or a browser — but a stray
+    \\r\\n pasted from a ticket renders as a blank line in a small box, and a NUL truncates
+    the message at the Win32 boundary without telling anyone it did.
+    """
+    text = value if isinstance(value, str) else ""
+    text = "".join(c for c in text if c == "\n" or c >= " ").strip()
+    if not text:
+        raise RemediationError("A message is required — an empty box tells the user nothing.")
+    if len(text) > 1000:
+        raise RemediationError(
+            "Message is too long (1000 characters). A dialog nobody can read past the edge "
+            "of the screen is worse than a shorter one."
+        )
+    return text
+
+
 def _validate_kb_article_id(value: Any) -> str:
     """Normalize a KB article id to the canonical 'KB<digits>' form. Rejects anything else so
     the value handed to the agent's Windows Update search can never be an injection vector."""
@@ -272,8 +314,8 @@ class RemediationService:
         # Checked here rather than in _validate_params because the answer depends on the
         # organization's own policy list, which is a database read, not a constant.
         if "app_name" in action.params:
-            params["app_name"] = await self._validate_restricted_app(
-                org_id, params.get("app_name")
+            params["app_name"] = await self._validate_uninstall_target(
+                org_id, params.get("app_name"), source
             )
 
         # Secure offboarding is a Professional feature. Checked here rather than by hiding
@@ -390,17 +432,28 @@ class RemediationService:
         await self.session.commit()
         return task
 
-    async def _validate_restricted_app(self, org_id: uuid.UUID, value: Any) -> str:
-        """An application may be uninstalled only because THIS organization restricted it.
+    async def _validate_uninstall_target(
+        self, org_id: uuid.UUID, value: Any, source: RemediationSource
+    ) -> str:
+        """Which applications may be uninstalled, and by whom.
 
-        Every other action in the registry is constrained by a fixed allowlist. This one
-        cannot be: the whole point is to remove whatever the customer decided they do not
-        want, and that set is theirs to define. So the check is a lookup against their own
-        policy list — which also means an uninstall can never be requested for something
-        nobody wrote down, and the audit trail always has a stated reason behind it.
+        Two different callers ask for this, and they do not deserve the same latitude:
 
-        What is NOT theirs to define is UNINSTALL_NEVER. It is checked first, so an
-        organization cannot reach protected software by adding it to their own list.
+        * The AI engine (``source=ASSISTANT``) may only remove software THIS organization
+          wrote down as restricted. Every other action in the registry is constrained by a
+          fixed allowlist; this one cannot be, because the whole point is to remove whatever
+          the customer decided they do not want. Their own policy list is that allowlist, so
+          the model can never propose removing something nobody wrote down.
+        * An admin in the portal (``source=USER``) may remove anything not protected. They
+          are looking at the device's own software inventory, they picked one row, they typed
+          a reason, and the action is ADMIN_ONLY so only an admin can approve it. Requiring
+          them to first add the app to a policy list would mean editing org-wide policy to
+          perform a one-off removal on one machine — which pollutes the policy list and
+          teaches people to add entries they intend to delete afterwards.
+
+        What NEITHER may reach is UNINSTALL_NEVER. It is checked first and applies to both,
+        so no organization can reach protected software by adding it to their own list, and
+        no portal session can strip a machine's defences.
         """
         from sqlalchemy import select
 
@@ -420,14 +473,17 @@ class RemediationService:
                     f"'{name}' is protected and can never be uninstalled by ASTRA."
                 )
 
+        if source is not RemediationSource.ASSISTANT:
+            return name
+
         patterns = (await self.session.execute(
             select(BannedSoftware.pattern).where(BannedSoftware.org_id == org_id)
         )).scalars().all()
         if not any(p and p in lowered for p in patterns):
             raise RemediationError(
                 f"'{name}' is not on this organization's restricted-software list. "
-                "Uninstall is only offered for software the organization has restricted — "
-                "add it there first."
+                "ASTRA only proposes removing software the organization has restricted — "
+                "add it there first, or have an admin remove it from the device's Software tab."
             )
         return name
 
@@ -461,6 +517,10 @@ class RemediationService:
             params["kb_article_id"] = _validate_kb_article_id(params["kb_article_id"])
         if "username" in action.params:
             params["username"] = _validate_username(params.get("username"))
+        if "session_id" in action.params:
+            params["session_id"] = _validate_session_id(params.get("session_id"))
+        if "message" in action.params:
+            params["message"] = _validate_message(params.get("message"))
         if "timezone_id" in action.params:
             params["timezone_id"] = _validate_timezone(params.get("timezone_id"))
         if "printer_path" in action.params:

@@ -18,6 +18,7 @@ public sealed class TelemetryWorker(
     IServicesCollector services,
     IWindowsUpdateCollector updates,
     IHardwareCollector hardware,
+    ISessionCollector sessions,
     IOptions<AgentOptions> options,
     ILogger<TelemetryWorker> logger) : BackgroundService
 {
@@ -60,6 +61,7 @@ public sealed class TelemetryWorker(
         var mem = memory.GetMemoryInfo();
         var diskList = disk.GetDiskInfo();
         var eventList = events.GetRecentEntries();
+        var sessionList = sessions.GetSessions();
 
         var payload = new TelemetryPush(
             CollectedAt: now,
@@ -78,14 +80,22 @@ public sealed class TelemetryWorker(
             WindowsUpdates: collectInventory
                 ? updates.GetUpdates().Select(u => new TelemetryWindowsUpdate(
                     u.KbArticleId, u.Title, u.IsInstalled, u.InstalledOn, u.State, u.ErrorCode)).ToList()
-                : []);
+                : [],
+            // Every cycle, not with the hourly inventory. Who is signed in changes on a scale
+            // of minutes, and an hourly session list would show people at desks they left
+            // fifty minutes ago — which is worse than no list, because it looks current.
+            // The cost is a handful of rows: the backend fingerprints them and writes nothing
+            // when nobody has signed in or out since the last push.
+            Sessions: sessionList.Select(x => new TelemetrySessionEntry(
+                x.SessionId, x.Username, x.State, x.Connection,
+                x.Station, x.ClientName, x.LogonAt, x.IdleSeconds)).ToList());
 
         if (await api.PushTelemetryAsync(token, payload, ct) && collectInventory)
             _lastInventoryAt = now.UtcDateTime;
 
         logger.LogInformation(
-            "Telemetry pushed — CPU {Cpu:F1}% RAM {Ram}/{Total}MB Disks:{Disks}",
-            cpuPct, mem.UsedMb, mem.TotalMb, diskList.Count);
+            "Telemetry pushed — CPU {Cpu:F1}% RAM {Ram}/{Total}MB Disks:{Disks} Sessions:{Sessions}",
+            cpuPct, mem.UsedMb, mem.TotalMb, diskList.Count, sessionList.Count);
     }
 
     private static TelemetryHardware ToHardware(HardwareInfo h) =>

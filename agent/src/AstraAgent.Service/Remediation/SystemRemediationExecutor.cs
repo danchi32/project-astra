@@ -25,6 +25,11 @@ public sealed class SystemRemediationExecutor
             "block_usb_storage", "unblock_usb_storage",
             "restart_service", "restart_network_adapter", "network_reset",
             "reset_windows_update_components",
+            // Acting on one logon session. These live here rather than in the Tray for a
+            // structural reason: the Tray runs inside one user's session and can only reach
+            // that one, while this service runs as LocalSystem and can address any of them
+            // by id — which is the entire point on a machine with more than one user on it.
+            "lock_session", "logoff_session", "message_session", "reset_local_password",
         };
 
     public (bool Success, string Output) Execute(
@@ -53,6 +58,17 @@ public sealed class SystemRemediationExecutor
                 "restart_network_adapter" => NetworkRemediation.RestartAdapter(),
                 "network_reset" => NetworkRemediation.ResetNetworkStack(),
                 "reset_windows_update_components" => WindowsUpdateComponents.Reset(),
+                // The backend has validated the session id's shape and refused session 0.
+                // SessionManager re-checks both against this machine's LIVE session list,
+                // because the portal page the operator clicked may be minutes old and the
+                // session it named may now belong to somebody else.
+                "lock_session" => SessionManager.Lock(GetParam(parameters, "session_id")),
+                "logoff_session" => SessionManager.Logoff(GetParam(parameters, "session_id")),
+                "message_session" => SessionManager.SendMessage(
+                    GetParam(parameters, "session_id"), GetParam(parameters, "message")),
+                // The password is generated on the device and returned once — see
+                // LocalPasswordReset for why the portal never sends one.
+                "reset_local_password" => LocalPasswordReset.Reset(GetParam(parameters, "username")),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),

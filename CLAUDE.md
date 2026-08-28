@@ -31,10 +31,15 @@ AI System Administrator SaaS: web portal + Windows desktop agent + FastAPI backe
 
 RBAC, JWT (short-lived access + refresh), HTTPS only, audit logs for all mutations and all agent commands, encryption at rest and in transit, device certificates for agent enrollment, least privilege.
 
-Self-healing action tiers:
-- **automatic**: restart Explorer/services/Outlook/Teams/Zoom, flush DNS, clear temp, restart adapter
-- **approval_required**: Office repair, driver update, network reset
-- **admin_only**: registry, BIOS, firmware, Windows reinstall
+Self-healing action tiers (the registry in `backend/app/services/remediation/actions.py` is
+authoritative; this is the shape, not the list):
+- **automatic**: restart Explorer/services/Outlook/Teams/Zoom/Chrome/Edge, flush DNS, clear temp, restart adapter, set time zone, add a printer
+- **approval_required**: Office repair, network reset, install Windows updates, lock a session, message a session
+- **admin_only**: reset Windows Update components, disable/enable a local account, reset a local password, sign a session out, uninstall software, block/allow USB storage
+
+Two orthogonal flags, not one scale:
+- `execution_context` — `user` (the Tray, inside one person's session) vs `system` (the elevated service, LocalSystem). Anything addressing a *specific* session id must be `system`: the Tray can only ever see its own.
+- `operator_only` — withheld from the reasoning engine whatever its tier. For actions that interrupt a *person* rather than fix a *fault* (lock, message). No telemetry can establish that someone should be interrupted, and a model-addressable message box signed "IT" is a phishing primitive.
 
 ## AI engine
 

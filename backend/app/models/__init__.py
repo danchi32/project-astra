@@ -6,6 +6,19 @@ from app.models.webhook_event import WebhookEvent
 from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
 from app.models.device import Device
+from app.models.device_session import (
+    SESSION_ACTIVE,
+    SESSION_CONSOLE,
+    SESSION_DISCONNECTED,
+    SESSION_RDP,
+    DeviceSession,
+)
+from app.models.grouping import (
+    DeviceGroup,
+    DeviceGroupMember,
+    UserTeam,
+    UserTeamMember,
+)
 from app.models.email_settings import (
     EmailSendMethod,
     EmailSettings,
@@ -57,9 +70,18 @@ __all__ = [
     "Conversation",
     "Device",
     "DeviceEventLog",
+    "DeviceGroup",
+    "DeviceGroupMember",
     "DeviceInstalledApp",
     "DeviceService",
+    "DeviceSession",
     "DeviceWindowsUpdate",
+    "SESSION_ACTIVE",
+    "SESSION_CONSOLE",
+    "SESSION_DISCONNECTED",
+    "SESSION_RDP",
+    "UserTeam",
+    "UserTeamMember",
     "EmailSendMethod",
     "EmailSettings",
     "EmailVerificationStatus",

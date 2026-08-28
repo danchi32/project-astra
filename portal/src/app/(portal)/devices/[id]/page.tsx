@@ -8,6 +8,7 @@ import { getDevice, deleteDevice } from "@/lib/api/devices";
 import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
 import { getAssetForDevice, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
 import { getDeviceCompliance } from "@/lib/api/compliance";
+import { listDeviceSessions } from "@/lib/api/sessions";
 import { listAllUsers } from "@/lib/api/users";
 import { listLocations } from "@/lib/api/locations";
 import { getMe } from "@/lib/api/auth";
@@ -49,6 +50,21 @@ const FIXES: Fix[] = [
   { id: "windows_update_install", label: "Install pending Windows updates", tier: "approval_required" },
   { id: "reset_windows_update_components", label: "Reset Windows Update components", tier: "admin_only" },
 ];
+// Software ASTRA never uninstalls, mirrored from UNINSTALL_NEVER in the backend's action
+// registry. This copy is a LABEL, not a rule: it greys the button and says why, so an admin
+// isn't left clicking a row that will always come back refused. The backend refuses these
+// regardless of what this list says, and stays the only thing that decides.
+const NEVER_UNINSTALL = [
+  "astra", "windows defender", "microsoft defender", "crowdstrike", "falcon",
+  "sentinelone", "sophos", "mcafee", "symantec", "eset", "kaspersky",
+  "trend micro", "carbon black", "cylance", "bitdefender", "webroot",
+  "malwarebytes", "cortex xdr", "forticlient", "trellix",
+];
+const isProtectedApp = (name: string) => {
+  const lowered = name.toLowerCase();
+  return NEVER_UNINSTALL.some((p) => lowered.includes(p));
+};
+
 // Worded to match the Windows Update page the user is looking at on the device, so the two
 // screens can be read side by side without translating between them.
 const UPDATE_STATE: Record<string, { label: string; color: string }> = {
@@ -114,12 +130,13 @@ function suggestFixes(sources: string[]): Fix[] {
   return FIXES.filter((f) => wanted.has(fixTag(f)));
 }
 
-type Tab = "overview" | "telemetry" | "events" | "compliance" | "software" | "services" | "updates" | "assignment" | "history";
+type Tab = "overview" | "telemetry" | "events" | "compliance" | "sessions" | "software" | "services" | "updates" | "assignment" | "history";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "telemetry", label: "Telemetry" },
   { key: "events", label: "Health" },
   { key: "compliance", label: "Compliance" },
+  { key: "sessions", label: "Sessions" },
   { key: "software", label: "Software" },
   { key: "services", label: "Services" },
   { key: "updates", label: "Windows Updates" },
@@ -193,6 +210,9 @@ export default function DeviceDetailPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [fixMenu, setFixMenu] = useState(false);
+  // Filter for the Software tab. A laptop reports 80–300 installed apps; finding the one
+  // you came to remove by scrolling is the whole difficulty of the tab.
+  const [appQuery, setAppQuery] = useState("");
 
   // Lock down (secure offboarding) modal.
   const [lockOpen, setLockOpen] = useState(false);
@@ -206,6 +226,12 @@ export default function DeviceDetailPage() {
   const { data: events } = useQuery({ queryKey: ["dev-events", id], queryFn: () => getDeviceEvents(id), enabled: tab === "events" });
   const { data: compliance } = useQuery({ queryKey: ["dev-compliance", id], queryFn: () => getDeviceCompliance(id), enabled: tab === "compliance" });
   const { data: apps } = useQuery({ queryKey: ["dev-apps", id], queryFn: () => getDeviceApps(id), enabled: tab === "software" });
+  // Who is signed in on THIS machine. Refetched while the tab is open, because unlike the
+  // inventory tabs beside it this one is describing something that changes minute to minute.
+  const { data: sessions } = useQuery({
+    queryKey: ["dev-sessions", id], queryFn: () => listDeviceSessions(id),
+    enabled: tab === "sessions", refetchInterval: tab === "sessions" ? 30_000 : false,
+  });
   const { data: services } = useQuery({ queryKey: ["dev-services", id], queryFn: () => getDeviceServices(id), enabled: tab === "services" });
   const { data: updates } = useQuery({ queryKey: ["dev-updates", id], queryFn: () => getDeviceUpdates(id), enabled: tab === "updates" });
   // This device's asset, resolved server-side. Scanning a page of the register for it
@@ -288,6 +314,49 @@ export default function DeviceDetailPage() {
         await qc.invalidateQueries({ queryKey: ["dev-remediations", id] });
       } else {
         setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't push the fix. The device may be offline, or you may lack permission.") });
+      }
+    }
+    finally { setBusy(false); }
+  }
+
+  // Remove one application from this device, from the row showing it is installed.
+  //
+  // The confirmation asks for the app's name to be typed rather than offering an OK button.
+  // Every other push on this page is reversible — a restarted service comes back, a network
+  // reset is undone by another reset. This one is not: the software is gone, and reinstalling
+  // it is a separate errand that may need a licence key nobody has. A misplaced click in a
+  // 300-row table should not be able to do that.
+  async function uninstallApp(name: string) {
+    if (!device) return;
+    const typed = prompt(
+      `Uninstall "${name}" from ${device.hostname}?\n\n` +
+      "The agent runs the vendor's silent uninstaller. This cannot be undone from ASTRA — " +
+      "reinstalling is a separate job, and may need a licence key.\n\n" +
+      "Type the application name exactly to confirm:",
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== name.trim().toLowerCase()) {
+      setMsg({ ok: false, text: "Name didn't match — nothing was uninstalled." });
+      return;
+    }
+    setBusy(true); setMsg(null);
+    try {
+      await createRemediation({
+        device_id: device.id, action_id: "uninstall_application",
+        params: { app_name: name },
+        reason: `Uninstall "${name}" from the device Software tab`,
+        approve: true,   // admin-only tier; the admin clicking IS the approver
+      });
+      setMsg({ ok: true, text: `Queued: "${name}" will be removed from ${device.hostname}. The inventory refreshes on the next hourly collection.` });
+      await qc.invalidateQueries({ queryKey: ["dev-remediations", id] });
+    } catch (e) {
+      if (isAlreadyRunning(e)) {
+        setMsg({ ok: true, text: apiErrorMessage(e, "That uninstall is already under way.") });
+        await qc.invalidateQueries({ queryKey: ["dev-remediations", id] });
+      } else {
+        // Carries the server's own refusal text — "protected and can never be uninstalled",
+        // or a permission error — which is more use than a generic failure line.
+        setMsg({ ok: false, text: apiErrorMessage(e, "Couldn't queue the uninstall.") });
       }
     }
     finally { setBusy(false); }
@@ -729,17 +798,104 @@ export default function DeviceDetailPage() {
             </div>
           )}
 
-          {tab === "software" && (
-            <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["Name", "Version", "Publisher"].map((h) => <th key={h} className="text-left py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
-            </tr></thead><tbody>
-              {apps?.map((a) => <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td className="py-2" style={{ color: "var(--text-primary)" }}>{a.name}</td>
-                <td className="py-2" style={{ color: "var(--text-secondary)" }}>{a.version ?? "—"}</td>
-                <td className="py-2" style={{ color: "var(--text-secondary)" }}>{a.publisher ?? "—"}</td></tr>)}
-              {!apps?.length && <tr><td colSpan={3} className="py-6 text-center" style={{ color: "var(--text-secondary)" }}>No apps collected yet.</td></tr>}
-            </tbody></table>
+          {tab === "sessions" && (
+            <div className="space-y-3">
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                Everyone signed in on this machine, console and remote. To lock, sign out or
+                message one of them, open{" "}
+                <Link href="/sessions" className="hover:underline" style={{ color: "var(--accent)" }}>Sessions</Link>
+                {" "}— the actions live there, where the confirmations and the audit trail are.
+              </p>
+              <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {["User", "Session", "State", "Type", "Signed in", "Idle"].map((h) =>
+                  <th key={h} className="text-left py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
+              </tr></thead><tbody>
+                {sessions?.map((s) => (
+                  <tr key={s.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="py-2" style={{ color: s.username ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                      {s.username ?? "(no user)"}
+                    </td>
+                    <td className="py-2 font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+                      {s.session_id}{s.station ? ` · ${s.station}` : ""}
+                    </td>
+                    <td className="py-2" style={{ color: s.state === "active" ? "#10b981" : "#f59e0b" }}>
+                      {s.state === "active" ? "Active" : "Disconnected"}
+                    </td>
+                    <td className="py-2" style={{ color: "var(--text-secondary)" }}>
+                      {s.connection === "rdp" ? `RDP${s.client_name ? ` from ${s.client_name}` : ""}` : "Console"}
+                    </td>
+                    <td className="py-2" style={{ color: "var(--text-secondary)" }}>
+                      {s.logon_at ? new Date(s.logon_at).toLocaleString() : "—"}
+                    </td>
+                    <td className="py-2" style={{ color: "var(--text-secondary)" }}>
+                      {s.idle_seconds === null || s.idle_seconds === undefined
+                        ? "—"
+                        : s.idle_seconds < 120 ? "active" : `${Math.round(s.idle_seconds / 60)}m`}
+                    </td>
+                  </tr>
+                ))}
+                {!sessions?.length && <tr><td colSpan={6} className="py-6 text-center" style={{ color: "var(--text-secondary)" }}>
+                  Nobody is signed in, or this agent is older than the sessions feature.
+                </td></tr>}
+              </tbody></table>
+            </div>
           )}
+
+          {tab === "software" && (() => {
+            const needle = appQuery.trim().toLowerCase();
+            const shown = (apps ?? []).filter((a) =>
+              !needle ||
+              a.name.toLowerCase().includes(needle) ||
+              (a.publisher ?? "").toLowerCase().includes(needle));
+            return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <input
+                  value={appQuery} onChange={(e) => setAppQuery(e.target.value)}
+                  placeholder="Search software or publisher…"
+                  className="px-3 py-2 rounded-lg text-sm w-64 max-w-full"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                />
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  {needle
+                    ? `${shown.length} of ${apps?.length ?? 0} applications`
+                    : `${apps?.length ?? 0} applications`}
+                  {isAdmin && " · uninstall is admin-only and audited"}
+                </p>
+              </div>
+              <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {["Name", "Version", "Publisher"].map((h) => <th key={h} className="text-left py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
+                {isAdmin && <th />}
+              </tr></thead><tbody>
+                {shown.map((a) => {
+                  const protectedApp = isProtectedApp(a.name);
+                  const running = runningJob("uninstall_application", { app_name: a.name });
+                  return (
+                  <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="py-2" style={{ color: "var(--text-primary)" }}>{a.name}</td>
+                    <td className="py-2" style={{ color: "var(--text-secondary)" }}>{a.version ?? "—"}</td>
+                    <td className="py-2" style={{ color: "var(--text-secondary)" }}>{a.publisher ?? "—"}</td>
+                    {isAdmin && <td className="py-2 text-right">
+                      <button
+                        onClick={() => uninstallApp(a.name)}
+                        disabled={busy || protectedApp || !!running}
+                        title={protectedApp
+                          ? "Endpoint protection and the ASTRA agent itself can never be uninstalled by ASTRA."
+                          : running ? "Already queued on this device." : `Uninstall ${a.name}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                        style={{ background: "var(--surface)", border: "1px solid var(--border)", color: protectedApp ? "var(--text-secondary)" : "#ef4444" }}>
+                        {protectedApp ? <ShieldCheck size={12} /> : <Trash2 size={12} />}
+                        {protectedApp ? "Protected" : running ? "Removing…" : "Uninstall"}
+                      </button>
+                    </td>}
+                  </tr>);
+                })}
+                {!shown.length && <tr><td colSpan={isAdmin ? 4 : 3} className="py-6 text-center" style={{ color: "var(--text-secondary)" }}>
+                  {apps?.length ? "No software matches that search." : "No apps collected yet."}
+                </td></tr>}
+              </tbody></table>
+            </div>);
+          })()}
 
           {tab === "services" && (
             <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
