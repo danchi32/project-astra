@@ -42,7 +42,12 @@ class Draft(BaseModel):
         description="Only for formats that have one — a blog post, an email subject. "
                     "Null for a LinkedIn or X post, where the first line IS the headline.",
     )
-    body: str = Field(description="The post itself, ready to publish. No preamble.")
+    body: str = Field(
+        description="The post itself. No preamble. Do NOT include the call to action or "
+                    "the hashtags here — they are separate fields below, and the "
+                    "publisher places them where the channel wants them. Repeating the "
+                    "CTA in the body makes it appear twice in the published post.",
+    )
     hashtags: str | None = Field(
         default=None, max_length=300,
         description="Space-separated, at the end, only where the channel uses them.",

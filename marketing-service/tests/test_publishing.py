@@ -478,3 +478,53 @@ async def test_the_summary_names_published_urls_and_skip_reasons(publishing, fak
 
     assert "https://www.linkedin.com/feed/update/" in summary
     assert "Shorten it" in summary, "a bare count tells the reader nothing to act on"
+
+
+# ── The duplicated CTA ────────────────────────────────────────────────────────
+
+async def test_a_cta_already_in_the_body_is_not_appended_again(publishing, fake_linkedin):
+    """Found by the preview on the first real draft, before anything went public.
+
+    The drafting agent is told to keep the CTA out of the body. An instruction is not a
+    guarantee, and a post that ends with the same sentence twice is the kind of mistake a
+    reader remembers.
+    """
+    item = await _approved(publishing)
+    await publishing.content.revise(
+        item.id, body="Tiers, enforced server-side.\n\nBook an assessment.",
+        cta="Book an assessment", actor="agent", reason="cta",
+    )
+    await publishing.content.submit_for_review(item.id, actor="agent")
+    item = await publishing.content.get(item.id)
+    await publishing.content.approve(item.id, actor="danish",
+                                     version_id=item.current_version_id)
+
+    await publishing.publish(item.id, actor="danish")
+
+    assert fake_linkedin.commentary.lower().count("book an assessment") == 1
+
+
+async def test_a_genuinely_new_cta_is_still_appended(publishing, fake_linkedin):
+    item = await _approved(publishing)
+    await publishing.content.revise(
+        item.id, body="Tiers, enforced server-side.", cta="See the action registry",
+        actor="agent", reason="cta",
+    )
+    await publishing.content.submit_for_review(item.id, actor="agent")
+    item = await publishing.content.get(item.id)
+    await publishing.content.approve(item.id, actor="danish",
+                                     version_id=item.current_version_id)
+
+    await publishing.publish(item.id, actor="danish")
+
+    assert "See the action registry" in fake_linkedin.commentary
+
+
+def test_punctuation_and_case_do_not_defeat_the_check():
+    """"Book an assessment." and "Book an assessment" are the same sentence to a reader
+    and different strings to everything else."""
+    from app.services.publishers.linkedin import _already_says
+
+    assert _already_says("... Book an Assessment.", "book an assessment")
+    assert _already_says("Ends with: Book an assessment!", "Book an assessment")
+    assert not _already_says("Nothing like it here.", "Book an assessment")

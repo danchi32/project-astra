@@ -74,6 +74,19 @@ def hashtag_template(tag: str) -> str:
     return "{hashtag|\\#|" + match.group(1) + "}"
 
 
+def _already_says(body: str, cta: str) -> bool:
+    """Is this call to action already in the body?
+
+    Compared with punctuation and case removed, because "Book an assessment." in the body
+    and "Book an assessment" in the field are the same sentence to a reader and different
+    strings to everything else.
+    """
+    def normalise(text: str) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+    return normalise(cta) in normalise(body)
+
+
 class LinkedInPublisher:
     channel_name = "linkedin"
 
@@ -91,9 +104,14 @@ class LinkedInPublisher:
         Pure and side-effect free, so the dry run and the approval preview can show a
         person the real thing rather than an approximation of it.
         """
-        parts = [escape_little(version.body.strip())]
+        body = version.body.strip()
+        parts = [escape_little(body)]
 
-        if version.cta:
+        # Only if the body has not already said it. The drafting agent is told to keep the
+        # CTA out of the body, but an instruction is not a guarantee, and a post that ends
+        # with the same sentence twice is the kind of mistake a reader remembers. Caught
+        # on the very first real draft, by the preview, before anything was public.
+        if version.cta and not _already_says(body, version.cta):
             parts.append(escape_little(version.cta.strip()))
 
         if version.hashtags:
