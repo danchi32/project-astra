@@ -70,3 +70,53 @@ def test_the_two_copies_agree(content: dict) -> None:
         ABOUT_TSX.read_text(encoding="utf-8"),
     )
     assert match and match.group(1) == str(from_json)
+
+
+# ── The fleet mockup ──────────────────────────────────────────────────────────
+
+VISUALS_TSX = WEBSITE / "src" / "components" / "visuals.tsx"
+
+#: Figures that were once printed inside the product mockup as if measured. None was.
+#: They are listed by value because that is what a reader sees; if any returns, it will
+#: return as one of these.
+INVENTED_FLEET_FIGURES = ('"248"', '"1,204"', '"38s"', '"99.9%"', '"−72% vs manual"')
+
+
+@pytest.fixture(scope="module")
+def visuals() -> str:
+    if not VISUALS_TSX.exists():
+        pytest.skip(f"{VISUALS_TSX} not present")
+    return VISUALS_TSX.read_text(encoding="utf-8")
+
+
+def test_the_fleet_mockup_states_no_invented_figures(visuals: str) -> None:
+    """The panel is titled with the live product domain, which is what makes this matter.
+
+    Sample data in a product mockup is ordinary. Sample data in a panel captioned
+    `astra.technomateai.com — Fleet Dashboard` reads as a screenshot of a running system,
+    and once the homepage began reporting real counts from the database the two were
+    making contradictory claims about the same fleet.
+    """
+    found = [f for f in INVENTED_FLEET_FIGURES if f in visuals]
+    assert not found, (
+        f"{VISUALS_TSX.name} prints {found} inside the fleet dashboard. Those numbers "
+        "were never measured, and the panel is captioned with the real product domain."
+    )
+
+
+def test_the_fleet_mockup_reads_its_figures_from_the_platform(visuals: str) -> None:
+    """Banning the old literals is not enough — new ones can be typed.
+
+    This asserts the shape instead: the figures come from the live endpoint, so there is
+    nowhere to put an invented one.
+    """
+    assert "usePlatformStats" in visuals, (
+        "the fleet dashboard no longer reads live stats; its figures are literals again"
+    )
+
+
+def test_an_unavailable_api_shows_a_dash_not_a_zero(visuals: str) -> None:
+    """"0 devices managed" is a claim, and a false one. A dash is visibly an absence."""
+    assert '"—"' in visuals, (
+        "fleetFigure should fall back to an em dash; a zero would assert an empty fleet"
+    )

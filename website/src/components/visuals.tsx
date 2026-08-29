@@ -20,6 +20,9 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import type { PlatformStats, StatsState } from "@/lib/platformStats";
+import { usePlatformStats } from "@/lib/platformStats";
+
 /* ----------------------------------------------------------------------------
  * Small window chrome shared by every mock panel.
  * ------------------------------------------------------------------------- */
@@ -72,10 +75,37 @@ function LiveBar({
   );
 }
 
+/**
+ * One live figure, or an em dash.
+ *
+ * Never zero. A dashboard reading "0 devices managed" is a claim, and a false one; a dash
+ * is visibly an absence. Same rule as the homepage counters, for the same reason.
+ */
+function fleetFigure(
+  state: StatsState,
+  pick: (s: PlatformStats) => number,
+): string {
+  return state.status === "ready" ? pick(state.stats).toLocaleString() : "—";
+}
+
 /* ============================================================================
  * HERO DASHBOARD — fleet overview with live telemetry + an AI action ticker.
  * ========================================================================= */
 export function DashboardMockup() {
+  // The three figures at the top are the platform's real ones, from the same endpoint the
+  // homepage counters use.
+  //
+  // They used to be invented — 248 / 256 devices online, 1,204 issues, 38s average
+  // resolve. A previous pass left them, reasoning that sample data in a product mockup is
+  // ordinary and honest. That reasoning missed the frame: this panel is titled with the
+  // real product domain, which turns sample figures into an apparent screenshot of a live
+  // system. And once the homepage a screen away began reporting 34 devices from the
+  // database, the two were making contradictory claims about the same fleet.
+  //
+  // The telemetry bars and the activity ticker below stay illustrative. They demonstrate
+  // what the interface does rather than asserting a scale, and per-device telemetry is
+  // customer data that has no business on a public endpoint.
+  const statsState = usePlatformStats();
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => (t + 1) % actions.length), 2400);
@@ -100,13 +130,27 @@ export function DashboardMockup() {
     <Chrome title="astra.technomateai.com — Fleet Dashboard">
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Devices online", value: "248", sub: "/ 256", accent: "text-emerald-500" },
-          { label: "Issues auto-healed", value: "1,204", sub: "this month", accent: "text-brand-500" },
-          // Sample data in a product mockup is ordinary and honest. "−72% vs manual" was
-          // not sample data — it was a comparative benchmark nobody has measured, placed
-          // inside an illustration where it reads as a product reading. The figures that
-          // remain are plainly a demo of the interface; that sub-label was a claim.
-          { label: "Avg. resolve time", value: "38s", sub: "last 24h", accent: "text-violet-500" },
+          {
+            label: "Devices managed",
+            value: fleetFigure(statsState, (s) => s.devices),
+            sub: "across all orgs",
+            accent: "text-emerald-500",
+          },
+          {
+            label: "Issues auto-healed",
+            value: fleetFigure(statsState, (s) => s.remediations),
+            sub: "to date",
+            accent: "text-brand-500",
+          },
+          {
+            // Not "avg. resolve time". We do not measure it, so there is no honest number
+            // to put here — and an unmeasured figure inside a panel titled with the live
+            // product domain is exactly the kind of claim this whole pass removed.
+            label: "Remediation actions",
+            value: fleetFigure(statsState, (s) => s.remediation_actions),
+            sub: "in the registry",
+            accent: "text-violet-500",
+          },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-token bg-surface-2 p-3">
             <div className="text-xs text-muted-token">{s.label}</div>
