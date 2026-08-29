@@ -130,6 +130,12 @@ class Settings(BaseSettings):
     #: Comma-separated numeric chat IDs allowed to receive alerts AND to act on them.
     #: An allowlist, not a single ID, so a second person can be added without a deploy.
     telegram_chat_ids: str = ""
+    #: Secret Telegram echoes back in `X-Telegram-Bot-Api-Secret-Token` on every update it
+    #: delivers. Same rule as `intake_secret`: UNSET MEANS THE WEBHOOK IS SHUT. The bot
+    #: token appears in the webhook URL, which lands in proxy logs and browser history, so
+    #: the URL alone is not a credential — this header is what proves the caller is
+    #: Telegram. Without it anyone who ever saw the URL could post an approval.
+    telegram_webhook_secret: str = ""
 
     #: Anthropic key for lead scoring. Unset means the rules-only score is used, which is
     #: deliberately good enough to ship without it.

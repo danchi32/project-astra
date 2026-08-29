@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -111,6 +111,19 @@ class ContentItem(TimestampMixin, Base):
     #: collect performance later, and neither can be reconstructed afterwards.
     published_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     published_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # ── The approval desk ──────────────────────────────────────────────────────
+    # The Telegram message currently asking for a decision on this item. Stored so a
+    # plain reply — "make it more concrete" — can be traced back to what it is about;
+    # Telegram gives a reply the id of the message it answers and nothing else.
+    #
+    # Overwritten when a new version is sent for review. A reply to a superseded message
+    # therefore finds nothing, which is the right answer: the conversation moved on, and
+    # acting on it would apply feedback to words the sender was not looking at.
+    review_message_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
+    review_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Eager, because nothing in this domain reads an item without its history: a
     # reviewer needs the versions, an audit needs the events, and lazy loading them under

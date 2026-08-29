@@ -27,6 +27,7 @@ from app.schemas.content import (
     ScheduleRequest,
     SimpleActorRequest,
 )
+from app.services.approval_desk import ApprovalDesk
 from app.services.content import ContentService, PublishRefused
 from app.services.drafting import DraftingAgent
 from app.services.exceptions import NotConfiguredError, NotFoundError, ValidationError
@@ -121,6 +122,16 @@ async def revise(
 async def submit(
     item_id: uuid.UUID, body: SimpleActorRequest, session: AsyncSession = Depends(get_db)
 ) -> ContentDetail:
+    """Run the blocking claim check, then put it on the Telegram desk.
+
+    Posting is part of submitting, not a second call someone has to remember. "Submitted
+    for review" that sits in a table nobody opens is how a queue silently becomes a
+    graveyard — and the reviewer here reviews on a phone, not in a portal.
+
+    The post is best-effort and comes *after* the transition. Telegram being unreachable
+    must not undo a submission that already passed the claim check; the item stays
+    IN_REVIEW and can be re-posted by submitting again.
+    """
     service = ContentService(session)
     try:
         await service.submit_for_review(item_id, actor=body.actor)
@@ -128,6 +139,14 @@ async def submit(
         raise _not_found(exc) from exc
     except ValidationError as exc:
         raise _invalid(exc) from exc
+
+    item = await service.get(item_id)
+    desk = ApprovalDesk(session)
+    if desk.enabled:
+        try:
+            await desk.post_for_review(item)
+        except Exception:  # noqa: BLE001 — a failed notification must not fail the submit
+            logger.exception("submitted %s but could not post it to the desk", item_id)
     return ContentDetail.model_validate(await service.get(item_id))
 
 

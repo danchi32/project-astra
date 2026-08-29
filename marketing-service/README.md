@@ -86,11 +86,53 @@ the calendar, and says a person will follow up — a prospect who books from it 
 converted with nobody touching it, and one who waits has still been answered. It is
 skipped for anyone with `unsubscribed_at` set.
 
-Telegram is **outbound only**. No webhook, no inline keyboard: buttons mean a public
-callback endpoint that can change state, and that gets designed once, carefully, with the
-content approval desk. Every field in the alert is HTML-escaped — name, company and
-message all come from a public form, and a lead crafted to make Telegram reject the
-message would otherwise silently stop the alerts.
+**Lead alerts are outbound only** — no buttons. The actions a founder takes on a lead
+(reply, mark contacted) belong in the mail client and the CRM. Every field is HTML-escaped:
+name, company and message all come from a public form, and a lead crafted to make Telegram
+reject the message would otherwise silently stop the alerts.
+
+Buttons exist only on the **content approval desk** (below), where a callback endpoint is
+the whole point rather than a convenience.
+
+## The approval desk
+
+`app/services/approval_desk.py` + `POST /api/v1/telegram/webhook`. A draft, two buttons,
+and a reply lane — the human half of the publishing loop, run from a phone.
+
+Three things carry the design:
+
+**A button carries a version id, not an item id.** The keyboard was drawn for specific
+words, so tapping Approve means "I approve *these* words". Scroll back to yesterday's
+message, tap Approve, and the gate refuses because that version is no longer current. Had
+the button named the item, that tap would have endorsed a draft the reviewer never read —
+and every step would look legitimate in the log afterwards.
+
+**Two checks, two questions.** The `X-Telegram-Bot-Api-Secret-Token` header proves the
+*caller* is Telegram. The allowlist on `callback_query.from.id` proves the *human* is one
+of ours. Passing the first does not imply the second: anyone in the world can message a
+bot, and Telegram delivers it faithfully. The bot token also sits in the webhook URL,
+which lands in proxy logs, so the URL is not a credential either. Unset secret means the
+webhook is **shut**, like `intake_secret` and `admin_token`.
+
+**Answer 200 fast, always.** Telegram redelivers any update it does not get a prompt
+answer to, so `handle_update` never raises and a rewrite (a model call, tens of seconds)
+runs as a background task after the response has gone out.
+
+One documented limit: the buttons work from every allowed chat, but the free-text reply
+lane is bound to the chat the draft was posted in — a reply gives us a message id and
+nothing else, and Telegram numbers messages per chat, so ids collide across them. A reply
+from elsewhere gets an explanation rather than a guess.
+
+Register the webhook once, after the secret is deployed:
+
+```bash
+python scripts/setup_telegram_webhook.py --url https://<service-url>/api/v1/telegram/webhook
+python scripts/setup_telegram_webhook.py --status
+```
+
+The registration is global to the bot token — one webhook URL per bot — so running it
+against staging takes production's desk offline. Use a separate bot, or accept that
+whichever ran last wins.
 
 ## CRM sync (Zoho Bigin)
 

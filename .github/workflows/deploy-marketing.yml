@@ -138,6 +138,11 @@ jobs:
           SECRETS=$SECRETS,ASTRA_MKT_ADMIN_TOKEN=ASTRA_MKT_ADMIN_TOKEN:latest
           SECRETS=$SECRETS,ASTRA_MKT_TELEGRAM_BOT_TOKEN=ASTRA_MKT_TELEGRAM_BOT_TOKEN:latest
           SECRETS=$SECRETS,ASTRA_MKT_TELEGRAM_CHAT_IDS=ASTRA_MKT_TELEGRAM_CHAT_IDS:latest
+          # The secret Telegram echoes back on every update it delivers to the approval
+          # desk. The bot token sits in the webhook URL, which lands in proxy logs, so the
+          # URL is not a credential — this header is what proves the caller is Telegram.
+          # Unset means the webhook is SHUT, like the two above.
+          SECRETS=$SECRETS,ASTRA_MKT_TELEGRAM_WEBHOOK_SECRET=ASTRA_MKT_TELEGRAM_WEBHOOK_SECRET:latest
           SECRETS=$SECRETS,ASTRA_MKT_BIGIN_CLIENT_ID=ASTRA_MKT_BIGIN_CLIENT_ID:latest
           SECRETS=$SECRETS,ASTRA_MKT_BIGIN_CLIENT_SECRET=ASTRA_MKT_BIGIN_CLIENT_SECRET:latest
           SECRETS=$SECRETS,ASTRA_MKT_BIGIN_REFRESH_TOKEN=ASTRA_MKT_BIGIN_REFRESH_TOKEN:latest

@@ -3,11 +3,11 @@
 Outbound only, for now. The founder gets told about a lead within seconds, with enough
 context to reply without opening anything else.
 
-There is deliberately **no webhook and no inline keyboard here**. Buttons mean a public
-callback endpoint, and a public callback endpoint that can change state is the sort of
-thing that gets designed once, carefully — that happens with the content approval desk,
-where it is the whole point. An alert does not need it: the actions a founder takes on a
-lead (reply, mark contacted) belong in the mail client and the CRM.
+Lead alerts have no buttons, and that is still deliberate: the actions a founder takes on
+a lead (reply, mark contacted) belong in the mail client and the CRM, and a button that
+changes state needs a public callback endpoint. That endpoint now exists for the content
+approval desk, where it is the whole point — see `app/services/approval_desk.py` and
+`app/api/v1/telegram.py`. What lives here is only the transport it speaks over.
 
 Inert until both `telegram_bot_token` and `telegram_chat_ids` are set.
 """
@@ -30,6 +30,13 @@ _TIMEOUT_SECONDS = 3.0
 #: Telegram rejects messages over 4096 characters outright, so the quoted lead message is
 #: truncated well short of it rather than losing the whole alert.
 _MAX_QUOTED_MESSAGE = 1200
+#: The approval desk is not on anyone's critical path — no visitor is watching a spinner —
+#: and Telegram's own API is occasionally slow to edit a message. It gets room the lead
+#: alert cannot have.
+_DESK_TIMEOUT_SECONDS = 15.0
+#: Telegram truncates any message over this. A draft plus its metadata can exceed it, so
+#: the desk trims the body rather than letting Telegram reject the whole review.
+MAX_MESSAGE = 4096
 
 _TIER_BADGE = {
     LeadTier.HOT: "🔥 HOT",
@@ -48,6 +55,12 @@ def _esc(value: str | None) -> str:
     silently stop being told about exactly the leads crafted to avoid it.
     """
     return html.escape(value or "", quote=False)
+
+
+#: Public alias. The approval desk renders attacker-controlled text too — a draft can
+#: quote a prospect's own words — and it should not have to reach for a private name to
+#: escape it correctly.
+escape_html = _esc
 
 
 class TelegramNotifier:
@@ -152,3 +165,82 @@ class TelegramNotifier:
                            chat_id, response.status_code, response.text[:200])
             return False
         return True
+
+
+    # ── Transport for the approval desk ────────────────────────────────────────
+    # Three thin wrappers. They return message ids and booleans rather than raising,
+    # because every caller is inside a webhook handler that must answer 200 quickly:
+    # Telegram redelivers an update it did not get an answer for, and an exception
+    # escaping here would turn one failed edit into a redelivery loop.
+
+    async def send_message(
+        self, chat_id: str, text: str, keyboard: dict | None = None
+    ) -> int | None:
+        """Send one message to one chat. Returns Telegram's message id, or None."""
+        if not settings.telegram_bot_token:
+            return None
+
+        payload: dict = {
+            "chat_id": chat_id,
+            "text": text[:MAX_MESSAGE],
+            "parse_mode": "HTML",
+            "link_preview_options": {"is_disabled": True},
+        }
+        if keyboard is not None:
+            payload["reply_markup"] = keyboard
+
+        data = await self._call("sendMessage", payload)
+        return (data or {}).get("message_id")
+
+    async def edit_message(
+        self, chat_id: str, message_id: int, text: str, keyboard: dict | None = None
+    ) -> bool:
+        """Rewrite a message in place.
+
+        The desk edits rather than replies, so a decided draft stops looking undecided.
+        Passing no keyboard removes the buttons, which is how a handled review stops
+        offering an action that would now be refused.
+        """
+        payload: dict = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text[:MAX_MESSAGE],
+            "parse_mode": "HTML",
+            "link_preview_options": {"is_disabled": True},
+            "reply_markup": keyboard if keyboard is not None else {"inline_keyboard": []},
+        }
+        return await self._call("editMessageText", payload) is not None
+
+    async def answer_callback(self, callback_query_id: str, text: str = "") -> bool:
+        """Stop the button spinning.
+
+        Telegram spins a tapped button for a few seconds and then shows a client-side
+        error unless this is called. Skipping it makes every successful approval look
+        broken to the person who made it.
+        """
+        return await self._call("answerCallbackQuery", {
+            "callback_query_id": callback_query_id,
+            "text": text[:200],
+        }) is not None
+
+    async def _call(self, method: str, payload: dict) -> dict | None:
+        if not settings.telegram_bot_token:
+            return None
+
+        url = f"{_API}/bot{settings.telegram_bot_token}/{method}"
+        try:
+            async with httpx.AsyncClient(timeout=_DESK_TIMEOUT_SECONDS) as client:
+                response = await client.post(url, json=payload)
+        except httpx.HTTPError as exc:
+            logger.warning("telegram %s failed: %s", method, exc)
+            return None
+
+        if response.status_code >= 400:
+            logger.warning("telegram rejected %s: %s %s",
+                           method, response.status_code, response.text[:300])
+            return None
+        try:
+            return response.json().get("result") or {}
+        except ValueError:
+            logger.warning("telegram %s returned a non-JSON body", method)
+            return None
