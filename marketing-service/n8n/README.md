@@ -24,9 +24,29 @@ n8n being up.
 
 ### 1. Credentials
 
-Create three credentials in n8n, then paste each one's id into the workflow JSON where it
-says `REPLACE_WITH_CREDENTIAL_ID` (or re-select them in the UI after import, which is
-easier and does the same thing).
+Create three credentials in n8n, then **re-select each one in the node's UI after import**.
+
+Do not skip that step, and do not assume the import carried it. The workflow JSON ships
+`"id": "REPLACE_WITH_CREDENTIAL_ID"`, and a node pointing at an id that does not exist
+does not fail loudly — **n8n sends the request with no auth header at all**. On this
+service that is an ordinary 401, indistinguishable at a glance from a wrong token, so the
+natural reaction is to go and check the token, which is fine, which wastes the afternoon.
+
+This happened. Every scheduled sweep 401'd from the moment the workflows were activated,
+along with `Rescore with the model` and `Sync to Bigin` in workflow 01 — three nodes, one
+missing credential. The service now logs which of the three possible mistakes it was
+(`no Authorization header was sent` / wrong scheme / wrong token), so the next occurrence
+is a one-line diagnosis:
+
+```bash
+gcloud logging read 'resource.type="cloud_run_revision"
+  AND resource.labels.service_name="astra-marketing"
+  AND (logName:"stderr" OR logName:"stdout")
+  AND textPayload:"admin request refused"' --limit=5 --freshness=1h
+```
+
+Nodes that need `ASTRA admin token` attached: `Sync anything pending` (workflow 02),
+`Rescore with the model` and `Sync to Bigin` (workflow 01).
 
 | Credential | Type | Value |
 |---|---|---|
