@@ -1,10 +1,9 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.lead import Lead, LeadSubmission
 
@@ -64,7 +63,7 @@ class LeadRepository:
         without it, a submission would be picked up twice — once by the request that
         created it and once by the sweeper — and the prospect would get two emails.
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+        cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
         stmt = (
             select(LeadSubmission)
             .where(LeadSubmission.dispatched_at.is_(None))

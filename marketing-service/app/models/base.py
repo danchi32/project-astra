@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import CHAR, DateTime, TypeDecorator
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -29,12 +29,12 @@ class GUID(TypeDecorator):
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def as_utc(dt: datetime) -> datetime:
     """Normalize a DB-loaded datetime; SQLite drops tzinfo, PostgreSQL keeps it."""
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 class Base(DeclarativeBase):

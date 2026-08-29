@@ -11,7 +11,7 @@ first, then do everything that can fail.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -158,7 +158,7 @@ class LeadService:
         lead.score = result.score
         lead.tier = result.tier
         lead.score_reason = result.summary
-        lead.scored_at = datetime.now(timezone.utc)
+        lead.scored_at = datetime.now(UTC)
         if result.disqualified:
             lead.status = LeadStatus.DISQUALIFIED
 
@@ -178,7 +178,7 @@ class LeadService:
         lead.score = result.score
         lead.tier = result.tier
         lead.score_reason = result.summary
-        lead.scored_at = datetime.now(timezone.utc)
+        lead.scored_at = datetime.now(UTC)
         # Only ever moves a lead INTO disqualified, never out of one a human set. A model
         # that can un-disqualify would quietly undo a considered human decision.
         if result.disqualified and lead.status == LeadStatus.NEW:
@@ -225,7 +225,7 @@ class LeadService:
         )
         acknowledged, notified, dispatched = (r is True for r in results)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if acknowledged:
             lead.acknowledged_at = now
         if notified:
@@ -275,7 +275,7 @@ class LeadService:
             await client.update_stage(lead.crm_record_id, lead.status)
 
         lead.crm_provider = "bigin"
-        lead.crm_synced_at = datetime.now(timezone.utc)
+        lead.crm_synced_at = datetime.now(UTC)
         await self.session.commit()
 
         logger.info("lead %s synced to bigin: contact=%s record=%s",
@@ -301,7 +301,7 @@ class LeadService:
         return {"pending": len(pending), "synced": synced, "failed": failed}
 
     async def mark_dispatched(self, submission: LeadSubmission) -> None:
-        submission.dispatched_at = datetime.now(timezone.utc)
+        submission.dispatched_at = datetime.now(UTC)
         submission.dispatch_attempts += 1
         await self.session.commit()
 
@@ -320,4 +320,4 @@ class LeadService:
         distinction is what `Lead.is_contactable` reads before any marketing send.
         """
         lead.consent_source = payload.consent_text or f"form:{payload.source}"
-        lead.consent_at = datetime.now(timezone.utc)
+        lead.consent_at = datetime.now(UTC)

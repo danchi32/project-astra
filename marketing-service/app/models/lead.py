@@ -8,7 +8,21 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import GUID, Base, TimestampMixin
 
 
-class LeadStatus(str, enum.Enum):
+#: SQLAlchemy's `Enum(PyEnumClass)` persists each member's NAME by default — "NEW" — while
+#: the migration's server_default is the value, "new". Nothing hit it, because the model
+#: supplies a Python-side default on every insert so the server default never fires. But a
+#: row written by anything else — a data fix, a migration backfill, a psql session — would
+#: store "new" and then fail to load, because the ORM looks the string up by name.
+#:
+#: Passing `values_callable` makes the column store values, which is what the rest of the
+#: system already assumes: the API serialises `.value`, the Bigin stage map is keyed on
+#: members, and the server defaults were written as values. Applied while the table was
+#: still empty, so there was nothing to migrate.
+def _enum_values(enum_class) -> list[str]:
+    return [member.value for member in enum_class]
+
+
+class LeadStatus(enum.StrEnum):
     """The pipeline from docs/GO_TO_MARKET.md, as data.
 
     The stage names are copied from that document deliberately. If the sales process and
@@ -27,7 +41,7 @@ class LeadStatus(str, enum.Enum):
     DISQUALIFIED = "disqualified"        # not a fit; kept, never deleted, so we learn
 
 
-class LeadTier(str, enum.Enum):
+class LeadTier(enum.StrEnum):
     """What the scorer decided, which decides how fast a human must respond.
 
     Kept separate from `status` because they answer different questions: tier is about the
@@ -71,11 +85,11 @@ class Lead(TimestampMixin, Base):
     is_free_email: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     status: Mapped[LeadStatus] = mapped_column(
-        Enum(LeadStatus, native_enum=False, length=20),
+        Enum(LeadStatus, native_enum=False, length=20, values_callable=_enum_values),
         default=LeadStatus.NEW, nullable=False, index=True,
     )
     tier: Mapped[LeadTier] = mapped_column(
-        Enum(LeadTier, native_enum=False, length=12),
+        Enum(LeadTier, native_enum=False, length=12, values_callable=_enum_values),
         default=LeadTier.UNSCORED, nullable=False, index=True,
     )
     #: 0-100. The rules produce it; the model may adjust it. Stored alongside the reason

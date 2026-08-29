@@ -10,8 +10,8 @@ import uuid
 import pytest
 
 from app.core.config import get_settings
-from app.models.lead import Lead, LeadSubmission, LeadTier
 from app.models.base import utcnow
+from app.models.lead import Lead, LeadSubmission, LeadTier
 from app.services.email import EmailService
 from app.services.telegram import TelegramNotifier
 

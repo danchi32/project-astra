@@ -7,4 +7,22 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
+# Stricter than the product backend, which runs ruff's defaults (E4/E7/E9/F). Import
+# order and pyupgrade catch real drift in a codebase this young, and bugbear has already
+# earned its place — see the enum note in app/models/lead.py.
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+# There is an `alembic/` directory at the project root, so ruff's source detection
+# concludes that `alembic` is a local package and wants `from alembic import op` grouped
+# with our own imports. It is the migration tool, installed from PyPI; the directory just
+# happens to share its name. Saying so is more honest than reordering the imports to
+# satisfy a misdetection.
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 forbids function calls in argument defaults, which is exactly how FastAPI declares
+# a dependency: `session: AsyncSession = Depends(get_db)`. The rule is right in general
+# and wrong here, and the framework offers no alternative spelling — so these three are
+# exempted by name rather than the rule being switched off everywhere.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Header", "fastapi.Query"]

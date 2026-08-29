@@ -193,7 +193,9 @@ class BiginClient:
         """Create the opportunity. Three mandatory fields, all supplied."""
         company = lead.company or lead.email_domain or lead.email
         record = {
-            "Deal_Name": f"{company} — {(submission.interest if submission else None) or 'Enquiry'}"[:120],
+            "Deal_Name": (
+                f"{company} — {(submission.interest if submission else None) or 'Enquiry'}"
+            )[:120],
             "Stage": STAGE_FOR_STATUS.get(lead.status, "New"),
             "Sub_Pipeline": sub_pipeline,
             "Contact_Name": {"id": contact_id},
