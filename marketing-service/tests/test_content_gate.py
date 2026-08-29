@@ -230,3 +230,19 @@ async def test_unknown_item_is_not_found(service):
 
     with pytest.raises(NotFoundError):
         await service.get(uuid.uuid4())
+
+
+async def test_the_version_check_catches_what_the_status_check_would_miss(service):
+    """Defence in depth, and worth having.
+
+    The normal path never reaches this: revising clears the approval and drops the item to
+    DRAFT, so the status check refuses first. But `approved_version_id` is the thing that
+    actually means "a human read these words", and any future code that moves
+    current_version_id without clearing the approval would slip past a status check alone.
+    """
+    item = await _approved_item(service)
+    # Simulate exactly that: the current version moves, the approval does not.
+    item.current_version_id = uuid.uuid4()
+
+    with pytest.raises(PublishRefused, match="revised after approval"):
+        service.assert_publishable(item)

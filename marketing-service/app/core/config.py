@@ -134,7 +134,11 @@ class Settings(BaseSettings):
     #: Anthropic key for lead scoring. Unset means the rules-only score is used, which is
     #: deliberately good enough to ship without it.
     anthropic_api_key: str = ""
+    #: Haiku for classification — hundreds of calls for pennies.
     scoring_model: str = "claude-haiku-4-5"
+    #: Sonnet for writing. The Brand Bible is a cached prefix on every call, so the
+    #: long file costs almost nothing after the first request in each window.
+    drafting_model: str = "claude-sonnet-5"
 
     #: Zoho Bigin. Unset means leads are stored and alerted but not pushed to CRM.
     bigin_client_id: str = ""
