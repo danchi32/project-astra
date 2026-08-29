@@ -359,8 +359,8 @@
         "desc": "Encryption in transit and at rest, HTTPS-only."
       },
       {
-        "title": "Device certificates",
-        "desc": "Certificate-based enrollment for every agent."
+        "title": "Per-device credentials",
+        "desc": "Each agent enrolls with an organization key, then authenticates with its own token."
       },
       {
         "title": "Audit logs",

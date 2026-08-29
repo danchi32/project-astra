@@ -91,7 +91,7 @@ const securityIcons = [KeyRound, Lock, BadgeCheck, ScrollText];
 const securityDefaults = [
   { title: "JWT + RBAC", desc: "Short-lived tokens and role-based access on every endpoint." },
   { title: "Encrypted everywhere", desc: "Encryption in transit and at rest, HTTPS-only." },
-  { title: "Device certificates", desc: "Certificate-based enrollment for every agent." },
+  { title: "Per-device credentials", desc: "Each agent enrolls with an organization key, then authenticates with its own token." },
   { title: "Audit logs", desc: "Immutable records for all mutations and commands." },
 ];
 
