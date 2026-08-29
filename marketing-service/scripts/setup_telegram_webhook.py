@@ -78,10 +78,10 @@ async def set_webhook(url: str) -> int:
     })
 
     if not result.get("ok"):
-        print(f"✗ Telegram refused: {result.get('description')}")
+        print(f"FAILED: Telegram refused: {result.get('description')}")
         return 1
 
-    print(f"✓ Webhook registered: {url}")
+    print(f"OK: Webhook registered: {url}")
     print(f"  Updates delivered: {', '.join(ALLOWED_UPDATES)}")
     print("  Secret token: set (the service compares it in constant time)")
     return 0
@@ -104,7 +104,7 @@ async def status() -> int:
     # The two fields that actually diagnose a broken desk. Telegram keeps retrying and
     # reports the last failure here, which is the only place the reason is visible.
     if info.get("last_error_message"):
-        print(f"\n⚠ Last delivery error: {info['last_error_message']}")
+        print(f"\nWARNING: Last delivery error: {info['last_error_message']}")
         print("  A 401 here almost always means the secret in Secret Manager and the one")
         print("  registered with Telegram have drifted apart. Re-run with --url to reset.")
         return 1
@@ -115,7 +115,7 @@ async def status() -> int:
 async def delete() -> int:
     _require_token()
     result = await call("deleteWebhook", {"drop_pending_updates": True})
-    print("✓ Webhook removed." if result.get("ok") else f"✗ {result.get('description')}")
+    print("OK: Webhook removed." if result.get("ok") else f"FAILED: {result.get('description')}")
     return 0 if result.get("ok") else 1
 
 
