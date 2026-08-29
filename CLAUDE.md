@@ -62,6 +62,30 @@ Modern enterprise SaaS — Microsoft Intune + ServiceNow + Linear + Notion. Dark
 
 Specialist subagents live in `.claude/agents/`. Delegate domain work to the matching specialist: `architect`, `backend-dev`, `frontend-dev`, `windows-agent-dev`, `devops-engineer`, `qa-engineer`, `security-reviewer`. Run `security-reviewer` before merging anything touching auth, agent commands, or remediation execution.
 
+## Ponytail mode
+
+The `ponytail` plugin runs at **`full`**: reuse what is already here, stdlib before a
+dependency, no abstraction with one implementation, shortest diff that works.
+
+Its own "When NOT to be lazy" section already protects the things in this codebase that
+look removable and are not — trust-boundary validation, error handling that prevents data
+loss, security measures, anything explicitly requested. That covers, by name:
+
+- the publish gate and `assert_publishable` (one implementation, deliberately)
+- `approved_version_id` pointing at a version rather than a status column
+- the version check that the status check already refuses first — it is defence in depth,
+  and `approved_version_id` is the field that means "a human read THESE words"
+- `PublishedButNotRecorded` as its own type — a live post the database thinks is a draft
+  is the worst state this system reaches
+- the intake HMAC and the admin-token door
+
+If a simplification is proposed for any of those, the answer is no and the reason is in
+the file it lives in. Deliberate corners get a `ponytail:` comment naming the ceiling and
+the upgrade path.
+
+Nothing about this reaches production on its own. The route is unchanged: git push → CI
+(ruff + the full suite) → Cloud Run.
+
 ## Commands
 
 - Infra up: `docker compose -f infra/docker-compose.yml up -d`
