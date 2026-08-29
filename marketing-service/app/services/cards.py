@@ -169,7 +169,7 @@ def render(line: str, *, eyebrow: str | None = None,
 
     # ── The line ──────────────────────────────────────────────────────────────
     size = 68 if len(line) <= _SHORT_LINE else 52
-    for attempt in range(6):
+    for _attempt in range(6):
         line_font = _font(size, "Bold")
         lines = _wrap(draw, line.strip(), line_font, text_width)
         spacing = int(size * 1.28)
