@@ -1,0 +1,125 @@
+{
+  "name": "ASTRA 02 — CRM sweeper",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Every 30 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-160, 0],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 30 }]
+        }
+      },
+      "notes": "Thirty minutes, not five. This is a backstop, not the primary path — workflow 01 syncs a lead seconds after capture. A tighter interval would mostly wake a scaled-to-zero Cloud Run instance to be told there is nothing to do, which costs a cold start every time and finds nothing."
+    },
+    {
+      "id": "sweep",
+      "name": "Sync anything pending",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [60, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://astra-marketing-fmuizr4sda-as.a.run.app/api/v1/leads/sync-pending",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "limit", "value": "25" }]
+        },
+        "options": {
+          "timeout": 120000,
+          "response": { "response": { "neverError": true, "fullResponse": true } }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "ASTRA admin token"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Returns {pending, synced, failed}. A long timeout because 25 leads is up to 25 pairs of Bigin calls; the service caps the batch so this cannot run away."
+    },
+    {
+      "id": "if-worth-saying",
+      "name": "Anything worth reporting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [280, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2, "typeValidation": "loose" },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "c1",
+              "operator": { "type": "number", "operation": "gt" },
+              "leftValue": "={{ $json.body.failed }}",
+              "rightValue": 0
+            },
+            {
+              "id": "c2",
+              "operator": { "type": "number", "operation": "gt" },
+              "leftValue": "={{ $json.body.synced }}",
+              "rightValue": 0
+            },
+            {
+              "id": "c3",
+              "operator": { "type": "number", "operation": "gte" },
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 400
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Silence on a clean sweep is the point. This runs 48 times a day and finds nothing almost every time; a message each run would train the reader to ignore the channel, which is exactly when the one that matters arrives."
+    },
+    {
+      "id": "report",
+      "name": "Report the sweep",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [520, -100],
+      "parameters": {
+        "chatId": "1140193092",
+        "text": "={{ $json.statusCode >= 400 ? '⚠️ CRM sweeper could not run — HTTP ' + $json.statusCode : ($json.body.failed > 0 ? '⚠️' : '✅') + ' CRM sweep: ' + $json.body.synced + ' synced, ' + $json.body.failed + ' failed, ' + $json.body.pending + ' were pending' }}",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "ASTRA marketing bot"
+        }
+      }
+    },
+    {
+      "id": "quiet",
+      "name": "Nothing to do",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [520, 100],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every 30 minutes": { "main": [[{ "node": "Sync anything pending", "type": "main", "index": 0 }]] },
+    "Sync anything pending": { "main": [[{ "node": "Anything worth reporting?", "type": "main", "index": 0 }]] },
+    "Anything worth reporting?": {
+      "main": [
+        [{ "node": "Report the sweep", "type": "main", "index": 0 }],
+        [{ "node": "Nothing to do", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}

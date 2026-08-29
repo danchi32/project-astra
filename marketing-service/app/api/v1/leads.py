@@ -18,7 +18,6 @@ from app.core.security import SignatureError, verify
 from app.repositories.leads import LeadRepository
 from app.schemas.lead import LeadDetail, LeadIntake, LeadIntakeAccepted, LeadRead
 from app.services.bigin import BiginError
-from app.services.dispatch import LeadDispatcher
 from app.services.exceptions import NotConfiguredError, NotFoundError
 from app.services.leads import LeadService
 
@@ -94,17 +93,9 @@ async def intake(
     service = LeadService(session)
     captured = await service.capture(payload)
 
-    # Everything past this point is best-effort. The lead is committed; the visitor is
-    # owed a response, not a fully fanned-out pipeline.
-    await service.notify(captured.lead, captured.submission)
-
-    dispatcher = LeadDispatcher()
-    if dispatcher.enabled:
-        lead = await LeadRepository(session).get_with_submissions(captured.lead.id)
-        if await dispatcher.dispatch(lead or captured.lead, captured.submission):
-            await service.mark_dispatched(captured.submission)
-        else:
-            await service.mark_dispatch_failed(captured.submission)
+    # Everything past this point is best-effort and runs concurrently. The lead is
+    # committed; the visitor is owed a response, not a fully fanned-out pipeline.
+    await service.fan_out(captured.lead, captured.submission)
 
     return LeadIntakeAccepted(
         lead_id=captured.lead.id,

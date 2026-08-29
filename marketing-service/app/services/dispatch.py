@@ -80,6 +80,18 @@ class LeadDispatcher:
         timestamp = str(int(time.time()))
         headers = {"Content-Type": "application/json", "X-Astra-Timestamp": timestamp}
         if settings.n8n_webhook_secret:
+            # Two headers, because the receiver decides which it can check.
+            #
+            # `X-Astra-Webhook-Token` is a plain shared secret, and it is what n8n
+            # verifies: its built-in Header Auth does it natively, with no code. The Code
+            # node's crypto access is sandboxed on n8n Cloud, so an HMAC check there would
+            # be a dependency on undocumented sandbox behaviour — for a hop that is
+            # already server-to-server over TLS and not publicly reachable.
+            #
+            # The signature stays for consumers that want body integrity rather than just
+            # caller identity. It is the same scheme contact.php uses to reach us, where
+            # the endpoint IS public and replay protection genuinely matters.
+            headers["X-Astra-Webhook-Token"] = settings.n8n_webhook_secret
             headers["X-Astra-Signature"] = sign(settings.n8n_webhook_secret, timestamp, body)
 
         try:

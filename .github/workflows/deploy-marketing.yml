@@ -142,8 +142,16 @@ jobs:
           SECRETS=$SECRETS,ASTRA_MKT_BIGIN_CLIENT_SECRET=ASTRA_MKT_BIGIN_CLIENT_SECRET:latest
           SECRETS=$SECRETS,ASTRA_MKT_BIGIN_REFRESH_TOKEN=ASTRA_MKT_BIGIN_REFRESH_TOKEN:latest
           SECRETS=$SECRETS,ASTRA_MKT_SMTP_PASSWORD=ASTRA_MKT_SMTP_PASSWORD:latest
+          # The token n8n's Header Auth checks on the inbound webhook. The URL it guards
+          # is an env var below, not a secret — knowing the address buys nothing without
+          # this.
+          SECRETS=$SECRETS,ASTRA_MKT_N8N_WEBHOOK_SECRET=ASTRA_MKT_N8N_WEBHOOK_SECRET:latest
 
           ENVVARS=ASTRA_MKT_ENVIRONMENT=production
+          # Fixed path, set in n8n/01-lead-pipeline.json, so this URL is known before the
+          # workflow is imported. Unset, the dispatcher is inert and the service captures,
+          # scores, acknowledges and alerts exactly as it does with it.
+          ENVVARS=$ENVVARS,ASTRA_MKT_N8N_LEAD_WEBHOOK_URL=https://technomate.app.n8n.cloud/webhook/astra-lead
           ENVVARS=$ENVVARS,ASTRA_MKT_SMTP_HOST=smtp.hostinger.com
           ENVVARS=$ENVVARS,ASTRA_MKT_SMTP_PORT=465
           ENVVARS=$ENVVARS,ASTRA_MKT_SMTP_USER=sales@technomateai.com

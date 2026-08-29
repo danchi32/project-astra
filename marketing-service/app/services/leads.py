@@ -21,12 +21,18 @@ from app.models.lead import Lead, LeadStatus, LeadSubmission
 from app.repositories.leads import LeadRepository
 from app.schemas.lead import LeadIntake
 from app.services.bigin import BiginClient
+from app.services.dispatch import LeadDispatcher
 from app.services.email import EmailService
 from app.services.exceptions import NotConfiguredError, NotFoundError
 from app.services.scoring import LeadScorer, score_rules
 from app.services.telegram import TelegramNotifier
 
 logger = logging.getLogger("astra.mkt.leads")
+
+
+async def _false() -> bool:
+    """A coroutine that is already False, so the gather below stays one shape."""
+    return False
 
 
 class LeadCapture:
@@ -185,36 +191,54 @@ class LeadService:
         )
         return lead
 
-    async def notify(self, lead: Lead, submission: LeadSubmission) -> None:
-        """Acknowledge the prospect and alert the team, concurrently.
+    async def fan_out(self, lead: Lead, submission: LeadSubmission) -> None:
+        """Acknowledge the prospect, alert the team, and hand the lead to the automation.
 
-        Two separate promises, tracked separately: `acknowledged_at` is when the prospect
-        was answered, `notified_at` is when a human was told. Either can fail without the
-        other, and a null on a lead older than a minute is a broken pipeline worth
-        alerting on rather than a mystery.
+        All three at once. They are independent best-effort side effects with no ordering
+        between them, and running them in sequence cost the visitor the sum rather than
+        the maximum — measured, that was 4.2 s instead of 2.9 s, and a cold start on top
+        pushed intake past contact.php's 6 s timeout. Concurrent, the wall clock is
+        whichever is slowest (SMTP, at about two seconds).
 
-        Run inline rather than as a FastAPI background task on purpose. Cloud Run
-        throttles CPU outside the request by default, so work scheduled after the response
-        is starved and may never run — the visitor gets a fast form and no email. Run
-        together, these two cost a few hundred milliseconds, and neither can raise.
+        Three separate outcomes, tracked separately: `acknowledged_at` is when the
+        prospect was answered, `notified_at` is when a human was told, `dispatched_at` is
+        when the automation took it. Any one can fail without the others, and a null on a
+        lead older than a minute is a broken pipeline worth alerting on rather than a
+        mystery.
+
+        Inline rather than a FastAPI background task on purpose: Cloud Run throttles CPU
+        outside the request by default, so work scheduled after the response is starved
+        and may never run — the visitor would get a fast form and no email. Nothing here
+        can raise.
         """
+        dispatcher = LeadDispatcher()
+        # The dispatch payload needs the lead's submissions, and loading them inside the
+        # gather would serialise a database round trip against the network calls.
+        stored = await self.repo.get_with_submissions(lead.id) if dispatcher.enabled else None
+
         results = await asyncio.gather(
             EmailService().send_acknowledgement(lead),
             TelegramNotifier().send_lead_alert(lead, submission),
+            dispatcher.dispatch(stored or lead, submission) if dispatcher.enabled
+            else _false(),
             return_exceptions=True,
         )
-        acknowledged, notified = (r is True for r in results)
+        acknowledged, notified, dispatched = (r is True for r in results)
 
         now = datetime.now(timezone.utc)
         if acknowledged:
             lead.acknowledged_at = now
         if notified:
             lead.notified_at = now
-        if acknowledged or notified:
-            await self.session.commit()
+        if dispatcher.enabled:
+            submission.dispatch_attempts += 1
+            if dispatched:
+                submission.dispatched_at = now
+        # One commit for all three, rather than one per outcome.
+        await self.session.commit()
 
-        logger.info("lead %s notified: acknowledged=%s alerted=%s",
-                    lead.id, acknowledged, notified)
+        logger.info("lead %s fanned out: acknowledged=%s alerted=%s dispatched=%s",
+                    lead.id, acknowledged, notified, dispatched)
 
     async def sync_to_crm(self, lead_id: uuid.UUID) -> Lead:
         """Push the lead to Bigin as a Contact plus a Pipeline record.

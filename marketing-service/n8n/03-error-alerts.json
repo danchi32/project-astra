@@ -1,0 +1,42 @@
+{
+  "name": "ASTRA 03 — Error alerts",
+  "nodes": [
+    {
+      "id": "error-trigger",
+      "name": "Any workflow failed",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [-160, 0],
+      "parameters": {},
+      "notes": "Fires for every workflow that names this one as its error workflow (Settings → Error Workflow, per workflow). Without it a failed execution is a red row in a list nobody opens — and an automation that fails silently is worse than one that was never built, because it is trusted."
+    },
+    {
+      "id": "alert",
+      "name": "Tell the team",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [80, 0],
+      "parameters": {
+        "chatId": "1140193092",
+        "text": "=🔴 n8n workflow failed\n\nWorkflow: {{ $json.workflow.name }}\nNode: {{ $json.execution.lastNodeExecuted }}\nWhen: {{ $json.execution.startedAt }}\n\n{{ $json.execution.error.message }}\n\n{{ $json.execution.url }}",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "ASTRA marketing bot"
+        }
+      },
+      "notes": "Names the workflow, the node and the actual error, and links to the execution. A bare 'something failed' costs the same to send and is worth nothing at 2am."
+    }
+  ],
+  "connections": {
+    "Any workflow failed": { "main": [[{ "node": "Tell the team", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {}
+}

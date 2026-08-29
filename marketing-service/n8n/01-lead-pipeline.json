@@ -1,0 +1,174 @@
+{
+  "name": "ASTRA 01 — Lead pipeline",
+  "nodes": [
+    {
+      "id": "webhook-lead",
+      "name": "Lead dispatched",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-160, 0],
+      "webhookId": "astra-lead",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "astra-lead",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "ASTRA webhook token"
+        }
+      },
+      "notes": "Fired by the marketing service after a lead is committed. Header Auth checks X-Astra-Webhook-Token; responseMode onReceived answers immediately, because the service does not wait for this workflow and a slow run must never look like a failed dispatch."
+    },
+    {
+      "id": "set-lead",
+      "name": "Lead fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [60, 0],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "lead_id", "type": "string", "value": "={{ $json.body.lead_id }}" },
+            { "id": "a2", "name": "email", "type": "string", "value": "={{ $json.body.email }}" },
+            { "id": "a3", "name": "tier", "type": "string", "value": "={{ $json.body.tier }}" },
+            { "id": "a4", "name": "score", "type": "number", "value": "={{ $json.body.score }}" },
+            { "id": "a5", "name": "company", "type": "string", "value": "={{ $json.body.company || '' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Flattens the webhook body so every later node reads $json.lead_id rather than $json.body.lead_id — the single most common source of silent nulls in a workflow like this."
+    },
+    {
+      "id": "rescore",
+      "name": "Rescore with the model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://astra-marketing-fmuizr4sda-as.a.run.app/api/v1/leads/{{ $json.lead_id }}/rescore",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "response": { "response": { "neverError": true, "fullResponse": true } }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "ASTRA admin token"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "The Haiku pass, deliberately out of the visitor's request path. Idempotent: with no API key configured it returns the same rules score capture already stored, so a retry is always safe. neverError + continueRegularOutput so a scoring hiccup cannot stop the CRM sync — a lead in the CRM with a stale score beats a lead that never arrives."
+    },
+    {
+      "id": "sync-crm",
+      "name": "Sync to Bigin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://astra-marketing-fmuizr4sda-as.a.run.app/api/v1/leads/{{ $('Lead fields').item.json.lead_id }}/sync-crm",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 45000,
+          "response": { "response": { "neverError": true, "fullResponse": true } }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "ASTRA admin token"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Creates the Bigin Contact and Pipeline record. Guarded server-side on crm_record_id, so a retry cannot produce a second deal. Reads lead_id from the 'Lead fields' node rather than from the previous node's response, which is the rescore payload."
+    },
+    {
+      "id": "if-failed",
+      "name": "Did anything fail?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [720, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2, "typeValidation": "loose" },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "c1",
+              "operator": { "type": "number", "operation": "gte" },
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 400
+            },
+            {
+              "id": "c2",
+              "operator": { "type": "number", "operation": "gte" },
+              "leftValue": "={{ $('Rescore with the model').item.json.statusCode }}",
+              "rightValue": 400
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Both calls are set to neverError so the run reaches here either way. This is where a failure becomes visible — otherwise a 502 from Bigin would leave a green execution and a lead that never reached the CRM."
+    },
+    {
+      "id": "alert-failure",
+      "name": "Tell the team",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [960, -100],
+      "parameters": {
+        "chatId": "1140193092",
+        "text": "=⚠️ Lead pipeline failed\n\nLead: {{ $('Lead fields').item.json.email }}\nCompany: {{ $('Lead fields').item.json.company }}\nTier: {{ $('Lead fields').item.json.tier }} ({{ $('Lead fields').item.json.score }}/100)\n\nrescore  → HTTP {{ $('Rescore with the model').item.json.statusCode }}\nsync-crm → HTTP {{ $('Sync to Bigin').item.json.statusCode }}\n\nThe lead IS stored and the prospect WAS acknowledged — only the follow-on steps failed. `POST /api/v1/leads/sync-pending` retries it.",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "ASTRA marketing bot"
+        }
+      },
+      "notes": "Says explicitly what did NOT fail. A bare 'pipeline failed' at 2am reads as lost lead; the truth is that capture, the acknowledgement email and the alert all succeeded before this workflow ran at all."
+    },
+    {
+      "id": "noop-ok",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [960, 100],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Lead dispatched": { "main": [[{ "node": "Lead fields", "type": "main", "index": 0 }]] },
+    "Lead fields": { "main": [[{ "node": "Rescore with the model", "type": "main", "index": 0 }]] },
+    "Rescore with the model": { "main": [[{ "node": "Sync to Bigin", "type": "main", "index": 0 }]] },
+    "Sync to Bigin": { "main": [[{ "node": "Did anything fail?", "type": "main", "index": 0 }]] },
+    "Did anything fail?": {
+      "main": [
+        [{ "node": "Tell the team", "type": "main", "index": 0 }],
+        [{ "node": "Done", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
+  },
+  "pinData": {}
+}
