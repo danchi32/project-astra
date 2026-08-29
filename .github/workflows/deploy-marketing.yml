@@ -151,6 +151,10 @@ jobs:
           # is an env var below, not a secret — knowing the address buys nothing without
           # this.
           SECRETS=$SECRETS,ASTRA_MKT_N8N_WEBHOOK_SECRET=ASTRA_MKT_N8N_WEBHOOK_SECRET:latest
+          # Deliberately its own key, not the product's ASTRA_ANTHROPIC_API_KEY. Rate
+          # limits are org-level so that is not the reason — revocation is. A marketing
+          # compromise should not force the product's AI offline to contain it.
+          SECRETS=$SECRETS,ASTRA_MKT_ANTHROPIC_API_KEY=ASTRA_MKT_ANTHROPIC_API_KEY:latest
 
           ENVVARS=ASTRA_MKT_ENVIRONMENT=production
           # Fixed path, set in n8n/01-lead-pipeline.json, so this URL is known before the
