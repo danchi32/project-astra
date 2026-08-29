@@ -162,9 +162,16 @@ jobs:
           ENVVARS=$ENVVARS,ASTRA_MKT_BIGIN_API_DOMAIN=https://www.zohoapis.in
           ENVVARS=$ENVVARS,ASTRA_MKT_BIGIN_ACCOUNTS_DOMAIN=https://accounts.zoho.in
 
-          # EMAIL_FROM holds a comma-free display name on purpose: `--set-env-vars` splits
-          # on commas, so "ASTRA <sales@...>" is safe but "Technomate, ASTRA" would not be.
-          ENVVARS=$ENVVARS,ASTRA_MKT_EMAIL_FROM=ASTRA <sales@technomateai.com>
+          # QUOTED, and both halves of that matter.
+          #
+          # `<` and `>` are shell redirection operators, so the unquoted form is a syntax
+          # error before gcloud is ever reached — which is exactly how this step failed
+          # the first time it ran in CI, having worked by hand from PowerShell.
+          #
+          # The display name must also stay comma-free: `--set-env-vars` splits on commas,
+          # so "ASTRA <sales@…>" is fine but "Technomate, ASTRA" would silently become two
+          # broken variables.
+          ENVVARS="$ENVVARS,ASTRA_MKT_EMAIL_FROM=ASTRA <sales@technomateai.com>"
 
           # min-instances 0: this service handles a handful of requests a day, and an
           # always-warm instance would cost more per month than every other line in the
