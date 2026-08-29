@@ -1,0 +1,158 @@
+# How ASTRA sounds.
+#
+# `claims.yaml` decides what is true. This decides how it is said. They are separate
+# because they fail separately: a true sentence in the wrong voice is a bad ad, and a
+# beautiful sentence about certificate enrollment is a lie.
+#
+# Drawn from marketing/strategy/positioning.md and the eight LinkedIn posts already
+# written in marketing/content/linkedin-posts.md — this is a description of a voice that
+# exists, not an invention. When the two disagree, the drafts are right; they were written
+# by a person for a real audience.
+
+meta:
+  sources:
+    - marketing/strategy/positioning.md
+    - marketing/content/linkedin-posts.md
+    - docs/GO_TO_MARKET.md
+  verified_on: 2026-08-29
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Who is reading
+# ─────────────────────────────────────────────────────────────────────────────
+reader:
+  is: >-
+    An IT manager, Head of IT, or MSP service-delivery lead who owns a fleet of 50-500
+    Windows endpoints and is short of people, not of tools.
+  is_not: >-
+    A startup founder, a developer, a CIO at a 10,000-seat enterprise, or anyone shopping
+    for "AI" in the abstract.
+  knows_already: >-
+    What endpoint management is, what patching costs them, and that every vendor on the
+    page claims AI. Explaining those insults them.
+  is_afraid_of: >-
+    Software with system privileges doing something irreversible on 400 machines at once,
+    and having no way to explain to their own boss how it happened.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Voice
+# ─────────────────────────────────────────────────────────────────────────────
+voice:
+  register: >-
+    A competent engineer explaining their own system to a peer. Specific, unhurried, and
+    willing to say what the product does not do.
+
+  rules:
+    - Lead with the mechanism, not the outcome. "It collects the event log, the installed
+      apps and the update state before proposing anything" beats "it saves you time".
+    - Name the thing. `restart_explorer`, `flush_dns`, SID-matched account disable. Vague
+      capability language reads as a product that has none.
+    - Say what it will not do, in the same breath as what it will. The audience's first
+      question about an automation product is what stops it.
+    - One idea per post. A post that lists six capabilities is remembered as none.
+    - Short sentences carry weight. Long ones carry qualifications.
+    - Write "ASTRA", never "our platform", never "the solution".
+
+  avoid:
+    - Superlatives — revolutionary, game-changing, cutting-edge, best-in-class, seamless.
+    - Empty verbs, meaning leverage, utilise, empower, unlock, supercharge and
+      transform.
+    - Exclamation marks, rhetorical questions as openers, and any sentence that
+      begins by asking the reader to imagine something.
+    - Emoji in body copy. One at the start of a LinkedIn post is the ceiling, and it is
+      usually better without.
+    - Em-dash-heavy sentences that stack three clauses; this audience skims.
+    - Any sentence that would read identically for a competitor's product.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Approved language, verbatim from positioning.md
+# ─────────────────────────────────────────────────────────────────────────────
+approved_phrases:
+  - Evidence before action
+  - Human-controlled automation
+  - Governed self-healing
+  - AI system administrator for Windows endpoints
+  - Audit trail for every action
+  - Endpoint Automation Assessment
+
+banned_phrases:
+  # Not merely off-voice — each of these makes a claim the product cannot support.
+  # The claim checker blocks them; they are repeated here so a draft never reaches it.
+  - fully autonomous
+  - zero-touch
+  - set and forget
+  - hands-free IT
+  - self-driving IT
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Calls to action
+# ─────────────────────────────────────────────────────────────────────────────
+cta:
+  primary: Book an Endpoint Automation Assessment
+  # One offer per campaign. Two CTAs in one post is a post with none — the GTM plan is
+  # explicit that everything points at the assessment.
+  alternates:
+    - See it on your own fleet
+    - Talk to us about your Windows fleet
+  destination: https://technomateai.com/contact/
+  booking: https://cal.com/astraai/30min
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-channel shape
+# ─────────────────────────────────────────────────────────────────────────────
+channels:
+  linkedin:
+    length: 120-200 words
+    hook: >-
+      The first line is the whole post on a phone. Make it a statement about the reader's
+      day, not about ASTRA.
+    hashtags:
+      count: 3-5
+      placement: at the end, never inline
+      set:
+        - "#WindowsEndpointManagement"
+        - "#ITOperations"
+        - "#EndpointSecurity"
+        - "#ITAutomation"
+        - "#MSP"
+    link_placement: >-
+      LinkedIn suppresses reach on posts carrying an outbound link in the body. Awareness
+      posts put the tracked link in the first comment; conversion posts keep it in the
+      body, because attribution matters more there than raw reach.
+
+  x:
+    length: under 260 characters
+    note: >-
+      A post containing a link costs $0.20 through the API against $0.015 without one.
+      Thread the link as a reply unless the post exists to drive a click.
+
+  blog:
+    length: 1200-1600 words
+    shape: >-
+      Decision-stage, not awareness. The reader is comparing tools, not learning what
+      endpoint management is. Open with the problem in their words, give the mechanism,
+      and end with what to check on their own fleet.
+    cadence: >-
+      One a week, maximum. Google's scaled-content-abuse policy penalises volume without
+      substance, and four excellent articles beat forty generated ones for this audience.
+
+  email:
+    length: under 150 words
+    note: >-
+      Reference something specific about their business or do not send it. A merge field
+      is not personalisation.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Visual
+# ─────────────────────────────────────────────────────────────────────────────
+visual:
+  brand_purple: "#b246d4"
+  brand_purple_dark: "#9a2fbb"
+  typeface: Inter
+  rule: >-
+    No AI-generated lettering, ever. Plates are generated without text and typeset by
+    marketing/creative/compose.py, which sets the logo, headline, sub and CTA inside a 10%
+    safe margin. A model that misspells one word in a headline has ruined the asset, and
+    it will not tell you it did.
+  interface_shots: >-
+    Only the portal sections that exist (see claims.yaml portal_sections). No customer
+    data, no invented dashboard readings, no metric that has not been measured.

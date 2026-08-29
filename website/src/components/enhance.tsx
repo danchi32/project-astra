@@ -103,6 +103,24 @@ export function Counter({
     return () => controls.stop();
   }, [inView, value, decimals]);
 
+  // If the observer never fires, show the number anyway.
+  //
+  // These counters now carry live platform figures, so the resting state of this
+  // component is a factual claim: without this, an IntersectionObserver that does not
+  // fire leaves "0 Organizations onboarded" on the homepage. That happens in more places
+  // than it sounds — automation and preview browsers, some privacy modes, anything that
+  // renders the node without a real viewport.
+  //
+  // The count-up is decoration. The number is not, and it must not depend on decoration
+  // working. Two seconds is past the 1.6s animation, so a normal visitor never sees this
+  // path; anyone whose observer is asleep gets the truth instead of a zero.
+  useEffect(() => {
+    const settle = setTimeout(() => {
+      setDisplay((current) => (current === "0" && value !== 0 ? value.toFixed(decimals) : current));
+    }, 2000);
+    return () => clearTimeout(settle);
+  }, [value, decimals]);
+
   return (
     <span ref={ref} className={className}>
       {prefix}

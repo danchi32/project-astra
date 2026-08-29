@@ -77,6 +77,9 @@ class CheckResult:
         return not self.blockers
 
 
+BRAND_DIR = CLAIMS_PATH.parent
+
+
 @functools.lru_cache(maxsize=1)
 def load_claims() -> dict:
     """Parse claims.yaml once per process.
@@ -85,6 +88,20 @@ def load_claims() -> dict:
     file in the image, edited by humans and shipped by a deploy.
     """
     return yaml.safe_load(CLAIMS_PATH.read_text(encoding="utf-8"))
+
+
+@functools.lru_cache(maxsize=1)
+def load_voice() -> dict:
+    """How ASTRA sounds. Separate from claims because the two fail separately: a true
+    sentence in the wrong voice is a bad ad, and a beautiful sentence about certificate
+    enrollment is a lie."""
+    return yaml.safe_load((BRAND_DIR / "voice.yaml").read_text(encoding="utf-8"))
+
+
+@functools.lru_cache(maxsize=1)
+def load_icp() -> dict:
+    """Who it is for. The same four clauses drive the lead scorer."""
+    return yaml.safe_load((BRAND_DIR / "icp.yaml").read_text(encoding="utf-8"))
 
 
 @functools.lru_cache(maxsize=1)
@@ -191,5 +208,38 @@ def brand_bible_prompt() -> str:
         "If a sentence needs a number to work, the sentence is wrong. Describe the "
         "mechanism instead: what ASTRA gathers, what it proposes, who approves it, and "
         "what it records.",
+    ]
+
+    # ── Who is reading ─────────────────────────────────────────────────────────
+    icp = load_icp()
+    lines += [
+        "",
+        "WHO IS READING:",
+        f"  {' '.join(load_voice()['reader']['is'].split())}",
+        f"  Not: {' '.join(load_voice()['reader']['is_not'].split())}",
+        f"  They already know: {' '.join(load_voice()['reader']['knows_already'].split())}",
+        f"  They are afraid of: {' '.join(load_voice()['reader']['is_afraid_of'].split())}",
+        "",
+        "THEIR PROBLEMS, in their words — answer one of these or the copy is a brochure:",
+    ]
+    lines += [f"  - {pain}" for pain in icp["pains"]]
+
+    # ── Voice ──────────────────────────────────────────────────────────────────
+    voice = load_voice()
+    lines += [
+        "",
+        "HOW TO WRITE:",
+        f"  {' '.join(voice['voice']['register'].split())}",
+    ]
+    lines += [f"  - {' '.join(rule.split())}" for rule in voice["voice"]["rules"]]
+    lines += ["", "NEVER WRITE:"]
+    lines += [f"  - {item}" for item in voice["voice"]["avoid"]]
+    lines += [
+        "",
+        "Use this language, which is approved: " + "; ".join(voice["approved_phrases"]),
+        "Never use these, each of which claims something untrue: "
+        + ", ".join(voice["banned_phrases"]),
+        "",
+        f"One call to action, and it is: {voice['cta']['primary']}",
     ]
     return "\n".join(lines)

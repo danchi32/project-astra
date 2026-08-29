@@ -1,0 +1,80 @@
+# Who ASTRA is for, and who it is not for.
+#
+# Lifted from docs/GO_TO_MARKET.md rather than invented. The same four clauses drive the
+# lead scorer in app/services/scoring.py — if this file and that rubric ever disagree,
+# one of them is quietly ranking leads by a standard nobody agreed to.
+#
+# The exclusions matter as much as the segments. The GTM plan says it plainly: honest fit
+# increases close rate and protects trust. A product that runs commands on other people's
+# machines cannot afford a customer who bought it for something it does not do.
+
+meta:
+  source: docs/GO_TO_MARKET.md
+  also_implemented_in: marketing-service/app/services/scoring.py
+  verified_on: 2026-08-29
+
+segments:
+  - id: ncr_midmarket
+    who: Delhi NCR firms running 50-500 Windows endpoints
+    buyer: IT manager, Head of IT, COO
+    trigger: >-
+      Ticket backlog, a lean IT team, poor asset visibility, or pressure from patching and
+      audits.
+    offer: 30-minute Endpoint Automation Assessment
+    priority: primary
+
+  - id: msp
+    who: Managed service providers
+    buyer: Owner, service-delivery lead
+    trigger: Technicians repeating the same diagnostics across every client fleet.
+    offer: ASTRA partner pilot
+    priority: primary
+
+  - id: multi_site
+    who: Multi-site professional services, education, and light manufacturing
+    buyer: IT lead, operations leader
+    trigger: Distributed endpoints and the cost of sending someone on site.
+    offer: 30-day controlled pilot
+    priority: secondary
+
+# The qualification bar, verbatim in effect from the GTM doc. A lead meets it with a work
+# email, 50+ Windows endpoints or clear MSP fit, a relevant pain, and a buyer or champion.
+qualifies_when:
+  - Work email on a company domain
+  - 50 or more Windows endpoints, or a clear MSP fit
+  - A stated, relevant operational pain
+  - The writer owns or influences the decision
+
+# Not "low priority" — actively out of scope. Selling into one of these is a refund and a
+# bad reference, not a customer.
+exclude:
+  - Fleets that are not Windows. There is no macOS or Linux agent, at any tier.
+  - Buyers who need a compliance certification we do not hold. None are held.
+  - Anyone asking for fully autonomous high-risk remediation. The tiers are the product.
+  - Individuals and firms below roughly 20 endpoints — the economics do not work for
+    either side, and the scorer caps them for the same reason.
+
+# What the reader is actually weighing, in their words. Copy that answers one of these is
+# doing its job; copy that answers none of them is a brochure.
+pains:
+  - Most of the day goes into collecting context, not fixing things.
+  - No reliable picture of what is installed, patched, or missing across the fleet.
+  - Repetitive work that a person has to do because nothing is trusted to do it.
+  - An audit or a patching deadline with no evidence trail to show for it.
+  - Offboarding that depends on someone remembering to disable an account.
+
+objections:
+  - objection: What stops it doing something destructive?
+    answer: >-
+      Three tiers enforced server-side, an allowlist the agent will not deviate from, and
+      an organisation setting that can force even automatic actions to wait for a human.
+  - objection: We already have an RMM.
+    answer: >-
+      The comparison pages are the honest version of this conversation. ASTRA is not a
+      broader RMM; it is the diagnosis-and-remediation layer, and it says so.
+  - objection: How do I explain an automated change to my own management?
+    answer: >-
+      Every mutation and every agent command is recorded with actor, action and target.
+  - objection: We are too small for this.
+    answer: >-
+      Below about 20 endpoints, they probably are. Say so — see `exclude`.
