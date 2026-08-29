@@ -26,7 +26,8 @@ async def test_stats_are_public(client):
     assert response.status_code == 200
     body = response.json()
     assert set(body) == {
-        "organizations", "devices", "devices_online", "remediations", "generated_at",
+        "organizations", "devices", "devices_online", "remediations",
+        "remediation_actions", "generated_at",
     }
 
 
@@ -110,3 +111,13 @@ async def test_the_answer_is_cached(client, monkeypatch):
     await client.get("/api/v1/public/stats")
 
     assert calls["n"] == 1, f"queried the database {calls['n']} times for three requests"
+
+
+async def test_the_action_count_comes_from_the_registry(client):
+    """Not a constant. The About page said 23 for as long as it took the registry to
+    reach 29, and nobody noticed — a number typed into a page is stale the moment the
+    thing it describes changes."""
+    from app.services.remediation.actions import _ACTIONS
+
+    body = (await client.get("/api/v1/public/stats")).json()
+    assert body["remediation_actions"] == len(_ACTIONS)

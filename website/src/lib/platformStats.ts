@@ -24,6 +24,7 @@ export type PlatformStats = {
   devices: number;
   devices_online: number;
   remediations: number;
+  remediation_actions: number;
   generated_at: string;
 };
 
@@ -64,15 +65,23 @@ export function usePlatformStats(): StatsState {
 /**
  * The stat cards, built from live counts.
  *
- * `devices_online` is labelled as devices reporting in, never as uptime or availability:
- * it is a liveness reading at one moment, and calling it uptime would turn a true number
- * into exactly the sort of unearned claim these replaced.
+ * Three cumulative figures and one product fact. All four come from the platform, so none
+ * of them is maintained by hand and none can go stale.
+ *
+ * `devices_online` is deliberately NOT among them, even though the endpoint returns it.
+ * The other three only ever go up and describe what has happened; a liveness reading
+ * swings with the clock and the calendar. It read 0 the Saturday this was written — 34
+ * devices enrolled, offices closed — and would have read about 34 the following Tuesday.
+ * Nothing about the product would have changed. On a page strangers read at all hours,
+ * that number reports on whether offices are open, and the failure is asymmetric: nobody
+ * remembers the 34, everybody remembers the 0. It belongs in the fleet dashboard, where a
+ * live reading is the point and the viewer knows what they are looking at.
  */
 export function statCards(stats: PlatformStats) {
   return [
     { value: stats.organizations, suffix: "", label: "Organizations onboarded" },
     { value: stats.devices, suffix: "", label: "Devices under management" },
     { value: stats.remediations, suffix: "", label: "Issues auto-healed" },
-    { value: stats.devices_online, suffix: "", label: "Devices reporting in" },
+    { value: stats.remediation_actions, suffix: "", label: "Remediation actions" },
   ];
 }

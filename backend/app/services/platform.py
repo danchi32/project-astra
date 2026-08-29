@@ -31,6 +31,7 @@ from app.repositories.organizations import OrganizationRepository
 from app.repositories.users import UserRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.schemas.public_stats import PublicStats
+from app.services.remediation.actions import _ACTIONS as REMEDIATION_ACTIONS
 from app.schemas.platform import (
     ActionStat,
     MonthCount,
@@ -265,6 +266,9 @@ class PlatformService:
             devices=devices,
             devices_online=devices_online,
             remediations=remediations,
+            # From the registry, not a constant. A count typed into a page is stale the
+            # first time the registry changes and nobody notices for weeks.
+            remediation_actions=len(REMEDIATION_ACTIONS),
             generated_at=now,
         )
 

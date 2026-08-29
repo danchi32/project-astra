@@ -21,6 +21,11 @@ class PublicStats(BaseModel):
     remediations: int = Field(
         description="Remediation tasks that have completed successfully, all time."
     )
+    remediation_actions: int = Field(
+        description="Actions in the shipped registry. Read from the registry itself, so "
+                    "the site can state it without anyone maintaining a number — the "
+                    "About page said 23 for as long as it took the registry to reach 29."
+    )
     #: So the site can say how fresh the numbers are, and so a stale cache is visible
     #: rather than silently wrong.
     generated_at: datetime
