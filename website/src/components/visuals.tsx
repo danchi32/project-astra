@@ -102,7 +102,11 @@ export function DashboardMockup() {
         {[
           { label: "Devices online", value: "248", sub: "/ 256", accent: "text-emerald-500" },
           { label: "Issues auto-healed", value: "1,204", sub: "this month", accent: "text-brand-500" },
-          { label: "Avg. resolve time", value: "38s", sub: "−72% vs manual", accent: "text-violet-500" },
+          // Sample data in a product mockup is ordinary and honest. "−72% vs manual" was
+          // not sample data — it was a comparative benchmark nobody has measured, placed
+          // inside an illustration where it reads as a product reading. The figures that
+          // remain are plainly a demo of the interface; that sub-label was a claim.
+          { label: "Avg. resolve time", value: "38s", sub: "last 24h", accent: "text-violet-500" },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-token bg-surface-2 p-3">
             <div className="text-xs text-muted-token">{s.label}</div>

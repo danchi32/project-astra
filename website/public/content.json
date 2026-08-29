@@ -44,29 +44,6 @@
       "Helpdesk Escalation",
       "Self-Learning KB"
     ],
-    "stats": [
-      {
-        "value": 1204,
-        "suffix": "+",
-        "label": "Issues auto-healed / mo"
-      },
-      {
-        "value": 38,
-        "suffix": "s",
-        "label": "Avg. resolution time"
-      },
-      {
-        "value": 72,
-        "suffix": "%",
-        "label": "Less manual triage"
-      },
-      {
-        "value": 99.9,
-        "decimals": 1,
-        "suffix": "%",
-        "label": "Fleet visibility"
-      }
-    ],
     "pillarsHead": {
       "eyebrow": "What we do",
       "title": "One partner for your entire IT stack",
@@ -126,7 +103,7 @@
     "subtitle": "Technomate IT-Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **ASTRA**.",
     "stats": [
       {
-        "value": "23",
+        "value": "29",
         "label": "Automated remediation actions"
       },
       {

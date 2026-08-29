@@ -13,6 +13,7 @@ rather than inheriting them:
     costs a model call, and the caller is a stranger.
 """
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,8 +23,10 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.rate_limit import FixedWindowLimiter, RateLimitExceeded, apply_limit
 from app.schemas.assistant import AssistantAsk, AssistantReply, AssistantSource
+from app.schemas.public_stats import PublicStats
 from app.services.ai.intent import is_off_topic
 from app.services.ai.support_bot import SupportBot
+from app.services.platform import PlatformService
 
 logger = logging.getLogger("astra.public")
 
@@ -89,3 +92,54 @@ async def ask_public_assistant(
         sources=[AssistantSource.model_validate(s) for s in reply.sources],
         grounded=reply.grounded,
     )
+
+
+#: Counts change slowly and every homepage visit asks for them, so the answer is held in
+#: memory for a few minutes. Per-instance, which is fine: with N instances the database
+#: sees at most N queries per window, and there is no Redis in this backend to share a
+#: cache through. A stale count is a smaller problem than a database query per pageview.
+_STATS_TTL_SECONDS = 300
+_stats_cache: dict[str, object] = {"at": 0.0, "value": None}
+
+#: Looser than the assistant's limit — this costs one cheap aggregate query, not a model
+#: call — but present, because an uncached miss still reaches the database.
+_stats_limiter = FixedWindowLimiter(limit=60, window_seconds=60)
+
+
+@router.get(
+    "/stats",
+    response_model=PublicStats,
+    summary="Aggregate platform counts for the marketing site (no account required)",
+)
+async def public_stats(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> PublicStats:
+    """Counts of customer organisations, devices and completed remediations.
+
+    Serves the homepage figures. Everything here is an aggregate over customer
+    organisations with the operator's own workspace excluded — no names, no per-customer
+    breakdown, nothing that could identify who they are.
+
+    The website reads this at runtime, so the numbers on the page are whatever the
+    platform actually holds. That is the entire point: they replace four figures that
+    were invented before there was anything real to put there, and they cannot drift,
+    because nobody maintains them.
+    """
+    try:
+        apply_limit(_stats_limiter, client_ip(request), enforce=True, label="ip")
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests.",
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+
+    cached = _stats_cache.get("value")
+    if cached is not None and time.monotonic() - float(_stats_cache["at"]) < _STATS_TTL_SECONDS:
+        return cached  # type: ignore[return-value]
+
+    stats = await PlatformService(session).public_stats()
+    _stats_cache["value"] = stats
+    _stats_cache["at"] = time.monotonic()
+    return stats

@@ -23,6 +23,7 @@ import { TiltCard, Counter, Magnetic, Marquee } from "@/components/enhance";
 import { Hero3D } from "@/components/three/Hero3D";
 import { useContent, Rich } from "@/lib/content";
 import { site } from "@/lib/site";
+import { statCards, usePlatformStats } from "@/lib/platformStats";
 
 const pillarIcons = [Server, Laptop, Sparkles];
 const pillarDefaults = [
@@ -55,19 +56,11 @@ const capDefaults = [
   "Self-Learning KB",
 ];
 
-type Stat = { value: number; suffix?: string; decimals?: number; label: string };
-const statDefaults: Stat[] = [
-  { value: 1204, suffix: "+", label: "Issues auto-healed / mo" },
-  { value: 38, suffix: "s", label: "Avg. resolution time" },
-  { value: 72, suffix: "%", label: "Less manual triage" },
-  { value: 99.9, decimals: 1, suffix: "%", label: "Fleet visibility" },
-];
-
 export function HomeContent() {
+  const statsState = usePlatformStats();
   const { c, list } = useContent();
   const pillars = list("home.pillars", pillarDefaults);
   const marquee = list<string>("home.marquee", capDefaults);
-  const stats = list<Stat>("home.stats", statDefaults);
   const heroChecks = list<string>("home.hero.checks", [
     "No manual triage",
     "Human-in-the-loop",
@@ -176,29 +169,37 @@ export function HomeContent() {
         </Container>
       </section>
 
-      {/* --------------------------------------------------------- STATS */}
-      <Section className="py-14">
-        <Container>
-          <Reveal>
-            <div className="grid grid-cols-2 gap-4 rounded-3xl border border-token bg-surface p-8 sm:grid-cols-4">
-              {stats.map((s) => (
-                <div key={s.label} className="text-center">
-                  <div className="text-3xl font-extrabold gradient-text sm:text-4xl">
-                    <Counter
-                      value={s.value}
-                      suffix={s.suffix ?? ""}
-                      decimals={s.decimals ?? 0}
-                    />
+      {/* --------------------------------------------------------- STATS
+        *
+        * Read live from the platform. These four were hand-written until 2026-08-29 —
+        * 1,204+ issues auto-healed, 38s average resolution, 72% less manual triage,
+        * 99.9% fleet visibility — and not one had ever been measured. A number nobody
+        * maintains is false from the day it is typed; these are whatever the platform
+        * actually holds, and they change on their own as organizations are onboarded.
+        *
+        * The block renders nothing at all until the counts arrive, and nothing if they
+        * never do. Zeros would be a claim; an absence is not.
+        */}
+      {statsState.status === "ready" && (
+        <Section className="py-14">
+          <Container>
+            <Reveal>
+              <div className="grid grid-cols-2 gap-4 rounded-3xl border border-token bg-surface p-8 sm:grid-cols-4">
+                {statCards(statsState.stats).map((s) => (
+                  <div key={s.label} className="text-center">
+                    <div className="text-3xl font-extrabold gradient-text sm:text-4xl">
+                      <Counter value={s.value} suffix={s.suffix} decimals={0} />
+                    </div>
+                    <div className="mt-1.5 text-xs text-muted-token sm:text-sm">
+                      {s.label}
+                    </div>
                   </div>
-                  <div className="mt-1.5 text-xs text-muted-token sm:text-sm">
-                    {s.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </Container>
-      </Section>
+                ))}
+              </div>
+            </Reveal>
+          </Container>
+        </Section>
+      )}
 
       {/* -------------------------------------------------------- PILLARS */}
       <Section className="pt-6">

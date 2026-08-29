@@ -30,6 +30,7 @@ from app.models.base import as_utc, utcnow
 from app.repositories.organizations import OrganizationRepository
 from app.repositories.users import UserRepository
 from app.schemas.devices import ONLINE_THRESHOLD
+from app.schemas.public_stats import PublicStats
 from app.schemas.platform import (
     ActionStat,
     MonthCount,
@@ -221,6 +222,51 @@ class PlatformService:
             read.device_count = device_counts.get(org.id, 0)
             result.append(read)
         return result
+
+    async def public_stats(self) -> PublicStats:
+        """Aggregate counts for the public marketing site.
+
+        Lives here because this class owns `_platform_org_ids`, the rule that separates
+        customers from the operator's own workspace. Getting that wrong would put our own
+        test organisation on the homepage as a customer.
+
+        Deliberately narrower than `overview()`: counts only, and only the four a visitor
+        could sensibly be shown. No revenue, no trial expiry, no per-status breakdown —
+        this response is served to anyone who asks, so it carries the minimum that makes
+        the homepage true rather than everything that happens to be countable.
+        """
+        now = utcnow()
+        platform_ids = await self._platform_org_ids()
+        org_excl = [Organization.id.notin_(platform_ids)] if platform_ids else []
+        dev_excl = [Device.org_id.notin_(platform_ids)] if platform_ids else []
+        rem_excl = [RemediationTask.org_id.notin_(platform_ids)] if platform_ids else []
+
+        organizations = (await self.session.execute(
+            select(func.count()).select_from(Organization).where(*org_excl)
+        )).scalar_one()
+        devices = (await self.session.execute(
+            select(func.count()).select_from(Device).where(*dev_excl)
+        )).scalar_one()
+        devices_online = (await self.session.execute(
+            select(func.count()).select_from(Device).where(
+                Device.last_seen_at.is_not(None),
+                Device.last_seen_at >= now - ONLINE_THRESHOLD,
+                *dev_excl,
+            )
+        )).scalar_one()
+        remediations = (await self.session.execute(
+            select(func.count()).select_from(RemediationTask).where(
+                RemediationTask.status == RemediationStatus.SUCCEEDED, *rem_excl
+            )
+        )).scalar_one()
+
+        return PublicStats(
+            organizations=organizations,
+            devices=devices,
+            devices_online=devices_online,
+            remediations=remediations,
+            generated_at=now,
+        )
 
     async def overview(self) -> PlatformOverview:
         """Aggregate stats across all CUSTOMER organizations for the operator's landing
