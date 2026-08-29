@@ -338,10 +338,11 @@ async def test_being_due_is_not_permission(publishing, fake_linkedin):
         item.id, body="changed after scheduling", actor="agent", reason="edit"
     )
 
-    outcomes = await publishing.publish_due()
+    result = await publishing.publish_due()
 
     assert fake_linkedin.requests == []
-    assert all(o["status"] == "skipped" for o in outcomes)
+    assert result["published"] == 0
+    assert all(o["status"] == "skipped" for o in result["outcomes"])
 
 
 async def test_one_bad_item_does_not_stop_the_queue(publishing, fake_linkedin):
@@ -353,11 +354,12 @@ async def test_one_bad_item_does_not_stop_the_queue(publishing, fake_linkedin):
     for item in (good, bad):
         await publishing.content.schedule(item.id, actor="danish", when=due)
 
-    outcomes = await publishing.publish_due()
+    result = await publishing.publish_due()
 
-    by_id = {o["id"]: o["status"] for o in outcomes}
+    by_id = {o["id"]: o["status"] for o in result["outcomes"]}
     assert by_id[str(good.id)] == "published"
     assert by_id[str(bad.id)] == "skipped"
+    assert (result["published"], result["skipped"]) == (1, 1)
 
 
 async def test_an_unknown_item_is_not_found(publishing):
@@ -398,3 +400,81 @@ async def test_publish_needs_the_admin_token(client, session_factory, fake_linke
 
     assert response.status_code == 401
     assert fake_linkedin.requests == []
+
+
+async def test_a_live_but_unrecorded_post_is_not_reported_as_skipped(
+    publishing, fake_linkedin, monkeypatch
+):
+    """The scheduler's most dangerous outcome, and the one easiest to mislabel.
+
+    Folded in with the failures it reads as "nothing happened" — while the post is public.
+    Whoever sees the alert has to be told the opposite of that.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    item = await _approved(publishing)
+    await publishing.content.schedule(
+        item.id, actor="danish", when=datetime.now(UTC) - timedelta(minutes=1)
+    )
+
+    async def _refuse(*args, **kwargs):
+        raise PublishRefused("something changed underneath us")
+
+    monkeypatch.setattr(ContentService, "mark_published", _refuse)
+
+    result = await publishing.publish_due()
+
+    assert result["needs_attention"] == 1
+    assert result["skipped"] == 0, "a public post must never be counted as skipped"
+    assert result["outcomes"][0]["status"] == "published_but_not_recorded"
+    assert POST_URN in result["outcomes"][0]["reason"]
+
+
+async def test_the_counts_let_the_alerting_side_stay_dumb(publishing, fake_linkedin):
+    """An n8n expression filtering an array is a place for a bug nobody will find."""
+    result = await publishing.publish_due()
+
+    assert result == {"considered": 0, "published": 0, "skipped": 0,
+                      "needs_attention": 0, "summary": "", "outcomes": []}
+
+
+async def test_a_quiet_run_produces_no_alert_text(publishing, fake_linkedin):
+    """The scheduler runs every 15 minutes. An empty summary is what stops it saying
+    "nothing to do" ninety-six times a day."""
+    assert (await publishing.publish_due())["summary"] == ""
+
+
+async def test_the_summary_leads_with_the_thing_to_act_on(publishing, fake_linkedin,
+                                                          monkeypatch):
+    """A live-but-unrecorded post outranks everything else in the message, including
+    successful ones. It is the only line that means "go and do something right now"."""
+    from datetime import UTC, datetime, timedelta
+    due = datetime.now(UTC) - timedelta(minutes=1)
+
+    item = await _approved(publishing)
+    await publishing.content.schedule(item.id, actor="danish", when=due)
+
+    async def _refuse(*a, **k):
+        raise PublishRefused("changed underneath us")
+    monkeypatch.setattr(ContentService, "mark_published", _refuse)
+
+    summary = (await publishing.publish_due())["summary"]
+
+    assert summary.startswith("🚨")
+    assert "Do NOT retry" in summary
+    assert POST_URN in summary
+
+
+async def test_the_summary_names_published_urls_and_skip_reasons(publishing, fake_linkedin):
+    from datetime import UTC, datetime, timedelta
+    due = datetime.now(UTC) - timedelta(minutes=1)
+
+    good = await _approved(publishing, body="A perfectly fine post.")
+    bad = await _approved(publishing, body="y" * (li.MAX_COMMENTARY + 1))
+    for item in (good, bad):
+        await publishing.content.schedule(item.id, actor="danish", when=due)
+
+    summary = (await publishing.publish_due())["summary"]
+
+    assert "https://www.linkedin.com/feed/update/" in summary
+    assert "Shorten it" in summary, "a bare count tells the reader nothing to act on"

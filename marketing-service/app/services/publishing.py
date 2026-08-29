@@ -153,13 +153,21 @@ class PublishingService:
         logger.info("published %s to %s as %s", item_id, item.channel.value, result.ref)
         return result
 
-    async def publish_due(self, *, actor: str = "scheduler") -> list[dict]:
+    async def publish_due(self, *, actor: str = "scheduler") -> dict:
         """Everything scheduled and due.
 
         Being due is not permission: each one still goes through `publish` above, so an
         item whose approval was invalidated after it was scheduled is refused rather than
         published because a timer fired. Failures are collected, not raised — one bad item
         must not stop the rest of the queue.
+
+        `published_but_not_recorded` gets its own status rather than being folded in with
+        the failures. It is the opposite of a failure: the post is PUBLIC. Reporting it as
+        "skipped" would tell whoever reads the alert that nothing happened, which is the
+        one wrong thing to tell them.
+
+        Counts are returned alongside the outcomes so the alerting side can stay dumb —
+        an n8n expression filtering an array is a place for a bug nobody will find.
         """
         outcomes: list[dict] = []
         for item in await self.content.due_for_publishing():
@@ -167,9 +175,70 @@ class PublishingService:
                 result = await self.publish(item.id, actor=actor)
                 outcomes.append({"id": str(item.id), "status": "published",
                                  "url": result.url})
+            except PublishedButNotRecorded as exc:
+                logger.error("scheduled publish of %s is LIVE but unrecorded: %s",
+                             item.id, exc)
+                outcomes.append({"id": str(item.id),
+                                 "status": "published_but_not_recorded",
+                                 "reason": str(exc)})
             except (PublishRefused, ValidationError, PublisherError,
-                    PublishedButNotRecorded, NotFoundError) as exc:
+                    NotFoundError) as exc:
                 logger.warning("scheduled publish of %s did not go out: %s", item.id, exc)
                 outcomes.append({"id": str(item.id), "status": "skipped",
                                  "reason": str(exc)})
-        return outcomes
+
+        counts = {
+            "considered": len(outcomes),
+            "published": sum(1 for o in outcomes if o["status"] == "published"),
+            "skipped": sum(1 for o in outcomes if o["status"] == "skipped"),
+            "needs_attention": sum(
+                1 for o in outcomes if o["status"] == "published_but_not_recorded"
+            ),
+        }
+        return {**counts, "summary": _summarise(outcomes, counts), "outcomes": outcomes}
+
+
+def _summarise(outcomes: list[dict], counts: dict) -> str:
+    """The alert text, built here rather than in an n8n expression.
+
+    Composed in Python for the same reason the counts are: a expression on an n8n canvas
+    that filters an array is edited live in a browser, has no tests, and fails by
+    producing a plausible-looking wrong sentence. This one is covered by the suite, and
+    the workflow node reduces to `{{ $json.body.summary }}`.
+
+    Ordered by what the reader has to act on. A live-but-unrecorded post outranks
+    everything, including several successful ones — it is the only line that means "go and
+    do something right now".
+    """
+    if not outcomes:
+        return ""
+
+    lines: list[str] = []
+
+    if counts["needs_attention"]:
+        lines.append(
+            f"🚨 {counts['needs_attention']} post(s) are LIVE but were not recorded. "
+            "Do NOT retry — that would post them again. Reconcile by hand:"
+        )
+        lines += [
+            f"   • {o['reason']}" for o in outcomes
+            if o["status"] == "published_but_not_recorded"
+        ]
+
+    if counts["published"]:
+        lines.append(f"🚀 Published {counts['published']}:")
+        lines += [
+            f"   • {o.get('url') or o['id']}" for o in outcomes
+            if o["status"] == "published"
+        ]
+
+    if counts["skipped"]:
+        # Named, not just counted. "3 skipped" tells a reader nothing they can act on, and
+        # the reasons are the whole point — a scheduled post that did not go out is
+        # usually an approval that was invalidated, which someone has to decide about.
+        lines.append(f"⚠️ {counts['skipped']} did not go out:")
+        lines += [
+            f"   • {o['reason']}" for o in outcomes if o["status"] == "skipped"
+        ]
+
+    return "\n".join(lines)

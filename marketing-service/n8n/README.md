@@ -46,7 +46,25 @@ gcloud logging read 'resource.type="cloud_run_revision"
 ```
 
 Nodes that need `ASTRA admin token` attached: `Sync anything pending` (workflow 02),
-`Rescore with the model` and `Sync to Bigin` (workflow 01).
+`Rescore with the model` and `Sync to Bigin` (workflow 01), `Publish anything due`
+(workflow 04).
+
+### 4. Publish what is due
+
+`04-publish-scheduler.json` calls `POST /content/publish-due` every 15 minutes. That is
+the granularity of "scheduled for 9am" — a post lands between 09:00 and 09:15 — and the
+drift is a small mercy, because posting at exactly :00 every time is one of the things
+that makes an account read as automated.
+
+Being due is not permission. Every item still goes through the publish gate individually,
+so one whose approval was invalidated after it was scheduled is refused rather than posted
+because a timer fired.
+
+The Telegram node sends `{{ $json.body.summary }}` and nothing else. The message is
+composed in Python (`_summarise`) where it has tests, rather than in an expression on a
+canvas that is edited live in a browser and fails by producing a plausible-looking wrong
+sentence. One line in that summary outranks the rest: a post that went live but could not
+be recorded says **Do NOT retry**, because retrying would post it a second time.
 
 | Credential | Type | Value |
 |---|---|---|

@@ -275,8 +275,7 @@ async def publish_due(
     one refusal does not stop the queue. The response says what happened to every item,
     including the ones that did not go out and why.
     """
-    outcomes = await PublishingService(session).publish_due(actor=body.actor)
-    return {"considered": len(outcomes), "outcomes": outcomes}
+    return await PublishingService(session).publish_due(actor=body.actor)
 
 
 @router.get("", response_model=list[ContentRead], summary="List content")
