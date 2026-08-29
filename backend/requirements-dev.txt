@@ -4,3 +4,6 @@ pytest-asyncio>=0.24
 httpx>=0.28
 aiosqlite>=0.20
 ruff>=0.8
+# Read by tests/test_marketing_claims.py, which is the only thing keeping the
+# marketing claim file honest. Without it that test would silently skip.
+pyyaml>=6.0

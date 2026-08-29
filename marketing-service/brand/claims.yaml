@@ -1,0 +1,210 @@
+# ASTRA — what may be claimed, and what may not.
+#
+# This file is the ground truth for every generated word, image brief and ad. A claim that
+# is not in here does not go out, however true it feels.
+#
+# It is NOT a summary of the marketing material. It is read FROM THE CODE, and
+# `backend/tests/test_marketing_claims.py` fails the build when the two disagree — which
+# is the only thing that stops a claim file becoming quietly wrong. The prose version in
+# `marketing/creative/astra-image-prompt-master.md` was accurate when written on
+# 2026-08-22 and had drifted within a week: two admin-only actions shipped and were never
+# added to it.
+#
+# EDITED BY HUMANS ONLY. A generator that can edit its own constraints has none.
+
+meta:
+  verified_on: 2026-08-29
+  verified_by: read from the shipped registry and models, not from prior marketing copy
+  enforced_by: backend/tests/test_marketing_claims.py
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The remediation catalogue.
+#
+# Mirrored exactly from `backend/app/services/remediation/actions.py`. The test above
+# compares this list against the live registry and fails on any difference, in either
+# direction — a new action nobody may mention yet is as much a bug as a claimed action
+# that no longer exists.
+# ─────────────────────────────────────────────────────────────────────────────
+actions:
+  source: backend/app/services/remediation/actions.py
+
+  automatic:      # runs without human approval
+    - restart_explorer
+    - restart_outlook
+    - restart_teams
+    - restart_zoom
+    - restart_application
+    - flush_dns
+    - clear_temp
+    - clear_system_temp
+    - clear_browser_cache
+    - restart_chrome
+    - restart_edge
+    - restart_network_adapter
+    - restart_service
+    - create_outlook_rule
+    - set_timezone
+    - add_network_printer
+
+  approval_required:   # a technician or admin must approve
+    - office_repair
+    - network_reset
+    - windows_update_install
+    - lock_session
+    - message_session
+
+  admin_only:          # only an admin may approve
+    - reset_windows_update_components
+    - disable_local_account
+    - enable_local_account
+    - uninstall_application
+    - block_usb_storage
+    - unblock_usb_storage
+    - logoff_session
+    - reset_local_password
+
+  # Withheld from the reasoning engine whatever their tier. These act on a PERSON rather
+  # than a fault, and no telemetry can establish that someone should be interrupted. Never
+  # describe ASTRA as deciding to lock a screen or message a user — a human asks for both.
+  withheld_from_ai:
+    - lock_session
+    - message_session
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Capabilities. Each one names the file that makes it true.
+# ─────────────────────────────────────────────────────────────────────────────
+capabilities:
+  - id: windows_agent
+    claim: >-
+      A Windows service plus a tray application, reporting a heartbeat every 60 seconds.
+    source: agent/src/AstraAgent.Service/AgentOptions.cs
+    verified: 2026-08-29
+
+  - id: enrollment
+    claim: >-
+      Devices enrol with an organisation enrolment token, which is exchanged for a
+      per-device token.
+    source: backend/app/api/v1/agent.py, backend/app/models/enrollment_token.py
+    verified: 2026-08-29
+    note: >-
+      Token-based. NOT certificates — see forbidden.certificate_enrollment.
+
+  - id: telemetry
+    claim: >-
+      CPU, RAM and disk snapshots, event logs, installed applications, services and
+      Windows update state, collected from the endpoint.
+    source: backend/app/models/telemetry.py
+    verified: 2026-08-29
+
+  - id: tiered_remediation
+    claim: >-
+      Remediations are tiered automatic / approval-required / admin-only, drawn from an
+      allowlist, and the tier is enforced on the server rather than in a prompt.
+    source: backend/app/services/remediation/actions.py
+    verified: 2026-08-29
+
+  - id: two_allowlists
+    claim: >-
+      Two independent allowlists gate every command: the server-side action registry and a
+      hardcoded list in the agent. The agent executes action IDs, never command strings.
+    source: SECURITY.md, backend/app/services/remediation/actions.py
+    verified: 2026-08-29
+
+  - id: audit_log
+    claim: Every mutation and every agent command is recorded with actor, action and target.
+    source: backend/app/services/audit.py
+    verified: 2026-08-29
+
+  - id: signed_agent_updates
+    claim: >-
+      The agent update manifest is signed RSA-SHA256 and verified against a key pinned in
+      the agent binary.
+    source: backend/app/core/config.py
+    verified: 2026-08-29
+
+  - id: secure_offboarding
+    claim: >-
+      Disable a leaver's local Windows account and force them out of the session, matched
+      by SID. It refuses to disable the last remaining administrator.
+    source: agent/src/AstraAgent.Service/Remediation/LocalAccountManager.cs
+    verified: 2026-08-29
+    note: LOCAL Windows accounts only. Not domain, not Entra.
+
+  - id: usb_storage_control
+    claim: >-
+      Blocks pen drives and portable disks only. Keyboards, mice and webcams are
+      unaffected, and the block is reversible.
+    source: backend/app/services/remediation/actions.py (block_usb_storage)
+    verified: 2026-08-29
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Never claim these. Each is a thing the product genuinely does not do.
+# ─────────────────────────────────────────────────────────────────────────────
+forbidden:
+  - id: certificate_enrollment
+    never_claim: Certificate-based device enrollment, device certificates.
+    reality: Enrollment is token-based. There are no certificates anywhere in the flow.
+    #  ⚠ LIVE ON THE PUBLIC SITE as of 2026-08-29, in two places:
+    #      website/src/app/astra/AstraContent.tsx  — "Device certificates"
+    #      website/public/content.json             — the same card
+    #  Flagged as untrue on 2026-08-22 and still shipping. A false claim about a security
+    #  property is the worst kind to have on a page a buyer reads before trusting you with
+    #  an agent that runs commands on their machines.
+
+  - id: registry_and_drivers
+    never_claim: Registry edits, driver updates, BIOS or firmware changes, Windows reinstall.
+    reality: >-
+      `registry_fix` and `driver_update` were deliberately removed because the agent never
+      implemented them. ASTRA cannot do these at any tier.
+
+  - id: domain_accounts
+    never_claim: Managing domain or Entra ID accounts.
+    reality: Offboarding covers local Windows accounts only.
+
+  - id: transport_security
+    never_claim: mTLS between agent and backend, per-command cryptographic signing.
+    reality: Both are on the roadmap in SECURITY.md, neither has shipped.
+
+  - id: non_windows
+    never_claim: macOS, Linux, mobile, servers or network hardware support.
+    reality: Windows endpoints only.
+
+  - id: full_autonomy
+    never_claim: >-
+      "Fully autonomous", or anything implying high-risk actions run without approval.
+    reality: >-
+      Approval tiers are the product. An organisation setting can force even
+      automatic-tier actions to wait for a human.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# True enough, but not provable — so not claimable until a customer says it.
+# From marketing/strategy/positioning.md, "Avoid Until Verified".
+# ─────────────────────────────────────────────────────────────────────────────
+unproven:
+  - Savings, cost-reduction or ROI figures.
+  - Ticket-reduction percentages, resolution times, MTTR improvements.
+  - Uptime or availability numbers.
+  - Fleet sizes under management, customer counts, named customers.
+  - Compliance certifications (SOC 2, ISO 27001) — none are held.
+  - Penetration-test attestation — the first one has not happened yet.
+  - Competitor comparisons beyond what the comparison pages already substantiate.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Portal sections that exist. If navigation is legible in a generated image, it may only
+# show these.
+# ─────────────────────────────────────────────────────────────────────────────
+portal_sections:
+  - Dashboard
+  - Devices
+  - Fleet
+  - Self-Healing
+  - Compliance
+  - Assets
+  - Audit
+  - Knowledge
+  - Reports
+  - Notifications
+  - Users
+  - Billing
+  - Settings
+  - Install
