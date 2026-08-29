@@ -20,6 +20,20 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+# httpx logs every request at INFO as "HTTP Request: POST <full url> ...". For most APIs
+# that is useful. For Telegram it is a credential leak: the bot token is a path segment of
+# every call — https://api.telegram.org/bot<TOKEN>/sendMessage — so an INFO line writes the
+# token into Cloud Run logs on every alert, every approval, every button press.
+#
+# Raised to WARNING rather than disabled: a genuine transport failure still surfaces, and
+# this service already logs its own outcome for each integration in terms that mean
+# something ("telegram alert reached none of N chats"), which is the line worth having.
+#
+# The same shape of leak is latent in any client that puts a secret in a URL. This is the
+# reason the marketing service's own intake uses a signed header instead.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 # Which integrations a running revision actually has is otherwise only knowable by reading
 # the deploy that produced it — and "why did nobody get a Telegram alert" is answered here
 # in one line. Values are never logged, only whether they are present.
