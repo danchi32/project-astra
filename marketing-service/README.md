@@ -134,6 +134,69 @@ The registration is global to the bot token — one webhook URL per bot — so r
 against staging takes production's desk offline. Use a separate bot, or accept that
 whichever ran last wins.
 
+## Publishing
+
+`app/services/publishing.py` is the only path from approved copy to a live post, and the
+only thing this service does that cannot be retried, corrected or deleted.
+
+The gate is `ContentService.assert_publishable` — the same call the regression tests are
+written against. There is no second implementation of "is this allowed out", because two
+implementations means one of them is eventually wrong. What goes out is the **approved
+version, looked up by `approved_version_id`**, never "the current one": the gate already
+refuses when those differ, but naming the version explicitly means a later change that
+moves `current_version_id` cannot quietly redirect what gets transmitted.
+
+Publishing twice is refused before the network is touched, so a retry after a crash cannot
+put a second copy on the page. And if the post succeeds but recording it is then refused,
+that gets its own exception — `PublishedButNotRecorded` — plus an event carrying the live
+URL and an ERROR log, because a published post the database thinks is a draft is the worst
+state this system can reach.
+
+```
+GET  /api/v1/content/{id}/preview   exactly what would be sent, without sending it
+POST /api/v1/content/{id}/publish   the irreversible one
+POST /api/v1/content/publish-due    everything scheduled and due, each still gated
+```
+
+### LinkedIn
+
+Two details in LinkedIn's API do real damage silently.
+
+**`commentary` is "little" text format, not plain text.** Fifteen characters are reserved
+(`\ | { } @ [ ] ( ) < > # * _ ~`) and the docs say they must be escaped *even when not
+used as markup*. Unescaped, a post containing `(3 min read)` or `snake_case` publishes
+mangled — and LinkedIn accepts it, so nothing fails loudly. Escaping runs character by
+character, which makes the classic ordering bug (escaping `(` and then going back over
+`\`, doubling what the first pass added) unrepresentable. Hashtags are the deliberate
+exception: escaping `#` would cost every post its tags, so they are emitted as
+`{hashtag|\#|Tag}` templates.
+
+**The API is versioned by month and each version is sunset about a year later** — 202508
+died on 2026-08-17. Pinned in `linkedin_api_version` so an upgrade is a tested decision,
+but it does need revisiting.
+
+Over-length is refused, never truncated, and the check runs on the *rendered* string,
+because escaping can push a compliant draft past 3000 characters.
+
+#### Getting a token
+
+```bash
+python scripts/setup_linkedin.py --auth-url
+python scripts/setup_linkedin.py --exchange <code>
+python scripts/setup_linkedin.py --organizations
+python scripts/setup_linkedin.py --check
+```
+
+Before any of that works, the LinkedIn app needs the **Community Management API** product,
+which is a separate request in the developer console and is not granted automatically. A
+403 from `--organizations` is what its absence looks like.
+
+**The token expires after 60 days.** Programmatic refresh is available only to approved
+Marketing Developer Platform partners; without that approval a human re-runs `--auth-url`
+in a browser roughly every two months. It does not announce itself — it just starts
+returning 401, which is why the publisher's 401 message says "these expire after 60 days"
+rather than "unauthorized".
+
 ## CRM sync (Zoho Bigin)
 
 One-way: this service writes to Bigin and never reads lead data back. A human editing a

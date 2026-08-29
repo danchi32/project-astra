@@ -152,6 +152,11 @@ class Settings(BaseSettings):
     #: approved Marketing Developer Platform partners; without that approval a human has
     #: to re-authorise through a browser roughly every two months. Treat a 401 from
     #: LinkedIn as "the token aged out", not as a permissions bug.
+    #: Only needed to OBTAIN a token (scripts/setup_linkedin.py). The running service
+    #: never uses these — it holds the finished token and nothing else, so a compromised
+    #: deployment cannot mint fresh ones.
+    linkedin_client_id: str = ""
+    linkedin_client_secret: str = ""
     linkedin_access_token: str = ""
     #: Numeric id from the page URL, not the vanity name. The URN is built from it.
     linkedin_organization_id: str = ""
