@@ -197,3 +197,38 @@ def test_command_signing_blocks_in_any_voice(copy: str):
     """Marketing copy is written in the passive. The first version of this pattern only
     matched the active form, so "every command is signed" sailed through."""
     assert "transport_security" in {f.rule for f in check_text(copy).blockers}
+
+
+# ── Stat cards: a figure and a caption, not a sentence ────────────────────────
+
+@pytest.mark.parametrize("copy", [
+    "1204+ Issues auto-healed / mo",
+    "38s Avg. resolution time",
+    "72% Less manual triage",
+    "99.9% Fleet visibility",
+])
+def test_invented_stat_cards_are_flagged(copy: str):
+    """All four of these were live in the homepage hero, and none was sourced.
+
+    The sentence-shaped patterns caught only "72% Less". A stat card is a number beside a
+    label, not a claim in prose, and fabricated metrics live in exactly that shape — so
+    the shape needs its own patterns.
+    """
+    result = check_text(copy)
+    assert result.warnings, f"not flagged: {copy}"
+    assert result.passed, "a stat still goes to a human to judge, not straight back"
+
+
+@pytest.mark.parametrize("copy", [
+    "A heartbeat every 60 seconds.",
+    "29 remediation actions across three approval tiers.",
+    "Three tiers: automatic, approval-required, admin-only.",
+])
+def test_true_product_numbers_are_not_flagged(copy: str):
+    """Facts about the product are not results claims.
+
+    A checker that flagged "60-second heartbeat" would push copy away from the concrete
+    and towards the vague, which is the opposite of what it is for.
+    """
+    result = check_text(copy)
+    assert not result.findings, [str(f) for f in result.findings]

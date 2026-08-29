@@ -251,6 +251,18 @@ unproven:
       match:
         - '(?i)\b(resolved?|fixe[sd]|remediat\w+)\s+in\s+(under\s+)?\d+\s*(second|minute|hour)'
         - '(?i)\bMTTR\b[^.]{0,40}\b(by|to|under|below)\s+\d+\s*(%|second|minute|hour|day)'
+    - id: stat_card
+      why: >-
+        A number beside a metric label is the most-read claim on any page and the least
+        likely to be sourced. All four counters in the homepage hero were invented, and
+        the sentence-shaped patterns above missed three of them: a stat card is not a
+        sentence, it is a figure and a caption.
+      match:
+        - '(?i)\b\d[\d,]*\+?\s*(issues?|tickets?|incidents?|devices?|endpoints?)\s+(auto[- ]?healed|resolved|fixed|managed|prevented)'
+        - '(?i)\b\d+(\.\d+)?\s*(s|sec|secs|seconds?|m|min|mins|minutes?|h|hours?)\b[^.]{0,20}\b(avg|average|median|mean)\b'
+        - '(?i)\b(avg|average|median|mean)\b[^.]{0,20}\b(resolution|response|fix|triage)\s*(time)?\b[^.]{0,12}\d'
+        - '(?i)\b\d+(\.\d+)?\s?%\s+(fleet\s+)?(visibility|coverage|accuracy|success|adoption)'
+        - '(?i)\b\d+(\.\d+)?\s?%\s+(less|fewer|more)\b'
     - id: scale
       why: Customer counts and fleet sizes under management are not published.
       match:
