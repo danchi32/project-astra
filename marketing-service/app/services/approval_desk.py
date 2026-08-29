@@ -120,6 +120,12 @@ class ApprovalDesk:
         if version.cta:
             lines += ["", f"👉 {escape_html(version.cta)}"]
 
+        # The card carries this sentence to more eyes than the post body reaches — people
+        # scrolling see the picture first. Approving without having read it would approve
+        # the most visible copy sight unseen.
+        if version.card_line:
+            lines += ["", f"🖼 <b>On the image:</b> {escape_html(version.card_line)}"]
+
         warnings = self._warnings(version)
         if warnings:
             lines += ["", "<b>Worth a look before you approve:</b>"]

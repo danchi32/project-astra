@@ -53,6 +53,7 @@ class VersionRead(BaseModel):
     hashtags: str | None
     cta: str | None
     media_url: str | None
+    card_line: str | None
     authored_by: str | None
     revision_reason: str | None
     check_result: dict | None

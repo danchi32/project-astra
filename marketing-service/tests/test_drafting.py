@@ -20,12 +20,14 @@ GOOD = Draft(
          "tiered, and the tier is enforced server-side rather than in a prompt.",
     hashtags="#WindowsEndpointManagement #ITOperations",
     cta="Book an Endpoint Automation Assessment",
+    card_line="Evidence before action. The tier is enforced server-side.",
     rationale="Leads with the mechanism, which is what this reader trusts.",
 )
 BAD = Draft(
     body="Certificate-based enrollment for every agent, with fully autonomous remediation "
          "across Windows, macOS and Linux.",
     cta="Book an Endpoint Automation Assessment",
+    card_line="Fully autonomous remediation, on every platform.",
     rationale="Punchier.",
 )
 

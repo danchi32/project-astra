@@ -10,3 +10,4 @@ httpx>=0.28
 anthropic>=0.69
 # Reads brand/claims.yaml, which every generation and every check depends on.
 pyyaml>=6.0
+pillow>=11.0

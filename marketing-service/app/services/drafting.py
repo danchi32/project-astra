@@ -56,6 +56,14 @@ class Draft(BaseModel):
         default=None, max_length=200,
         description="One call to action, taken from the approved list.",
     )
+    card_line: str = Field(
+        max_length=110,
+        description="ONE short sentence for the image that goes out with this post. "
+                    "Under about 90 characters — it is set large on a graphic, so a long "
+                    "one shrinks until nobody reads it. It must stand alone: someone "
+                    "scrolling sees the picture before any words of the post. Say the "
+                    "sharpest true thing, not a summary and not a slogan.",
+    )
     rationale: str = Field(
         max_length=500,
         description="One or two sentences on the angle taken and why it suits this "
@@ -125,7 +133,8 @@ class DraftingAgent:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             draft = await self._generate(instruction, correction)
             result = check_text(" ".join(filter(
-                None, [draft.headline, draft.body, draft.cta, draft.hashtags]
+                None, [draft.headline, draft.body, draft.cta, draft.hashtags,
+                       draft.card_line]
             )))
             findings = result.findings
 
@@ -165,7 +174,8 @@ class DraftingAgent:
 
         draft = await self._generate(instruction, None)
         result = check_text(" ".join(filter(
-            None, [draft.headline, draft.body, draft.cta, draft.hashtags]
+            None, [draft.headline, draft.body, draft.cta, draft.hashtags,
+                   draft.card_line]
         )))
         return DraftResult(draft, 1, blocked=bool(result.blockers), findings=result.findings)
 

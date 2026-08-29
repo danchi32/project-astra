@@ -170,6 +170,9 @@ class ContentVersion(TimestampMixin, Base):
     cta: Mapped[str | None] = mapped_column(String(200), nullable=True)
     #: Object-store URL. The media itself never lives in the database.
     media_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    #: The single sentence rendered on the accompanying image. Checked and approved with
+    #: everything else — see alembic 0004.
+    card_line: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     #: The model that wrote it, or the person. Kept per version so a bad run is traceable
     #: to the model and prompt that produced it rather than to "the AI".

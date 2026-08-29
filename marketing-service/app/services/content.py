@@ -104,7 +104,7 @@ class ContentService:
         campaign: str | None = None, brief: str | None = None,
         headline: str | None = None, hashtags: str | None = None,
         cta: str | None = None, media_url: str | None = None,
-        authored_by: str | None = None,
+        card_line: str | None = None, authored_by: str | None = None,
     ) -> ContentItem:
         """Create an item with its first version, checked."""
         item = ContentItem(channel=channel, campaign=campaign, brief=brief)
@@ -113,7 +113,8 @@ class ContentService:
 
         version = await self._add_version(
             item, body=body, headline=headline, hashtags=hashtags, cta=cta,
-            media_url=media_url, authored_by=authored_by, revision_reason=None,
+            media_url=media_url, card_line=card_line, authored_by=authored_by,
+            revision_reason=None,
         )
         self._record(item, ContentEventType.CREATED, actor, version_id=version.id)
         await self.session.commit()
@@ -123,7 +124,7 @@ class ContentService:
         self, item_id: uuid.UUID, *, body: str, actor: str, reason: str,
         headline: str | None = None, hashtags: str | None = None,
         cta: str | None = None, media_url: str | None = None,
-        authored_by: str | None = None,
+        card_line: str | None = None, authored_by: str | None = None,
     ) -> ContentVersion:
         """Add a new version, and drop any approval that was riding on the old one.
 
@@ -136,7 +137,8 @@ class ContentService:
 
         version = await self._add_version(
             item, body=body, headline=headline, hashtags=hashtags, cta=cta,
-            media_url=media_url, authored_by=authored_by, revision_reason=reason,
+            media_url=media_url, card_line=card_line, authored_by=authored_by,
+            revision_reason=reason,
         )
 
         if item.approved_version_id is not None:
@@ -298,6 +300,7 @@ class ContentService:
         self, item: ContentItem, *, body: str, headline: str | None,
         hashtags: str | None, cta: str | None, media_url: str | None,
         authored_by: str | None, revision_reason: str | None,
+        card_line: str | None = None,
     ) -> ContentVersion:
         next_number = (await self.session.execute(
             select(func.coalesce(func.max(ContentVersion.version_number), 0) + 1)
@@ -307,12 +310,16 @@ class ContentService:
         # Checked at write time, and the verdict stored with the words. Running the check
         # later would answer a question about today's rules, not the ones in force when a
         # human said yes.
-        checked = " ".join(filter(None, [headline, body, cta, hashtags]))
+        # card_line is in here deliberately. It is the most visible copy in the whole
+        # post — a sentence set large on a graphic — and leaving it out of the check would
+        # exempt exactly the words most people will actually read.
+        checked = " ".join(filter(None, [headline, body, cta, hashtags, card_line]))
         result = check_text(checked)
 
         version = ContentVersion(
             content_item_id=item.id, version_number=next_number, body=body,
             headline=headline, hashtags=hashtags, cta=cta, media_url=media_url,
+            card_line=card_line,
             authored_by=authored_by, revision_reason=revision_reason,
             check_result={
                 "blockers": [asdict(f) for f in result.blockers],
