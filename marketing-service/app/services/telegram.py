@@ -192,6 +192,43 @@ class TelegramNotifier:
         data = await self._call("sendMessage", payload)
         return (data or {}).get("message_id")
 
+    async def send_photo(
+        self, chat_id: str, png: bytes, caption: str | None = None
+    ) -> int | None:
+        """Upload an image. Returns Telegram's message id, or None.
+
+        Multipart rather than a URL, because the card endpoint needs the admin token and
+        Telegram fetches URLs anonymously. Uploading the bytes also means the reviewer
+        sees exactly the image that was rendered, not whatever the endpoint returns when
+        Telegram happens to ask.
+        """
+        if not settings.telegram_bot_token:
+            return None
+
+        url = f"{_API}/bot{settings.telegram_bot_token}/sendPhoto"
+        data: dict[str, str] = {"chat_id": chat_id}
+        if caption:
+            data["caption"] = caption[:1024]  # Telegram's caption ceiling
+            data["parse_mode"] = "HTML"
+
+        try:
+            async with httpx.AsyncClient(timeout=_DESK_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    url, data=data, files={"photo": ("card.png", png, "image/png")}
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("telegram sendPhoto to %s failed: %s", chat_id, exc)
+            return None
+
+        if response.status_code >= 400:
+            logger.warning("telegram rejected sendPhoto to %s: %s %s",
+                           chat_id, response.status_code, response.text[:300])
+            return None
+        try:
+            return (response.json().get("result") or {}).get("message_id")
+        except ValueError:
+            return None
+
     async def edit_message(
         self, chat_id: str, message_id: int, text: str, keyboard: dict | None = None
     ) -> bool:

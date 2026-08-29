@@ -134,6 +134,27 @@ class ApprovalDesk:
         return "\n".join(lines)[:MAX_MESSAGE]
 
     @staticmethod
+    def _card_for(version: ContentVersion) -> bytes | None:
+        """Render the accompanying image, or None.
+
+        Never raises. A card that will not draw must not stop a draft reaching a human —
+        the copy is the thing being approved, and an image problem is a smaller problem
+        than a review queue that silently stops moving.
+        """
+        from app.services.cards import CardError, fallback_line
+        from app.services.cards import render as render_card
+
+        line = version.card_line or fallback_line(version.body)
+        if not line:
+            return None
+        try:
+            return render_card(line, eyebrow="ASTRA")
+        except (CardError, OSError):
+            logger.warning("could not render the card for version %s", version.id,
+                           exc_info=True)
+            return None
+
+    @staticmethod
     def _warnings(version: ContentVersion) -> list[str]:
         """Warnings as stored at the time this version was written.
 
@@ -174,10 +195,20 @@ class ApprovalDesk:
 
         text = self.compose_review(item, version)
         keyboard = self.keyboard(version)
+        card = self._card_for(version)
 
         first_message_id: int | None = None
         first_chat_id: str | None = None
         for chat_id in self.telegram.chat_ids:
+            # Image first, then the copy with the buttons. Not one message with the card
+            # as its caption: Telegram caps a caption at 1024 characters and a LinkedIn
+            # draft routinely exceeds that, so the single-message version would silently
+            # truncate the very words being approved.
+            #
+            # The buttons stay on the TEXT message, which keeps review_message_id pointing
+            # at the thing a reply attaches to.
+            if card is not None:
+                await self.telegram.send_photo(chat_id, card)
             message_id = await self.telegram.send_message(chat_id, text, keyboard)
             if message_id is not None and first_message_id is None:
                 first_message_id, first_chat_id = message_id, chat_id

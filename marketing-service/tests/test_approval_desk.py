@@ -38,9 +38,16 @@ class FakeTelegram:
 
     def __init__(self) -> None:
         self.sent: list[dict] = []
+        self.photos: list[dict] = []
         self.edited: list[dict] = []
         self.answered: list[dict] = []
         self._next_id = 1000
+
+    async def send_photo(self, chat_id, png, caption=None):
+        self._next_id += 1
+        self.photos.append({"chat_id": chat_id, "png": png, "caption": caption,
+                            "message_id": self._next_id})
+        return self._next_id
 
     async def send_message(self, chat_id, text, keyboard=None):
         self._next_id += 1
@@ -80,7 +87,7 @@ def telegram(monkeypatch) -> FakeTelegram:
     monkeypatch.setattr(settings, "telegram_chat_ids", f"{DESK_CHAT},{SECOND_CHAT}")
     monkeypatch.setattr(settings, "telegram_webhook_secret", WEBHOOK_SECRET)
 
-    for name in ("send_message", "edit_message", "answer_callback"):
+    for name in ("send_message", "send_photo", "edit_message", "answer_callback"):
         monkeypatch.setattr(TelegramNotifier, name, getattr(fake, name))
     return fake
 
@@ -469,3 +476,42 @@ async def test_telegram_being_down_does_not_undo_a_submission(
     assert response.status_code == 200
     async with session_factory() as session:
         assert (await ContentService(session).get(item.id)).status is ContentStatus.IN_REVIEW
+
+
+# ── The card goes with it ─────────────────────────────────────────────────────
+
+async def test_the_card_is_sent_before_the_copy(desk, telegram):
+    """A reviewer approving a post is approving its image too, so they have to have seen
+    it. Sending the picture first puts it above the copy in the conversation."""
+    await _in_review(desk)
+
+    assert telegram.photos, "no image reached the desk"
+    assert telegram.photos[0]["png"][:4] == bytes([0x89, 0x50, 0x4E, 0x47]), "not a PNG"
+    assert {p["chat_id"] for p in telegram.photos} == {DESK_CHAT, SECOND_CHAT}
+
+
+async def test_the_buttons_stay_on_the_text_message(desk, telegram):
+    """Not on the photo. The buttons and the reply lane have to live on the same message,
+    and review_message_id points at the one a reply attaches to."""
+    item = await _in_review(desk)
+
+    assert telegram.photos[0]["caption"] is None
+    assert telegram.sent[0]["keyboard"] is not None
+    assert item.review_message_id == telegram.sent[0]["message_id"]
+
+
+async def test_a_card_that_will_not_draw_does_not_block_the_review(desk, telegram,
+                                                                   monkeypatch):
+    """An image problem is a smaller problem than a review queue that stops moving."""
+    import app.services.cards as cards
+
+    def _explode(*args, **kwargs):
+        raise OSError("no font in this container")
+
+    monkeypatch.setattr(cards, "render", _explode)
+
+    item = await _in_review(desk)
+
+    assert telegram.photos == []
+    assert telegram.sent, "the copy still has to reach a human"
+    assert item.review_message_id is not None
