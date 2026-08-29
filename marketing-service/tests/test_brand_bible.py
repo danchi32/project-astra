@@ -11,7 +11,6 @@ from app.services.claims import brand_bible_prompt, check_text, load_icp, load_v
 from app.services.scoring import HOT_THRESHOLD, WARM_THRESHOLD, score_rules
 from tests.test_scoring import make_lead, make_submission
 
-
 # ── The files load and carry what the generator needs ─────────────────────────
 
 def test_voice_names_the_reader_and_what_they_fear():

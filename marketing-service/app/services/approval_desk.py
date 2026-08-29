@@ -274,8 +274,9 @@ class ApprovalDesk:
         if message_id is not None:
             fresh = await self.content.get(item.id)
             version = await self.content.current_version(fresh)
+            by = escape_html(sender.get("first_name") or "")
             await self._settle(chat_id, message_id, fresh, version,
-                               f"✅ <b>Approved</b> by {escape_html(sender.get('first_name') or '')}")
+                               f"✅ <b>Approved</b> by {by}")
         return DeskResult(True, "approved")
 
     async def _ask_for_changes(
@@ -335,7 +336,9 @@ class ApprovalDesk:
         try:
             await self.content.request_changes(item.id, actor=actor, feedback=text)
         except ValidationError as exc:
-            await self.telegram.send_message(chat_id, f"Couldn't record that: {escape_html(str(exc))}")
+            await self.telegram.send_message(
+                chat_id, f"Couldn't record that: {escape_html(str(exc))}"
+            )
             return DeskResult(False, "refused")
 
         logger.info("content %s: changes requested by %s", item.id, actor)
