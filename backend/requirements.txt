@@ -7,7 +7,7 @@ pydantic>=2.9
 pydantic-settings>=2.6
 email-validator>=2.2
 bcrypt>=4.2
-PyJWT>=2.10
+PyJWT>=2.13.0
 # Fernet, for the third-party helpdesk credentials an organization entrusts to us.
 cryptography>=43.0
 # Allowlist HTML sanitizer (Rust ammonia) for org-authored email bodies. Not hand-rolled:
