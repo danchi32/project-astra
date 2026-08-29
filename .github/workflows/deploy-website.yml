@@ -47,6 +47,24 @@ jobs:
           NEXT_PUBLIC_META_PIXEL_ID: ${{ vars.NEXT_PUBLIC_META_PIXEL_ID }}
           NEXT_PUBLIC_GOOGLE_ADS_ID: ${{ vars.NEXT_PUBLIC_GOOGLE_ADS_ID }}
 
+      # The PHP lead handler is not part of the Next.js build — it lives outside `src/`
+      # and the static export knows nothing about it — so it has to be placed into `out/`
+      # by hand to reach the server.
+      #
+      # It was NOT here before, while the comment below claimed the handler shipped with
+      # the site. So the file only ever reached production by manual upload, code fixes to
+      # it never shipped, and the FTP sync could remove a copy it had not placed there.
+      # Same conclusion as content.json and pricing.json: git is the source of truth, and
+      # a file the server owns is a file that silently drifts.
+      #
+      # mail-config.php is deliberately NOT copied — it holds the mailbox password and the
+      # intake secret, is gitignored, and stays excluded from the sync below so the
+      # server's copy survives every release.
+      - name: Stage the PHP lead handler for upload
+        run: |
+          cp hostinger/contact.php out/contact.php
+          echo "staged: $(wc -c < out/contact.php) bytes"
+
       - name: Deploy to Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -59,7 +77,9 @@ jobs:
           local-dir: ./website/out/
           server-dir: /public_html/
           # Protect server-only mailbox configuration. The versioned PHP handler
-          # is deployed with the site so lead-capture fixes are released too.
+          # is copied into out/ by the step above, so lead-capture fixes are
+          # released with the site — which is what this line has always claimed
+          # and, until that step existed, was not true.
           # content.json and pricing.json are git-controlled and deploy from
           # source: keeping content.json server-editable meant a stale copy on
           # the server silently overrode newly shipped copy at runtime, leaving
