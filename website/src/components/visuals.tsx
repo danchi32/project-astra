@@ -329,10 +329,13 @@ export function AiConsole() {
   const lines = [
     { who: "user", text: "My Teams keeps crashing and audio cuts out." },
     { who: "tool", text: "🔍 Searching knowledge base… 3 matches" },
-    { who: "tool", text: "📡 Collecting telemetry — Teams, audio driver, network" },
-    { who: "astra", text: "Confidence 94%: corrupt Teams cache + stale audio driver." },
+    // The scenario has to end in something ASTRA can actually be asked to do. It used to
+    // resolve with "Driver update needs your approval", which is not in the registry —
+    // so the demo of the approval tier demonstrated an action that cannot be approved.
+    { who: "tool", text: "📡 Collecting telemetry — Teams, Office, network" },
+    { who: "astra", text: "Confidence 94%: corrupt Teams cache + damaged Office install." },
     { who: "tool", text: "🛠 Clearing Teams cache (automatic tier)…" },
-    { who: "astra", text: "Fixed & verified. Driver update needs your approval →" },
+    { who: "astra", text: "Fixed & verified. Office repair needs your approval →" },
   ];
   const [n, setN] = useState(1);
   useEffect(() => {
@@ -403,14 +406,21 @@ export function ApprovalTiers() {
       color: "amber",
       icon: ShieldCheck,
       desc: "A human approves before ASTRA acts.",
-      items: ["Office repair", "Driver update", "Network reset"],
+      // Every item on this card is an action ID in the shipped registry
+      // (backend/app/services/remediation/actions.py). "Driver update" was here and is
+      // not one: driver_update was removed because the agent never implemented it.
+      items: ["Office repair", "Install Windows updates", "Network reset"],
     },
     {
       name: "Admin only",
       color: "red",
       icon: Wrench,
       desc: "High-impact changes, admins only.",
-      items: ["Registry edits", "BIOS / firmware", "Windows reinstall"],
+      // All three previous items — registry edits, BIOS/firmware, Windows reinstall —
+      // were things ASTRA cannot do at any tier. The card demonstrating the product's
+      // central promise was populated entirely with capabilities it does not have.
+      // These three are real, and they carry the offboarding story besides.
+      items: ["Disable a local account", "Uninstall software", "Block USB storage"],
     },
   ];
   const ring: Record<string, string> = {

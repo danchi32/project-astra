@@ -151,36 +151,113 @@ forbidden:
     #  property is the worst kind to have on a page a buyer reads before trusting you with
     #  an agent that runs commands on their machines.
 
+    match:
+      - '(?i)\bdevice certificates?\b'
+      - '(?i)\bcertificate[- ]based\b'
+      - '(?i)\bcert(ificate)?[- ]?based enroll'
+      - '(?i)\bmutual certificates?\b'
   - id: registry_and_drivers
     never_claim: Registry edits, driver updates, BIOS or firmware changes, Windows reinstall.
     reality: >-
       `registry_fix` and `driver_update` were deliberately removed because the agent never
       implemented them. ASTRA cannot do these at any tier.
 
+    match:
+      - '(?i)\bregistry (edit|fix|change|tweak|modif)'
+      - '(?i)\bedits? the registry\b'
+      - '(?i)\bdriver (update|upgrade|install)'
+      - '(?i)\bupdates? drivers\b'
+      - '(?i)\bBIOS\b'
+      - '(?i)\bfirmware\b'
+      - '(?i)\bre-?install(s|ing)? Windows\b'
   - id: domain_accounts
     never_claim: Managing domain or Entra ID accounts.
     reality: Offboarding covers local Windows accounts only.
 
+    match:
+      - '(?i)\b(domain|Entra|Azure AD|Active Directory) (account|user|identit)'
+      - '(?i)\bdisables? (a )?domain (account|user)'
   - id: transport_security
     never_claim: mTLS between agent and backend, per-command cryptographic signing.
     reality: Both are on the roadmap in SECURITY.md, neither has shipped.
 
+    match:
+      - '(?i)\bmTLS\b'
+      - '(?i)\bmutual TLS\b'
+      - '(?i)\bper-command (signing|signature)'
+      - '(?i)\bsigned commands?\b'
+      - '(?i)\bcryptographically signs? (each|every) command'
+      - '(?i)\bcommands?\s+(are|is)\s+(\w+\s+){0,2}signed\b'
+      - '(?i)\bsigns?\s+(each|every)\s+command\b'
   - id: non_windows
     never_claim: macOS, Linux, mobile, servers or network hardware support.
     reality: Windows endpoints only.
-
+    match:
+      - '(?i)\bASTRA\b[^.]{0,40}\b(macOS|Linux|Android|iPhone)\b'
+      - '(?i)\b(supports?|works? on|runs? on|covers?|manages?)\s+(\w+\s+){0,3}(macOS|Linux)\b'
+      - '(?i)\bone agent for\b[^.]{0,40}\b(macOS|Linux)\b'
+      - '(?i)\b(we are|it is|astra is)\s+cross[- ]platform\b'
+      - '(?i)\bcross[- ]platform\s+(\w+\s+){0,2}(agent|platform|tool|product)\b'
+      - '(?i)\bany (operating system|OS|device type)\b'
+    warn_match:
+      - '(?i)\bmacOS\b'
+      - '(?i)\bLinux\b'
+      - '(?i)\bcross[- ]platform\b'
   - id: full_autonomy
     never_claim: >-
       "Fully autonomous", or anything implying high-risk actions run without approval.
     reality: >-
       Approval tiers are the product. An organisation setting can force even
       automatic-tier actions to wait for a human.
+    match:
+      - '(?i)\bfully autonomous\b'
+      - '(?i)\bzero[- ]touch remediation\b'
+      - '(?i)\bfixes everything (itself|automatically)\b'
+      - '(?i)\b(high[- ]risk|admin[- ]only|any)\s+\w*\s*actions?\b[^.]{0,40}\bwithout\b[^.]{0,20}\bapproval\b'
+    warn_match:
+      - '(?i)\bwithout (human )?(approval|oversight|intervention)\b'
+      - '(?i)\bno human (in the loop|approval|involvement)\b'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # True enough, but not provable — so not claimable until a customer says it.
 # From marketing/strategy/positioning.md, "Avoid Until Verified".
 # ─────────────────────────────────────────────────────────────────────────────
+# A match below is a WARNING, never a blocker: "40%" is only a problem when it is a claim
+# about results, and only a person can tell "40% fewer tickets" from "40% of Indian SMBs".
 unproven:
+  patterns:
+    - id: results_percentage
+      why: A percentage beside a results verb is a claim no customer has backed yet.
+      match:
+        - '(?i)\b\d{1,3}(\.\d+)?\s?%\s+(fewer|less|lower|faster|more|reduction|improvement)'
+        - '(?i)(reduce|cut|save|lower|improve)\w*\s+(\w+\s+){0,3}by\s+\d{1,3}(\.\d+)?\s?%'
+    - id: multiplier
+      why: A multiplier is the same results claim wearing different clothes.
+      match:
+        - '(?i)\b\d+(\.\d+)?x\s+(faster|fewer|more|better|quicker)'
+    - id: uptime
+      why: No uptime figure has been measured or published.
+      match:
+        - '(?i)\b(99(\.\d+)?%|100%)\s*(uptime|availability)'
+    - id: certifications
+      why: None are held. Naming one is a compliance claim, not marketing copy.
+      match:
+        - '(?i)\bSOC\s?2\b'
+        - '(?i)\bISO\s?27001\b'
+        - '(?i)\bHIPAA compliant\b'
+        - '(?i)\bpen(etration)?[- ]tested\b'
+    - id: resolution_time
+      why: No MTTR or resolution-time figure has been measured.
+      match:
+        - '(?i)\b(resolved?|fixe[sd]|remediat\w+)\s+in\s+(under\s+)?\d+\s*(second|minute|hour)'
+        - '(?i)\bMTTR\b[^.]{0,40}\b(by|to|under|below)\s+\d+\s*(%|second|minute|hour|day)'
+    - id: scale
+      why: Customer counts and fleet sizes under management are not published.
+      match:
+        - '(?i)\b(trusted by|used by|serving)\s+\d'
+        - '(?i)\b\d{2,}[,\d]*\+?\s+(devices?|endpoints?|customers?)\s+(managed|under management)'
+
+  rules:
   - Savings, cost-reduction or ROI figures.
   - Ticket-reduction percentages, resolution times, MTTR improvements.
   - Uptime or availability numbers.

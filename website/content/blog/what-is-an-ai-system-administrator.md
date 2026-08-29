@@ -47,7 +47,7 @@ If you're weighing the two approaches directly, our [comparison pages](/compare/
 
 ## Why safety tiers matter
 
-Autonomy without guardrails is the fear every IT leader has about AI. The answer is tiering: safe, reversible fixes (restart a service, flush DNS) run automatically; impactful ones (Office repair, driver update) wait for approval; high-risk ones (registry changes) require an admin. Enforced in code — not left to a prompt.
+Autonomy without guardrails is the fear every IT leader has about AI. The answer is tiering: safe, reversible fixes (restart a service, flush DNS) run automatically; impactful ones (Office repair, installing pending Windows updates) wait for approval; high-risk ones (disabling a local account, uninstalling software) require an admin. Enforced in code — not left to a prompt.
 
 That's what makes an AI System Administrator trustworthy: the boring majority heals itself, and a human still owns every consequential decision.
 

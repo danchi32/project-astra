@@ -48,8 +48,8 @@ Just as importantly, autonomy without guardrails is dangerous. That's why safety
 Not every fix should run unattended. The mature approach is to classify remediations by risk:
 
 - **Automatic** — safe, reversible actions (restart a service, flush DNS, clear temp) run on their own.
-- **Approval-required** — impactful but routine actions (Office repair, driver update) wait for a technician to approve.
-- **Admin-only** — high-risk actions (registry changes, resets) require an administrator.
+- **Approval-required** — impactful but routine actions (Office repair, installing pending Windows updates, a network stack reset) wait for a technician to approve.
+- **Admin-only** — high-risk actions (disabling a local account, uninstalling software, blocking USB storage) require an administrator.
 
 This "human-in-the-loop" model is what lets you trust automation: the boring 80% heals itself, while anything consequential still gets a human decision. Crucially, the tier should be enforced in code — never left to a prompt or a config a script can bypass.
 
