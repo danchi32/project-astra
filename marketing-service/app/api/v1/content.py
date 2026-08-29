@@ -237,7 +237,11 @@ async def card(item_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> R
             raise ValidationError("Nothing to draw.")
 
         line = version.card_line or fallback_line(version.body)
-        png = render_card(line, eyebrow=item.campaign or item.channel.value)
+        # Deliberately NOT the campaign. Campaign names are internal identifiers used for
+        # grouping and reporting — "pipeline-first-run", "q3-retarget" — and one of them
+        # rendered in brand purple on a public graphic is a small, permanent embarrassment.
+        # The product name is the one label that is always true and always presentable.
+        png = render_card(line, eyebrow="ASTRA")
     except NotFoundError as exc:
         raise _not_found(exc) from exc
     except (ValidationError, CardError) as exc:

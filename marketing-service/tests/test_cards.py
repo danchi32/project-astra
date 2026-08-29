@@ -205,3 +205,36 @@ def test_the_card_still_draws_without_the_logo(monkeypatch):
 
     image = _open(render(TRUE_LINE))
     assert image.size == SIZE
+
+
+async def test_the_campaign_slug_never_reaches_the_card(client, admin_token,
+                                                        session_factory):
+    """Campaign names are internal identifiers — "pipeline-first-run", "q3-retarget".
+
+    One of them set in brand purple on a public graphic is a small, permanent
+    embarrassment, and it was on the first card this service ever rendered in production.
+    """
+    async with session_factory() as session:
+        item = await ContentService(session).create(
+            channel=ContentChannel.LINKEDIN, actor="agent", body="Evidence first.",
+            card_line=TRUE_LINE, campaign="pipeline-first-run",
+        )
+
+    response = await client.get(
+        f"/api/v1/content/{item.id}/card.png",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    # The campaign card must be byte-identical to one with no campaign at all: whatever
+    # the eyebrow says, it cannot be derived from the slug.
+    async with session_factory() as session:
+        plain = await ContentService(session).create(
+            channel=ContentChannel.LINKEDIN, actor="agent", body="Evidence first.",
+            card_line=TRUE_LINE,
+        )
+    other = await client.get(
+        f"/api/v1/content/{plain.id}/card.png",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.content == other.content
