@@ -19,9 +19,15 @@ return [
     // Leave both empty to disable lead recording entirely; contact.php then behaves
     // exactly as it did before, mailing the enquiry and nothing else.
     //
-    // `intake_secret` must be byte-identical to ASTRA_MKT_INTAKE_SECRET on the marketing
-    // service. It signs the request; it is never sent, so a leaked access log does not
-    // hand anyone a working credential.
-    'intake_url'    => 'https://marketing.astra.technomateai.com/api/v1/leads/intake',
-    'intake_secret' => 'REPLACE_WITH_A_LONG_RANDOM_STRING',
+    // This is the REAL, live URL — not a placeholder. An earlier version of this file
+    // showed `marketing.astra.technomateai.com`, a host that was never created, and
+    // copying it verbatim sent every lead to a domain that does not resolve. There is no
+    // custom domain: the Cloud Run URL is the address.
+    'intake_url'    => 'https://astra-marketing-fmuizr4sda-as.a.run.app/api/v1/leads/intake',
+
+    // Must be byte-identical to ASTRA_MKT_INTAKE_SECRET on the marketing service, which
+    // is NOT the value in any developer's local .env — production has its own. The secret
+    // signs the request and is never transmitted, so a leaked access log does not hand
+    // anyone a working credential.
+    'intake_secret' => 'REPLACE_WITH_THE_PRODUCTION_INTAKE_SECRET',
 ];
