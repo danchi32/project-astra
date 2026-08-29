@@ -19,6 +19,11 @@ select = ["E", "F", "I", "UP", "B"]
 # happens to share its name. Saying so is more honest than reordering the imports to
 # satisfy a misdetection.
 known-third-party = ["alembic"]
+# And the mirror of that problem: `tests` is our own package (it has an __init__.py and
+# sits next to `app`), but leaving its classification to detection is a guess. Naming both
+# means a shared test helper imported as `tests.x` groups with `app.x` rather than landing
+# in the third-party block beside pytest.
+known-first-party = ["app", "tests"]
 
 [tool.ruff.lint.flake8-bugbear]
 # B008 forbids function calls in argument defaults, which is exactly how FastAPI declares

@@ -39,7 +39,7 @@ from app.core.database import SessionLocal
 from app.models.content import ContentItem, ContentStatus, ContentVersion
 from app.services.content import ContentService
 from app.services.exceptions import NotConfiguredError, NotFoundError, ValidationError
-from app.services.telegram import MAX_MESSAGE, TelegramNotifier, escape_html as _esc
+from app.services.telegram import MAX_MESSAGE, TelegramNotifier, escape_html
 
 logger = logging.getLogger("astra.mkt.desk")
 settings = get_settings()
@@ -100,30 +100,30 @@ class ApprovalDesk:
         """
         head = f"<b>{_STATUS_LINE.get(item.status, '📝 Draft')} · {item.channel.value}</b>"
         if item.campaign:
-            head += f" · {_esc(item.campaign)}"
+            head += f" · {escape_html(item.campaign)}"
 
         lines = [f"{head}  <i>v{version.version_number}</i>", ""]
 
         if version.revision_reason:
-            lines += [f"<i>Revising: {_esc(version.revision_reason)}</i>", ""]
+            lines += [f"<i>Revising: {escape_html(version.revision_reason)}</i>", ""]
 
         if version.headline:
-            lines += [f"<b>{_esc(version.headline)}</b>", ""]
+            lines += [f"<b>{escape_html(version.headline)}</b>", ""]
 
         body = version.body.strip()
         if len(body) > _MAX_BODY_IN_MESSAGE:
             body = body[:_MAX_BODY_IN_MESSAGE] + "\n\n… (truncated — open the API for the rest)"
-        lines.append(_esc(body))
+        lines.append(escape_html(body))
 
         if version.hashtags:
-            lines += ["", f"<i>{_esc(version.hashtags)}</i>"]
+            lines += ["", f"<i>{escape_html(version.hashtags)}</i>"]
         if version.cta:
-            lines += ["", f"👉 {_esc(version.cta)}"]
+            lines += ["", f"👉 {escape_html(version.cta)}"]
 
         warnings = self._warnings(version)
         if warnings:
             lines += ["", "<b>Worth a look before you approve:</b>"]
-            lines += [f"• {_esc(w)}" for w in warnings]
+            lines += [f"• {escape_html(w)}" for w in warnings]
 
         return "\n".join(lines)[:MAX_MESSAGE]
 
@@ -275,7 +275,7 @@ class ApprovalDesk:
             fresh = await self.content.get(item.id)
             version = await self.content.current_version(fresh)
             await self._settle(chat_id, message_id, fresh, version,
-                               f"✅ <b>Approved</b> by {_esc(sender.get('first_name') or '')}")
+                               f"✅ <b>Approved</b> by {escape_html(sender.get('first_name') or '')}")
         return DeskResult(True, "approved")
 
     async def _ask_for_changes(
@@ -335,7 +335,7 @@ class ApprovalDesk:
         try:
             await self.content.request_changes(item.id, actor=actor, feedback=text)
         except ValidationError as exc:
-            await self.telegram.send_message(chat_id, f"Couldn't record that: {_esc(str(exc))}")
+            await self.telegram.send_message(chat_id, f"Couldn't record that: {escape_html(str(exc))}")
             return DeskResult(False, "refused")
 
         logger.info("content %s: changes requested by %s", item.id, actor)
@@ -451,6 +451,6 @@ async def _tell(desk: ApprovalDesk, item: ContentItem, text: str) -> None:
 async def _notify_failure(desk: ApprovalDesk, item_id: uuid.UUID, reason: str) -> None:
     for chat_id in desk.telegram.chat_ids:
         await desk.telegram.send_message(
-            chat_id, f"❌ Couldn't rewrite that draft.\n<code>{_esc(reason)[:300]}</code>"
+            chat_id, f"❌ Couldn't rewrite that draft.\n<code>{escape_html(reason)[:300]}</code>"
         )
         break

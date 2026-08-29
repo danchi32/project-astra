@@ -177,7 +177,9 @@ class ContentService:
         await self.session.commit()
         return item
 
-    async def approve(self, item_id: uuid.UUID, *, actor: str, version_id: uuid.UUID) -> ContentItem:
+    async def approve(
+        self, item_id: uuid.UUID, *, actor: str, version_id: uuid.UUID
+    ) -> ContentItem:
         """Approve one specific version.
 
         The caller must name the version. Approving "the item" is how a reviewer ends up
@@ -204,7 +206,9 @@ class ContentService:
         await self.session.commit()
         return item
 
-    async def request_changes(self, item_id: uuid.UUID, *, actor: str, feedback: str) -> ContentItem:
+    async def request_changes(
+        self, item_id: uuid.UUID, *, actor: str, feedback: str
+    ) -> ContentItem:
         item = await self.get(item_id)
         self._transition(item, ContentStatus.CHANGES_REQUESTED)
         self._record(
