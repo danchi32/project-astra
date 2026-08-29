@@ -334,6 +334,20 @@ class ContentService:
             )
         item.status = to
 
+    async def record_event(
+        self, item: ContentItem, event: ContentEventType, actor: str,
+        *, version_id: uuid.UUID | None = None, note: str | None = None,
+    ) -> None:
+        """Append to the trail from outside this service, and commit.
+
+        Exists for one caller: the publisher, when a post went live and recording it was
+        refused. That fact has to reach the history even though every normal write path
+        has just declined — so it gets a door of its own rather than the publisher
+        reaching into a private method.
+        """
+        self._record(item, event, actor, version_id=version_id, note=note)
+        await self.session.commit()
+
     def _record(
         self, item: ContentItem, event: ContentEventType, actor: str,
         *, version_id: uuid.UUID | None = None, note: str | None = None,

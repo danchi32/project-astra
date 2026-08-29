@@ -31,6 +31,8 @@ from app.services.approval_desk import ApprovalDesk
 from app.services.content import ContentService, PublishRefused
 from app.services.drafting import DraftingAgent
 from app.services.exceptions import NotConfiguredError, NotFoundError, ValidationError
+from app.services.publishers.base import PublisherError
+from app.services.publishing import PublishedButNotRecorded, PublishingService
 
 logger = logging.getLogger("astra.mkt.api.content")
 router = APIRouter(prefix="/content", tags=["content"], dependencies=[Depends(require_admin)])
@@ -211,6 +213,70 @@ async def mark_published(
     except PublishRefused as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return ContentDetail.model_validate(await service.get(item_id))
+
+
+@router.get("/{item_id}/preview", summary="Exactly what would be posted, without posting")
+async def preview(item_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> dict:
+    """A dry run.
+
+    The platform's escaping and hashtag templating make the wire format differ visibly
+    from the approved text, and for an action nobody can undo that difference should be
+    inspectable beforehand rather than discovered on the page.
+    """
+    try:
+        return await PublishingService(session).preview(item_id)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
+    except ValidationError as exc:
+        raise _invalid(exc) from exc
+    except PublishRefused as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/{item_id}/publish", summary="Post the approved version for real")
+async def publish(
+    item_id: uuid.UUID, body: SimpleActorRequest, session: AsyncSession = Depends(get_db)
+) -> dict:
+    """The irreversible one.
+
+    Distinct from `/published`, which only records something a caller already posted
+    elsewhere. This one goes through the gate and then out to the platform.
+    """
+    service = PublishingService(session)
+    try:
+        result = await service.publish(item_id, actor=body.actor)
+    except NotFoundError as exc:
+        raise _not_found(exc) from exc
+    except (PublishRefused, ValidationError) as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PublishedButNotRecorded as exc:
+        # 500, deliberately. The request did not do what was asked, a human has to
+        # reconcile, and the detail carries the live URL so they can start.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        ) from exc
+    except PublisherError as exc:
+        # 502: the failure is on the far side, not in the request. `retryable` tells a
+        # caller whether trying again could plausibly help.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc), headers={"X-Retryable": str(exc.retryable).lower()},
+        ) from exc
+    return {"ref": result.ref, "url": result.url, "characters": len(result.rendered or "")}
+
+
+@router.post("/publish-due", summary="Publish everything scheduled and due")
+async def publish_due(
+    body: SimpleActorRequest, session: AsyncSession = Depends(get_db)
+) -> dict:
+    """For the scheduler.
+
+    Being due is not permission — each item still goes through the gate individually, and
+    one refusal does not stop the queue. The response says what happened to every item,
+    including the ones that did not go out and why.
+    """
+    outcomes = await PublishingService(session).publish_due(actor=body.actor)
+    return {"considered": len(outcomes), "outcomes": outcomes}
 
 
 @router.get("", response_model=list[ContentRead], summary="List content")

@@ -146,6 +146,20 @@ class Settings(BaseSettings):
     #: long file costs almost nothing after the first request in each window.
     drafting_model: str = "claude-sonnet-5"
 
+    # ── Publishing ─────────────────────────────────────────────────────────────
+    #: LinkedIn company page. Both must be set or nothing publishes there — and note that
+    #: this token EXPIRES AFTER 60 DAYS. Programmatic refresh is only available to
+    #: approved Marketing Developer Platform partners; without that approval a human has
+    #: to re-authorise through a browser roughly every two months. Treat a 401 from
+    #: LinkedIn as "the token aged out", not as a permissions bug.
+    linkedin_access_token: str = ""
+    #: Numeric id from the page URL, not the vanity name. The URN is built from it.
+    linkedin_organization_id: str = ""
+    #: LinkedIn versions its API by month and sunsets each one about a year later —
+    #: 202508 died on 2026-08-17. Pinned rather than floating so an upgrade is a decision
+    #: someone makes and tests, but it does need revisiting before this one is retired.
+    linkedin_api_version: str = "202608"
+
     #: Zoho Bigin. Unset means leads are stored and alerted but not pushed to CRM.
     bigin_client_id: str = ""
     bigin_client_secret: str = ""
