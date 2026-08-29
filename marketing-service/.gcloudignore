@@ -1,0 +1,22 @@
+# What `gcloud builds submit` uploads as the build context.
+#
+# Without this it uploads the whole directory, which means the local .venv (hundreds of
+# megabytes) and, worse, .env — sending production credentials to a build service that
+# does not need them.
+#
+# Note: gcloud does NOT fall back to .dockerignore once this file exists, so the two are
+# maintained together. Keep the .env and .venv lines in both.
+.env
+.env.*
+!.env.example
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+.git/
+.gitignore

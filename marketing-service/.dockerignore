@@ -1,0 +1,22 @@
+# The Dockerfile does `COPY . .`, so anything not excluded here is baked into the image
+# and shipped to the registry. The first two lines are the ones that matter: `.env` holds
+# the database URL, the SMTP password and the Bigin refresh token, and an image is not a
+# secret store — it is pulled by anyone with registry read access and survives forever in
+# the layer history.
+.env
+.env.*
+!.env.example
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Tests and their fixtures are not needed at runtime and only enlarge the attack surface.
+tests/
+.git/
+.gitignore
+README.md

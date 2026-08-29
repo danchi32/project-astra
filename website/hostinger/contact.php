@@ -51,6 +51,13 @@ $company  = field($data, 'company', 160);
 $phone    = field($data, 'phone', 60);
 $interest = field($data, 'interest', 60) ?: 'General';
 $message  = field($data, 'message', 5000);
+$landingPage = field($data, 'landing_page', 1000);
+$referrer = field($data, 'referrer', 1000);
+$utmSource = field($data, 'utm_source', 160);
+$utmMedium = field($data, 'utm_medium', 160);
+$utmCampaign = field($data, 'utm_campaign', 160);
+$utmContent = field($data, 'utm_content', 160);
+$utmTerm = field($data, 'utm_term', 160);
 
 if ($name === '' || $message === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     http_response_code(422);
@@ -65,18 +72,130 @@ $bodyText = implode("\r\n", [
     "Company: " . ($company !== '' ? $company : '—'),
     "Phone: " . ($phone !== '' ? $phone : '—'),
     "Interested in: $interest",
+    "Landing page: " . ($landingPage !== '' ? $landingPage : '—'),
+    "Referrer: " . ($referrer !== '' ? $referrer : 'direct'),
+    "Campaign: " . ($utmSource !== '' ? implode(' / ', array_filter([$utmSource, $utmMedium, $utmCampaign, $utmContent, $utmTerm])) : '—'),
     '',
     'Message:',
     $message,
 ]);
 
+// --- Record the lead before mailing it ------------------------------------
+// The email is a notification; this is the record. Until this existed, a lead was only
+// ever an inbox item — nothing stored it, deduplicated it, scored it or followed it up,
+// and a mailbox outage lost it outright. Now the API owns the lead and the email is the
+// fast path to a human.
+//
+// Runs first because it is the durable half: if the intake succeeds we can honestly tell
+// the visitor we have their enquiry even when SMTP is down.
+$leadStored = intake_send($cfg, [
+    'email'        => $email,
+    'name'         => $name,
+    'company'      => $company !== '' ? $company : null,
+    'phone'        => $phone !== '' ? $phone : null,
+    'source'       => field($data, 'source', 80) ?: 'contact_form',
+    'interest'     => $interest,
+    'message'      => $message,
+    'landing_page' => $landingPage !== '' ? $landingPage : null,
+    'referrer'     => $referrer !== '' ? $referrer : null,
+    'utm_source'   => $utmSource,
+    'utm_medium'   => $utmMedium,
+    'utm_campaign' => $utmCampaign,
+    'utm_content'  => $utmContent,
+    'utm_term'     => $utmTerm,
+    'consent_text' => field($data, 'consent_text', 500) ?: null,
+]);
+
 $err = '';
-if (smtp_send($cfg, $email, $name, $subject, $bodyText, $err)) {
+$mailSent = smtp_send($cfg, $email, $name, $subject, $bodyText, $err);
+if (!$mailSent) {
+    error_log('[contact.php] SMTP error: ' . $err);
+}
+
+// Success if EITHER path worked. Failing the form because the mailbox is down would now
+// throw away a lead the API has already accepted — the visitor would retry or leave, and
+// we would have their details either way but tell them we did not.
+if ($leadStored || $mailSent) {
     echo json_encode(['ok' => true]);
 } else {
-    error_log('[contact.php] SMTP error: ' . $err);
     http_response_code(502);
     echo json_encode(['ok' => false, 'error' => 'Could not send your message right now.']);
+}
+
+/**
+ * POST the lead to the ASTRA Marketing Service, signed so the endpoint can tell our
+ * website from anyone who found the URL.
+ *
+ * Inert until `intake_url` and `intake_secret` are added to mail-config.php, so deploying
+ * this file before the service exists changes nothing. Never throws and never blocks for
+ * long: the visitor is waiting, and a lead recorded late beats a form that hangs.
+ */
+function intake_send(array $cfg, array $lead): bool {
+    $url    = $cfg['intake_url'] ?? '';
+    $secret = $cfg['intake_secret'] ?? '';
+    if ($url === '' || $secret === '') {
+        return false;
+    }
+
+    // Drop nulls so the API's optional fields stay absent rather than explicitly null.
+    $body = json_encode(array_filter($lead, static fn($v) => $v !== null && $v !== ''),
+                        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $ts   = (string) time();
+    // The timestamp is signed together with the body, so a captured request cannot be
+    // replayed tomorrow by pairing the old body with a fresh timestamp.
+    $sig  = 'sha256=' . hash_hmac('sha256', $ts . '.' . $body, $secret);
+    $headers = [
+        'Content-Type: application/json',
+        'X-Astra-Timestamp: ' . $ts,
+        'X-Astra-Signature: ' . $sig,
+    ];
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $body,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 6,
+            CURLOPT_CONNECTTIMEOUT => 3,
+        ]);
+        $response = curl_exec($ch);
+        $status   = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($status >= 200 && $status < 300) {
+            return true;
+        }
+        error_log('[contact.php] intake failed: status=' . $status
+                  . ' err=' . $curlErr . ' body=' . substr((string) $response, 0, 300));
+        return false;
+    }
+
+    // Shared hosting without cURL. Same request, no dependency.
+    $context = stream_context_create(['http' => [
+        'method'        => 'POST',
+        'header'        => implode("\r\n", $headers),
+        'content'       => $body,
+        'timeout'       => 6,
+        'ignore_errors' => true,
+    ]]);
+    $response = @file_get_contents($url, false, $context);
+    if ($response === false) {
+        error_log('[contact.php] intake failed: no response');
+        return false;
+    }
+    // $http_response_header is populated by the stream wrapper, not by us.
+    // Anchored at the status line's start: a reason-phrase match ("... 200 OK") would
+    // also hit on a header that merely contains a number, and a trailing-space match
+    // would miss a reason-less "HTTP/1.1 201".
+    $statusLine = $http_response_header[0] ?? '';
+    if (preg_match('#^HTTP/\S+\s+2\d\d#', $statusLine)) {
+        return true;
+    }
+    error_log('[contact.php] intake failed: ' . $statusLine);
+    return false;
 }
 
 /**

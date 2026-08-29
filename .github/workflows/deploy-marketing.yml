@@ -1,0 +1,206 @@
+name: Deploy Marketing Service (Cloud Run)
+
+# The lead-capture service. Same shape as deploy-backend.yml and for the same reasons —
+# the traps encoded there (async Cloud Build, migrations as a separate Job, gating on the
+# revision's own URL) were all learned the expensive way and apply identically here.
+#
+# Runs on any push to main touching marketing-service/, and can be triggered manually.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "marketing-service/**"
+      - ".github/workflows/deploy-marketing.yml"
+  workflow_dispatch: {}
+
+# Never let two deploys race — the migration step must not run concurrently.
+concurrency:
+  group: deploy-marketing
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: astra-prod-503923
+  REGION: asia-southeast1
+  SERVICE: astra-marketing
+  REPO: astra
+
+permissions:
+  contents: read
+  id-token: write        # required for keyless auth to Google (Workload Identity)
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketing-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: marketing-service/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # conftest.py empties every outbound credential before importing the app, and an
+      # autouse fixture fails the run if any integration is still live. That guard exists
+      # because the suite once picked up real credentials from a developer's .env and sent
+      # real Telegram alerts and real emails.
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Lint
+        run: python -m ruff check .
+
+  # The website's PHP mailer is the other half of the intake contract, and nothing else in
+  # CI parses it. A syntax error there breaks lead capture on a static host with no build
+  # step to catch it.
+  lint-php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint contact.php
+        run: php -l website/hostinger/contact.php
+
+  deploy:
+    needs: [test, lint-php]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketing-service
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keyless: GitHub's OIDC token is exchanged for short-lived Google credentials.
+      # No service-account JSON key exists, so there is no long-lived secret to leak.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1041631804427/locations/global/workloadIdentityPools/github/providers/github
+          service_account: gh-deploy@astra-prod-503923.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # Submitted ASYNC and polled here rather than letting `gcloud builds submit` block:
+      # in the synchronous form it exits non-zero on a SUCCEEDED build, because of its
+      # post-build log streaming rather than the build itself. Polling the build's own
+      # status makes this step depend only on the thing we care about.
+      - name: Build image via Cloud Build
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/marketing:${GITHUB_SHA::7}"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+          BUILD_ID=$(gcloud builds submit --async --tag "$IMAGE" --region "$REGION" \
+            --format='value(id)' .)
+          echo "build id: $BUILD_ID"
+          echo "logs: https://console.cloud.google.com/cloud-build/builds;region=${REGION}/${BUILD_ID}?project=${PROJECT_ID}"
+
+          for i in $(seq 1 120); do
+            STATUS=$(gcloud builds describe "$BUILD_ID" --region "$REGION" --format='value(status)')
+            case "$STATUS" in
+              SUCCESS)
+                echo "build succeeded"; exit 0 ;;
+              FAILURE|TIMEOUT|CANCELLED|EXPIRED|INTERNAL_ERROR)
+                echo "build ended as $STATUS — see the logs URL above"; exit 1 ;;
+            esac
+            echo "  [$i] $STATUS"
+            sleep 10
+          done
+          echo "build did not finish within 20 minutes"; exit 1
+
+      # Migrations run ONCE here, not per instance: entrypoint.sh is told to skip them
+      # (RUN_MIGRATIONS_ON_START defaults to false) because parallel Cloud Run cold starts
+      # would otherwise race on `alembic upgrade`.
+      #
+      # The Job needs ASTRA_MKT_DATABASE_URL because alembic/env.py calls get_settings(),
+      # which validates the whole Settings model — and it is the only required field.
+      # alembic/env.py then derives the DIRECT endpoint from it: PgBouncer's transaction
+      # pooling cannot hold the session DDL needs.
+      - name: Run database migrations
+        run: |
+          gcloud run jobs deploy astra-marketing-migrate \
+            --image "$IMAGE" --region "$REGION" \
+            --set-secrets ASTRA_MKT_DATABASE_URL=ASTRA_MKT_DATABASE_URL:latest \
+            --command alembic --args upgrade,head --quiet
+          gcloud run jobs execute astra-marketing-migrate --region "$REGION" --wait
+
+      - name: Deploy to Cloud Run
+        run: |
+          SECRETS=ASTRA_MKT_DATABASE_URL=ASTRA_MKT_DATABASE_URL:latest
+          # Both of these fail SHUT rather than open when absent: an unauthenticated
+          # public write endpoint, or an unauthenticated read of every prospect's contact
+          # details, is not an acceptable default.
+          SECRETS=$SECRETS,ASTRA_MKT_INTAKE_SECRET=ASTRA_MKT_INTAKE_SECRET:latest
+          SECRETS=$SECRETS,ASTRA_MKT_ADMIN_TOKEN=ASTRA_MKT_ADMIN_TOKEN:latest
+          SECRETS=$SECRETS,ASTRA_MKT_TELEGRAM_BOT_TOKEN=ASTRA_MKT_TELEGRAM_BOT_TOKEN:latest
+          SECRETS=$SECRETS,ASTRA_MKT_TELEGRAM_CHAT_IDS=ASTRA_MKT_TELEGRAM_CHAT_IDS:latest
+          SECRETS=$SECRETS,ASTRA_MKT_BIGIN_CLIENT_ID=ASTRA_MKT_BIGIN_CLIENT_ID:latest
+          SECRETS=$SECRETS,ASTRA_MKT_BIGIN_CLIENT_SECRET=ASTRA_MKT_BIGIN_CLIENT_SECRET:latest
+          SECRETS=$SECRETS,ASTRA_MKT_BIGIN_REFRESH_TOKEN=ASTRA_MKT_BIGIN_REFRESH_TOKEN:latest
+          SECRETS=$SECRETS,ASTRA_MKT_SMTP_PASSWORD=ASTRA_MKT_SMTP_PASSWORD:latest
+
+          ENVVARS=ASTRA_MKT_ENVIRONMENT=production
+          ENVVARS=$ENVVARS,ASTRA_MKT_SMTP_HOST=smtp.hostinger.com
+          ENVVARS=$ENVVARS,ASTRA_MKT_SMTP_PORT=465
+          ENVVARS=$ENVVARS,ASTRA_MKT_SMTP_USER=sales@technomateai.com
+          ENVVARS=$ENVVARS,ASTRA_MKT_BOOKING_URL=https://cal.com/astraai/30min
+          ENVVARS=$ENVVARS,ASTRA_MKT_SITE_URL=https://technomateai.com
+          # India data centre. The .com endpoints return a confusing 401 rather than a
+          # redirect, so getting this wrong costs an afternoon.
+          ENVVARS=$ENVVARS,ASTRA_MKT_BIGIN_API_DOMAIN=https://www.zohoapis.in
+          ENVVARS=$ENVVARS,ASTRA_MKT_BIGIN_ACCOUNTS_DOMAIN=https://accounts.zoho.in
+
+          # EMAIL_FROM holds a comma-free display name on purpose: `--set-env-vars` splits
+          # on commas, so "ASTRA <sales@...>" is safe but "Technomate, ASTRA" would not be.
+          ENVVARS=$ENVVARS,ASTRA_MKT_EMAIL_FROM=ASTRA <sales@technomateai.com>
+
+          # min-instances 0: this service handles a handful of requests a day, and an
+          # always-warm instance would cost more per month than every other line in the
+          # marketing stack combined. The cost is a cold start on the first lead after an
+          # idle period — see the note in README.md; contact.php stores the lead anyway,
+          # because the request reaches this service even when the caller gives up waiting.
+          #
+          # max-instances 2 is a deliberate floor, not a guess. Cloud Run's regional CPU
+          # quota is PROJECT-WIDE (20 vCPU here, which is why astra-backend is capped at
+          # 20), and astra-backend-staging already claims up to 3 on top of that. Anything
+          # this service reserves is capacity the product API cannot scale into. At
+          # concurrency 40 one instance covers this workload many times over; the second
+          # exists only so a deploy's revision overlap is never the thing that blocks it.
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" --region "$REGION" \
+            --min-instances 0 --max-instances 2 --concurrency 40 --port 8080 \
+            --cpu 1 --memory 512Mi --timeout 60s \
+            --allow-unauthenticated \
+            --set-secrets "$SECRETS" \
+            --set-env-vars "$ENVVARS" \
+            --quiet
+
+      # Gate on the revision's OWN url — custom-domain DNS and certificate state are
+      # one-time infrastructure that a code deploy neither changes nor controls.
+      - name: Verify the new revision is healthy
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "revision url: $URL"
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$URL/health" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "healthy:"; curl -s "$URL/health"; echo; exit 0
+            fi
+            echo "attempt $i: HTTP $CODE"; sleep 10
+          done
+          echo "New revision did not become healthy."
+          exit 1
+
+      # A renamed Bigin stage surfaces otherwise as one lead at a time failing to sync,
+      # weeks later, in a log nobody is reading. Informational: a stage mismatch should
+      # not block a deploy that is otherwise fine.
+      - name: Bigin stage check (informational)
+        continue-on-error: true
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          CODE=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "$URL/health" || echo 000)
+          echo "health: $CODE — stage verification runs from the service's own logs on first sync"
