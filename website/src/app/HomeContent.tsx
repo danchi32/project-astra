@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   ArrowRight,
   Sparkles,
@@ -15,6 +14,10 @@ import {
   CheckCircle2,
   DownloadCloud,
   UserX,
+  CalendarCheck,
+  Clock3,
+  TicketCheck,
+  Users,
 } from "lucide-react";
 import { Container, Section, Reveal, Button, Badge, SectionHeading } from "@/components/ui";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
@@ -22,7 +25,7 @@ import { DashboardMockup, AiConsole, SelfHealingFlow } from "@/components/visual
 import { TiltCard, Counter, Magnetic, Marquee } from "@/components/enhance";
 import { Hero3D } from "@/components/three/Hero3D";
 import { useContent, Rich } from "@/lib/content";
-import { site } from "@/lib/site";
+import { bookDemo, site } from "@/lib/site";
 import { statCards, usePlatformStats } from "@/lib/platformStats";
 
 const pillarIcons = [Server, Laptop, Sparkles];
@@ -56,6 +59,14 @@ const capDefaults = [
   "Self-Learning KB",
 ];
 
+const outcomeDefaults = [
+  { title: "Prevent avoidable tickets", desc: "Detect device issues early and resolve approved, repeatable problems before they interrupt an employee." },
+  { title: "Give IT time back", desc: "Automate evidence collection, diagnosis and routine remediation so your team can focus on higher-value work." },
+  { title: "Keep every action controlled", desc: "Use allowlisted commands, approval tiers and audit trails to automate without surrendering oversight." },
+];
+
+const outcomeIcons = [TicketCheck, Clock3, ShieldCheck];
+
 export function HomeContent() {
   const statsState = usePlatformStats();
   const { c, list } = useContent();
@@ -77,6 +88,7 @@ export function HomeContent() {
     "Self-heals with tiered approval controls",
     "Verifies and learns from every resolution",
   ]);
+  const outcomes = list("home.outcomes", outcomeDefaults);
 
   return (
     <>
@@ -118,13 +130,13 @@ export function HomeContent() {
               <Reveal delay={0.15}>
                 <div className="mt-8 flex flex-wrap items-center gap-3">
                   <Magnetic>
-                    <Button href="/astra">
-                      {c("home.hero.cta1", "Explore ASTRA")}{" "}
-                      <ArrowRight className="h-4 w-4" />
+                    <Button href={bookDemo.href} external={bookDemo.external}>
+                      {c("home.hero.cta1", "Book a 30-minute demo")}{" "}
+                      <CalendarCheck className="h-4 w-4" />
                     </Button>
                   </Magnetic>
-                  <Button href={site.appUrl} variant="secondary" external>
-                    {c("home.hero.cta2", "Sign up free")}
+                  <Button href="/astra" variant="secondary">
+                    {c("home.hero.cta2", "See how ASTRA works")}
                   </Button>
                 </div>
               </Reveal>
@@ -137,6 +149,9 @@ export function HomeContent() {
                     </span>
                   ))}
                 </div>
+                <p className="mt-4 text-xs leading-relaxed text-muted-token">
+                  Built for growing teams managing Windows 10 and 11 devices. No credit card required to explore the platform.
+                </p>
               </Reveal>
             </div>
 
@@ -166,6 +181,16 @@ export function HomeContent() {
               </Marquee>
             </div>
           </Reveal>
+        </Container>
+      </section>
+
+      <section className="border-y border-token bg-surface/70 py-5">
+        <Container>
+          <div className="grid gap-4 text-sm sm:grid-cols-3">
+            <div className="flex items-center justify-center gap-2 text-secondary-token"><Users className="h-4 w-4 text-brand-500" /> India-based sales &amp; support</div>
+            <div className="flex items-center justify-center gap-2 text-secondary-token"><ShieldCheck className="h-4 w-4 text-brand-500" /> Human approval for sensitive fixes</div>
+            <div className="flex items-center justify-center gap-2 text-secondary-token"><Activity className="h-4 w-4 text-brand-500" /> Live telemetry &amp; audit history</div>
+          </div>
         </Container>
       </section>
 
@@ -200,6 +225,28 @@ export function HomeContent() {
           </Container>
         </Section>
       )}
+
+      <Section className="pb-8">
+        <Container>
+          <Reveal>
+            <SectionHeading eyebrow={c("home.outcomesHead.eyebrow", "Why teams choose ASTRA")} title={c("home.outcomesHead.title", "Less firefighting. More control.")} subtitle={c("home.outcomesHead.subtitle", "Turn endpoint signals into safe, verified action — without adding another dashboard your team has to watch all day.")} />
+          </Reveal>
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
+            {outcomes.map((outcome, i) => {
+              const Icon = outcomeIcons[i % outcomeIcons.length];
+              return (
+                <Reveal key={outcome.title} delay={i * 0.08}>
+                  <div className="h-full rounded-2xl border border-token bg-surface p-7">
+                    <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand-500/10 text-brand-500"><Icon className="h-5 w-5" /></div>
+                    <h3 className="mt-5 text-lg font-bold">{outcome.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-secondary-token">{outcome.desc}</p>
+                  </div>
+                </Reveal>
+              );
+            })}
+          </div>
+        </Container>
+      </Section>
 
       {/* -------------------------------------------------------- PILLARS */}
       <Section className="pt-6">
@@ -371,13 +418,14 @@ export function HomeContent() {
                 </p>
                 <div className="mt-8 flex flex-wrap justify-center gap-3">
                   <Magnetic>
-                    <Link
-                      href="/contact"
+                    <a
+                      href={bookDemo.href}
+                      {...(bookDemo.external ? { target: "_blank", rel: "noopener" } : {})}
                       className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-700 transition-transform hover:-translate-y-0.5"
                     >
-                      {c("home.cta.btn1", "Get in touch")}{" "}
+                      {c("home.cta.btn1", "Book your demo")}{" "}
                       <ArrowRight className="h-4 w-4" />
-                    </Link>
+                    </a>
                   </Magnetic>
                   <a
                     href={site.appUrl}

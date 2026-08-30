@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { HomeContent } from "./HomeContent";
 
 export const metadata: Metadata = {
+  title: "AI-Powered Managed IT & Self-Healing Windows Support",
   // Home-specific description (more targeted than the site default).
   description:
-    "Managed IT services, business laptops & hardware, and ASTRA — an AI System Administrator that watches every device, diagnoses issues and self-heals your Windows fleet with human approval where it matters.",
+    "Reduce IT tickets with managed support and ASTRA, the AI system administrator for Windows fleets. Live telemetry, controlled self-healing, patching and human approvals.",
   alternates: { canonical: "/" },
 };
 

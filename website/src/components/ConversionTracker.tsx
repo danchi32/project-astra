@@ -5,9 +5,8 @@ import { site } from "@/lib/site";
 import { getAttribution, trackEvent } from "@/lib/analytics";
 
 /**
- * Fires a `book_demo_click` conversion whenever a visitor clicks a link to the
- * booking page (Cal.com). Uses one delegated listener instead of wiring every
- * "Book a demo" button, so new CTAs are covered automatically.
+ * Tracks high-intent demo and product sign-up clicks with one delegated listener,
+ * so new CTAs are covered automatically.
  */
 export function ConversionTracker() {
   useEffect(() => {
@@ -18,15 +17,15 @@ export function ConversionTracker() {
         return "";
       }
     })();
-    if (!bookingHost) return;
-
     function onClick(e: MouseEvent) {
       const target = e.target as HTMLElement | null;
       const link = target?.closest?.("a");
       if (!link) return;
       const href = link.getAttribute("href") || "";
-      if (href.includes(bookingHost)) {
+      if (bookingHost && href.includes(bookingHost)) {
         trackEvent("book_demo_click", { ...getAttribution(), destination: href });
+      } else if (href.startsWith(site.appUrl)) {
+        trackEvent("signup_click", { ...getAttribution(), destination: href });
       }
     }
 

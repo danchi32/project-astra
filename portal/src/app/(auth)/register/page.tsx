@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerStart, registerVerify } from "@/lib/api/auth";
@@ -32,6 +33,7 @@ export default function RegisterPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   function set(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [field]: e.target.value });
@@ -106,17 +108,17 @@ export default function RegisterPage() {
         <form onSubmit={submitDetails} className="space-y-4">
           <div>
             <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Organization name</label>
-            <input required value={form.organization_name} onChange={set("organization_name")}
+            <input required autoComplete="organization" value={form.organization_name} onChange={set("organization_name")}
               className={authInputCls} style={authInputStyle} placeholder="Acme Corp" />
           </div>
           <div>
             <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Your name</label>
-            <input required value={form.admin_name} onChange={set("admin_name")}
+            <input required autoComplete="name" value={form.admin_name} onChange={set("admin_name")}
               className={authInputCls} style={authInputStyle} placeholder="Jane Admin" />
           </div>
           <div>
             <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Work email</label>
-            <input type="email" required value={form.admin_email} onChange={set("admin_email")}
+            <input type="email" required autoComplete="email" value={form.admin_email} onChange={set("admin_email")}
               className={authInputCls} style={authInputStyle} placeholder="admin@yourcompany.com" />
             {/* Say it up front — the backend rejects personal providers, and finding that
                 out only after submitting (and after the OTP email) is a poor first run. */}
@@ -126,8 +128,17 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Password</label>
-            <input type="password" required value={form.admin_password} onChange={set("admin_password")}
-              className={authInputCls} style={authInputStyle} placeholder="At least 8 characters" />
+            <div className="relative">
+              <input type={showPassword ? "text" : "password"} required autoComplete="new-password"
+                minLength={8} value={form.admin_password} onChange={set("admin_password")}
+                className={`${authInputCls} pr-11`} style={authInputStyle} placeholder="At least 8 characters" />
+              <button type="button" onClick={() => setShowPassword((shown) => !shown)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute inset-y-0 right-0 grid w-11 place-items-center"
+                style={{ color: "var(--text-secondary)" }}>
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
           </div>
 
           {/* Clickwrap. The acceptance, its version and the source address are recorded
@@ -156,7 +167,7 @@ export default function RegisterPage() {
 
           <button type="submit" disabled={loading || !termsAccepted} className={authButtonCls}
             style={{ background: "var(--accent)" }}>
-            {loading ? "Please wait…" : "Continue"}
+            {loading ? "Creating your trial…" : "Start my 14-day trial"}
           </button>
         </form>
       ) : (
@@ -164,7 +175,8 @@ export default function RegisterPage() {
           <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
             We emailed a 6-digit code to <strong style={{ color: "var(--text-primary)" }}>{form.admin_email}</strong>. Enter it to finish.
           </p>
-          <input required value={code} onChange={(e) => setCode(e.target.value)}
+          <input required value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            maxLength={6} autoComplete="one-time-code"
             inputMode="numeric" autoFocus placeholder="123456"
             className="w-full px-3 py-2.5 rounded-lg text-center text-lg tracking-[0.4em] font-mono outline-none focus:ring-2 focus:ring-brand-500"
             style={authInputStyle} />
