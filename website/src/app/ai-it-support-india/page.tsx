@@ -197,6 +197,7 @@ export default function AiItSupportIndiaPage() {
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Button href="/astra/">Explore ASTRA</Button>
+                <Button href="/windows-endpoint-automation/" variant="secondary">Endpoint automation</Button>
                 <Button href="/contact/" variant="secondary">Discuss managed IT</Button>
               </div>
             </div>

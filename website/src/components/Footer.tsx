@@ -86,6 +86,7 @@ export function Footer() {
   const resources = [
     { label: "Blog", href: "/blog" },
     { label: "AI IT Support India", href: "/ai-it-support-india" },
+    { label: "Windows Endpoint Automation", href: "/windows-endpoint-automation" },
     { label: "Security & Trust", href: "/security" },
     { label: "Offboarding checklist", href: "/resources/offboarding-checklist" },
   ];
