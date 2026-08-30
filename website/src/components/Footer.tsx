@@ -85,6 +85,7 @@ export function Footer() {
   ];
   const resources = [
     { label: "Blog", href: "/blog" },
+    { label: "AI IT Support India", href: "/ai-it-support-india" },
     { label: "Security & Trust", href: "/security" },
     { label: "Offboarding checklist", href: "/resources/offboarding-checklist" },
   ];

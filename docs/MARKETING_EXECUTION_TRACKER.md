@@ -39,7 +39,7 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 
 ## Weeks 3-6 queue
 
-1. AI IT support India landing page.
+1. AI IT support India landing page. - DONE; production build verified.
 2. Windows endpoint automation landing page.
 3. Self-healing IT landing page.
 4. Managed IT services Noida / Greater Noida landing page.
