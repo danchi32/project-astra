@@ -3,9 +3,17 @@ import { AstraContent } from "./AstraContent";
 import { AstraJsonLd } from "@/components/JsonLd";
 
 export const metadata: Metadata = {
-  title: "ASTRA — Your AI System Administrator",
+  title: "AI System Administrator for Windows | ASTRA",
   description:
-    "ASTRA is an AI System Administrator that automates IT support: asset inventory, live telemetry, AI reasoning, and tiered self-healing across your entire Windows fleet.",
+    "ASTRA is AI System Administrator software for Windows fleets. Diagnose endpoint issues, run governed fixes, and verify results with human approval controls.",
+  keywords: [
+    "AI System Administrator",
+    "AI System Admin",
+    "AI sysadmin",
+    "AI IT administrator",
+    "automated system administration",
+    "Windows IT automation",
+  ],
   alternates: { canonical: "/astra/" },
 };
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { Container, Section, Badge, SectionHeading } from "@/components/ui";
+import { Container, Section, Badge } from "@/components/ui";
 import { site } from "@/lib/site";
 import { comparisons } from "@/lib/comparisons";
 
@@ -18,10 +18,13 @@ export default function CompareIndexPage() {
       <Container>
         <div className="mx-auto max-w-2xl text-center">
           <Badge>Compare</Badge>
-          <SectionHeading
-            title={`How ${site.product} compares`}
-            subtitle="Honest, side-by-side breakdowns of ASTRA against popular IT automation and RMM tools — including where each one is the better fit."
-          />
+          <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+            How {site.product} Compares with RMM and Endpoint Tools
+          </h1>
+          <p className="mt-4 text-secondary-token">
+            Honest, side-by-side breakdowns of ASTRA against popular IT automation
+            and RMM tools, including where each one is the better fit.
+          </p>
         </div>
 
         <div className="mx-auto mt-14 grid max-w-4xl gap-5 sm:grid-cols-2">

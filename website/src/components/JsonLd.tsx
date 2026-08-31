@@ -98,26 +98,44 @@ export function AstraJsonLd() {
   const monthly = Object.values(pricing).map((p) => p.monthly);
   const data = {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: site.product,
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Windows",
-    url: `${base}/astra/`,
-    description:
-      "ASTRA is an AI System Administrator that automates IT support: asset inventory, live telemetry, AI reasoning, and tiered self-healing across your entire Windows fleet.",
-    publisher: { "@id": `${base}/#organization` },
-    // A range, in the currency actually charged. The previous node declared
-    // priceCurrency "INR" with price "0" while the pricing page showed USD — a
-    // contradiction that would have been read as a free product.
-    offers: {
-      "@type": "AggregateOffer",
-      priceCurrency: "USD",
-      lowPrice: Math.min(...monthly).toFixed(2),
-      highPrice: Math.max(...monthly).toFixed(2),
-      offerCount: monthly.length,
-      description: "Per device, per month. See the pricing page for current plans.",
-      url: `${base}/pricing/`,
-    },
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${base}/astra/#software`,
+        name: site.product,
+        alternateName: ["ASTRA AI System Administrator", "ASTRA AI System Admin"],
+        applicationCategory: "BusinessApplication",
+        applicationSubCategory: "AI system administration and endpoint management",
+        operatingSystem: "Windows 10, Windows 11",
+        url: `${base}/astra/`,
+        description:
+          "ASTRA is AI System Administrator software that diagnoses Windows endpoint issues, applies governed remediations, and verifies results with human approval controls.",
+        publisher: { "@id": `${base}/#organization` },
+        offers: {
+          "@type": "AggregateOffer",
+          priceCurrency: "USD",
+          lowPrice: Math.min(...monthly).toFixed(2),
+          highPrice: Math.max(...monthly).toFixed(2),
+          offerCount: monthly.length,
+          description: "Per device, per month. See the pricing page for current plans.",
+          url: `${base}/pricing/`,
+        },
+      },
+      {
+        "@type": "FAQPage",
+        "@id": `${base}/astra/#faq`,
+        mainEntity: [
+          ["Can an AI System Administrator replace a human IT administrator?", "No. ASTRA automates repeatable evidence collection and approved endpoint fixes. IT administrators retain control of sensitive, approval-required and admin-only actions."],
+          ["How is an AI system admin different from an RMM tool?", "RMM platforms primarily monitor devices and run predefined automation. ASTRA adds an evidence-to-decision-to-verification loop, while enforcing allowlists, approval tiers and audit records."],
+          ["Which devices can ASTRA manage?", "ASTRA is currently focused on business fleets running Windows 10 and Windows 11, including office and remote-work endpoints."],
+          ["How can a company evaluate ASTRA safely?", "Start with a limited-device pilot, review collected telemetry and audit records, then expand only after the approval policy and remediation results meet your requirements."],
+        ].map(([name, text]) => ({
+          "@type": "Question",
+          name,
+          acceptedAnswer: { "@type": "Answer", text },
+        })),
+      },
+    ],
   };
   return <JsonLdScript data={data} />;
 }

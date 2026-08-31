@@ -1,0 +1,22 @@
+# ASTRA Pricing
+
+Currency: USD. Prices are per managed device. Current pricing and billing terms should be confirmed on https://technomateai.com/pricing/.
+
+## Essential
+- Monthly: $4.49 per device
+- Annual: $44.90 per device
+
+## Professional
+- Monthly: $5.99 per device
+- Annual: $59.90 per device
+
+## Expert
+- Monthly: $8.99 per device
+- Annual: $89.90 per device
+
+## Trial
+- 14 days
+- Full product
+- No credit card required
+
+Book a demo: https://technomateai.com/contact/

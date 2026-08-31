@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CalendarDays, Clock } from "lucide-react";
-import { Container, Section, Badge, SectionHeading } from "@/components/ui";
+import { Container, Section, Badge } from "@/components/ui";
 import { getAllPosts } from "@/lib/blog";
 
 export const metadata: Metadata = {
@@ -29,10 +29,13 @@ export default function BlogIndexPage() {
       <Container>
         <div className="mx-auto max-w-2xl text-center">
           <Badge>Blog</Badge>
-          <SectionHeading
-            title="Insights on AI-driven IT operations"
-            subtitle="Practical guides on IT automation, self-healing endpoints, secure offboarding and cutting support tickets."
-          />
+          <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
+            AI System Administration and IT Automation Guides
+          </h1>
+          <p className="mt-4 text-secondary-token">
+            Practical guides on AI system administrators, IT automation,
+            self-healing endpoints, secure offboarding and cutting support tickets.
+          </p>
         </div>
 
         <div className="mx-auto mt-14 grid max-w-4xl gap-5 sm:grid-cols-2">

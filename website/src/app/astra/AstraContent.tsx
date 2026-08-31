@@ -186,6 +186,34 @@ export function AstraContent() {
         </Container>
       </section>
 
+      <Section>
+        <Container>
+          <Reveal>
+            <div className="mx-auto max-w-4xl rounded-2xl border border-token bg-surface p-7 sm:p-9">
+              <h2 className="text-2xl font-bold tracking-tight">
+                What is an AI System Administrator?
+              </h2>
+              <p className="mt-4 leading-relaxed text-secondary-token">
+                An AI System Administrator, or AI system admin, is software that
+                monitors IT systems, gathers live evidence, diagnoses routine
+                problems, applies permitted fixes, and verifies the outcome. ASTRA
+                performs this governed workflow for Windows endpoints while keeping
+                sensitive actions behind human approval.
+              </p>
+              <p className="mt-4 text-sm leading-relaxed text-secondary-token">
+                Unlike a generic chatbot, ASTRA works from endpoint telemetry and an
+                enterprise knowledge base. Unlike script-only automation, it selects
+                from allowlisted actions, follows code-enforced approval tiers, and
+                records the result in an audit trail. Read the detailed guide to{" "}
+                <a className="font-semibold text-brand-500 hover:underline" href="/blog/what-is-an-ai-system-administrator/">
+                  how AI system administration works
+                </a>.
+              </p>
+            </div>
+          </Reveal>
+        </Container>
+      </Section>
+
       {/* ---------------------------------------------------- HOW IT WORKS */}
       <Section>
         <Container>
@@ -547,6 +575,42 @@ export function AstraContent() {
                 </Reveal>
               );
             })}
+          </div>
+        </Container>
+      </Section>
+
+      <Section className="bg-surface">
+        <Container>
+          <Reveal>
+            <SectionHeading
+              eyebrow="AI system admin FAQ"
+              title="Common questions about AI system administrators"
+            />
+          </Reveal>
+          <div className="mx-auto mt-10 grid max-w-4xl gap-4">
+            {[
+              {
+                q: "Can an AI System Administrator replace a human IT administrator?",
+                a: "No. ASTRA automates repeatable evidence collection and approved endpoint fixes. IT administrators retain control of sensitive, approval-required and admin-only actions.",
+              },
+              {
+                q: "How is an AI system admin different from an RMM tool?",
+                a: "RMM platforms primarily monitor devices and run predefined automation. ASTRA adds an evidence-to-decision-to-verification loop, while enforcing allowlists, approval tiers and audit records.",
+              },
+              {
+                q: "Which devices can ASTRA manage?",
+                a: "ASTRA is currently focused on business fleets running Windows 10 and Windows 11, including office and remote-work endpoints.",
+              },
+              {
+                q: "How can a company evaluate ASTRA safely?",
+                a: "Start with a limited-device pilot, review collected telemetry and audit records, then expand only after the approval policy and remediation results meet your requirements.",
+              },
+            ].map((item) => (
+              <div key={item.q} className="rounded-2xl border border-token bg-app p-6">
+                <h3 className="font-bold">{item.q}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-secondary-token">{item.a}</p>
+              </div>
+            ))}
           </div>
         </Container>
       </Section>

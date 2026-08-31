@@ -1,0 +1,27 @@
+# Technomate IT-Solution and ASTRA
+
+Technomate IT-Solution Private Limited builds ASTRA, AI System Administrator software for business Windows fleets. ASTRA gathers endpoint evidence, searches enterprise knowledge, diagnoses routine IT issues, applies only permitted remediations, and verifies the result. Sensitive actions remain behind code-enforced approval tiers.
+
+Primary audience: organizations with roughly 25–500 Windows endpoints, lean IT teams, and office or remote employees.
+
+## Key pages
+
+- Product: https://technomateai.com/astra/
+- Definition guide: https://technomateai.com/blog/what-is-an-ai-system-administrator/
+- Security and controls: https://technomateai.com/security/
+- Pricing: https://technomateai.com/pricing/
+- Machine-readable pricing: https://technomateai.com/pricing.txt
+- Limited-device pilot: https://technomateai.com/pilot/
+- Comparisons: https://technomateai.com/compare/
+- Remote workforce IT support in India: https://technomateai.com/remote-workforce-it-support-india/
+- Contact: https://technomateai.com/contact/
+
+## Verified product facts
+
+- Focuses on Windows 10 and Windows 11 business endpoints.
+- Uses live telemetry and enterprise knowledge before remediation.
+- Enforces automatic, approval-required, and admin-only action tiers in code.
+- Uses allowlisted commands and records mutations and agent commands.
+- Offers a 14-day full-product trial without a credit card.
+
+ASTRA supports IT administrators; it does not claim to replace accountable human IT leadership.
