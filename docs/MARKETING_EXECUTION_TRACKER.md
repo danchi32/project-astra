@@ -42,8 +42,8 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 1. AI IT support India landing page. - DONE; production build verified.
 2. Windows endpoint automation landing page. - DONE; production build verified.
 3. Self-healing IT landing page. - DONE; production build verified.
-4. Managed IT services Noida / Greater Noida landing page.
-5. IT support for organizations with 50-500 employees landing page.
+4. Managed IT services Noida / Greater Noida landing page. - LATER; local-only positioning deprioritized in favor of pan-India software reach.
+5. IT support for organizations with 50-500 employees landing page. - DONE; India-wide ASTRA software positioning and production build verified.
 6. Intune and ManageEngine comparison pages with dated sources.
 7. Publish two high-intent articles per month.
 

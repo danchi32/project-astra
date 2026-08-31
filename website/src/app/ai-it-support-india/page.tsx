@@ -199,6 +199,7 @@ export default function AiItSupportIndiaPage() {
                 <Button href="/astra/">Explore ASTRA</Button>
                 <Button href="/windows-endpoint-automation/" variant="secondary">Endpoint automation</Button>
                 <Button href="/contact/" variant="secondary">Discuss managed IT</Button>
+                <Button href="/it-support-50-500-employees/" variant="secondary">For 50–500 employee teams</Button>
               </div>
             </div>
             <ul className="grid gap-3 sm:grid-cols-2">
