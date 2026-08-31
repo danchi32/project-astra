@@ -199,6 +199,13 @@ export default function RemoteWorkforceItSupportIndiaPage() {
               <p className="mt-4 leading-relaxed text-secondary-token">
                 ASTRA follows an evidence-first workflow and code-enforced remediation tiers. Start with company-managed devices and a small action catalogue before considering broader deployment.
               </p>
+              <p className="mt-3 text-sm leading-relaxed text-secondary-token">
+                New to the category? Read what an{" "}
+                <Link href="/blog/what-is-an-ai-system-administrator/" className="font-semibold text-brand-500 hover:underline">
+                  AI System Administrator
+                </Link>{" "}
+                does before planning the pilot.
+              </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <Button href="/security/">Review security controls</Button>
                 <Button href="/windows-endpoint-automation/" variant="secondary">Explore endpoint automation</Button>

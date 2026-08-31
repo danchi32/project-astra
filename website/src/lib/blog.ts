@@ -16,6 +16,7 @@ export type PostMeta = {
   title: string;
   description: string;
   date: string; // ISO (YYYY-MM-DD)
+  updated?: string; // ISO (YYYY-MM-DD)
   author: string;
   keywords: string[];
   readingMinutes: number;
@@ -40,6 +41,7 @@ function toMeta(slug: string, data: Record<string, unknown>, content: string): P
     title: String(data.title ?? slug),
     description: String(data.description ?? ""),
     date: String(data.date ?? ""),
+    updated: data.updated ? String(data.updated) : undefined,
     author: String(data.author ?? "Technomate IT-Solution"),
     keywords: Array.isArray(data.keywords) ? (data.keywords as string[]) : [],
     readingMinutes: estimateReadingMinutes(content),

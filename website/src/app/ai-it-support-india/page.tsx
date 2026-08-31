@@ -162,6 +162,9 @@ export default function AiItSupportIndiaPage() {
               <Link href="/security/" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">
                 Review ASTRA security controls <ArrowRight className="h-4 w-4" />
               </Link>
+              <Link href="/blog/what-is-an-ai-system-administrator/" className="mt-3 flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">
+                Learn what an AI System Administrator does <ArrowRight className="h-4 w-4" />
+              </Link>
             </aside>
           </div>
         </Container>

@@ -60,12 +60,45 @@ export default async function BlogPostPage({
     headline: post.title,
     description: post.description,
     datePublished: post.date,
-    dateModified: post.date,
+    dateModified: post.updated ?? post.date,
     author: { "@type": "Organization", name: post.author },
     publisher: { "@id": `${base}/#organization` },
     mainEntityOfPage: `${base}/blog/${slug}/`,
     keywords: post.keywords.join(", "),
   };
+  const aiAdminFaq =
+    slug === "what-is-an-ai-system-administrator"
+      ? {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: [
+            {
+              "@type": "Question",
+              name: "Is an AI System Administrator the same as an AI IT assistant?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Not necessarily. An assistant may answer questions or draft instructions. An AI System Administrator is connected to operational evidence and can execute governed actions, subject to explicit permissions and verification.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "Does an AI System Administrator replace Microsoft Intune or an RMM?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Not automatically. The right architecture depends on current device management, security and integration requirements. A limited pilot should test coexistence and workflow value before any replacement decision.",
+              },
+            },
+            {
+              "@type": "Question",
+              name: "How should a company evaluate an AI System Administrator?",
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: "Start with a small group of representative Windows devices. Measure diagnosis quality, approval behavior, remediation success, audit completeness and user impact before a wider rollout.",
+              },
+            },
+          ],
+        }
+      : null;
 
   return (
     <article className="aurora grain relative -mt-16 pt-28 pb-24 sm:pt-36">
@@ -73,6 +106,12 @@ export default async function BlogPostPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
       />
+      {aiAdminFaq ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(aiAdminFaq) }}
+        />
+      ) : null}
       <Container className="max-w-3xl">
         <Link
           href="/blog"
@@ -93,6 +132,7 @@ export default async function BlogPostPage({
             <Clock className="h-4 w-4" /> {post.readingMinutes} min read
           </span>
           <span>By {post.author}</span>
+          {post.updated ? <span>Updated {formatDate(post.updated)}</span> : null}
         </div>
 
         <div
