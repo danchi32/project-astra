@@ -25,7 +25,7 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 | Replace unsupported performance claims | DONE | Engineering | Homepage public stats render only from the live platform; empty/unavailable data renders no claim. |
 | Founder/team credibility | BLOCKED | Founder | Supply approved founder bio, headshot and real LinkedIn URL. |
 | Response-time expectation | DONE | Founder | Immediate automated acknowledgement/execution may be stated for eligible online-device actions; no instant human-response guarantee. |
-| Pilot terms | DONE | Sales + Engineering | 10-device, free guided, 14-day controlled pilot approved; begins at first successful device report. |
+| Pilot terms | DONE | Sales + Engineering | 10-device, free guided, 14-day controlled pilot approved; public `/pilot/` page built and production build verified. |
 | Google Business Profile | DONE | Founder | Profile created and core fields completed. Continue weekly posts, photos and review requests. |
 
 ## First four weekly funnel rows

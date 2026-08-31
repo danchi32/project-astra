@@ -89,6 +89,7 @@ export function Footer() {
     { label: "Windows Endpoint Automation", href: "/windows-endpoint-automation" },
     { label: "Self-Healing IT", href: "/self-healing-it" },
     { label: "IT Support for Growing Teams", href: "/it-support-50-500-employees" },
+    { label: "Free 10-Device Pilot", href: "/pilot" },
     { label: "Security & Trust", href: "/security" },
     { label: "Offboarding checklist", href: "/resources/offboarding-checklist" },
   ];

@@ -204,6 +204,7 @@ export default function ItSupportForGrowingOrganizationsPage() {
               <h2 className="mt-3 text-3xl font-bold tracking-tight">Prove the workflow before expanding</h2>
               <p className="mt-4 text-secondary-token">A useful pilot limits devices and actions while giving your team enough evidence to judge operational fit.</p>
               <Link href="/self-healing-it/" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">Understand self-healing IT <ArrowRight className="h-4 w-4" /></Link>
+              <Link href="/pilot/" className="mt-3 flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">See the free 10-device pilot <ArrowRight className="h-4 w-4" /></Link>
             </div>
             <div className="space-y-4">
               {rollout.map(([title, body], index) => (
