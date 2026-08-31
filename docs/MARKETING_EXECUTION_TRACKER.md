@@ -48,6 +48,17 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 6. Intune and ManageEngine comparison pages with dated sources. - DONE; official sources reviewed 30 August 2026 and production build verified.
 7. Publish two high-intent articles per month. - DONE for August; buyer guide and endpoint automation pilot checklist added and production build verified.
 
+## India-wide acquisition execution
+
+| Work item | Status | Owner | Evidence / next action |
+|---|---|---|---|
+| B2B ICP and scoring model | DONE | Growth | India-wide 25-500 Windows endpoint ICP, buying signals, disqualifiers and 100-point qualification rubric documented. |
+| Compliance-safe prospect tracker | DONE | Growth | CSV template captures source lineage, verification, lawful basis, opt-out and deletion date. |
+| Cold outreach sequence | DONE | Growth + Sales | Five-touch, 24-day sequence created without fabricated proof; first-touch CTA asks for a reply. |
+| LinkedIn organic campaign | DONE | Founder + Growth | Five posts and unique UTM links ready for founder/company publishing. |
+| First 25 verified accounts | NEXT | Growth | Research 50-75 candidates, verify public business contacts and promote only signal-backed accounts. |
+| First controlled outreach batch | NEXT | Founder | Send to a maximum of 10 newly verified contacts per business day; stop on deliverability or complaint warnings. |
+
 ## Decision log
 
 - ASTRA is the lead offer; managed services and hardware support the implementation story.
