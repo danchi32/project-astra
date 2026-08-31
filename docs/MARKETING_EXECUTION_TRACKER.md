@@ -20,7 +20,8 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 | Completed-onboarding event | IN PROGRESS | Engineering | First successful device reporting is the proposed milestone. Portal tracking needs a privacy-safe server-side design before implementation. |
 | Google Search Console | NEXT | Founder | Verify domain property and submit `https://technomateai.com/sitemap.xml`. |
 | Microsoft Clarity | DONE | Founder + Engineering | Project `yarda8bkso` configured as a repository variable, deployed and verified in the live bundle. |
-| Weekly funnel report | NEXT | Growth | Record sessions, source/medium, landing page, leads, demos, signups, qualified opportunities and pilots every Monday. |
+| First-touch campaign attribution | DONE | Engineering | Session-scoped attribution now survives internal navigation; conversion events include CTA text and page path without PII. |
+| Weekly funnel report | IN PROGRESS | Growth | Measurement definitions, sources, reconciliation rules and Monday cadence documented in `docs/ANALYTICS_TRACKING_PLAN.md`; first baseline awaits source data. |
 | Security and trust page | DONE | Engineering | `/security/` implemented, linked in the footer and sitemap, and production build verified. |
 | Replace unsupported performance claims | DONE | Engineering | Homepage public stats render only from the live platform; empty/unavailable data renders no claim. |
 | Founder/team credibility | BLOCKED | Founder | Supply approved founder bio, headshot and real LinkedIn URL. |

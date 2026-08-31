@@ -1,5 +1,17 @@
 type AnalyticsParams = Record<string, string | number | boolean | undefined>;
 
+const ATTRIBUTION_KEY = "technomate_first_touch_attribution";
+
+type Attribution = {
+  landing_page: string;
+  referrer: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_content: string;
+  utm_term: string;
+};
+
 declare global {
   interface Window {
     gtag?: (command: "event", eventName: string, params?: AnalyticsParams) => void;
@@ -27,10 +39,7 @@ export function trackEvent(eventName: string, params?: AnalyticsParams) {
   if (metaEvent) window.fbq?.("track", metaEvent, params);
 }
 
-/** Preserve acquisition context with a lead, even after it leaves analytics. */
-export function getAttribution() {
-  if (typeof window === "undefined") return {};
-
+function currentAttribution(): Attribution {
   const query = new URLSearchParams(window.location.search);
   return {
     landing_page: window.location.href,
@@ -41,4 +50,29 @@ export function getAttribution() {
     utm_content: query.get("utm_content") ?? "",
     utm_term: query.get("utm_term") ?? "",
   };
+}
+
+/**
+ * Capture the first page and campaign for this browser session. This prevents
+ * attribution disappearing when someone visits content before converting.
+ */
+export function captureAttribution(): Attribution | Record<string, never> {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const existing = window.sessionStorage.getItem(ATTRIBUTION_KEY);
+    if (existing) return JSON.parse(existing) as Attribution;
+
+    const attribution = currentAttribution();
+    window.sessionStorage.setItem(ATTRIBUTION_KEY, JSON.stringify(attribution));
+    return attribution;
+  } catch {
+    // Storage can be unavailable in strict privacy modes; tracking still works.
+    return currentAttribution();
+  }
+}
+
+/** Return the session's first-touch acquisition context without collecting PII. */
+export function getAttribution(): Attribution | Record<string, never> {
+  return captureAttribution();
 }

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { site } from "@/lib/site";
-import { getAttribution, trackEvent } from "@/lib/analytics";
+import { captureAttribution, getAttribution, trackEvent } from "@/lib/analytics";
 
 /**
  * Tracks high-intent demo and product sign-up clicks with one delegated listener,
@@ -10,6 +10,8 @@ import { getAttribution, trackEvent } from "@/lib/analytics";
  */
 export function ConversionTracker() {
   useEffect(() => {
+    captureAttribution();
+
     const bookingHost = (() => {
       try {
         return site.booking ? new URL(site.booking).host : "";
@@ -22,10 +24,16 @@ export function ConversionTracker() {
       const link = target?.closest?.("a");
       if (!link) return;
       const href = link.getAttribute("href") || "";
+      const context = {
+        ...getAttribution(),
+        destination: href,
+        cta_text: (link.textContent || "").trim().replace(/\s+/g, " ").slice(0, 100),
+        page_path: window.location.pathname,
+      };
       if (bookingHost && href.includes(bookingHost)) {
-        trackEvent("book_demo_click", { ...getAttribution(), destination: href });
+        trackEvent("book_demo_click", context);
       } else if (href.startsWith(site.appUrl)) {
-        trackEvent("signup_click", { ...getAttribution(), destination: href });
+        trackEvent("signup_click", context);
       }
     }
 
