@@ -94,7 +94,7 @@ export const site = {
   },
 
   social: {
-    linkedin: "#",
+    linkedin: "https://www.linkedin.com/company/technomate-ai/",
     twitter: "#",
     instagram: "#",
   },
