@@ -15,6 +15,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/windows-endpoint-automation/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/self-healing-it/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/it-support-50-500-employees/", priority: 0.9, changeFrequency: "monthly" },
+    { path: "/remote-workforce-it-support-india/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/pilot/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/pricing/", priority: 0.8, changeFrequency: "monthly" },
     { path: "/compare/", priority: 0.7, changeFrequency: "monthly" },
