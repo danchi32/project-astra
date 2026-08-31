@@ -202,6 +202,9 @@ export default function WindowsEndpointAutomationPage() {
               <Link href="/security/" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">
                 Review security controls <ArrowRight className="h-4 w-4" />
               </Link>
+              <Link href="/self-healing-it/" className="mt-3 flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">
+                See the self-healing IT workflow <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               {useCases.map((useCase) => (

@@ -87,6 +87,7 @@ export function Footer() {
     { label: "Blog", href: "/blog" },
     { label: "AI IT Support India", href: "/ai-it-support-india" },
     { label: "Windows Endpoint Automation", href: "/windows-endpoint-automation" },
+    { label: "Self-Healing IT", href: "/self-healing-it" },
     { label: "Security & Trust", href: "/security" },
     { label: "Offboarding checklist", href: "/resources/offboarding-checklist" },
   ];

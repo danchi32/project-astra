@@ -13,6 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/astra/", priority: 0.9, changeFrequency: "weekly" },
     { path: "/ai-it-support-india/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/windows-endpoint-automation/", priority: 0.9, changeFrequency: "monthly" },
+    { path: "/self-healing-it/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/pricing/", priority: 0.8, changeFrequency: "monthly" },
     { path: "/compare/", priority: 0.7, changeFrequency: "monthly" },
     { path: "/blog/", priority: 0.7, changeFrequency: "weekly" },
