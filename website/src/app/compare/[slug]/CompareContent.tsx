@@ -89,6 +89,22 @@ export function CompareContent({ data }: { data: Comparison }) {
             <p className="mt-4 text-xs leading-relaxed text-muted-token">
               {compareDisclaimer}
             </p>
+            {data.sources?.length ? (
+              <div className="mt-4 rounded-xl border border-token bg-app p-4 text-xs text-muted-token">
+                <p className="font-semibold text-secondary-token">
+                  Official sources reviewed {data.sourceReviewed}
+                </p>
+                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                  {data.sources.map((source) => (
+                    <li key={source.href}>
+                      <a href={source.href} target="_blank" rel="noopener noreferrer" className="text-brand-500 hover:underline">
+                        {source.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </Reveal>
         </Container>
       </Section>

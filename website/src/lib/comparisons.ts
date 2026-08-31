@@ -38,6 +38,8 @@ export type Comparison = {
   /** Honest "when the competitor is the better fit". */
   whenThem: string[];
   faqs: { q: string; a: string }[];
+  sourceReviewed?: string;
+  sources?: { label: string; href: string }[];
 };
 
 const disclaimer =
@@ -46,6 +48,99 @@ const disclaimer =
 export const compareDisclaimer = disclaimer;
 
 export const comparisons: Comparison[] = [
+  {
+    slug: "astra-vs-microsoft-intune",
+    competitor: "Microsoft Intune",
+    title: "ASTRA vs Microsoft Intune — AI IT Operations vs UEM (2026)",
+    description:
+      "Compare ASTRA and Microsoft Intune for Windows operations: evidence-first remediation and approval tiers vs mature cross-platform device management.",
+    h1: "ASTRA vs Microsoft Intune",
+    intro:
+      "Microsoft Intune is a mature, cross-platform unified endpoint management service in the Microsoft ecosystem. ASTRA is a Windows-focused AI System Administrator built around evidence-first diagnosis, governed remediation and verification. The right choice depends on whether your priority is broad policy management or an AI operations loop.",
+    competitorSummary:
+      "Microsoft Intune manages and protects Windows, macOS, iOS and Android endpoints from a cloud console. It provides device and app management, compliance policy, remote actions and endpoint analytics, and is included with several Microsoft 365 and Enterprise Mobility + Security subscriptions.",
+    rows: [
+      { feature: "Category", astra: "AI System Administrator", them: "Unified endpoint management (UEM)", edge: "even" },
+      { feature: "Primary workflow", astra: "Evidence → diagnosis → authorization → remediation → verification", them: "Enrollment → policy → compliance → remote administration", edge: "even" },
+      { feature: "AI-driven remediation", astra: "Core product workflow with code-enforced action tiers", them: "Analytics, policies and remediations within the Microsoft management stack", edge: "astra" },
+      { feature: "Human approval boundaries", astra: "Automatic / approval-required / admin-only tiers", them: "Role-based access, assignments and policy controls", edge: "even" },
+      { feature: "Device platforms", astra: "Windows 10 and 11 (64-bit)", them: "Windows, macOS, iOS and Android", edge: "them" },
+      { feature: "Mobile application management", astra: "Not currently offered", them: "Built-in app protection and management", edge: "them" },
+      { feature: "Endpoint analytics", astra: "Live fleet telemetry and remediation context", them: "Device performance, startup, app reliability and related reports", edge: "even" },
+      { feature: "Pricing model", astra: "Per device, published plans", them: "Per user; also included in several Microsoft subscriptions", edge: "even" },
+      { feature: "Best fit", astra: "Windows teams prioritizing controlled AI diagnosis and verified fixes", them: "Organizations standardized on Microsoft and needing broad UEM", edge: "even" },
+    ],
+    whyAstra: [
+      "Evidence before action — ASTRA combines the request, enterprise knowledge and live endpoint telemetry before selecting a remediation.",
+      "Explicit action governance — automatic, approval-required and admin-only tiers are enforced in backend code rather than left to an AI prompt.",
+      "Post-action verification — the workflow checks and records the result instead of treating command delivery as resolution.",
+      "Focused evaluation — Windows-first teams can test the reasoning-to-verification loop on a limited device group.",
+    ],
+    whenThem: [
+      "Your organization needs mature management across Windows, macOS, iOS and Android from one Microsoft-aligned platform.",
+      "Device compliance, mobile application management and Microsoft 365 identity integration are primary requirements.",
+      "Intune is already included in your licensing and your team is invested in Microsoft administration workflows.",
+    ],
+    faqs: [
+      { q: "Is ASTRA a replacement for Microsoft Intune?", a: "Not in every environment. Intune is broader UEM for device, app and compliance management across several operating systems. ASTRA is focused on Windows evidence, diagnosis and controlled remediation. A pilot should assess whether ASTRA complements or replaces specific current workflows." },
+      { q: "Which product supports more operating systems?", a: "Microsoft Intune supports Windows, macOS, iOS and Android management. The ASTRA endpoint agent currently supports 64-bit Windows 10 and Windows 11." },
+      { q: "How do their pricing models differ?", a: "ASTRA uses per-device plans. Microsoft lists Intune Plan 1 per user and also includes it in several Microsoft 365 and Enterprise Mobility + Security subscriptions. Verify current regional pricing and your existing license entitlements before comparing cost." },
+      { q: "What is ASTRA's main difference?", a: "ASTRA is built around an evidence-to-verification loop: gather live context, diagnose, apply a code-enforced approval tier, execute an allowlisted action and verify the result." },
+    ],
+    sourceReviewed: "30 August 2026",
+    sources: [
+      { label: "Microsoft Intune plans and pricing", href: "https://www.microsoft.com/en-us/security/business/microsoft-intune-pricing" },
+      { label: "Microsoft Intune product features", href: "https://www.microsoft.com/en-us/security/business/endpoint-management/microsoft-intune" },
+      { label: "Microsoft Learn: Endpoint analytics overview", href: "https://learn.microsoft.com/en-us/intune/analytics/" },
+    ],
+  },
+  {
+    slug: "astra-vs-manageengine-endpoint-central",
+    competitor: "ManageEngine Endpoint Central",
+    title: "ASTRA vs ManageEngine Endpoint Central (2026)",
+    description:
+      "Compare ASTRA and ManageEngine Endpoint Central: governed AI remediation for Windows vs broad endpoint management, patching and security.",
+    h1: "ASTRA vs ManageEngine Endpoint Central",
+    intro:
+      "ManageEngine Endpoint Central is a broad endpoint management and security platform with deep patching, configuration and multi-OS capabilities. ASTRA is a Windows-focused AI System Administrator designed to reason from live evidence, enforce action boundaries and verify remediation.",
+    competitorSummary:
+      "ManageEngine Endpoint Central provides endpoint management and security across desktop and mobile platforms. Its official materials cover patching, software deployment, asset management, remote troubleshooting, configurations, reporting, mobile device management and multiple deployment editions.",
+    rows: [
+      { feature: "Category", astra: "AI System Administrator", them: "Unified endpoint management and security", edge: "even" },
+      { feature: "Core workflow", astra: "AI reasoning with evidence, governed action and verification", them: "Policies, configurations, automation and technician tools", edge: "even" },
+      { feature: "Approval model", astra: "Three code-enforced remediation tiers", them: "Roles, configurations, deployment controls and approvals", edge: "even" },
+      { feature: "Device platforms", astra: "Windows 10 and 11 (64-bit)", them: "Broad desktop and mobile OS coverage", edge: "them" },
+      { feature: "Patch management", astra: "Windows update visibility and controlled workflows", them: "Deep OS and third-party patch management", edge: "them" },
+      { feature: "OS deployment and imaging", astra: "Not currently offered", them: "Available within the platform", edge: "them" },
+      { feature: "Evidence before remediation", astra: "Required reasoning step using telemetry and knowledge", them: "Monitoring, reports, policies and administrator-led tooling", edge: "astra" },
+      { feature: "Post-action verification", astra: "Part of the cognitive remediation loop", them: "Activity, status and reporting capabilities", edge: "astra" },
+      { feature: "Deployment and pricing", astra: "Cloud SaaS priced per device", them: "Cloud and on-premises editions with endpoint/technician bands", edge: "even" },
+      { feature: "Best fit", astra: "Lean Windows teams seeking controlled AI operations", them: "Teams needing broad, mature endpoint administration depth", edge: "even" },
+    ],
+    whyAstra: [
+      "AI operations is the product core — ASTRA reasons over live evidence and approved knowledge before choosing a permitted fix.",
+      "Authorization boundaries are explicit — the model cannot lower an approval-required or admin-only action into an automatic tier.",
+      "Verification closes the loop — ASTRA records whether the attempted remediation produced the expected endpoint state.",
+      "A focused Windows workflow can reduce evaluation complexity for lean teams that do not need a broad multi-platform administration suite.",
+    ],
+    whenThem: [
+      "You need established patching, software distribution, OS imaging and configuration capabilities across multiple operating systems.",
+      "Your environment requires on-premises deployment options or broad mobile device management.",
+      "You prefer a comprehensive endpoint administration suite and technician-led automation over a focused AI reasoning loop.",
+    ],
+    faqs: [
+      { q: "Is ASTRA a full replacement for Endpoint Central?", a: "Not for every use case. Endpoint Central offers broader endpoint administration, multi-OS management, patching and deployment capabilities. ASTRA is best evaluated for its Windows evidence-to-verification workflow and controlled AI remediation." },
+      { q: "Which platform is broader?", a: "ManageEngine Endpoint Central is broader across operating systems and endpoint management functions. ASTRA is intentionally focused on Windows IT operations and governed remediation." },
+      { q: "How should we compare pricing?", a: "ASTRA publishes per-device SaaS plans. Endpoint Central offers multiple editions, deployment models and endpoint bands. Use your device, server, technician and add-on requirements with the current official calculators rather than comparing a single headline price." },
+      { q: "Can ASTRA be evaluated alongside Endpoint Central?", a: "Yes. A limited-device pilot can test ASTRA's diagnosis, approval and verification workflow while coexistence requirements are reviewed against your current Endpoint Central configuration." },
+    ],
+    sourceReviewed: "30 August 2026",
+    sources: [
+      { label: "Endpoint Central features", href: "https://www.manageengine.com/products/desktop-central/features.html" },
+      { label: "Endpoint Central OS comparison matrix", href: "https://www.manageengine.com/products/desktop-central/os-comparison-matrix.html" },
+      { label: "Endpoint Central pricing", href: "https://www.manageengine.com/products/desktop-central/pricing.html" },
+    ],
+  },
   {
     slug: "astra-vs-ninjaone",
     competitor: "NinjaOne",

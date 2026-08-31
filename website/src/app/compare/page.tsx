@@ -8,7 +8,7 @@ import { comparisons } from "@/lib/comparisons";
 export const metadata: Metadata = {
   title: "Compare ASTRA — AI IT Automation vs RMM Tools",
   description:
-    "See how ASTRA, the AI System Administrator, compares to popular IT automation and RMM tools like NinjaOne and Atera. Honest, side-by-side breakdowns.",
+    "Compare ASTRA with Microsoft Intune, ManageEngine Endpoint Central, NinjaOne and Atera. Honest, sourced IT automation and endpoint management guides.",
   alternates: { canonical: "/compare/" },
 };
 
