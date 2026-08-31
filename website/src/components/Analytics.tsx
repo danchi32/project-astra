@@ -27,7 +27,7 @@ import { effectiveConsent, onConsentChange } from "@/lib/consent";
  *   NEXT_PUBLIC_META_PIXEL_ID  Meta (Facebook/Instagram) Pixel id — for ads
  *   NEXT_PUBLIC_GOOGLE_ADS_ID  Google Ads id (AW-…) — remarketing + conversions
  */
-const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "G-GKPCWJGVEY";
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID ?? "G-80HZL6TZGW";
 const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID ?? "";
 // NOTE: use `||` not `??` — the CI/build env may set these to an EMPTY string
 // (not undefined), and `??` would not fall back on "". `||` falls back on empty.
