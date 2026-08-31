@@ -1,7 +1,7 @@
 # ASTRA Controlled Endpoint Pilot — Draft Offer
 
 Updated: 2026-08-30
-Status: Internal draft; not approved for public publication
+Status: Core commercial terms approved; public-page drafting ready
 
 ## Offer summary
 
@@ -25,7 +25,9 @@ The pilot is designed to answer four questions:
 | Primary owner | One named customer IT owner |
 | Approvers | Named approver for approval-required actions and named administrator for admin-only actions |
 | Review cadence | Kickoff, midpoint review and final decision review |
-| Commercial status | Software trial requires no credit card; guided-service pricing still requires founder approval |
+| Commercial status | Free guided pilot; no credit card required |
+| Automated response | Immediate acknowledgement and execution for eligible automatic actions when the device is online |
+| Human support | During published support hours; no unsupported instant human-response guarantee |
 
 The device limit is deliberately small enough to control risk and broad enough to include representative users, hardware and working locations.
 
@@ -99,7 +101,7 @@ No improvement percentage should be promised before a real baseline exists.
 - Unrestricted shell or arbitrary command execution
 - Registry, BIOS, firmware or reinstallation automation
 - Identity, ticketing or third-party tool integrations not validated before kickoff
-- Guaranteed response or resolution times
+- Guaranteed human response or resolution times
 - On-site coverage outside an agreed service area
 - Hardware replacement, licensing or procurement charges
 - A production-wide rollout during the pilot
@@ -125,13 +127,19 @@ The closing review should record one of four outcomes:
 3. Use ASTRA alongside an existing endpoint platform for selected workflows.
 4. End the pilot and remove the agent.
 
-## Founder decisions required before publication
+## Founder decisions
 
-1. Confirm the public device limit: **10 devices** or another number.
-2. Confirm whether guided kickoff and review support are free or separately priced.
-3. Confirm support hours and a serviceable response-time expectation.
-4. Confirm whether the 14 days begin at account creation or first successful device report. This draft recommends first device report.
-5. Confirm the default data-retention and deletion language for ended pilots.
-6. Confirm whether optional managed/on-site support is mentioned in the public offer.
+Approved:
 
-Until these items are approved, the website should continue offering a 14-day software trial and a 30-minute pilot-planning session without publishing unsupported service commitments.
+1. Public device limit: **10 devices**.
+2. Guided kickoff and review support: **free**.
+3. Eligible automatic actions: immediate acknowledgement/execution when the endpoint is online and policy permits the action.
+
+Publication defaults:
+
+4. The 14 days begin at the first successful device report.
+5. Ended-pilot data handling follows the published privacy and retention terms; no separate promise is added.
+6. Optional managed/on-site support is not part of the core pan-India software offer.
+7. Human support is available during the published support hours. “Instant human support” is not promised.
+
+The public offer may now be drafted using these approved boundaries without publishing unsupported human-response or resolution commitments.
