@@ -17,15 +17,15 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 | Track signup clicks | DONE | Engineering | `signup_click` maps to Meta `StartTrial`. |
 | Track contact and lead-magnet leads | DONE | Engineering | `generate_lead` fires after contact success and lead-magnet delivery. |
 | Mark GA4 events as key events | NEXT | Founder | In GA4 Admin, mark `book_demo_click`, `signup_click` and `generate_lead` as key events. |
-| Completed-onboarding event | NEXT | Engineering | Define the first-value milestone, then emit it from the product rather than counting account creation. |
+| Completed-onboarding event | IN PROGRESS | Engineering | First successful device reporting is the proposed milestone. Portal tracking needs a privacy-safe server-side design before implementation. |
 | Google Search Console | NEXT | Founder | Verify domain property and submit `https://technomateai.com/sitemap.xml`. |
-| Microsoft Clarity | BLOCKED | Founder | Create project, add `NEXT_PUBLIC_CLARITY_ID` as a GitHub Actions repository variable, then redeploy. |
+| Microsoft Clarity | DONE | Founder + Engineering | Project `yarda8bkso` configured as a repository variable, deployed and verified in the live bundle. |
 | Weekly funnel report | NEXT | Growth | Record sessions, source/medium, landing page, leads, demos, signups, qualified opportunities and pilots every Monday. |
 | Security and trust page | DONE | Engineering | `/security/` implemented, linked in the footer and sitemap, and production build verified. |
 | Replace unsupported performance claims | DONE | Engineering | Homepage public stats render only from the live platform; empty/unavailable data renders no claim. |
 | Founder/team credibility | BLOCKED | Founder | Supply approved founder bio, headshot and real LinkedIn URL. |
 | Response-time expectation | NEXT | Founder | Confirm a serviceable sales response SLA before publishing it. |
-| Pilot terms | NEXT | Sales + Engineering | Define device limit, duration, success criteria, support scope and exit process. |
+| Pilot terms | IN PROGRESS | Sales + Engineering | Internal draft created in `docs/ASTRA_PILOT_OFFER_DRAFT.md`; founder decisions remain before publication. |
 | Google Business Profile | DONE | Founder | Profile created and core fields completed. Continue weekly posts, photos and review requests. |
 
 ## First four weekly funnel rows
