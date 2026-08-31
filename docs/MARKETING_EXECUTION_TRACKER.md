@@ -56,7 +56,7 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 | Compliance-safe prospect tracker | DONE | Growth | CSV template captures source lineage, verification, lawful basis, opt-out and deletion date. |
 | Cold outreach sequence | DONE | Growth + Sales | Five-touch, 24-day sequence created without fabricated proof; first-touch CTA asks for a reply. |
 | LinkedIn organic campaign | DONE | Founder + Growth | Five posts and unique UTM links ready for founder/company publishing. |
-| First 25 verified accounts | IN PROGRESS | Growth | Batch 1 added five sourced expansion candidates; none promoted to Hot until Windows fit, buyer and email deliverability are verified. Continue toward 50-75 candidates. |
+| First 25 verified accounts | IN PROGRESS | Growth | Batches 1-2 contain 10 sourced candidates. No account is Hot yet; Windows fit, buyer ownership and email deliverability remain mandatory promotion gates. |
 | First controlled outreach batch | NEXT | Founder | Send to a maximum of 10 newly verified contacts per business day; stop on deliverability or complaint warnings. |
 
 ## Decision log
