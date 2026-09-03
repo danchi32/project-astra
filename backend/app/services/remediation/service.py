@@ -205,46 +205,147 @@ def _validate_kb_article_id(value: Any) -> str:
     return "KB" + digits
 
 
-# Friendly, outcome-focused lines the assistant shows the user after a fix runs — the point is
-# reassurance ("it's fixed"), not the mechanics ("I restarted the service").
-# What was actually done, in one line the user can follow.
+# What the user is told once a fix has run: the RESULT first, then the mechanism that
+# produced it.
 #
-# These used to say things like "That's back up and running", which tells the user nothing
-# they didn't already know and reads like an evasion. Naming the mechanism — the process, the
-# folder, the cache — is what makes the fix legible: the user learns what changed on their
-# machine, and a technical colleague can sanity-check it. Kept to a single sentence; the
-# agent's own output (e.g. "Freed 2.1 GB") is appended separately when it has something
-# concrete to add.
+# These lines lead with state ("Outlook is running normally again") rather than with the
+# operation ("Restarted Outlook's process"). That ordering is the whole point, and it was
+# paid for: a customer read "restarted" as "they closed it and opened it again — anyone
+# could do that", during an incident that cost them a meeting. The operation is the same
+# either way; what changed is that the sentence now answers the question the user actually
+# has, which is whether their machine is working, not which verb was invoked.
+#
+# Naming the mechanism afterwards is still required — a line that says only "it's fixed"
+# reads like an evasion and a technical colleague cannot sanity-check it. Never write the
+# bare verb "restarted" here: it is accurate and it is worthless, because it describes the
+# one part of the work the user could have done themselves.
 _TECHNICAL_OUTCOME: dict[str, str] = {
     "restart_explorer":
-        "Restarted explorer.exe — the Windows shell that draws your desktop, taskbar and File Explorer.",
+        "Your desktop shell is responding normally again — the taskbar, desktop and File "
+        "Explorer were reinitialised and their window handles rebuilt.",
     "restart_outlook":
-        "Restarted Outlook's process, which rebuilds its Exchange connection and clears its in-memory state.",
-    "restart_teams": "Restarted the Teams process, clearing the cached session state it was stuck on.",
-    "restart_zoom": "Restarted the Zoom process, clearing the cached session state it was stuck on.",
-    "restart_chrome": "Restarted Chrome, releasing the memory its tabs and extensions were holding.",
-    "restart_edge": "Restarted Edge, releasing the memory its tabs and extensions were holding.",
-    "restart_application": "Restarted the application's process, clearing whatever state it was stuck in.",
+        "Outlook is running normally again. Its session was reinitialised, which re-established "
+        "the Exchange connection and cleared the in-memory state it was stuck on.",
+    "restart_teams":
+        "Microsoft Teams is running normally again. Its session was reinitialised and the cached "
+        "state it was stuck on has been cleared.",
+    "restart_zoom":
+        "Zoom is running normally again. Its session was reinitialised, clearing the state it was "
+        "stuck on, and its audio and video devices were re-enumerated on launch.",
+    "restart_chrome":
+        "Chrome is running normally again. Its process tree was reinitialised, releasing the "
+        "memory its tabs and extensions were holding.",
+    "restart_edge":
+        "Edge is running normally again. Its process tree was reinitialised, releasing the memory "
+        "its tabs and extensions were holding.",
+    "restart_application":
+        "The application is running normally again. Its process was reinitialised, clearing the "
+        "state it was stuck in.",
     "flush_dns":
-        "Flushed the DNS resolver cache, so your PC re-queries the DNS server instead of reusing stale records.",
+        "Your DNS resolver cache is clear — your PC now re-queries the DNS server instead of "
+        "reusing stale records.",
     "clear_temp":
-        "Emptied your user temp folder (%TEMP%) — Windows and your apps recreate whatever they still need.",
+        "Your user temp folder (%TEMP%) is clear — Windows and your apps recreate whatever they "
+        "still need.",
     "clear_system_temp":
-        "Cleared C:\\Windows\\Temp, the machine-wide temp folder only an elevated process can reach.",
+        "The machine-wide temp folder (C:\\Windows\\Temp) is clear — that one only an elevated "
+        "process can reach.",
     "clear_browser_cache":
-        "Deleted the browser's cached files, so pages are fetched fresh instead of served from disk.",
+        "Your browser cache is clear — pages are now fetched fresh instead of served from disk.",
     "restart_network_adapter":
-        "Disabled and re-enabled the network adapter, renewing its DHCP lease and resetting the link.",
-    "restart_service": "Stopped and restarted the Windows service, clearing its in-memory state.",
+        "Your network adapter is back online — the link was re-established and its DHCP lease "
+        "renewed.",
+    "restart_service":
+        "The service is running normally again. It was reinitialised, clearing the in-memory "
+        "state it was stuck on.",
     "create_outlook_rule":
-        "Created the rule server-side on your mailbox, so it applies wherever you read your mail.",
+        "The rule is live on your mailbox server-side, so it applies wherever you read your mail.",
     "office_repair":
-        "Ran Office's built-in repair, which re-registers its components and replaces damaged files.",
+        "Office is repaired — its components were re-registered and damaged files replaced.",
     "network_reset":
-        "Reset the TCP/IP stack and Winsock catalog, clearing the corrupted network configuration.",
+        "Your network stack has been rebuilt — the TCP/IP stack and Winsock catalog were reset, "
+        "clearing the corrupted configuration.",
     "windows_update_install":
-        "Installed the pending updates through the Windows Update service.",
+        "The pending updates are installed through the Windows Update service.",
+    "restart_audio":
+        "Your sound is working again — the audio endpoint service was reinitialised, which "
+        "rebuilt the list of playback and recording devices, and Windows Audio came back with "
+        "it. If your headset was the problem, unplug and reconnect it once.",
+    "renew_ip_address":
+        "Your PC has a fresh network address — the old DHCP lease was released and a new one "
+        "issued by the network you are actually on.",
+    "rescan_devices":
+        "Windows has re-enumerated the connected hardware, the same scan Device Manager runs. "
+        "Anything attached but not previously detected is picked up now.",
+    "repair_system_files":
+        "The system file check has finished — every protected Windows file was verified "
+        "against its known-good copy.",
+    # set_timezone names its target in the agent's own output rather than here, because the
+    # target is a parameter — and that parameter is checked against SAFE_TIMEZONES, so the
+    # echoed text can only ever be one of a fixed set of strings.
+    #
+    # add_network_printer deliberately does NOT do the same. Its output interpolates the
+    # printer_path it was given, and while _UNC_PRINTER forbids the characters that would
+    # make that markup or a URL, it still leaves ~80 characters of free text that would
+    # render in the user's chat AS AN ASSISTANT MESSAGE. The setter can be the model, and
+    # model output is untrusted input, so a prompt-injected share name becomes a message
+    # signed by IT — the same phishing primitive message_session is withheld for. The path
+    # is visible in the portal task result, which is where it belongs.
+    "add_network_printer":
+        "The printer is connected to your profile and available to print to.",
+    "set_timezone":
+        "Your clock is on the new time zone, and existing calendar entries have moved with it.",
 }
+
+
+# The subject of the acknowledgement posted the moment a fix starts — "checking Outlook now".
+# Deliberately the thing being worked on, never the operation about to run: the user is told
+# what is being looked at, and the outcome line above tells them what came of it.
+_ACK_SUBJECT: dict[str, str] = {
+    "restart_explorer": "your desktop shell",
+    "restart_outlook": "Outlook",
+    "restart_teams": "Microsoft Teams",
+    "restart_zoom": "Zoom",
+    "restart_chrome": "Chrome",
+    "restart_edge": "Edge",
+    "restart_application": "the application",
+    "flush_dns": "your DNS resolver",
+    "clear_temp": "your temporary files",
+    "clear_system_temp": "the machine-wide temporary files",
+    "clear_browser_cache": "your browser cache",
+    "restart_network_adapter": "your network adapter",
+    "restart_service": "the service",
+    "create_outlook_rule": "your mailbox rules",
+    "office_repair": "your Office installation",
+    "network_reset": "your network stack",
+    "windows_update_install": "Windows Update",
+    "restart_audio": "your sound",
+    "renew_ip_address": "your network address",
+    "rescan_devices": "your connected hardware",
+    "repair_system_files": "your Windows system files",
+    "add_network_printer": "the printer connection",
+    "set_timezone": "your clock",
+}
+
+
+# Actions whose raw agent output is worth showing the user verbatim, because it carries a
+# measurement they cannot get anywhere else ("freed 2.1 GB across 412 files").
+#
+# Everything else is withheld deliberately. The agent writes for an engineer reading the
+# audit trail, so its text names processes and full paths — the app-restart handler reports
+# "Closed 1 instance(s) and relaunched the application (C:\\...\\Zoom.exe)", which is exactly
+# the "they just closed and reopened it" impression the curated lines above exist to avoid.
+# That output is still recorded on the task and still shown in the portal; it just does not
+# get pasted into the end user's chat.
+#
+# repair_system_files is here for a different reason than the cleanups: its three endings —
+# no damage found, damage repaired, damage it could not repair — are the entire result, and
+# the curated line above cannot say which one happened without asserting something that may
+# be untrue. See BasicDiagnostics.InterpretSfc, which is what writes that sentence.
+_SHOW_AGENT_OUTPUT: frozenset[str] = frozenset(
+    {"clear_temp", "clear_system_temp", "clear_browser_cache", "repair_system_files",
+     "set_timezone"}
+)
 
 
 # Which roles may approve a task of a given tier. AUTOMATIC never reaches approval.
@@ -620,14 +721,24 @@ class RemediationService:
             # agent's poll interval, so it grows as polling is made less frequent to cut
             # traffic. Posting on dispatch keeps the user informed without adding a request:
             # the tray refreshes history every few seconds and picks this up on its own.
+            #
+            # It names what is being WORKED ON, not the operation being run. The action's own
+            # label is written for the portal, where an administrator needs to know exactly
+            # which operation was authorised; in a user's chat that same wording reduces the
+            # work to a verb they recognise and dismiss.
             if task.conversation_id is not None:
-                action_label = action.label.lower() if action else "that"
+                subject = _ACK_SUBJECT.get(task.action_id)
+                content = (
+                    f"🔧 On it — checking {subject} now. "
+                    "I'll confirm as soon as it's back to normal."
+                    if subject else
+                    "🔧 On it — checking your PC now. I'll confirm as soon as it's done."
+                )
                 self.session.add(
                     Message(
                         conversation_id=task.conversation_id,
                         role=MessageRole.ASSISTANT,
-                        content=f"🔧 Working on it now — running {action_label} on your PC. "
-                                "This usually takes a few moments.",
+                        content=content,
                     )
                 )
         await self.session.commit()
@@ -684,12 +795,19 @@ class RemediationService:
         if task.conversation_id is not None:
             snippet = (output or "").strip()
             if success:
-                # State what was done, then the agent's own measurement if it reported one
-                # ("Freed 2.1 GB"). That number was previously computed, sent, and thrown
-                # away — it is the most concrete evidence the fix did anything, and the
-                # difference between a claim and a result.
-                text = f"✅ Done. {_TECHNICAL_OUTCOME.get(task.action_id, '')}".rstrip()
-                detail = snippet.splitlines()[0].strip() if snippet else ""
+                # State the resulting condition, then the agent's own measurement if it
+                # reported one ("Freed 2.1 GB"). That number was previously computed, sent,
+                # and thrown away — it is the most concrete evidence the fix did anything,
+                # and the difference between a claim and a result.
+                #
+                # Only for the actions that actually produce a measurement, though: see
+                # _SHOW_AGENT_OUTPUT for why the rest of the agent's text stays out of chat.
+                text = f"✅ {_TECHNICAL_OUTCOME.get(task.action_id, 'Done.')}".rstrip()
+                detail = (
+                    snippet.splitlines()[0].strip()
+                    if snippet and task.action_id in _SHOW_AGENT_OUTPUT
+                    else ""
+                )
                 if detail and detail.lower() not in text.lower():
                     text += f"\n\n{detail[:200]}"
                 text += "\n\nTell me if it's still not right and I'll dig further."

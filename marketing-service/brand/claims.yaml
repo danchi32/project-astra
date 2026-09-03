@@ -42,6 +42,9 @@ actions:
     - restart_edge
     - restart_network_adapter
     - restart_service
+    - restart_audio
+    - renew_ip_address
+    - rescan_devices
     - create_outlook_rule
     - set_timezone
     - add_network_printer
@@ -49,6 +52,7 @@ actions:
   approval_required:   # a technician or admin must approve
     - office_repair
     - network_reset
+    - repair_system_files
     - windows_update_install
     - lock_session
     - message_session

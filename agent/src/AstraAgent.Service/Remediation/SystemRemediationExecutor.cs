@@ -25,6 +25,8 @@ public sealed class SystemRemediationExecutor
             "block_usb_storage", "unblock_usb_storage",
             "restart_service", "restart_network_adapter", "network_reset",
             "reset_windows_update_components",
+            // First-line diagnostics: sound, DHCP, a hardware rescan, a system file check.
+            "restart_audio", "renew_ip_address", "rescan_devices", "repair_system_files",
             // Acting on one logon session. These live here rather than in the Tray for a
             // structural reason: the Tray runs inside one user's session and can only reach
             // that one, while this service runs as LocalSystem and can address any of them
@@ -58,6 +60,12 @@ public sealed class SystemRemediationExecutor
                 "restart_network_adapter" => NetworkRemediation.RestartAdapter(),
                 "network_reset" => NetworkRemediation.ResetNetworkStack(),
                 "reset_windows_update_components" => WindowsUpdateComponents.Reset(),
+                // No parameters on any of these four: the target is fixed by the action id,
+                // so there is nothing a caller could point somewhere else.
+                "restart_audio" => BasicDiagnostics.RestartAudio(),
+                "renew_ip_address" => BasicDiagnostics.RenewIpAddress(),
+                "rescan_devices" => BasicDiagnostics.RescanDevices(),
+                "repair_system_files" => BasicDiagnostics.RepairSystemFiles(),
                 // The backend has validated the session id's shape and refused session 0.
                 // SessionManager re-checks both against this machine's LIVE session list,
                 // because the portal page the operator clicked may be minutes old and the

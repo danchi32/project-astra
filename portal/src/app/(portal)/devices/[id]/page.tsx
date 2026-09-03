@@ -44,9 +44,14 @@ const FIXES: Fix[] = [
   { id: "restart_edge", label: "Restart Microsoft Edge", tier: "automatic" },
   { id: "restart_service", label: "Restart Print Spooler", tier: "automatic", params: { service_name: "Spooler" } },
   { id: "restart_service", label: "Restart Windows Search", tier: "automatic", params: { service_name: "WSearch" } },
-  { id: "restart_service", label: "Restart Audio service", tier: "automatic", params: { service_name: "Audiosrv" } },
+  // Replaces a plain Audiosrv restart: that leaves the endpoint list untouched, and a
+  // device Windows has lost is the usual reason there is no sound. See restart_audio.
+  { id: "restart_audio", label: "Recover the audio stack", tier: "automatic" },
+  { id: "renew_ip_address", label: "Renew the network address", tier: "automatic" },
+  { id: "rescan_devices", label: "Scan for hardware changes", tier: "automatic" },
   { id: "office_repair", label: "Repair Microsoft Office", tier: "approval_required" },
   { id: "network_reset", label: "Reset network stack", tier: "approval_required" },
+  { id: "repair_system_files", label: "Check and repair Windows system files", tier: "approval_required" },
   { id: "windows_update_install", label: "Install pending Windows updates", tier: "approval_required" },
   { id: "reset_windows_update_components", label: "Reset Windows Update components", tier: "admin_only" },
 ];
@@ -124,7 +129,12 @@ function suggestFixes(sources: string[]): Fix[] {
     [/word|excel|powerpnt|office|onenote/, "office_repair"],
     [/windowsupdate|wuau|\bupdate\b/, "windows_update_install"],
     [/search|wsearch|indexer/, "restart_service:WSearch"],
-    [/audio|audiosrv|sound/, "restart_service:Audiosrv"],
+    [/audio|audiosrv|sound|mmsys/, "restart_audio"],
+    // Device-install and PnP sources mean Windows failed to bring a device up, which is a
+    // re-enumeration rather than anything to do with the device's own driver stack.
+    [/pnp|umdf|kernel-pnp|deviceset|usbhub|hid/, "rescan_devices"],
+    [/dhcp-client|lease|apipa/, "renew_ip_address"],
+    [/sfc|corrupt|cbs|servicing|winsxs/, "repair_system_files"],
   ];
   const wanted = new Set(rules.filter(([re]) => re.test(s)).map(([, id]) => id));
   return FIXES.filter((f) => wanted.has(fixTag(f)));

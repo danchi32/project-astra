@@ -109,6 +109,23 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "Restarts an allowlisted Windows service (e.g. Print Spooler, Windows Search). "
                       "Stops and restarts dependent services with it.",
                       params=("service_name",), execution_context="system"),
+    RemediationAction("restart_audio", "Recover the audio stack", RemediationTier.AUTOMATIC,
+                      "For 'no sound', 'my mic isn't working' or a headset Windows stopped "
+                      "seeing. Restarts the Audio Endpoint Builder — which rebuilds the list of "
+                      "playback and recording devices — and Windows Audio with it. Sound is "
+                      "silent for a few seconds; nothing is reconfigured.",
+                      execution_context="system"),
+    RemediationAction("renew_ip_address", "Renew the network address", RemediationTier.AUTOMATIC,
+                      "For a PC holding an address from a network it is no longer on — after a "
+                      "VPN, a dock, or a move between offices. Releases the DHCP lease and "
+                      "requests a new one. Less disruptive than restarting the adapter: the "
+                      "adapter stays enabled. Try this before restart_network_adapter.",
+                      execution_context="system"),
+    RemediationAction("rescan_devices", "Scan for hardware changes", RemediationTier.AUTOMATIC,
+                      "For hardware that is plugged in but not showing up — a headset, monitor, "
+                      "dock or USB device. Runs the same re-enumeration as Device Manager's "
+                      "'Scan for hardware changes'. Installs nothing and changes no driver.",
+                      execution_context="system"),
     RemediationAction("create_outlook_rule", "Create an Outlook inbox rule", RemediationTier.AUTOMATIC,
                       "Creates a rule in the user's DESKTOP Outlook that moves incoming mail from a "
                       "given sender address into a folder (creating the folder if it doesn't exist). "
@@ -127,6 +144,17 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     RemediationAction("network_reset", "Reset network stack", RemediationTier.APPROVAL_REQUIRED,
                       "Resets Winsock and the TCP/IP stack for corruption that survives an adapter "
                       "restart. REQUIRES A REBOOT to take effect. Needs IT approval.",
+                      execution_context="system"),
+    RemediationAction("repair_system_files", "Check and repair Windows system files",
+                      RemediationTier.APPROVAL_REQUIRED,
+                      "Runs System File Checker (sfc /scannow) over the protected Windows files "
+                      "and repairs any damage from the local component store. For repeated "
+                      "crashes, features that stopped working, or damage suspected after a bad "
+                      "update. Takes 10-30 minutes and loads the disk heavily, so it needs IT "
+                      "approval and is best run outside working hours. A repair needs a reboot "
+                      "to take effect. NOTE: while it runs, the device claims no other "
+                      "system-context task — an offboarding or a USB block approved in the "
+                      "meantime waits until it finishes.",
                       execution_context="system"),
     RemediationAction("windows_update_install", "Install pending Windows updates", RemediationTier.APPROVAL_REQUIRED,
                       "Installs pending Windows updates via the elevated service. Pass kb_article_id "

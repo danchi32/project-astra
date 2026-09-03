@@ -149,9 +149,15 @@ public static class NetworkRemediation
             using var process = Process.Start(psi);
             if (process is null) return (false, "could not start netsh");
 
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
+            // Drained concurrently, not one after the other: ReadToEnd on stdout blocks until
+            // the child exits, and a child that fills the stderr pipe buffer in the meantime
+            // blocks writing and never exits. The two then wait on each other and the
+            // 60-second timeout below is never reached — the adapter is left disabled.
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
             process.WaitForExit(60000);
+            var stdout = stdoutTask.GetAwaiter().GetResult();
+            var stderr = stderrTask.GetAwaiter().GetResult();
 
             if (process.ExitCode != 0)
             {

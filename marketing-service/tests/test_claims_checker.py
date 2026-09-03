@@ -171,7 +171,11 @@ def test_the_prompt_does_not_itself_contain_a_forbidden_claim():
 def test_claimable_actions_matches_the_claim_file():
     actions = claimable_actions()
     assert set(actions) == {"automatic", "approval_required", "admin_only"}
-    assert sum(len(v) for v in actions.values()) == 29
+    # Hand-maintained, and it has to be: this service cannot import the backend's action
+    # registry, so a count is the only tripwire available here. Bump it when claims.yaml
+    # gains an action. The real guard — the one that compares the file against the live
+    # registry in both directions — is backend/tests/test_marketing_claims.py.
+    assert sum(len(v) for v in actions.values()) == 33
 
 
 def test_signed_agent_updates_is_true_and_must_not_be_blocked():

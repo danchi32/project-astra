@@ -48,14 +48,14 @@ async def test_chat_is_told_when_the_fix_starts(client, session_factory, org, ad
         )
 
     # Nothing yet — the task is only queued.
-    assert not any("Working on it" in m for m in await _messages(session_factory, convo_id))
+    assert not any(m.startswith("🔧") for m in await _messages(session_factory, convo_id))
 
     # The tray claims it: that is the moment it starts running on the PC.
     await client.get("/api/v1/agent/tasks", headers={"Authorization": f"Bearer {token}"})
 
     msgs = await _messages(session_factory, convo_id)
-    assert any("Working on it" in m for m in msgs), msgs
-    # Names the actual fix rather than a generic "please wait".
+    assert any(m.startswith("🔧") for m in msgs), msgs
+    # Names what is being worked on rather than a generic "please wait".
     assert any("temp" in m.lower() for m in msgs), msgs
 
 
@@ -98,7 +98,7 @@ async def test_start_and_finish_messages_both_land(client, session_factory, org,
                       json={"success": True, "output": "Freed 2.1 GB"})
 
     msgs = await _messages(session_factory, convo_id)
-    assert any("Working on it" in m for m in msgs), msgs
+    assert any(m.startswith("🔧") for m in msgs), msgs
 
     done = next(m for m in msgs if m.startswith("✅"))
     # Says what was actually done, naming the mechanism — not "your PC should be better now".
@@ -135,3 +135,87 @@ async def test_completion_message_survives_an_agent_that_reports_nothing(
     # intentional, so compare line by line rather than collapsing newlines.)
     assert "None" not in done, done
     assert all(line == line.strip() for line in done.splitlines()), repr(done)
+
+
+async def test_app_fix_is_never_described_to_the_user_as_a_restart(
+    client, session_factory, org, admin_user
+):
+    """The regression that cost a customer a meeting.
+
+    Both chat messages used to hand the user the mechanics: the start message interpolated
+    the action label ("running restart zoom on your PC") and the finish message pasted the
+    agent's own output ("Closed 1 instance(s) and relaunched the application (...Zoom.exe)").
+    Read together those say "we closed it and opened it again", and the customer concluded
+    the platform had done something anyone could have done by hand.
+
+    The operation is unchanged and the raw output is still recorded on the task for the
+    portal and the audit trail — it just never reaches the person in the chat.
+    """
+    device_id, convo_id, token = await _device_and_conversation(
+        session_factory, org, admin_user, machine="chat-5")
+
+    async with session_factory() as s:
+        device = await s.get(Device, device_id)
+        task = await RemediationService(s).create_task(
+            org_id=org.id, device=device, action_id="restart_zoom", params=None,
+            reason="zoom is frozen", source=RemediationSource.USER,
+            actor_user_id=admin_user.id, conversation_id=convo_id,
+        )
+        task_id = task.id
+
+    h = {"Authorization": f"Bearer {token}"}
+    await client.get("/api/v1/agent/tasks", headers=h)
+    await client.post(
+        f"/api/v1/agent/tasks/{task_id}/result", headers=h,
+        json={"success": True,
+              "output": r"Closed 1 instance(s) and relaunched the application (C:\Zoom\Zoom.exe)."},
+    )
+
+    msgs = await _messages(session_factory, convo_id)
+    started = next(m for m in msgs if m.startswith("🔧"))
+    done = next(m for m in msgs if m.startswith("✅"))
+
+    # Acknowledged first, naming what is being looked at.
+    assert "Zoom" in started, started
+
+    # The outcome leads with the resulting state, not with the operation.
+    assert done.startswith("✅ Zoom is running normally again"), done
+
+    # None of the throwaway vocabulary reaches the user, from either source.
+    for banned in ("restart", "relaunch", "closed", "reopen", ".exe"):
+        assert banned not in started.lower(), (banned, started)
+        assert banned not in done.lower(), (banned, done)
+
+    # ...but the agent's report is still on the task, where an administrator reads it.
+    async with session_factory() as s:
+        from app.models import RemediationTask
+        assert "relaunched" in (await s.get(RemediationTask, task_id)).result["output"]
+
+
+def test_every_action_the_assistant_can_propose_has_both_chat_lines():
+    """Adding an action means touching three places: the registry, the acknowledgement
+    subject, and the outcome line. Miss the last two and the user gets "On it — checking
+    your PC now" followed by a bare "Done.", which is the generic non-answer these lines
+    exist to replace. The fallbacks are deliberate, so nothing fails loudly at runtime —
+    only here."""
+    from app.services.ai.tools import _ACTION_IDS
+    from app.services.remediation.service import _ACK_SUBJECT, _TECHNICAL_OUTCOME
+
+    missing_ack = sorted(a for a in _ACTION_IDS if a not in _ACK_SUBJECT)
+    missing_outcome = sorted(a for a in _ACTION_IDS if a not in _TECHNICAL_OUTCOME)
+
+    assert not missing_ack, f"No acknowledgement subject for: {missing_ack}"
+    assert not missing_outcome, f"No outcome line for: {missing_outcome}"
+
+
+def test_no_outcome_line_describes_the_work_as_a_restart():
+    """The wording rule, enforced rather than documented. "Restarted X" is accurate and
+    worthless — it names the one part of the job the user could have done themselves, and a
+    customer who read it concluded exactly that."""
+    from app.services.remediation.service import _ACK_SUBJECT, _TECHNICAL_OUTCOME
+
+    for source in (_TECHNICAL_OUTCOME, _ACK_SUBJECT):
+        for action_id, line in source.items():
+            lowered = line.lower()
+            for banned in ("restarted", "relaunch", "closed and", "reopen"):
+                assert banned not in lowered, f"{action_id}: {line!r} contains {banned!r}"
