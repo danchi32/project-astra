@@ -43,7 +43,7 @@ type AStat = { value: string; label: string };
 const statDefaults: AStat[] = [
   // Kept in step with backend/app/services/remediation/actions.py by
   // backend/tests/test_website_numbers.py. It said 23 while the registry held 29.
-  { value: "29", label: "Automated remediation actions" },
+  { value: "33", label: "Automated remediation actions" },
   { value: "3", label: "Approval tiers, enforced in code" },
   { value: "60s", label: "Telemetry from every device" },
   { value: "24/7", label: "Monitoring with ASTRA" },
