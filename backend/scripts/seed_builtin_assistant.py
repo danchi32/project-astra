@@ -7,7 +7,24 @@ become a second, silently stale copy the first time the prompt is tuned.
 Idempotent: re-running updates the built-in row's published version to whatever the
 constants currently say, and creates nothing twice. Safe to run on every deploy.
 
-    backend/.venv/Scripts/python.exe backend/scripts/seed_builtin_assistant.py
+OPTIONAL. Nothing depends on this having run: with no seeded row the engine falls back to
+the same constants, which is exactly today's behaviour. Run it when you want the row-driven
+path, not because something is broken without it.
+
+It needs a database URL, and `backend/.env` does not carry one — production's lives in
+Secret Manager and reaches the container as an environment variable. So pick a target
+explicitly:
+
+    # Local demo database
+    ASTRA_DATABASE_URL=sqlite+aiosqlite:///./astra-demo.db \
+        backend/.venv/Scripts/python.exe backend/scripts/seed_builtin_assistant.py
+
+    # Production — as a Cloud Run job, the same shape as the astra-migrate job in
+    # .github/workflows/deploy-backend.yml, so the connection string stays in Secret
+    # Manager rather than on a laptop.
+    gcloud run jobs deploy astra-seed-assistant --command python \
+        --args scripts/seed_builtin_assistant.py ...
+    gcloud run jobs execute astra-seed-assistant --region "$REGION" --wait
 """
 import asyncio
 import os
@@ -15,6 +32,11 @@ import sys
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BACKEND_DIR)
+# Settings reads `.env` relative to the CURRENT WORKING DIRECTORY, and the app only ever
+# resolves it because uvicorn is started from backend/. Run from the repo root — which is
+# how the command in this docstring reads — and the file is simply not found, so the script
+# dies on "No database URL found" with a perfectly good .env sitting one directory away.
+os.chdir(BACKEND_DIR)
 
 from sqlalchemy import select  # noqa: E402
 
