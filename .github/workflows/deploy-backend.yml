@@ -181,6 +181,28 @@ jobs:
           echo "New revision did not become healthy."
           exit 1
 
+      # Publishes the built-in ASTRA assistant from the constants in app/services/ai/prompts.py.
+      # Idempotent: it republishes only when the prompt has actually changed, and says
+      # "already current" otherwise.
+      #
+      # AFTER the health gate, not before it, and that ordering is the point. Seeding is
+      # optional — with no row the engine falls back to the same constants, which is exactly
+      # the behaviour that shipped before assistants existed — so it must never be able to
+      # block a deploy carrying real code. Running it here means the revision is already live
+      # and serving when this executes. It still fails the workflow if it breaks, because the
+      # alternative is a seed that has been silently failing for weeks while everyone assumes
+      # the row-driven path is in use.
+      #
+      # A separate job from astra-migrate: that one is `alembic upgrade head` and wants to stay
+      # the single thing anyone looks at when asking what happened to the schema.
+      - name: Seed the built-in assistant
+        run: |
+          gcloud run jobs deploy astra-seed-assistant \
+            --image "$IMAGE" --region "$REGION" \
+            --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY:latest \
+            --command python --args scripts/seed_builtin_assistant.py --quiet
+          gcloud run jobs execute astra-seed-assistant --region "$REGION" --wait
+
       - name: Custom domain check (informational)
         continue-on-error: true
         run: |

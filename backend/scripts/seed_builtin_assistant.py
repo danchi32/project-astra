@@ -11,20 +11,16 @@ OPTIONAL. Nothing depends on this having run: with no seeded row the engine fall
 the same constants, which is exactly today's behaviour. Run it when you want the row-driven
 path, not because something is broken without it.
 
-It needs a database URL, and `backend/.env` does not carry one — production's lives in
-Secret Manager and reaches the container as an environment variable. So pick a target
-explicitly:
+PRODUCTION RUNS THIS AUTOMATICALLY. `.github/workflows/deploy-backend.yml` executes it as
+the `astra-seed-assistant` Cloud Run job on every backend deploy, after the health gate —
+so the connection string stays in Secret Manager and never reaches a laptop, and a broken
+seed can never block a deploy that carries real code. You do not need to run it by hand.
 
-    # Local demo database
+To run it locally you must name a target, because `backend/.env` carries no database URL
+(production's lives in Secret Manager). Run from anywhere; the chdir above handles the rest:
+
     ASTRA_DATABASE_URL=sqlite+aiosqlite:///./astra-demo.db \
         backend/.venv/Scripts/python.exe backend/scripts/seed_builtin_assistant.py
-
-    # Production — as a Cloud Run job, the same shape as the astra-migrate job in
-    # .github/workflows/deploy-backend.yml, so the connection string stays in Secret
-    # Manager rather than on a laptop.
-    gcloud run jobs deploy astra-seed-assistant --command python \
-        --args scripts/seed_builtin_assistant.py ...
-    gcloud run jobs execute astra-seed-assistant --region "$REGION" --wait
 """
 import asyncio
 import os
