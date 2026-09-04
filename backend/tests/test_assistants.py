@@ -162,3 +162,26 @@ async def test_other_org_assistant_is_not_found(client, admin_headers, session_f
 
     listed = await client.get("/api/v1/assistants", headers=admin_headers)
     assert all(a["id"] != str(theirs.id) for a in listed.json())
+
+
+@pytest.mark.asyncio
+async def test_the_tool_catalogue_is_read_from_the_engine(client, user_headers):
+    """The portal must never hardcode tool names.
+
+    A hand-kept copy goes stale the first time a tool is added and nothing says so — the
+    same failure that shipped a marketing page describing an older product. This endpoint
+    is also why `/tools` has to be declared before `/{assistant_id}`: otherwise FastAPI
+    tries to parse "tools" as a UUID and answers 422.
+    """
+    from app.services.ai import escalation_tools
+    from app.services.ai.tools import TOOL_SCHEMAS
+
+    response = await client.get("/api/v1/assistants/tools", headers=user_headers)
+    assert response.status_code == 200, response.text
+
+    names = [t["name"] for t in response.json()]
+    assert names == [t["name"] for t in (*TOOL_SCHEMAS, *escalation_tools.TOOL_SCHEMAS)]
+    # Escalation is included even though the engine adds it per-org: a grant that omits it
+    # silently turns escalation off, so whoever is choosing has to be able to see it.
+    assert escalation_tools.OFFER in names
+    assert all(t["description"] for t in response.json()), "a tool with no description"

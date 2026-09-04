@@ -100,3 +100,10 @@ class AssistantRead(BaseModel):
 
 class AssistantDetail(AssistantRead):
     versions: list[AssistantVersionRead] = []
+
+
+class ToolSummary(BaseModel):
+    """One grantable tool, as the engine advertises it."""
+
+    name: str
+    description: str

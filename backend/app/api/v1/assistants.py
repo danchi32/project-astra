@@ -13,7 +13,9 @@ from app.schemas.assistants import (
     AssistantUpdate,
     AssistantVersionCreate,
     AssistantVersionRead,
+    ToolSummary,
 )
+from app.services.ai.tools import TOOL_SCHEMAS
 from app.services.assistants import AssistantService
 
 router = APIRouter(prefix="/assistants", tags=["assistants"])
@@ -37,6 +39,28 @@ async def list_assistants(
 ) -> list[AssistantRead]:
     rows = await AssistantService(session).list_for_org(org_id=actor.org_id)
     return [_read(r) for r in rows]
+
+
+@router.get("/tools", response_model=list[ToolSummary], summary="Tools an assistant may be granted")
+async def list_tools(actor: User = Depends(get_current_user)) -> list[ToolSummary]:
+    """The grantable tool catalogue, read from the schemas the engine actually advertises.
+
+    Declared before `/{assistant_id}` or FastAPI would try to parse "tools" as a UUID.
+
+    It exists so the portal never hardcodes tool names. A hand-maintained copy of this list
+    is the same failure that ships a marketing page describing an older product — it goes
+    stale the first time a tool is added, and nothing says so.
+
+    Escalation's two tools are included even though the engine adds them per-organization:
+    a grant that omits them silently turns escalation off for that assistant, so they have
+    to be visible to whoever is choosing.
+    """
+    from app.services.ai import escalation_tools
+
+    return [
+        ToolSummary(name=t["name"], description=t["description"])
+        for t in (*TOOL_SCHEMAS, *escalation_tools.TOOL_SCHEMAS)
+    ]
 
 
 @router.post(

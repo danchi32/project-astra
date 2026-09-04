@@ -6,8 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Users, Radar, Boxes, MonitorSmartphone,
   BookOpen, Zap, BarChart3, Shield, ShieldCheck,
-  CreditCard, Building2, ScrollText, LifeBuoy,
-} from "lucide-react";
+  CreditCard, Building2, ScrollText, LifeBuoy, Bot } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import { getViewAs } from "@/lib/viewAs";
 
@@ -19,6 +18,7 @@ const NAV = [
   { href: "/compliance", icon: ShieldCheck, label: "Compliance" },
   { href: "/fleet", icon: Radar, label: "Fleet Issues" },
   { href: "/users", icon: Users, label: "Users" },
+  { href: "/assistants", icon: Bot, label: "Assistants" },
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/self-healing", icon: Zap, label: "Self Healing" },
   { href: "/reports", icon: BarChart3, label: "Reports" },

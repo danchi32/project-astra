@@ -879,3 +879,52 @@ export interface AssistantReply {
    *  the human path instead of leaving someone to re-phrase a hopeless question. */
   grounded: boolean;
 }
+
+// ── Configurable AI assistants ────────────────────────────────────────────────
+// Named "assistant", not "agent": in this product "agent" is the Windows service on the
+// device. See docs/ASSISTANT_PLATFORM_CONTRACT.md.
+
+export type AssistantVersionStatus = "draft" | "published" | "archived";
+
+export interface AssistantVersion {
+  id: string;
+  version_no: number;
+  status: AssistantVersionStatus;
+  system_prompt: string | null;
+  model: string | null;
+  max_tokens: number | null;
+  max_tool_iterations: number | null;
+  // null = every tool the engine advertises. [] = this assistant may call nothing.
+  tool_ids: string[] | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+}
+
+export interface Assistant {
+  id: string;
+  name: string;
+  description: string | null;
+  published_version_id: string | null;
+  archived: boolean;
+  created_at: string;
+  // Platform-owned. Readable by every org, editable by none of them.
+  builtin: boolean;
+}
+
+export interface AssistantDetail extends Assistant {
+  versions: AssistantVersion[];
+}
+
+export interface AssistantTool {
+  name: string;
+  description: string;
+}
+
+/** Everything a draft version can carry. Omitted means "use the server default". */
+export interface AssistantVersionInput {
+  system_prompt?: string | null;
+  max_tool_iterations?: number | null;
+  tool_ids?: string[] | null;
+  notes?: string | null;
+}
