@@ -208,6 +208,43 @@ class StubProvider:
         "web page", "webpage", "no connection", "can't connect", "cant connect",
         "cannot connect", "no internet", "offline",
     )
+    # Sound complaints -> rebuild the audio device list. Nouns only; a problem word is
+    # required alongside them, so "how do I change my headset" is not a fix.
+    #
+    # Only the words that cannot mean anything else. "mic", "sound" and "hear" are NOT here:
+    # mentions() matches at a word START, which is deliberate for stems like "freez", and on
+    # these three it fires on the most common filler in an IT complaint —
+    #
+    #   "mic"   also matches "MICrosoft"        -> "microsoft teams not working"
+    #   "sound" also matches "SOUNDs like ..."  -> "it sounds like teams is not working"
+    #   "hear"  also matches "HEARd"            -> "i heard chrome is broken"
+    #
+    # Each of those would have rebuilt the audio stack instead of restarting the app the user
+    # actually named, and — because can_handle() gates routing — the message would never have
+    # reached the LLM to be read properly. They are matched by _AUDIO_WORD instead, anchored
+    # at both ends and with "sounds like" excluded outright.
+    _AUDIO_TRIGGERS = (
+        "audio", "microphone", "speaker", "speakers",
+        "headphone", "headphones", "headset", "earphone", "earphones",
+        "awaaz", "aawaz", "sunai",
+    )
+    _AUDIO_WORD = re.compile(
+        r"\bmic\b|\bsounds?\b(?!\s+like)|\bhear(?:s|ing)?\b", re.IGNORECASE)
+    # "The thing is plugged in and Windows can't see it" — a detection problem, which is a
+    # hardware rescan rather than anything to do with the device's own function. Checked
+    # before the audio rules, so "headset not detected" rescans instead of bouncing the
+    # audio service, which would not make an absent endpoint appear.
+    _NOT_DETECTED_PHRASES = (
+        "not detected", "not detecting", "not being detected", "not recognised",
+        "not recognized", "not showing up", "not showing", "doesn't appear",
+        "does not appear", "not appearing", "can't see my", "cannot see my",
+        "detect nahi", "dikh nahi raha", "show nahi ho raha",
+    )
+    _HARDWARE_NOUNS = (
+        "device", "hardware", "headset", "headphone", "monitor", "display", "screen",
+        "webcam", "camera", "usb", "dock", "docking", "keyboard", "mouse", "bluetooth",
+        "pen drive", "pendrive", "external drive", "hard disk", "scanner",
+    )
     # Apps the assistant can restart. Value is (action_id, process_name). A None
     # process_name means there's a dedicated action; otherwise the generic
     # restart_application action is used with that process name.
@@ -351,6 +388,34 @@ class StubProvider:
                 )],
             )
 
+        # Hardware that is plugged in but not visible → ask Windows to look again. Before
+        # the audio and app rules because it is the more specific signal: the user has said
+        # the device is ABSENT, and neither restarting a service nor an app makes it appear.
+        if self._match_hardware_rescan(user_text) is not None:
+            return LLMResponse(
+                text="It sounds like Windows hasn't picked that device up. Let me get it to "
+                     "scan for connected hardware again — doing that now.",
+                tool_calls=[ToolCall(
+                    id="stub-hardware-fix", name="propose_remediation",
+                    input={"action_id": "rescan_devices",
+                           "reason": "User reports a connected device is not detected."},
+                )],
+            )
+
+        # A sound or microphone complaint → rebuild the audio device list. Before the app
+        # rules on purpose: "no sound in Teams" is far more often the endpoint list than
+        # Teams itself, and restarting Teams cannot fix an audio device Windows has lost.
+        if self._match_audio_fix(user_text) is not None:
+            return LLMResponse(
+                text="Let me rebuild your audio device list to get the sound back — doing "
+                     "that now.",
+                tool_calls=[ToolCall(
+                    id="stub-audio-fix", name="propose_remediation",
+                    input={"action_id": "restart_audio",
+                           "reason": "User reports a sound or microphone problem."},
+                )],
+            )
+
         # An app the user named is misbehaving → restart it (dedicated action for the
         # common apps, generic kill-and-relaunch for the rest).
         app_fix = self._match_app_fix(user_text)
@@ -436,6 +501,10 @@ class StubProvider:
             return True
         if self._match_explicit_cleanup(text) is not None:
             return True
+        if self._match_hardware_rescan(text) is not None:
+            return True
+        if self._match_audio_fix(text) is not None:
+            return True
         if self._match_app_fix(text) is not None:
             return True
         if self._match_network_fix(text) is not None:
@@ -463,6 +532,36 @@ class StubProvider:
             if mentions(text, (app,)):
                 return (app.title(), action_id, process_name)
         return None
+
+    def _match_hardware_rescan(self, text: str) -> str | None:
+        """A device that is connected but that Windows is not showing → rescan_devices.
+
+        Needs both halves: the name of a piece of hardware AND an explicit statement that it
+        is not being seen. "My monitor is flickering" is a fault in a device Windows already
+        knows about, and a rescan does nothing for it."""
+        if not mentions(text, self._NOT_DETECTED_PHRASES):
+            return None
+        if not mentions(text, self._HARDWARE_NOUNS):
+            return None
+        return "rescan_devices"
+
+    def _match_audio_fix(self, text: str) -> str | None:
+        """A sound or microphone complaint → restart_audio.
+
+        Requires a problem word alongside the noun so that "which headset am I using" and
+        "turn the volume up" are not treated as faults to fix."""
+        if not (mentions(text, self._AUDIO_TRIGGERS) or self._AUDIO_WORD.search(text)):
+            return None
+        if not (
+            mentions(text, self._PROBLEM_WORDS)
+            # The complaint is very often phrased as an absence rather than a failure:
+            # "no sound", "can't hear anyone", "mic is muted for everyone".
+            or mentions(text, ("no sound", "no audio", "can't hear", "cant hear",
+                               "cannot hear", "nobody can hear", "no one can hear",
+                               "muted", "silent", "dead", "nahi aa rah", "nahi aa rha"))
+        ):
+            return None
+        return "restart_audio"
 
     def _match_network_fix(self, text: str) -> tuple[str, str] | None:
         """A connectivity complaint → a safe automatic network fix. Returns

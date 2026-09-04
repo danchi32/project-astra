@@ -37,6 +37,7 @@ from app.services.ai.provider import (
     get_provider,
 )
 from app.services.agent_update import AgentUpdateService
+from app.services.assistants import AssistantService
 from app.services.exceptions import NotFoundError
 from app.services.subscription import org_is_writable
 
@@ -356,7 +357,12 @@ class ConversationService:
             )
             if offered is not None:
                 return offered
-        result = await CognitiveEngine(self.session, provider=provider).run(
+        # Which assistant answers. Today there is one: the platform's built-in ASTRA
+        # persona, seeded from the same constants the engine falls back to, so this changes
+        # nothing until an operator publishes a different version. None — an unseeded
+        # deployment — means the engine runs on the constants exactly as before.
+        version = await AssistantService(self.session).published_builtin()
+        result = await CognitiveEngine(self.session, provider=provider, version=version).run(
             org_id=org_id, history=history, user_message=content,
             device_hostname=device_hostname, acting_device_id=acting_device_id,
             conversation_id=conversation_id,

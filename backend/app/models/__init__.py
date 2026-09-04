@@ -1,5 +1,6 @@
 from app.models.asset import AcknowledgementStatus, Asset, AssetCategory, AssetStatus
 from app.models.asset_event import AssetEvent, AssetEventType
+from app.models.assistant import Assistant, AssistantVersion, AssistantVersionStatus
 from app.models.audit_log import AuditLog
 from app.models.banned_software import BannedSoftware
 from app.models.webhook_event import WebhookEvent
@@ -64,6 +65,9 @@ __all__ = [
     "AssetEvent",
     "AssetEventType",
     "AssetStatus",
+    "Assistant",
+    "AssistantVersion",
+    "AssistantVersionStatus",
     "AuditLog",
     "BannedSoftware",
     "Base",

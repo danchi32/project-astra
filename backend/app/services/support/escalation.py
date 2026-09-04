@@ -42,6 +42,20 @@ DEDUPE_WINDOW = timedelta(hours=24)
 # ticket already exists; the cost of a miss is a duplicate in the customer's queue.
 DEDUPE_SIMILARITY = 0.6
 
+# Why a row ended where it did, written into `last_error`.
+#
+# Named rather than inline because the state alone does not say what happened, and anything
+# reading these rows back has to tell the cases apart:
+#
+#   * A `declined` row that was SUPERSEDED is ASTRA closing its own duplicate, not a user
+#     saying no.
+#   * A `failed` row with NO_HELPDESK means there was nowhere to file — which the tool gate
+#     normally prevents, so it is the narrow race where a helpdesk is disabled between the
+#     offer and the raise. Any other failure is a helpdesk that refused or was unreachable.
+NO_HELPDESK = "no helpdesk configured for this organization"
+SUPERSEDED_EXISTING = "superseded by an existing ticket"
+SUPERSEDED_OTHER_ANSWER = "superseded — the user's answer raised a different ticket"
+
 
 # What counts as answering the offer. Checked in code because the alternative is trusting
 # the model to have read the reply correctly — and the model is the part of this system an
@@ -186,14 +200,14 @@ class EscalationService:
         )
         if existing is not None:
             escalation.state = EscalationState.DECLINED
-            escalation.last_error = "superseded by an existing ticket"
+            escalation.last_error = SUPERSEDED_EXISTING
             await self.session.flush()
             return RaiseOutcome(existing, created=False,
                                 message=self._already_raised_message(existing))
 
         if self.connector is None:
             escalation.state = EscalationState.FAILED
-            escalation.last_error = "no helpdesk configured for this organization"
+            escalation.last_error = NO_HELPDESK
             await self.session.flush()
             return RaiseOutcome(escalation, created=False, message=(
                 "I couldn't raise the ticket — no helpdesk is connected for your "
@@ -290,7 +304,7 @@ class EscalationService:
         )).scalars().all()
         for row in rows:
             row.state = EscalationState.DECLINED
-            row.last_error = "superseded — the user's answer raised a different ticket"
+            row.last_error = SUPERSEDED_OTHER_ANSWER
 
     async def _pending_offer(self, conversation_id: uuid.UUID) -> SupportEscalation | None:
         result = await self.session.execute(

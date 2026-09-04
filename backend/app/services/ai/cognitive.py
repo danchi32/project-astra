@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.models import AssistantVersion
 from app.services.ai.prompts import WINDOWS_EXPERT_PROMPT
 from app.services.ai.provider import (
     LearnedActionProvider,
@@ -50,10 +51,37 @@ class EngineResult:
 
 
 class CognitiveEngine:
-    def __init__(self, session: AsyncSession, provider: LLMProvider | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        provider: LLMProvider | None = None,
+        version: AssistantVersion | None = None,
+    ) -> None:
+        """`version` is the published assistant configuration to run as.
+
+        None means "run as ASTRA has always run": the constants below and every tool the
+        engine advertises. That is what lets this parameter be added to a live system —
+        the absent case is the current case, not a new one.
+        """
         self.session = session
         self.provider = provider or get_provider()
-        self.max_iterations = get_settings().ai_max_tool_iterations
+        settings = get_settings()
+        defaults = {
+            "system_prompt": WINDOWS_EXPERT_PROMPT,
+            "max_tool_iterations": settings.ai_max_tool_iterations,
+        }
+        resolved = (
+            version.resolved(defaults=defaults)
+            if version is not None
+            else {**defaults, "tool_ids": None}
+        )
+        self.brief = resolved["system_prompt"]
+        self.max_iterations = resolved["max_tool_iterations"]
+        # None = every tool the engine advertises. A list NARROWS that set and can never
+        # widen it: the remediation registry's tier and operator_only rules are applied
+        # upstream in tools.py, so an id named here that the registry withholds stays
+        # withheld. A grant is a filter, not a privilege.
+        self.tool_ids = resolved["tool_ids"]
 
     def _is_real_llm(self) -> bool:
         """True when the provider is an actual model rather than the built-in rules.
@@ -83,7 +111,7 @@ class CognitiveEngine:
         # would be several thousand tokens describing a job they are not doing — and it
         # would blur what reaching the model is FOR. A problem only gets here because the
         # rules could not place it.
-        brief = WINDOWS_EXPERT_PROMPT if self._is_real_llm() else SYSTEM_PROMPT
+        brief = self.brief if self._is_real_llm() else SYSTEM_PROMPT
 
         messages: list[dict[str, Any]] = [*history, {"role": "user", "content": user_message}]
         trail: list[dict[str, Any]] = []
@@ -97,7 +125,13 @@ class CognitiveEngine:
             self.session, org_id=org_id, conversation_id=conversation_id,
             device_id=acting_device_id,
         )
-        if len(tools) > len(TOOL_SCHEMAS):
+        # An assistant's grant narrows the advertised set. Applied HERE, before the
+        # escalation wording below is decided, so the two can never disagree — an assistant
+        # not granted the offer tool must not be told to call it.
+        if self.tool_ids is not None:
+            allowed = set(self.tool_ids)
+            tools = [t for t in tools if t["name"] in allowed]
+        if any(t["name"] == escalation_tools.OFFER for t in tools):
             # "Ask first, then call the tool" is what this used to say, and the model did
             # exactly that: it wrote "shall I raise a ticket?" in its own words and called
             # nothing, so no offer was recorded and the user's yes had nothing to act on.

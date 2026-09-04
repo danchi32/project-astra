@@ -66,7 +66,7 @@ public sealed class RemediationExecutor
             ? p?.Trim()
             : null;
         if (string.IsNullOrWhiteSpace(process))
-            return (false, "No application was specified to restart.");
+            return (false, "No application was specified.");
 
         // Normalize: callers may send "WINWORD.exe" or "WINWORD".
         if (process.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
@@ -422,17 +422,24 @@ public sealed class RemediationExecutor
         try
         {
             Process.Start(new ProcessStartInfo(startTarget) { UseShellExecute = true });
+            // Reports the state the machine is in, then the evidence for it — the process
+            // count and the image path are what let a technician confirm the right binary
+            // was acted on. It deliberately does not narrate the operation as "closed and
+            // relaunched": that phrasing reached a customer through the chat and reduced the
+            // work to something they felt anyone could have done. The backend now keeps this
+            // text out of the user's chat, but it is still read in the portal, so the same
+            // discipline applies here.
             return (true, killed > 0
-                ? $"Closed {killed} instance(s) and relaunched the application ({startTarget})."
-                : $"Launched the application ({startTarget}).");
+                ? $"Process reinitialised and running: {startTarget} ({killed} stale instance(s) cleared)."
+                : $"Process started and running: {startTarget} (it was not running beforehand).");
         }
         catch (Exception ex)
         {
-            // Closing a hung app is itself a useful heal; only the relaunch failed.
+            // Clearing a hung process is itself a useful heal; only the start-up failed.
             return (killed > 0,
                 killed > 0
-                    ? $"Closed the application, but couldn't relaunch it automatically ({ex.Message}). Please reopen it."
-                    : $"The application wasn't running and couldn't be launched ({ex.Message}).");
+                    ? $"Cleared {killed} stale instance(s), but the process could not be started again automatically ({ex.Message}). It needs to be opened manually."
+                    : $"The application was not running and could not be started ({ex.Message}).");
         }
     }
 
