@@ -853,6 +853,16 @@ class StubProvider:
             except (json.JSONDecodeError, TypeError):
                 continue
             if isinstance(data, dict) and ("outcome" in data or "task_id" in data):
+                # A queued fix is not a finished one. "Done — Applied automatically (Clear
+                # temporary files). The agent will run it shortly." said both at once, in
+                # the tool's own words, and was then followed by the real "on it" line when
+                # the agent picked the work up — two messages about one fix, the first of
+                # them claiming success the device had not delivered yet. Answer with that
+                # same line instead, and let the dispatch path stand down.
+                if data.get("auto"):
+                    from app.services.remediation.service import ack_line
+
+                    return ack_line(data.get("action_id"))
                 outcome = data.get("outcome", "I've applied the fix.")
                 return f"Done — {outcome} Anything else?"
             if isinstance(data, dict) and "error" in data:

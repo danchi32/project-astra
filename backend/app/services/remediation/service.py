@@ -328,6 +328,19 @@ _ACK_SUBJECT: dict[str, str] = {
 }
 
 
+def ack_line(action_id: str | None) -> str:
+    """The one sentence the user gets when an automatic fix is under way.
+
+    Shared with the chat turn itself (app.services.ai.provider) so the reply the user reads
+    immediately and the line posted when the agent picks the work up are the same sentence
+    — which is what lets the second one be skipped instead of duplicating the first.
+    """
+    subject = _ACK_SUBJECT.get(action_id or "")
+    if subject:
+        return f"🔧 On it — checking {subject} now. I'll confirm as soon as it's back to normal."
+    return "🔧 On it — checking your PC now. I'll confirm as soon as it's done."
+
+
 # Actions whose raw agent output is worth showing the user verbatim, because it carries a
 # measurement they cannot get anywhere else ("freed 2.1 GB across 412 files").
 #
@@ -726,19 +739,22 @@ class RemediationService:
             # label is written for the portal, where an administrator needs to know exactly
             # which operation was authorised; in a user's chat that same wording reduces the
             # work to a verb they recognise and dismiss.
-            if task.conversation_id is not None:
-                subject = _ACK_SUBJECT.get(task.action_id)
-                content = (
-                    f"🔧 On it — checking {subject} now. "
-                    "I'll confirm as soon as it's back to normal."
-                    if subject else
-                    "🔧 On it — checking your PC now. I'll confirm as soon as it's done."
-                )
+            # ...but not twice. An automatic fix the assistant proposed was acknowledged in
+            # its own reply seconds ago, in these exact words — the chat turn answers with
+            # ack_line() rather than claiming the fix is finished. Posting again here put
+            # two messages about one fix in front of the user. A fix that waited for a
+            # human approval still gets this line: that gap is minutes or hours, and the
+            # reply the user read said "queued for approval", not "checking now".
+            already_acked = (
+                task.source is RemediationSource.ASSISTANT
+                and task.approved_by_user_id is None
+            )
+            if task.conversation_id is not None and not already_acked:
                 self.session.add(
                     Message(
                         conversation_id=task.conversation_id,
                         role=MessageRole.ASSISTANT,
-                        content=content,
+                        content=ack_line(task.action_id),
                     )
                 )
         await self.session.commit()

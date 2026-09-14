@@ -219,3 +219,81 @@ def test_no_outcome_line_describes_the_work_as_a_restart():
             lowered = line.lower()
             for banned in ("restarted", "relaunch", "closed and", "reopen"):
                 assert banned not in lowered, f"{action_id}: {line!r} contains {banned!r}"
+
+
+async def test_an_automatic_fix_the_assistant_proposed_is_announced_once(
+    client, session_factory, org, admin_user
+):
+    """One fix, one message.
+
+    The built-in engine used to end the turn with "Done — Applied automatically (Clear
+    temporary files). The agent will run it shortly. Anything else?" — and then the dispatch
+    path posted "On it — checking your temporary files now" on top of it. Two messages about
+    one fix, the first of them claiming a success no device had reported yet.
+
+    Both halves are asserted together on purpose: the turn now answers with the same
+    sentence the dispatch path would have written, which is the whole reason the second one
+    can stand down.
+    """
+    import uuid as _uuid
+
+    _device_id, _unused_convo, token = await _device_and_conversation(
+        session_factory, org, admin_user, machine="chat-6")
+    h = {"Authorization": f"Bearer {token}"}
+    await client.post(
+        "/api/v1/agent/telemetry", headers=h,
+        json={
+            "collected_at": "2026-07-08T10:00:00Z",
+            "cpu_percent": 91.0,
+            "ram_total_mb": 16384,
+            "ram_used_mb": 15000,
+            "disks": [{"drive": "C:", "total_gb": 500.0, "used_gb": 480.0, "free_gb": 20.0}],
+        },
+    )
+
+    chat = await client.post(
+        "/api/v1/agent/chat", json={"content": "my pc feels slow"}, headers=h)
+    assert chat.status_code == 200, chat.text
+    convo_id = _uuid.UUID(chat.json()["conversation_id"])
+    reply = chat.json()["reply"]
+
+    # The turn says it is on it, and never that it is finished.
+    assert reply.startswith("🔧 On it"), reply
+    assert "Done" not in reply and "Anything else" not in reply, reply
+
+    # Both agent processes pick their half of the work up — and neither says it again.
+    await client.get("/api/v1/agent/tasks", headers=h)
+    await client.get("/api/v1/agent/tasks?context=system", headers=h)
+
+    msgs = await _messages(session_factory, convo_id)
+    assert [m for m in msgs if m.startswith("🔧")] == [reply], msgs
+
+
+async def test_a_fix_that_waited_for_approval_still_says_when_it_starts(
+    client, session_factory, org, admin_user
+):
+    """The stand-down above is only for fixes that run straight away.
+
+    An approval-required action was answered with "queued for IT approval"; the user then
+    waits minutes or hours for a human to sign it off. The line that says it is actually
+    running now is the only thing marking that moment, so it still gets posted.
+    """
+    device_id, convo_id, token = await _device_and_conversation(
+        session_factory, org, admin_user, machine="chat-7")
+
+    async with session_factory() as s:
+        device = await s.get(Device, device_id)
+        service = RemediationService(s)
+        task = await service.create_task(
+            org_id=org.id, device=device, action_id="office_repair", params=None,
+            reason="Word keeps crashing", source=RemediationSource.ASSISTANT,
+            actor_user_id=None, conversation_id=convo_id,
+        )
+        from app.models import User
+        admin = await s.get(User, admin_user.id)
+        await service.approve_task(actor=admin, task_id=task.id)
+
+    await client.get("/api/v1/agent/tasks", headers={"Authorization": f"Bearer {token}"})
+
+    msgs = await _messages(session_factory, convo_id)
+    assert any(m.startswith("🔧") and "Office" in m for m in msgs), msgs

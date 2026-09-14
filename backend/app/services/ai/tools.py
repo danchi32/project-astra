@@ -335,8 +335,15 @@ async def _propose_remediation(
         return json.dumps({"error": str(exc)})
 
     action = ACTIONS[action_id]
-    if task.status.value == "approved":
+    auto = task.status.value == "approved"
+    if auto:
         outcome = f"Applied automatically ({action.label}). The agent will run it shortly."
     else:
         outcome = f"Queued for IT approval ({action.label}); it needs a {task.tier} sign-off."
-    return json.dumps({"task_id": str(task.id), "action": action.label, "outcome": outcome})
+    # `action_id` and `auto` are for the built-in engine, which has no words of its own and
+    # answers with the standard "on it" line — it needs to know which fix and whether it is
+    # waiting on a human. The model reads `outcome`.
+    return json.dumps({
+        "task_id": str(task.id), "action": action.label, "action_id": action_id,
+        "auto": auto, "outcome": outcome,
+    })
