@@ -122,6 +122,17 @@ class Settings(BaseSettings):
     # volume ever becomes the problem.
     log_level: str = "INFO"
 
+    # Remote control (MeshCentral). Unset means the feature is unreachable, which is the
+    # correct state for every deployment that has not stood a relay up — the entitlement
+    # keeps it off for customers, and this keeps it off for the code.
+    meshcentral_url: str | None = None
+    meshcentral_user: str | None = None
+    meshcentral_token: str | None = None
+    # Accept the relay's certificate without checking it. Development only, and named so
+    # it is impossible to set by accident: it disables exactly the check that stops
+    # somebody impersonating the relay to this backend.
+    meshcentral_insecure_tls: bool = False
+
     # AI engine — when the API key is unset, a deterministic stub provider is used
     # (local demo + tests run without a key or network).
     anthropic_api_key: str | None = None

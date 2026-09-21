@@ -17,3 +17,7 @@ nh3>=0.2.18
 anthropic>=0.40
 stripe>=11.0
 httpx>=0.27
+# The MeshCentral relay speaks a WebSocket, not REST. This arrives transitively with
+# uvicorn[standard] today, which is exactly why it is named here: app code depends on it
+# now, and a future uvicorn that drops it would break the build with no line to blame.
+websockets>=13.0
