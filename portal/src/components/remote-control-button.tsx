@@ -54,6 +54,10 @@ export function RemoteControlButton({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // `poll` re-arms itself from inside a closure, so it would read whatever `phase` was
+  // when that closure was made. The ref is always current.
+  const phaseRef = useRef(phase);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // Stop polling when the component goes away — a device page left in a background tab
   // should not keep asking the server about a session nobody is watching.
@@ -70,7 +74,11 @@ export function RemoteControlButton({
     try {
       const created = await requestRemoteSession({ device_id: deviceId, reason: reason.trim() });
       setSession(created);
-      setPhase("waiting");
+      // Open the viewer straight away. Opening it is what puts the prompt on the person's
+      // screen — there is no separate "ask" step to wait through. The relay then holds the
+      // stream until they allow it, and shows its own waiting state inside the frame, so a
+      // spinner out here would only cover up the thing worth watching.
+      setPhase(created.viewer_url ? "viewing" : "waiting");
       poll(created.id);
     } catch (e) {
       setError(apiErrorMessage(e, "Couldn't reach the server."));
@@ -84,14 +92,13 @@ export function RemoteControlButton({
       try {
         const next = await getRemoteSession(id);
         setSession(next);
-        if (next.status === "approved" || next.status === "active") {
-          // The link arrives with this response and nowhere else. Render it straight into
-          // the iframe; it is a credential and does not belong anywhere it could be copied.
-          if (next.viewer_url) { setPhase("viewing"); return; }
-        }
+        // Keep polling THROUGH the viewing state. The frame shows what is happening on
+        // the screen; this tells us what happened to the request — and a refusal has to
+        // close the frame, or the technician sits watching a viewer that will never fill.
         if (["declined", "no_response", "expired", "failed", "ended"].includes(next.status)) {
           setPhase("done"); return;
         }
+        if (next.viewer_url && phaseRef.current !== "viewing") setPhase("viewing");
         poll(id);
       } catch (e) {
         setError(apiErrorMessage(e, "Couldn't reach the server."));

@@ -57,14 +57,24 @@ async def _render(
         elapsed = (utcnow() - as_utc(remote_session.requested_at)).total_seconds()
         out.expires_in_seconds = max(0, int(CONSENT_TIMEOUT.total_seconds() - elapsed))
 
-    # The link appears only once the person at the device has agreed, and only for the
-    # technician who asked. Both halves matter: before consent there is nothing to look
-    # at, and handing it to a colleague would be handing over the session itself.
+    # The link is issued while the session is still PENDING, and that is not a hole — it
+    # is how the question gets asked. Opening the viewer is what makes the prompt appear
+    # on the person's screen; the relay then holds the stream until they allow it. So a
+    # link hands its bearer the ability to ASK, never the ability to SEE.
+    #
+    # Withholding it until APPROVED was the first attempt and it deadlocked: nothing could
+    # trigger the prompt, so nothing was ever approved, so no link was ever issued. The
+    # consent gate lives on the relay (the device group's consent flags), where it can
+    # actually stop pixels — not here, where it only stopped the question.
+    #
+    # Still only for the technician who asked. A colleague can read the session because it
+    # is their org's record; handing them the link would hand them the session.
     if (
         include_viewer_url
         and actor is not None
         and remote_session.requested_by_user_id == actor.id
-        and remote_session.status in (RemoteSessionStatus.APPROVED,
+        and remote_session.status in (RemoteSessionStatus.PENDING,
+                                      RemoteSessionStatus.APPROVED,
                                       RemoteSessionStatus.ACTIVE)
         and device is not None
         and device.meshcentral_node_id
@@ -104,7 +114,10 @@ async def request_session(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     except RemoteControlError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
-    return await _render(session, remote_session, actor=actor)
+    # With the link, because opening it is what puts the prompt on the person's screen.
+    # Returning it here rather than making the portal poll for it once saves a round trip
+    # on the one step where the technician is watching a spinner.
+    return await _render(session, remote_session, actor=actor, include_viewer_url=True)
 
 
 @router.get("/{session_id}", response_model=RemoteSessionRead,

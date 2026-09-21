@@ -62,11 +62,15 @@ async def test_an_org_without_the_feature_is_told_to_upgrade_not_refused(
 # ── Requesting ────────────────────────────────────────────────────────────
 
 
-async def test_a_request_starts_pending_with_a_countdown_and_no_link(
+async def test_a_request_starts_pending_with_a_countdown(
     client, session_factory, org, admin_headers
 ):
-    """Nothing is connected yet, so there is nothing to look at — and the portal is told
-    how long the person has, by the server that enforces it."""
+    """The portal is told how long the person has, by the server that enforces it.
+
+    No relay is configured here, so there is no link either — that is this deployment
+    having no relay, NOT a rule about pending sessions. The rule is the opposite, and it
+    has its own test below.
+    """
     await _grant(session_factory, org)
     device_id = await _device(session_factory, org, "api-2")
 
@@ -75,7 +79,7 @@ async def test_a_request_starts_pending_with_a_countdown_and_no_link(
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["status"] == "pending"
-    assert body["viewer_url"] is None
+    assert body["viewer_url"] is None        # no relay on this deployment
     assert 0 < body["expires_in_seconds"] <= 120
     assert body["device_hostname"] == "API-PC"
     assert body["requested_by_name"]
@@ -133,25 +137,39 @@ async def test_a_device_in_another_org_is_not_found(
 # ── The viewer link ───────────────────────────────────────────────────────
 
 
-async def test_no_link_is_issued_before_the_person_agrees(
-    client, session_factory, org, admin_headers
+async def test_the_link_is_issued_while_pending_because_it_is_what_asks(
+    client, session_factory, org, admin_headers, monkeypatch
 ):
-    """The gate that matters. A link handed out while the prompt is still on screen
-    would let a technician connect to somebody who had not answered."""
+    """This test used to assert the opposite, and it was wrong in a way worth recording.
+
+    "No link until they agree" reads like the safe rule. It deadlocks: opening the viewer
+    is what puts the prompt on the person's screen, so with no link nothing ever asks,
+    nothing is ever approved, and no link is ever issued. The feature could not complete a
+    single session.
+
+    Consent is enforced by the relay, which holds the stream until the person allows it —
+    a gate that can actually stop pixels. Withholding the link only stopped the question,
+    while looking like security.
+    """
+    _relay(monkeypatch)
     await _grant(session_factory, org)
     device_id = await _device(session_factory, org, "api-6")
 
     created = (await client.post("/api/v1/remote-sessions", headers=admin_headers,
                                  json={"device_id": device_id, "reason": REASON})).json()
+    assert created["status"] == "pending"
+    assert created["viewer_url"], "a pending session must carry the link that asks"
+
     r = await client.get(f"/api/v1/remote-sessions/{created['id']}", headers=admin_headers)
-    assert r.status_code == 200
-    assert r.json()["status"] == "pending"
-    assert r.json()["viewer_url"] is None
+    assert r.json()["viewer_url"]
 
 
 async def test_no_link_is_issued_after_a_refusal(
-    client, session_factory, org, admin_headers
+    client, session_factory, org, admin_headers, monkeypatch
 ):
+    """Still true, and now for the right reason: with a relay configured, a pending
+    session WOULD carry a link, so its absence here is the refusal and nothing else."""
+    _relay(monkeypatch)
     await _grant(session_factory, org)
     device_id = await _device(session_factory, org, "api-7")
     created = (await client.post("/api/v1/remote-sessions", headers=admin_headers,
@@ -167,10 +185,11 @@ async def test_no_link_is_issued_after_a_refusal(
 
 
 async def test_the_list_endpoint_never_carries_links(
-    client, session_factory, org, admin_headers
+    client, session_factory, org, admin_headers, monkeypatch
 ):
     """A list is read by a page showing many sessions to whoever can open the page.
     Minting credentials into it would scatter them."""
+    _relay(monkeypatch)
     await _grant(session_factory, org)
     device_id = await _device(session_factory, org, "api-8")
     created = (await client.post("/api/v1/remote-sessions", headers=admin_headers,
@@ -186,7 +205,7 @@ async def test_the_list_endpoint_never_carries_links(
 
 
 async def test_a_colleague_cannot_pick_up_someone_elses_link(
-    client, session_factory, org, admin_user, admin_headers
+    client, session_factory, org, admin_user, admin_headers, monkeypatch
 ):
     """Another technician in the same org can SEE the session — it is their org's
     record — but handing them the link would hand them the session itself."""
@@ -332,3 +351,16 @@ async def test_another_orgs_sessions_are_not_listed(
     r = await client.get("/api/v1/remote-sessions", headers=admin_headers)
     assert r.json()["total"] == 1
     assert r.json()["items"][0]["reason"] == REASON
+
+
+def _relay(monkeypatch):
+    """A relay that does not exist. Nothing here connects to one — issuing a viewer link
+    is pure composition — but without it `viewer_url` is empty for a reason that has
+    nothing to do with what these tests are checking."""
+    from app.core.config import get_settings
+
+    s = get_settings()
+    monkeypatch.setattr(s, "meshcentral_url", "https://relay.test", raising=False)
+    monkeypatch.setattr(s, "meshcentral_user", "~t:test", raising=False)
+    monkeypatch.setattr(s, "meshcentral_token", "test-token", raising=False)
+    monkeypatch.setattr(s, "meshcentral_cookie_key", "ab" * 80, raising=False)
