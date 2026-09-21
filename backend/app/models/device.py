@@ -64,3 +64,12 @@ class Device(TimestampMixin, Base):
     # unchanged rewrite matters more here than anywhere else above: a fleet where nobody
     # signs in or out for an hour should cost zero session writes in that hour.
     sessions_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # This device as the remote-control engine knows it. A mapping column and nothing more:
+    # `machine_id` above is what identifies a device to ASTRA, and this hangs beneath it.
+    #
+    # Never surface it and never key anything off it. The engine derives its own id from
+    # the machine's GUID, and two machines can report the same one — a re-imaged laptop, a
+    # cloned VM image — which puts two rows with identical names in front of a technician,
+    # one of them dead. Whichever they click is a coin toss; ASTRA's own identity is not.
+    meshcentral_node_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

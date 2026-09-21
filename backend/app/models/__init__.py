@@ -40,6 +40,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.pending_registration import PendingRegistration
 from app.models.refresh_token import RefreshToken
 from app.models.remediation import RemediationSource, RemediationStatus, RemediationTask
+from app.models.remote_session import OPEN_STATUSES, RemoteSession, RemoteSessionStatus
 from app.models.semantic_cache import SemanticCacheEntry
 from app.models.support_escalation import EscalationState, SupportEscalation
 from app.models.support_request import (
@@ -112,6 +113,9 @@ __all__ = [
     "RemediationSource",
     "RemediationStatus",
     "RemediationTask",
+    "OPEN_STATUSES",
+    "RemoteSession",
+    "RemoteSessionStatus",
     "EscalationState",
     "HelpdeskSettings",
     "SemanticCacheEntry",

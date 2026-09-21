@@ -43,6 +43,17 @@ ADVANCED_RBAC = "advanced_rbac"          # incl. SSO
 #: worth being able to say no to, per organization, which is what this key is for.
 SHARED_EMAIL_SENDER = "shared_email_sender"
 
+#: Taking control of someone's screen, with their consent, from the portal.
+#:
+#: Deliberately in NO plan below, which is what keeps the feature dark while it is built:
+#: `features_for` grants only what a plan lists, and the fallback for an unknown plan is
+#: Expert — which does not list this either. An organization gets it by an explicit
+#: override, one org at a time, which is how a pilot should start anyway.
+#:
+#: Tier it when it ships. The natural home is Professional and above: it is the same
+#: promise as AI_ACT — ASTRA doing something to a machine rather than reporting on it.
+REMOTE_CONTROL = "remote_control"
+
 # ── Plans ──────────────────────────────────────────────────────────────────
 
 ESSENTIAL = "essential"
