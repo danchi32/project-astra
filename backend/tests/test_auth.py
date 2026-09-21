@@ -82,3 +82,28 @@ async def test_logout_revokes_refresh_token(client, admin_user):
         "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
     )
     assert reuse.status_code == 401
+
+
+async def test_me_says_what_the_plan_includes(client, session_factory, org, admin_headers):
+    """The portal renders the product a customer bought, rather than controls that answer
+    402 when pressed. Presentation only — the server refuses anything off this list
+    whatever the portal shows — but a button nobody can use is noise, not a teaser.
+
+    Derived from the plan on every call, never stored: a cached copy drifts from what the
+    customer is actually paying for, and then nobody can explain what they are seeing.
+    """
+    from app.models import Organization
+    from app.services.entitlements import INVENTORY, REMOTE_CONTROL
+
+    body = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()
+    assert INVENTORY in body["entitlements"]
+    # In no plan, including the Expert fallback an unknown plan lands on.
+    assert REMOTE_CONTROL not in body["entitlements"]
+
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.entitlement_overrides = {REMOTE_CONTROL: True}
+        await s.commit()
+
+    body = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()
+    assert REMOTE_CONTROL in body["entitlements"]

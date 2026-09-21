@@ -103,10 +103,24 @@ async def logout(body: RefreshRequest, session: AsyncSession = Depends(get_db)) 
 
 
 @router.get("/me", response_model=UserRead, summary="Current authenticated user")
-async def me(current_user: User = Depends(get_current_user)) -> UserRead:
+async def me(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserRead:
     read = UserRead.model_validate(current_user)
     # Surface view-as mode so the portal renders the viewed org's (read-only) UI.
     read.view_as = bool(getattr(current_user, "_view_as", False))
+
+    # And what the org may use, so the portal can render the product they bought rather
+    # than controls that answer 402 when pressed. Derived from the plan on every call
+    # rather than stored, for the same reason `features_for` is: a cached copy drifts
+    # from what the customer is paying for.
+    from app.models import Organization
+    from app.services.entitlements import features_for
+
+    org = await session.get(Organization, current_user.org_id)
+    if org is not None:
+        read.entitlements = sorted(features_for(org.plan, org.entitlement_overrides))
     return read
 
 

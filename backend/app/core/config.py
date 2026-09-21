@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     meshcentral_url: str | None = None
     meshcentral_user: str | None = None
     meshcentral_token: str | None = None
+    # Hex of the relay's LoginCookieEncryptionKey — the same value must appear in its
+    # config.json. It is what lets this backend mint the short-lived URL that puts a
+    # technician straight onto a device, so the customer never meets the relay's own
+    # login page. Rotating it invalidates every viewer URL already handed out.
+    meshcentral_cookie_key: str | None = None
     # Accept the relay's certificate without checking it. Development only, and named so
     # it is impossible to set by accident: it disables exactly the check that stops
     # somebody impersonating the relay to this backend.

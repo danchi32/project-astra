@@ -4,9 +4,12 @@ No relay is mocked at the protocol level here — `RelayEvent` is the seam, and 
 one in is exactly what the socket does. What these tests pin down is the mapping, which
 is where the judgement lives.
 """
+import base64
+import json
 import uuid
 from datetime import timedelta
 
+import pytest
 from sqlalchemy import select
 
 from app.core.security import hash_opaque_token
@@ -19,6 +22,7 @@ from app.services.meshcentral import (
     MSG_DESKTOP_STARTED,
     REQUIRED_RELAY_CONSENT_TIMEOUT,
     MeshCentralClient,
+    MeshCentralNotConfigured,
     RelayEvent,
 )
 from app.services.remote_control import CONSENT_TIMEOUT, RemoteControlService
@@ -226,3 +230,69 @@ def test_the_token_is_sent_as_credentials_not_as_a_password():
     user_b64, token_b64 = header.split(",")
     assert base64.b64decode(user_b64).decode() == "~t:abc"
     assert base64.b64decode(token_b64).decode() == "secret"
+
+
+# ── The viewer link ───────────────────────────────────────────────────────
+#
+# The piece that keeps MeshCentral invisible: the technician clicks a button in the
+# ASTRA portal and lands on a device's desktop, never meeting the relay's login page.
+# Verified against a live relay while it was written — a cookie signed with the wrong
+# key gets the login page, which is the property these tests stand in for.
+
+COOKIE_KEY = "ab" * 80        # 80 bytes, the length the relay requires
+NODE_ID = "node//abc$123@xyz"
+
+
+def _client():
+    return MeshCentralClient(
+        url="https://relay.example.com", user="~t:u", token="t", cookie_key=COOKIE_KEY)
+
+
+def test_a_viewer_link_opens_one_device_and_nothing_else():
+    url = _client().viewer_url(node_id=NODE_ID, user_id="user//tech")
+    assert url.startswith("https://relay.example.com/?login=")
+    # viewmode=11 is the desktop tab; hide=31 strips the relay's own chrome, so what
+    # lands in the portal's iframe is a screen rather than somebody else's product.
+    assert "viewmode=11" in url and "hide=31" in url
+    # The node id carries characters that would end the query string if left raw.
+    assert "gotonode=node%2F%2Fabc%24123%40xyz" in url
+
+
+def test_the_cookie_is_encrypted_with_the_shared_key_not_merely_encoded():
+    """A relay that accepted a self-signed cookie would let anyone who can guess the
+    format onto any device. Confirmed live: a cookie signed with a different key is
+    refused and the browser gets the login page."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    cookie = _client().encode_login_cookie("user//tech")
+    raw = base64.b64decode(cookie.replace("@", "+").replace("$", "/"))
+    iv, tag, ciphertext = raw[:12], raw[12:28], raw[28:]
+
+    payload = json.loads(
+        AESGCM(bytes.fromhex(COOKIE_KEY)[:32]).decrypt(iv, ciphertext + tag, None))
+    assert payload["u"] == "user//tech"
+    assert isinstance(payload["time"], int)
+
+    # The wrong key must not open it — and the failure is an authentication-tag
+    # mismatch, not a decode error, which is the difference between "this was signed by
+    # somebody else" and "this was malformed".
+    from cryptography.exceptions import InvalidTag
+
+    with pytest.raises(InvalidTag):
+        AESGCM(bytes.fromhex("cd" * 32)).decrypt(iv, ciphertext + tag, None)
+
+
+def test_every_link_is_unique_even_for_the_same_device():
+    """A fresh random IV per link. Identical URLs would be shareable and replayable."""
+    client = _client()
+    links = {client.viewer_url(node_id=NODE_ID, user_id="user//tech") for _ in range(5)}
+    assert len(links) == 5
+
+
+def test_no_link_is_issued_without_a_key():
+    """A deployment with no relay key must refuse rather than hand out a URL that
+    silently drops the technician on a login page they have no account for."""
+    client = MeshCentralClient(
+        url="https://relay.example.com", user="u", token="t", cookie_key=None)
+    with pytest.raises(MeshCentralNotConfigured):
+        client.viewer_url(node_id=NODE_ID, user_id="user//tech")

@@ -20,6 +20,7 @@ from app.api.v1 import (
     platform,
     public,
     remediation,
+    remote_control,
     reports,
     sessions,
     settings,
@@ -41,6 +42,7 @@ api_router.include_router(agent.router)
 api_router.include_router(telemetry.router)
 api_router.include_router(conversations.router)
 api_router.include_router(remediation.router)
+api_router.include_router(remote_control.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(assistants.router)
 api_router.include_router(help_centre.router)

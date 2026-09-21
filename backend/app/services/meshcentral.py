@@ -26,11 +26,14 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import ssl
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 from app.core.config import get_settings
 
@@ -61,6 +64,17 @@ MSG_DESKTOP_REFUSED = 34
 #: recorded as a refusal, which is the exact bug the spike surfaced and this whole design
 #: exists to avoid. `consentTimeout` in the relay's config.json must be at least this.
 REQUIRED_RELAY_CONSENT_TIMEOUT = 600
+
+
+#: What the relay's own code puts in a login cookie: the user it logs you in as, and an
+#: access level. Read off webserver.js rather than documentation — `{u: userid, a: 3}` is
+#: the shape the relay builds for its own token logins, so it is the shape it expects.
+_COOKIE_ACCESS_LEVEL = 3
+
+#: The relay refuses a login cookie older than an hour. ASTRA hands out far shorter ones
+#: — a viewer URL is for a session starting now — but the ceiling is the relay's and this
+#: is it, so nothing here may assume a longer life.
+COOKIE_MAX_AGE_SECONDS = 3600
 
 
 class MeshCentralError(Exception):
@@ -119,12 +133,14 @@ class MeshCentralClient:
         url: str | None = None,
         user: str | None = None,
         token: str | None = None,
+        cookie_key: str | None = None,
         insecure_tls: bool | None = None,
     ) -> None:
         settings = get_settings()
         self.url = url or settings.meshcentral_url
         self.user = user or settings.meshcentral_user
         self.token = token or settings.meshcentral_token
+        self.cookie_key = cookie_key or settings.meshcentral_cookie_key
         self.insecure_tls = (
             settings.meshcentral_insecure_tls if insecure_tls is None else insecure_tls
         )
@@ -174,6 +190,53 @@ class MeshCentralClient:
             open_timeout=open_timeout,
         ) as ws:
             yield ws
+
+    # -- The viewer URL --------------------------------------------------------
+
+    def encode_login_cookie(self, user_id: str) -> str:
+        """Mint the relay's own login cookie, without going through its login page.
+
+        This is the piece that keeps MeshCentral invisible. The technician clicks a
+        button in the ASTRA portal and lands on a device's desktop; they never see, and
+        never need an account on, the relay.
+
+        The format is the relay's, reproduced exactly — AES-256-GCM over the JSON, with
+        the first 32 bytes of the shared key, and `+` and `/` swapped for `@` and `$` so
+        the result survives a query string. `time` is checked on the other side, which is
+        what bounds how long a minted URL stays good.
+        """
+        if not self.cookie_key:
+            raise MeshCentralNotConfigured(
+                "No relay cookie key is configured, so viewer links cannot be issued."
+            )
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        key = bytes.fromhex(self.cookie_key)[:32]
+        payload = json.dumps(
+            {"u": user_id, "a": _COOKIE_ACCESS_LEVEL, "time": int(time.time())},
+            separators=(",", ":"),
+        ).encode()
+        iv = os.urandom(12)
+        sealed = AESGCM(key).encrypt(iv, payload, None)
+        # AESGCM appends the 16-byte tag; the relay expects it in the middle.
+        ciphertext, tag = sealed[:-16], sealed[-16:]
+        raw = base64.b64encode(iv + tag + ciphertext).decode()
+        return raw.replace("+", "@").replace("/", "$")
+
+    def viewer_url(self, *, node_id: str, user_id: str) -> str:
+        """A link that opens one device's desktop and nothing else.
+
+        `viewmode=11` is the relay's desktop tab and `hide=31` strips its chrome — the
+        toolbar, the device list, the other tabs — so what lands in the ASTRA portal's
+        iframe is a screen, not somebody else's product.
+        """
+        self._require()
+        cookie = self.encode_login_cookie(user_id)
+        base = (self.url or "").rstrip("/")
+        return (
+            f"{base}/?login={quote(cookie, safe='')}"
+            f"&gotonode={quote(node_id, safe='')}&viewmode=11&hide=31"
+        )
 
     async def ping(self) -> dict[str, Any]:
         """Prove the relay is reachable and the token still works.

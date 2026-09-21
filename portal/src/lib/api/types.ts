@@ -113,6 +113,14 @@ export interface User {
   // True while this session is a platform admin's read-only "view as organization".
   view_as?: boolean;
   created_at: string;
+  /**
+   * What this org may use. Presentation only — hiding a control is not authorisation,
+   * and the server refuses anything not on this list whatever the portal renders. Use
+   * it so people see the product they bought instead of buttons that answer 402.
+   *
+   * Optional on the type because an older cached /me response may predate the field.
+   */
+  entitlements?: string[];
 }
 
 export type SubscriptionStatus =
@@ -167,6 +175,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   audit_export: "Audit export & retention",
   advanced_rbac: "Advanced RBAC & SSO",
   shared_email_sender: "Send email via ASTRA",
+  remote_control: "Remote control",
 };
 
 export interface OrganizationAdmin {

@@ -35,3 +35,10 @@ class UserRead(BaseModel):
     # token — org_id then points at the VIEWED org, not the admin's own.
     view_as: bool = False
     created_at: datetime
+    #: What this user's organisation may use, so the portal renders the product they
+    #: bought instead of buttons that answer 402. Presentation only — the server still
+    #: refuses anything not on this list, and a portal that lied would change nothing.
+    #:
+    #: Empty list, never null, so a caller can do `entitlements.includes(x)` without a
+    #: guard; the only path that leaves it empty is an org row that could not be read.
+    entitlements: list[str] = []

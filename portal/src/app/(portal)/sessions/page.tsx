@@ -13,6 +13,7 @@ import {
 import { listDeviceGroups } from "@/lib/api/grouping";
 import { getMe } from "@/lib/api/auth";
 import { ScrollPanel, stickyHeadCell } from "@/components/scroll-panel";
+import { RemoteControlButton } from "@/components/remote-control-button";
 import { apiErrorMessage } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -127,6 +128,7 @@ export default function SessionsPage() {
 
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const isAdmin = me?.role === "admin";
+  const canRemote = me?.entitlements?.includes("remote_control") ?? false;
   const { data: groups } = useQuery({ queryKey: ["device-groups"], queryFn: listDeviceGroups });
 
   const active = TABS.find((t) => t.key === tab) ?? TABS[0];
@@ -402,6 +404,13 @@ export default function SessionsPage() {
                       scroll, and they repeat identically down every row — the label earns its
                       width once, in a tooltip, not once per session. */}
                   <div className="flex items-center gap-1 justify-end">
+                    {/* Only on a machine that is actually reachable, and only where the
+                        org has bought the feature. Hiding it is presentation, not
+                        authorisation — the server refuses it either way — but a control
+                        that answers "upgrade your plan" on every press is noise. */}
+                    {canRemote && s.device_online && (
+                      <RemoteControlButton deviceId={s.device_id} hostname={s.hostname} />
+                    )}
                     {(Object.keys(ACTIONS) as SessionActionId[]).map((id) => {
                       const a = ACTIONS[id];
                       // Admin-only actions are hidden from technicians rather than shown

@@ -9,9 +9,21 @@ os.environ["ASTRA_ANTHROPIC_API_KEY"] = ""
 # Same reason, same hazard: a developer's backend/.env may point at a real MeshCentral
 # relay, and a test that reached one would take over somebody's screen to prove a point.
 # Forced empty here so the client reports itself unconfigured no matter what is on disk.
-os.environ["ASTRA_MESHCENTRAL_URL"] = ""
-os.environ["ASTRA_MESHCENTRAL_USER"] = ""
-os.environ["ASTRA_MESHCENTRAL_TOKEN"] = ""
+#
+# EVERY relay setting belongs in this list. The cookie key was added to Settings after
+# the first three and left out of here, and the gap was real: with a developer's key
+# still readable, the suite could mint working viewer links for a live relay. A test
+# caught it, which is luck — so the loop below covers whatever Settings declares rather
+# than a list somebody has to remember to extend.
+from app.core.config import Settings as _Settings
+
+for _field, _info in _Settings.model_fields.items():
+    if _field.startswith("meshcentral_"):
+        # A flag's "off" is False, not the empty string — pydantic refuses to parse that
+        # as a boolean and the whole suite fails to import.
+        os.environ[f"ASTRA_{_field.upper()}"] = (
+            "false" if _info.annotation is bool else ""
+        )
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
