@@ -314,6 +314,12 @@ class DeviceService:
         # overwrite a version an earlier beat recorded.
         if data.tray_version:
             device.tray_version = data.tray_version
+        # And once more for the remote-support node id. Written on every beat rather than
+        # only at enrollment because the relay agent can be reinstalled and gets a new node
+        # id when it is: a mapping left pointing at a node that no longer exists would take
+        # remote control down for this device until somebody went looking.
+        if data.remote_node_id:
+            device.meshcentral_node_id = data.remote_node_id
         await self.session.commit()
 
     # -- Portal-facing (staff/admin) -------------------------------------------

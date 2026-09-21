@@ -191,6 +191,31 @@ class MeshCentralClient:
         ) as ws:
             yield ws
 
+    # -- Provisioning the endpoint agent ---------------------------------------
+
+    def agent_download_url(self, mesh_id: str) -> str:
+        """Where a device fetches the remote-support agent for one device group.
+
+        The relay builds this executable per group, with the server URL, the group id and
+        the server's certificate hash already inside it — so the device downloads one file
+        and needs no configuration alongside it.
+
+        Nothing is bundled into the ASTRA installer, and that is the point. The relay is
+        what compiles and code-signs this binary; a copy vendored into ASTRA's installer
+        would go stale against the relay's certificate, would have to be byte-identical
+        across organisations that need different group ids, and would put a remote-access
+        executable on the disk of every customer including those who never bought remote
+        control. Fetching on demand has none of those problems.
+
+        `id=4` is the relay's Windows x64 background-service build.
+        """
+        self._require()
+        base = (self.url or "").rstrip("/")
+        return (
+            f"{base}/meshagents?id=4"
+            f"&meshid={quote(mesh_id, safe='')}&installflags=0"
+        )
+
     # -- The viewer URL --------------------------------------------------------
 
     def encode_login_cookie(self, user_id: str) -> str:

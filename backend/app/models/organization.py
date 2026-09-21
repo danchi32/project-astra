@@ -86,6 +86,17 @@ class Organization(TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
 
+    # The relay device group this org's machines enroll into. NULL means remote support
+    # cannot be provisioned here, which is the right state for an org nobody has set one
+    # up for — and for every org that exists today.
+    #
+    # Required IN ADDITION to the remote_control entitlement, not instead of it. The
+    # entitlement is a commercial decision; this is an operational one, and it takes
+    # somebody having actually created a group for this customer on the relay. Requiring
+    # both means a mis-granted entitlement cannot push a remote-access agent onto a
+    # fleet, and a missing group cannot land one customer's machines in another's.
+    meshcentral_mesh_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
     # -- Terms acceptance ------------------------------------------------------
     # Proof that somebody agreed to the Terms of Service, and to WHICH version. An
     # e-contract is enforceable only if acceptance can be demonstrated, so the record has

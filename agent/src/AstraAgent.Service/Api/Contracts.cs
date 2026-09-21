@@ -31,7 +31,14 @@ public sealed record HeartbeatRequest(
     // The tray updates on its own track and used to report nothing at all, so a portal showing
     // an up-to-date agent could be sitting on a tray several releases behind — invisible until a
     // user hit an action the tray had never heard of. Null when no tray is installed.
-    [property: JsonPropertyName("tray_version")] string? TrayVersion = null);
+    [property: JsonPropertyName("tray_version")] string? TrayVersion = null,
+    // This device as the remote-support relay knows it, read from the relay agent's own
+    // registry key. Reported on every beat rather than at enrollment: the agent can be
+    // reinstalled, and a mapping that pointed at a node which no longer exists would take
+    // remote support down for that device until somebody noticed. Null when the agent is
+    // not installed or has not registered yet — the backend then leaves the last known
+    // value alone rather than erasing a working mapping on a transient read failure.
+    [property: JsonPropertyName("remote_node_id")] string? RemoteNodeId = null);
 
 public sealed record HeartbeatResponse(
     [property: JsonPropertyName("status")] string Status,
@@ -119,3 +126,22 @@ public sealed record TelemetryPush(
     // enumerate them, which the backend treats as "leave what you have"; an empty list means
     // nobody is signed in, which it treats as "clear the rows". Older backends ignore both.
     [property: JsonPropertyName("sessions")] IReadOnlyList<TelemetrySessionEntry>? Sessions = null);
+
+// ── Remote support provisioning ─────────────────────────────────────────────
+
+/// <summary>What the backend says this device should do about remote support.
+///
+/// The decision is the server's, not the agent's: whether the customer bought the
+/// feature, and which device group they belong to, are both facts only the backend has.
+///
+/// Enabled=false is an instruction, not an absence. A device already running the relay
+/// agent removes it — a customer who stops paying for remote control must stop having a
+/// remote-access service on their machines, not merely stop being able to reach it.</summary>
+public sealed record RemoteSupportPlan(
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    // The relay compiles this per device group, with the server URL, group id and server
+    // certificate hash already inside — one file, nothing to configure beside it.
+    [property: JsonPropertyName("download_url")] string? DownloadUrl = null,
+    // Sent rather than hardcoded so the agent and the relay's agentCustomization cannot
+    // drift: it is the Windows service name AND the registry key the node id lives under.
+    [property: JsonPropertyName("service_name")] string? ServiceName = null);

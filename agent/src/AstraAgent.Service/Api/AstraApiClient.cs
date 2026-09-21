@@ -32,6 +32,12 @@ public interface IAstraApiClient
     /// transport error; an envelope with Available=false means no channel is configured.</summary>
     Task<UpdateEnvelope?> GetUpdateAsync(string deviceToken, CancellationToken ct);
 
+    /// <summary>What this device should do about remote support. Null on any failure —
+    /// the caller then does nothing, which is the safe answer: an unreachable backend
+    /// must not be read as "uninstall", or a relay outage would strip remote support
+    /// from a whole fleet.</summary>
+    Task<RemoteSupportPlan?> GetRemoteSupportPlanAsync(string deviceToken, CancellationToken ct);
+
     /// <summary>Claim approved remediation tasks for the given execution context ("system"
     /// for the elevated Service). The backend marks the returned tasks dispatched. Returns
     /// null on Unauthorized (credential rotated), an empty list when there's nothing to do.</summary>
@@ -79,6 +85,26 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
             if (!response.IsSuccessStatusCode)
                 return null;
             return await response.Content.ReadFromJsonAsync<UpdateEnvelope>(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return null;   // offline / timeout — try again next cycle
+        }
+    }
+
+    public async Task<RemoteSupportPlan?> GetRemoteSupportPlanAsync(
+        string deviceToken, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, "/api/v1/agent/remote-support");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            // A backend too old to know this endpoint answers 404. Null, not "disabled":
+            // the difference is doing nothing versus uninstalling a working agent.
+            if (!response.IsSuccessStatusCode)
+                return null;
+            return await response.Content.ReadFromJsonAsync<RemoteSupportPlan>(ct);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

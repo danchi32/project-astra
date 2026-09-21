@@ -20,6 +20,7 @@ from app.schemas.devices import (
     HeartbeatRequest,
     HeartbeatResponse,
 )
+from app.schemas.devices import RemoteSupportPlan, REMOTE_SUPPORT_SERVICE_NAME
 from app.schemas.remediation import AgentRemediationResult, AgentRemediationTask
 from app.services.agent_update import AgentUpdateService
 from app.services.conversations import ConversationService
@@ -144,4 +145,48 @@ async def report_task_result(
 ) -> None:
     await RemediationService(session).record_result(
         device=device, task_id=task_id, success=body.success, output=body.output
+    )
+
+
+@router.get(
+    "/remote-support",
+    response_model=RemoteSupportPlan,
+    summary="Whether this device should run the remote-support agent, and where to get it",
+)
+async def remote_support_plan(
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> RemoteSupportPlan:
+    """What the device should do about remote support, decided here rather than there.
+
+    Nothing about remote support ships in the ASTRA installer. A device asks this, and
+    only installs the relay agent if the answer says so — which means a customer who has
+    not bought remote control never receives a remote-access executable at all, rather
+    than receiving one that sits unused on every machine they own.
+
+    `enabled: false` is an instruction too. A device already running the relay agent
+    uninstalls it when the answer turns false, so withdrawing the feature actually
+    withdraws it from the fleet instead of leaving it installed and merely unreachable.
+
+    Three things must all hold for `enabled: true` — a relay configured on this
+    deployment, the org's plan including remote control, and an operator having created a
+    device group for this org on that relay. They fail differently and none of them
+    implies the others.
+    """
+    from app.models import Organization
+    from app.services.entitlements import REMOTE_CONTROL, features_for
+    from app.services.meshcentral import MeshCentralClient
+
+    client = MeshCentralClient()
+    org = await session.get(Organization, device.org_id)
+
+    if org is None or not client.configured or not org.meshcentral_mesh_id:
+        return RemoteSupportPlan(enabled=False)
+    if REMOTE_CONTROL not in features_for(org.plan, org.entitlement_overrides):
+        return RemoteSupportPlan(enabled=False)
+
+    return RemoteSupportPlan(
+        enabled=True,
+        download_url=client.agent_download_url(org.meshcentral_mesh_id),
+        service_name=REMOTE_SUPPORT_SERVICE_NAME,
     )

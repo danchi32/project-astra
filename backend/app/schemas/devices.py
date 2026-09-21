@@ -83,6 +83,18 @@ class HeartbeatRequest(BaseModel):
     # Reported by agents new enough to look. Optional, and written only when present, so an
     # older agent's silence never blanks a value a newer one recorded.
     tray_version: str | None = Field(default=None, min_length=1, max_length=20)
+    # This device as the remote-support relay knows it, read by the agent from the relay
+    # agent's own registry key. Same rule as the fields above: written only when reported,
+    # so an older agent's silence never erases a mapping a newer one recorded — and erasing
+    # it would take remote support down for that device with nothing to show why.
+    #
+    # Shaped, not just length-checked, because this value is put straight into a URL that
+    # opens somebody's screen. A node id is `node//` and base64-ish; anything else is either
+    # a bug or an attempt, and neither belongs in that URL.
+    remote_node_id: str | None = Field(
+        default=None, min_length=8, max_length=128,
+        pattern=r"^node//[A-Za-z0-9$@_\-]+$",
+    )
 
     @field_validator("tray_version")
     @classmethod
@@ -191,3 +203,32 @@ class DevicePage(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+#: The Windows service name the relay agent installs under, and therefore the registry
+#: key the ASTRA agent reads its node id from. Set on the relay via agentCustomization;
+#: the two must not drift, so it is stated once here and sent to the agent rather than
+#: hardcoded at both ends.
+REMOTE_SUPPORT_SERVICE_NAME = "AstraRemoteSupport"
+
+
+class RemoteSupportPlan(BaseModel):
+    """What a device should do about remote support.
+
+    The decision is the server's. A device that has never bought remote control is told
+    `enabled: false` and downloads nothing — which is why no remote-access binary is
+    bundled into the ASTRA installer in the first place.
+
+    `enabled: false` is an instruction, not merely an absence: a device already running
+    the relay agent removes it. Withdrawing the feature has to actually withdraw it, or a
+    customer who cancels keeps a remote-access service running on every machine.
+    """
+
+    enabled: bool
+    #: Where to fetch the agent. The relay compiles it per device group with the server
+    #: URL, group id and certificate hash already inside, so there is no second file to
+    #: place and nothing for the device to configure. Null when disabled.
+    download_url: str | None = None
+    #: The service name to install under, and to look for when deciding whether it is
+    #: already there. Null when disabled.
+    service_name: str | None = None

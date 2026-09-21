@@ -41,6 +41,13 @@ public sealed class HeartbeatWorker(
     // 1 while an action is executing. Read on the beat loop, cleared on the worker task.
     private int _executing;
 
+    // Remote-support provisioning is checked occasionally, not on every beat. The answer
+    // changes when somebody edits a subscription — hours or months apart — so asking every
+    // minute would be a request per device per minute to learn nothing. Ten minutes is
+    // still fast enough that revoking the feature removes the agent inside a coffee break.
+    private static readonly TimeSpan RemoteSupportCheckEvery = TimeSpan.FromMinutes(10);
+    private DateTimeOffset _remoteSupportCheckedAt = DateTimeOffset.MinValue;
+
     // Resolved once per process, not per beat: reading it costs a WMI query, and the OS name
     // can only change across a reboot — which restarts this service anyway.
     private readonly Lazy<string?> _osVersion = new(() =>
@@ -103,6 +110,36 @@ public sealed class HeartbeatWorker(
         }
     }
 
+    /// <summary>Keep this machine's remote-support state in line with what the customer is
+    /// entitled to — installing the relay agent when they buy it, removing it when they stop.
+    ///
+    /// Deliberately tolerant of every failure. A null plan (backend too old, offline, timed
+    /// out) means do nothing, NOT uninstall: reading an unreachable backend as "no longer
+    /// entitled" would strip remote support from a whole fleet during an outage. And the
+    /// whole thing is wrapped, because nothing here is worth stopping a heartbeat for.</summary>
+    private async Task MaybeProvisionRemoteSupportAsync(string token, CancellationToken ct)
+    {
+        if (DateTimeOffset.UtcNow - _remoteSupportCheckedAt < RemoteSupportCheckEvery)
+            return;
+        _remoteSupportCheckedAt = DateTimeOffset.UtcNow;
+
+        try
+        {
+            var plan = await api.GetRemoteSupportPlanAsync(token, ct);
+            if (plan is null)
+                return;
+            await new RemoteSupportProvisioner(logger).ApplyAsync(plan, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Service is stopping.
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Remote support provisioning check failed");
+        }
+    }
+
     private async Task<bool> BeatOnceAsync(CancellationToken ct)
     {
         var token = await enrollment.GetDeviceTokenAsync(ct);
@@ -120,8 +157,11 @@ public sealed class HeartbeatWorker(
             IncludeTasks: !busy,
             OsVersion: _osVersion.Value,
             UsbStorageBlocked: Remediation.UsbStorageManager.IsBlocked(),
-            TrayVersion: ReadTrayVersion());
+            TrayVersion: ReadTrayVersion(),
+            RemoteNodeId: Remediation.RemoteSupportAgent.GetNodeId());
         var result = await api.HeartbeatAsync(token, request, ct);
+
+        await MaybeProvisionRemoteSupportAsync(token, ct);
 
         if (result.Status == HeartbeatStatus.Unauthorized)
         {
