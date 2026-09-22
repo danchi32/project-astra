@@ -59,12 +59,20 @@ export function RemoteControlButton({
   const phaseRef = useRef(phase);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
+  // The viewer URL, FROZEN at the moment the frame opens. The backend mints a fresh one
+  // (new cookie, new IV) on every GET, so binding the iframe to session.viewer_url would
+  // swap its src every poll — the frame reloads twice a second, blinks, and the desktop
+  // connection never lives long enough to raise the consent prompt. Captured once here, it
+  // stays put; the poll still updates `session` for status, just not the src.
+  const viewerUrlRef = useRef<string | null>(null);
+
   // Stop polling when the component goes away — a device page left in a background tab
   // should not keep asking the server about a session nobody is watching.
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   function reset() {
     if (timer.current) clearTimeout(timer.current);
+    viewerUrlRef.current = null;
     setPhase("idle"); setReason(""); setSession(null); setError(null); setBusy(false);
   }
 
@@ -78,7 +86,12 @@ export function RemoteControlButton({
       // screen — there is no separate "ask" step to wait through. The relay then holds the
       // stream until they allow it, and shows its own waiting state inside the frame, so a
       // spinner out here would only cover up the thing worth watching.
-      setPhase(created.viewer_url ? "viewing" : "waiting");
+      if (created.viewer_url) {
+        viewerUrlRef.current = created.viewer_url;   // freeze it once
+        setPhase("viewing");
+      } else {
+        setPhase("waiting");
+      }
       poll(created.id);
     } catch (e) {
       setError(apiErrorMessage(e, "Couldn't reach the server."));
@@ -98,7 +111,13 @@ export function RemoteControlButton({
         if (["declined", "no_response", "expired", "failed", "ended"].includes(next.status)) {
           setPhase("done"); return;
         }
-        if (next.viewer_url && phaseRef.current !== "viewing") setPhase("viewing");
+        // First time a link appears, freeze it and open the frame. Never re-freeze — the
+        // next poll's link is a different cookie for the same session, and swapping it in
+        // would reload the frame.
+        if (next.viewer_url && !viewerUrlRef.current) {
+          viewerUrlRef.current = next.viewer_url;
+          setPhase("viewing");
+        }
         poll(id);
       } catch (e) {
         setError(apiErrorMessage(e, "Couldn't reach the server."));
@@ -193,7 +212,7 @@ export function RemoteControlButton({
       )}
 
       {/* View ----------------------------------------------------------- */}
-      {phase === "viewing" && session?.viewer_url && (
+      {phase === "viewing" && viewerUrlRef.current && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "var(--bg)" }}>
           <div className="flex items-center justify-between gap-3 px-4 h-12 shrink-0"
             style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -212,7 +231,7 @@ export function RemoteControlButton({
             </button>
           </div>
           <iframe
-            src={session.viewer_url}
+            src={viewerUrlRef.current}
             title={`Remote desktop — ${hostname}`}
             className="flex-1 w-full"
             style={{ border: "none" }}
