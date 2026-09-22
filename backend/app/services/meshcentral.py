@@ -268,13 +268,21 @@ class MeshCentralClient:
         `viewmode=11` is the relay's desktop tab and `hide=31` strips its chrome — the
         toolbar, the device list, the other tabs — so what lands in the ASTRA portal's
         iframe is a screen, not somebody else's product.
+
+        `gotonode` takes the BARE node id, with any "node//" prefix stripped — MeshCentral's
+        own desktop links build it from `_id.split('/')[2]`, i.e. the part after "node//".
+        Pass the prefixed form and the web app cannot resolve the node: it logs in fine but
+        the desktop never connects, the iframe just blinks, and no consent prompt is ever
+        raised on the device. The stored id keeps its prefix everywhere else; this endpoint,
+        like /meshagents, is the exception.
         """
         self._require()
         cookie = self.encode_login_cookie(user_id)
         base = (self.url or "").rstrip("/")
+        bare_node = node_id.removeprefix("node//")
         return (
             f"{base}/?login={quote(cookie, safe='')}"
-            f"&gotonode={quote(node_id, safe='')}&viewmode=11&hide=31"
+            f"&gotonode={quote(bare_node, safe='')}&viewmode=11&hide=31"
         )
 
     async def ping(self) -> dict[str, Any]:

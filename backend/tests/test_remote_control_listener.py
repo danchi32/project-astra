@@ -254,8 +254,11 @@ def test_a_viewer_link_opens_one_device_and_nothing_else():
     # viewmode=11 is the desktop tab; hide=31 strips the relay's own chrome, so what
     # lands in the portal's iframe is a screen rather than somebody else's product.
     assert "viewmode=11" in url and "hide=31" in url
-    # The node id carries characters that would end the query string if left raw.
-    assert "gotonode=node%2F%2Fabc%24123%40xyz" in url
+    # gotonode is the BARE id — no "node//" prefix — because the relay's web app builds
+    # it from `_id.split('/')[2]`; the prefixed form fails to resolve and the desktop
+    # never connects. The special characters are still url-encoded ($ -> %24, @ -> %40).
+    assert "gotonode=abc%24123%40xyz" in url
+    assert "node%2F%2F" not in url
 
 
 def test_the_cookie_is_encrypted_with_the_shared_key_not_merely_encoded():
