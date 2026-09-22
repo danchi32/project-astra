@@ -1,4 +1,5 @@
 """Phase A: platform-operator (super-admin) console + 14-day trial -> read-only."""
+import uuid
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -204,3 +205,68 @@ async def test_operator_can_suspend_and_reactivate(client, session_factory):
             json={"subscription_status": "active"})).status_code == 200
     assert (await client.post("/api/v1/users", headers=headers,
             json={"email": "z@s.com", "full_name": "Z", "password": _PW, "role": "user"})).status_code in (200, 201)
+
+
+async def test_operator_sets_the_device_group_that_makes_remote_support_possible(
+    client, session_factory
+):
+    """Remote control needs two switches, and they are deliberately separate.
+
+    The entitlement is commercial — anyone who can edit an org may grant it. The device
+    group is operational — it takes somebody having actually created a group for this
+    customer on the relay. Requiring both means a mis-granted entitlement cannot push a
+    remote-access agent onto a fleet, and a missing group cannot land one customer's
+    machines in another customer's group.
+    """
+    from app.services.entitlements import REMOTE_CONTROL
+
+    reg = await _register(client, await _issue_invite(session_factory), "Mesh Co", "m@x.com")
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    await _promote(session_factory, "m@x.com")
+
+    async with session_factory() as s:
+        org = (await s.execute(
+            select(Organization).where(Organization.name == "Mesh Co"))).scalar_one()
+        org_id = str(org.id)
+        assert org.meshcentral_mesh_id is None      # nobody has one until an operator says so
+
+    mesh = "pw0O8BcmHXFUdvuA6SgKIZQsA84rajqeYSvsAYOAFfRa1iwt5oqf5F3Nryse57sP"
+    r = await client.patch(f"/api/v1/platform/organizations/{org_id}", headers=headers,
+                           json={"entitlement_overrides": {REMOTE_CONTROL: True},
+                                 "meshcentral_mesh_id": mesh})
+    assert r.status_code == 200, r.text
+    assert REMOTE_CONTROL in r.json()["entitlements"]
+
+    async with session_factory() as s:
+        org = await s.get(Organization, uuid.UUID(org_id))
+        assert org.meshcentral_mesh_id == mesh
+
+    # Pointing an org's machines at a device group decides who can reach their screens,
+    # so it is answerable later like every other operator action.
+    async with session_factory() as s:
+        from app.models import AuditLog
+        rows = (await s.execute(select(AuditLog.action, AuditLog.detail))).all()
+        detail = next(d for a, d in rows if a == "platform.organization.update")
+        assert detail["meshcentral_mesh_id"] == mesh
+
+
+async def test_clearing_the_device_group_withdraws_remote_support(client, session_factory):
+    """Withdrawing it operationally, without touching what the customer is paying for —
+    the two are separate switches because they are separate decisions."""
+    reg = await _register(client, await _issue_invite(session_factory), "Clear Co", "c@x.com")
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    await _promote(session_factory, "c@x.com")
+
+    async with session_factory() as s:
+        org = (await s.execute(
+            select(Organization).where(Organization.name == "Clear Co"))).scalar_one()
+        org.meshcentral_mesh_id = "mesh//something"
+        await s.commit()
+        org_id = str(org.id)
+
+    r = await client.patch(f"/api/v1/platform/organizations/{org_id}", headers=headers,
+                           json={"meshcentral_mesh_id": ""})
+    assert r.status_code == 200, r.text
+
+    async with session_factory() as s:
+        assert (await s.get(Organization, uuid.UUID(org_id))).meshcentral_mesh_id is None

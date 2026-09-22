@@ -256,3 +256,12 @@ class OrganizationUpdate(BaseModel):
     # Per-feature exceptions for this org. Send {} to clear them; the plan is the answer
     # for everyone else.
     entitlement_overrides: dict[str, bool] | None = None
+    #: The relay device group this org's machines enroll into. Send "" to clear it, which
+    #: stops remote support being provisioned to any of their devices.
+    #:
+    #: Needed IN ADDITION to the remote_control entitlement. The entitlement is a
+    #: commercial decision; this is an operational one, and it takes somebody having
+    #: actually created a group for this customer on the relay. Requiring both means a
+    #: mis-granted entitlement cannot push a remote-access agent onto a fleet, and a
+    #: missing group cannot land one customer's machines in another's.
+    meshcentral_mesh_id: str | None = Field(default=None, max_length=128)

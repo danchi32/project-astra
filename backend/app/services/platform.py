@@ -1016,6 +1016,13 @@ class PlatformService:
             # to be answerable later.
             org.entitlement_overrides = data.entitlement_overrides or None
             changes["entitlement_overrides"] = str(data.entitlement_overrides or {})
+        if data.meshcentral_mesh_id is not None:
+            # Empty string clears it — which is how remote support is withdrawn from a
+            # fleet operationally, separately from the plan. Audited for the same reason
+            # the overrides are: pointing an org's devices at a device group decides who
+            # can reach their screens.
+            org.meshcentral_mesh_id = data.meshcentral_mesh_id.strip() or None
+            changes["meshcentral_mesh_id"] = org.meshcentral_mesh_id or "(cleared)"
 
         await self.audit.record(
             org_id=org.id,
