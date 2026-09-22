@@ -120,6 +120,18 @@ class RemoteControlService:
         if device is None or device.org_id != actor.org_id:
             raise NotFoundError("Device not found")
 
+        # No relay identity means the remote-support agent has not installed on this device
+        # yet, so there is nothing on it to receive the request or raise the prompt. Refusing
+        # here — rather than opening a session that can never mint a viewer link — is the
+        # difference between "this device isn't set up for remote support yet" and a spinner
+        # that counts down to nothing. (Commonly the endpoint's own security policy is
+        # blocking the agent from installing; the message stays about the visible symptom.)
+        if not device.meshcentral_node_id:
+            raise RemoteControlError(
+                "Remote support isn't ready on this device yet — its support agent hasn't "
+                "finished setting up. Once the device reports it in, this will work."
+            )
+
         existing = await self.repo.open_for_device(device_id)
         if existing is not None:
             raise SessionAlreadyOpenError(

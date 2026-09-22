@@ -123,6 +123,20 @@ async def test_a_second_request_on_a_busy_device_is_a_conflict(
     assert r.status_code == 409, r.text
 
 
+async def test_a_device_without_the_relay_agent_cannot_be_requested(
+    client, session_factory, org, admin_headers
+):
+    """A device that never finished installing the support agent has no relay identity, so
+    nothing on it can receive the request or raise the prompt. The request is refused with a
+    clear reason (400) instead of opening a session that spins toward a link it can't mint."""
+    await _grant(session_factory, org)
+    device_id = await _device(session_factory, org, "api-noprov", node_id=None)
+    r = await client.post("/api/v1/remote-sessions", headers=admin_headers,
+                          json={"device_id": device_id, "reason": REASON})
+    assert r.status_code == 400, r.text
+    assert "ready" in r.json()["detail"].lower() or "agent" in r.json()["detail"].lower()
+
+
 async def test_a_regular_user_cannot_request_a_session(
     client, session_factory, org, user_headers
 ):
