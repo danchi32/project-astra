@@ -13,7 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles, requires
 from app.core.database import get_db
-from app.models import Device, RemoteSession, RemoteSessionStatus, User, UserRole
+from app.models import (
+    Device,
+    Organization,
+    RemoteSession,
+    RemoteSessionStatus,
+    User,
+    UserRole,
+)
 from app.models.base import as_utc, utcnow
 from app.schemas.pagination import Page, build, clamp
 from app.schemas.remote_control import RemoteSessionRead, RemoteSessionRequest
@@ -82,24 +89,28 @@ async def _render(
         and device is not None
         and device.meshcentral_node_id
     ):
-        client = MeshCentralClient()
-        try:
-            # The user the browser logs in AS — the relay user id, not the control-channel
-            # token username. Resolved from the relay and cached; passing the token
-            # username here mints a cookie the relay rejects to its login page.
-            user_id = await client.resolve_user_id()
-            out.viewer_url = client.viewer_url(
-                node_id=device.meshcentral_node_id,
-                user_id=user_id or "",
-            )
-        except Exception:
-            # The session is real and its record stands; a relay that is unset, or briefly
-            # unreachable while resolving the user id, just means no link to show right now.
-            # Degrade to an empty field rather than failing the whole status response —
-            # the technician can retry, and the record is unaffected.
-            logger.warning("could not mint a viewer URL for session %s",
-                           remote_session.id, exc_info=True)
-            out.viewer_url = None
+        # The user the browser logs in AS is THIS org's scoped relay account, and only ever
+        # that. It is the cross-tenant boundary: that account can reach this org's device
+        # group and no other, so a technician who edits the node id in the URL to point at
+        # someone else's machine is refused by the relay. There is no fallback to a shared
+        # admin — an org with no scoped user simply gets no link, because a shared admin is
+        # exactly the leak this avoids. The org lookup is by the session's own org_id, which
+        # the request path already tied to the actor's org.
+        org = await session.get(Organization, remote_session.org_id)
+        scoped_user_id = org.meshcentral_user_id if org else None
+        if scoped_user_id:
+            try:
+                out.viewer_url = MeshCentralClient().viewer_url(
+                    node_id=device.meshcentral_node_id,
+                    user_id=scoped_user_id,
+                )
+            except Exception:
+                # The session is real and its record stands; a relay that is unset just
+                # means no link to show right now. Degrade to an empty field rather than
+                # failing the whole status response — the record is unaffected.
+                logger.warning("could not mint a viewer URL for session %s",
+                               remote_session.id, exc_info=True)
+                out.viewer_url = None
     return out
 
 

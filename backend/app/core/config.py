@@ -133,13 +133,12 @@ class Settings(BaseSettings):
     # technician straight onto a device, so the customer never meets the relay's own
     # login page. Rotating it invalidates every viewer URL already handed out.
     meshcentral_cookie_key: str | None = None
-    # The relay USER the viewer URL logs in as, e.g. "user//astraadmin" — NOT the login
-    # token username in meshcentral_user (that authenticates the control channel; this is
-    # who the browser becomes). Optional: left unset, the client asks the relay for the id
-    # of whoever the token belongs to and caches it, so this only needs setting to pin a
-    # specific user. Getting this wrong is a viewer URL that silently drops to the relay's
-    # login page — the cookie decodes, but names a user the relay does not have.
-    meshcentral_user_id: str | None = None
+    # The relay USER the viewer URL logs in as is NOT a global setting — it is per-org, on
+    # Organization.meshcentral_user_id, and each org's user is scoped to that org's device
+    # group alone. There is deliberately no deployment-wide fallback: a single shared user
+    # here would be a site-admin the browser becomes, able to reach any org's device by
+    # editing the node id in the URL. Isolation lives in "which user the cookie names", so
+    # that value has to come from the org, never from config. See services/meshcentral.py.
     # Accept the relay's certificate without checking it. Development only, and named so
     # it is impossible to set by accident: it disables exactly the check that stops
     # somebody impersonating the relay to this backend.

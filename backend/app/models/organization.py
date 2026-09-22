@@ -97,6 +97,16 @@ class Organization(TimestampMixin, Base):
     # fleet, and a missing group cannot land one customer's machines in another's.
     meshcentral_mesh_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
+    # The relay USER a viewer link for this org's devices logs in as, e.g.
+    # "user//astra-org-lancesoft". Its own account per org, scoped on the relay to this
+    # org's device group and nothing else, never a site admin. This is the cross-tenant
+    # boundary: the login cookie names THIS user, so a technician who edits the node id in
+    # a viewer URL to point at another org's machine is refused by the relay rather than
+    # shown it. NULL means no viewer link is issued at all — there is deliberately no
+    # fallback to a shared admin, because a shared admin is exactly the leak this prevents.
+    # Set together with meshcentral_mesh_id when an org is provisioned for remote support.
+    meshcentral_user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
     # -- Terms acceptance ------------------------------------------------------
     # Proof that somebody agreed to the Terms of Service, and to WHICH version. An
     # e-contract is enforceable only if acceptance can be demonstrated, so the record has

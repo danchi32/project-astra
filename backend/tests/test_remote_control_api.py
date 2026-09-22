@@ -28,6 +28,10 @@ async def _grant(session_factory, org, on=True):
     async with session_factory() as s:
         o = await s.get(Organization, org.id)
         o.entitlement_overrides = {REMOTE_CONTROL: on}
+        # Provisioned orgs carry a scoped relay user — the account a viewer cookie names.
+        # Set alongside the entitlement so these tests match a real, fully-set-up org; the
+        # cross-tenant boundary tests below set it apart to prove what its absence does.
+        o.meshcentral_user_id = "user//api-test-scoped" if on else None
         await s.commit()
 
 
@@ -242,6 +246,61 @@ async def test_a_colleague_cannot_pick_up_someone_elses_link(
     assert r.json()["viewer_url"] is None
 
 
+async def test_no_link_without_a_scoped_relay_user_for_the_org(
+    client, session_factory, org, admin_headers, monkeypatch
+):
+    """The cross-tenant boundary, stated as a test: an org with the entitlement, a relay,
+    and an enrolled device but NO scoped relay user gets no viewer link — never a fallback
+    to a shared admin account. A fallback is exactly the leak this design closes, because
+    an admin cookie would let its bearer reach any org's device by editing the node id.
+    """
+    _relay(monkeypatch)
+    await _grant(session_factory, org)
+    device_id = await _device(session_factory, org, "api-scoped")
+    # Clear the scoped user _grant set, leaving the org provisioned in every other way.
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.meshcentral_user_id = None
+        await s.commit()
+
+    created = (await client.post("/api/v1/remote-sessions", headers=admin_headers,
+                                 json={"device_id": device_id, "reason": REASON})).json()
+    assert created["status"] == "pending"
+    assert created["viewer_url"] is None, "no scoped user must mean no link, not a shared one"
+
+
+async def test_the_link_names_the_orgs_own_scoped_user(
+    client, session_factory, org, admin_headers, monkeypatch
+):
+    """And when the org DOES have a scoped user, that is who the cookie names — the login
+    payload carries this org's user id, not a shared one. Decrypting the cookie is the only
+    way to see who a link logs in as, since the id is not otherwise in the URL."""
+    import base64
+    import json as _json
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    _relay(monkeypatch)
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.entitlement_overrides = {REMOTE_CONTROL: True}
+        o.meshcentral_user_id = "user//astra-org-thisorg"
+        await s.commit()
+    device_id = await _device(session_factory, org, "api-named")
+
+    created = (await client.post("/api/v1/remote-sessions", headers=admin_headers,
+                                 json={"device_id": device_id, "reason": REASON})).json()
+    url = created["viewer_url"]
+    assert url
+
+    from urllib.parse import parse_qs, unquote, urlparse
+    cookie = parse_qs(urlparse(url).query)["login"][0]
+    raw = base64.b64decode(unquote(cookie).replace("@", "+").replace("$", "/"))
+    iv, tag, ct = raw[:12], raw[12:28], raw[28:]
+    payload = _json.loads(AESGCM(bytes.fromhex("ab" * 80)[:32]).decrypt(iv, ct + tag, None))
+    assert payload["u"] == "user//astra-org-thisorg"
+
+
 async def test_a_session_from_another_org_is_not_found(
     client, session_factory, org, other_org, admin_headers
 ):
@@ -370,5 +429,3 @@ def _relay(monkeypatch):
     monkeypatch.setattr(s, "meshcentral_user", "~t:test", raising=False)
     monkeypatch.setattr(s, "meshcentral_token", "test-token", raising=False)
     monkeypatch.setattr(s, "meshcentral_cookie_key", "ab" * 80, raising=False)
-    # Pin the user id so resolve_user_id needs no relay round-trip in tests.
-    monkeypatch.setattr(s, "meshcentral_user_id", "user//test", raising=False)
