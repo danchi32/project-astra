@@ -14,7 +14,12 @@ from app.models import Device, Organization
 from app.models.base import utcnow
 from app.services.entitlements import REMOTE_CONTROL
 
-MESH = "pw0O8BcmHXFUdvuA6SgKIZQsA84rajqeYSvsAYOAFfRa1iwt5oqf5F3Nryse57sP"
+# The org stores the id WITH its "mesh//" prefix — that is what the operator job
+# writes and what production holds. The download URL must carry the BARE id, because
+# the relay's /meshagents endpoint answers 401 for the prefixed form. Storing the
+# bare id here (as this test first did) hid that entirely.
+MESH_BARE = "pw0O8BcmHXFUdvuA6SgKIZQsA84rajqeYSvsAYOAFfRa1iwt5oqf5F3Nryse57sP"
+MESH = "mesh//" + MESH_BARE
 
 
 async def _device_token(session_factory, org, machine="rs-1") -> str:
@@ -86,8 +91,11 @@ async def test_all_three_together_produce_a_download(
     assert plan["enabled"] is True
     # One file, with the server URL, group and certificate hash already inside it — so
     # there is nothing to place beside it and nothing for the device to configure.
-    assert plan["download_url"].startswith("https://relay.test/meshagents?id=4")
-    assert MESH in plan["download_url"]
+    url = plan["download_url"]
+    assert url.startswith("https://relay.test/meshagents?id=4")
+    # The bare id, and NOT the prefix in any form — this is the 401 regression.
+    assert MESH_BARE in url
+    assert "mesh//" not in url and "mesh%2F%2F" not in url and "mesh%2f%2f" not in url
     # Sent rather than hardcoded at both ends: it is the Windows service name AND the
     # registry key the node id is read from, so the two must not drift.
     assert plan["service_name"] == "AstraRemoteSupport"
@@ -99,15 +107,16 @@ async def test_each_org_is_sent_only_its_own_group(
     """The isolation that matters. Two customers on one relay must never be handed each
     other's group — an agent in the wrong group is reachable by the wrong people."""
     _relay(monkeypatch)
-    theirs = "OTHERMESHIDoooooooooooooooooooooooooooooooooooooooooooooooooooo"
+    theirs_bare = "OTHERMESHIDoooooooooooooooooooooooooooooooooooooooooooooooooooo"
+    theirs = "mesh//" + theirs_bare
     await _configure(session_factory, org, entitled=True, mesh=MESH)
     await _configure(session_factory, other_org, entitled=True, mesh=theirs)
 
     mine = await _ask(client, await _device_token(session_factory, org, "rs-5"))
     yours = await _ask(client, await _device_token(session_factory, other_org, "rs-6"))
 
-    assert MESH in mine["download_url"] and theirs not in mine["download_url"]
-    assert theirs in yours["download_url"] and MESH not in yours["download_url"]
+    assert MESH_BARE in mine["download_url"] and theirs_bare not in mine["download_url"]
+    assert theirs_bare in yours["download_url"] and MESH_BARE not in yours["download_url"]
 
 
 def _relay(monkeypatch):

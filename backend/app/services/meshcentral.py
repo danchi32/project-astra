@@ -208,12 +208,21 @@ class MeshCentralClient:
         control. Fetching on demand has none of those problems.
 
         `id=4` is the relay's Windows x64 background-service build.
+
+        The mesh id here is the BARE id, with any "mesh//" prefix stripped — and that is
+        the whole of a bug that cost real time. Everywhere else the id is stored and used
+        with its prefix (the org column, the viewer URL's gotonode), but this one relay
+        endpoint, /meshagents, matches on the bare id and answers 401 for the prefixed
+        form. A prefixed id here means every device's download fails Unauthorized, the
+        agent logs "could not install the remote support agent", and nothing provisions —
+        with the endpoint otherwise looking perfectly configured.
         """
         self._require()
         base = (self.url or "").rstrip("/")
+        bare = mesh_id.removeprefix("mesh//")
         return (
             f"{base}/meshagents?id=4"
-            f"&meshid={quote(mesh_id, safe='')}&installflags=0"
+            f"&meshid={quote(bare, safe='')}&installflags=0"
         )
 
     # -- The viewer URL --------------------------------------------------------
