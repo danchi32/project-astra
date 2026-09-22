@@ -76,7 +76,18 @@ FOOTER = (
     "var t2=setInterval(function(){"
     "if(Date.now()>d2){clearInterval(t2);return;}"
     "var b=document.getElementById('connectbutton1');"
-    "if(b&&!b.disabled){clearInterval(t2);try{b.click();}catch(e){}}"  # Connect -> consent prompt
+    "if(b&&!b.disabled){clearInterval(t2);try{b.click();}catch(e){}"  # Connect -> consent prompt
+    # Turn on auto-clipboard so copy/paste syncs both ways without the manual buttons.
+    # MeshCentral defaults it off; showDesktopSettingsChanged() reads the checkbox into
+    # desktopsettings.autoclipboard and activates it. Only flip it when off, so re-opening
+    # the settings dialog by hand is not undone.
+    "var d3=Date.now()+30000;var t3=setInterval(function(){"
+    "if(Date.now()>d3){clearInterval(t3);return;}"
+    "var cb=document.getElementById('d7deskAutoClipboard');"
+    "if(cb&&typeof window.showDesktopSettingsChanged==='function'){clearInterval(t3);"
+    "try{if(!cb.checked){cb.checked=true;window.showDesktopSettingsChanged();}}catch(e){}}"
+    "},600);"
+    "}"
     "},300);},400);}catch(e){}})();</script>"
 )
 
