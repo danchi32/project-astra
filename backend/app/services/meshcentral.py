@@ -23,6 +23,7 @@ the MeshCentral account page without changing anything else.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -294,6 +295,30 @@ class MeshCentralClient:
                 if msg.get("action") == "userinfo":
                     return msg.get("userinfo", {})
         raise MeshCentralError("The relay did not identify itself.")
+
+    async def set_user_realname(self, *, user_id: str, realname: str) -> None:
+        """Set a relay account's display name — the `{0}` the endpoint's consent prompt shows.
+
+        ASTRA calls this just before a session so the person being asked sees WHO wants in and
+        WHY, on their own screen, in the relay's own dialog (see infra/relay/apply_consent_branding.py).
+        The relay updates the in-memory user and the next desktop connect reads the new name;
+        the relay caps realname at 256 characters, so this does too.
+
+        Uses the control-channel token, which is the site admin — editing another account needs
+        the manage-users right, which the scoped per-org accounts deliberately do NOT have, so
+        this cannot run as one of them. It is fire-and-forget: the caller treats a failure as
+        "the prompt shows the account's standing name" rather than a reason to fail the request.
+        The brief read after sending is only to let the relay process the edit before the socket
+        closes; the reply is not needed.
+        """
+        self._require()
+        async with self.connect() as ws:
+            await ws.send(json.dumps(
+                {"action": "edituser", "userid": user_id, "realname": realname[:256]}))
+            try:
+                await asyncio.wait_for(ws.recv(), timeout=5.0)
+            except Exception:
+                pass
 
     # There is deliberately no resolve_user_id() that hands back "whoever the control-channel
     # token belongs to". That user is the site-admin astraadmin, and minting a viewer cookie

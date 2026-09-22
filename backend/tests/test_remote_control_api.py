@@ -301,6 +301,57 @@ async def test_the_link_names_the_orgs_own_scoped_user(
     assert payload["u"] == "user//astra-org-thisorg"
 
 
+async def test_requesting_labels_the_consent_prompt_with_who_and_why(
+    client, session_factory, org, admin_headers, monkeypatch
+):
+    """Before the viewer opens, the org's scoped relay account is renamed to the requester
+    and their reason — that renamed account is the `{0}` the endpoint's consent prompt shows,
+    so the person being asked reads who wants in and why."""
+    from app.services.meshcentral import MeshCentralClient
+
+    _relay(monkeypatch)
+    await _grant(session_factory, org)      # sets meshcentral_user_id = user//api-test-scoped
+    device_id = await _device(session_factory, org, "api-label")
+
+    calls = []
+
+    async def fake(self, *, user_id, realname):
+        calls.append((user_id, realname))
+
+    monkeypatch.setattr(MeshCentralClient, "set_user_realname", fake, raising=True)
+
+    r = await client.post("/api/v1/remote-sessions", headers=admin_headers,
+                          json={"device_id": device_id, "reason": REASON})
+    assert r.status_code == 201, r.text
+    assert len(calls) == 1
+    user_id, realname = calls[0]
+    assert user_id == "user//api-test-scoped"
+    assert realname.endswith(f"(reason: {REASON})")
+
+
+async def test_a_failed_consent_label_does_not_fail_the_request(
+    client, session_factory, org, admin_headers, monkeypatch
+):
+    """Labelling is best-effort: a relay that will not take the rename still leaves a real
+    pending session and a viewer link — the prompt just shows the account's standing name."""
+    from app.services.meshcentral import MeshCentralClient
+
+    _relay(monkeypatch)
+    await _grant(session_factory, org)
+    device_id = await _device(session_factory, org, "api-label-fail")
+
+    async def boom(self, *, user_id, realname):
+        raise RuntimeError("relay unreachable")
+
+    monkeypatch.setattr(MeshCentralClient, "set_user_realname", boom, raising=True)
+
+    r = await client.post("/api/v1/remote-sessions", headers=admin_headers,
+                          json={"device_id": device_id, "reason": REASON})
+    assert r.status_code == 201, r.text
+    assert r.json()["status"] == "pending"
+    assert r.json()["viewer_url"], "the link still stands when only the label failed"
+
+
 async def test_a_session_from_another_org_is_not_found(
     client, session_factory, org, other_org, admin_headers
 ):

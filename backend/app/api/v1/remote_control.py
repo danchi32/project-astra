@@ -114,6 +114,35 @@ async def _render(
     return out
 
 
+async def _label_consent(
+    session: AsyncSession, remote_session: RemoteSession, actor: User
+) -> None:
+    """Put the requester and their reason on the endpoint's own consent prompt.
+
+    The relay draws that prompt from the connecting account's realname — the `{0}` in the
+    consent template (infra/relay/apply_consent_branding.py) — so ASTRA sets the org's
+    scoped account's realname to "<who> (reason: <why>)" just before the technician opens
+    the viewer. The person being asked then reads who wants in and why, on their own screen,
+    before anything connects.
+
+    Best-effort: a relay that is unset or briefly unreachable just means the prompt shows
+    the account's standing name, which is not worth failing the request over. The account is
+    shared within the org, so two technicians requesting at the same moment can race on the
+    name — acceptable at this scale, and a reason the prompt itself, not just the label, is
+    what the person actually reads before allowing.
+    """
+    org = await session.get(Organization, remote_session.org_id)
+    if not (org and org.meshcentral_user_id):
+        return
+    realname = f"{actor.full_name} (reason: {remote_session.reason})"
+    try:
+        await MeshCentralClient().set_user_realname(
+            user_id=org.meshcentral_user_id, realname=realname)
+    except Exception:
+        logger.warning("could not label the consent prompt for session %s",
+                       remote_session.id, exc_info=True)
+
+
 @router.post("", response_model=RemoteSessionRead, status_code=status.HTTP_201_CREATED,
              summary="Ask the person at a device for control of their screen")
 async def request_session(
@@ -136,6 +165,9 @@ async def request_session(
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     except RemoteControlError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    # Label the endpoint's consent prompt with who is asking and why, before the link is
+    # opened and the prompt appears. Best-effort inside the helper — never fails the request.
+    await _label_consent(session, remote_session, actor)
     # With the link, because opening it is what puts the prompt on the person's screen.
     # Returning it here rather than making the portal poll for it once saves a round trip
     # on the one step where the technician is watching a spinner.
