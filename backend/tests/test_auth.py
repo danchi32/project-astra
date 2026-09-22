@@ -95,15 +95,30 @@ async def test_me_says_what_the_plan_includes(client, session_factory, org, admi
     from app.models import Organization
     from app.services.entitlements import INVENTORY, REMOTE_CONTROL
 
-    body = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()
-    assert INVENTORY in body["entitlements"]
-    # In no plan, including the Expert fallback an unknown plan lands on.
-    assert REMOTE_CONTROL not in body["entitlements"]
-
+    # Put the org below the top tier so remote control is genuinely absent — it is
+    # Expert-only, and the default fixture org (no plan) otherwise falls back to Expert.
     async with session_factory() as s:
         o = await s.get(Organization, org.id)
-        o.entitlement_overrides = {REMOTE_CONTROL: True}
+        o.plan = "essential"
         await s.commit()
 
+    body = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()
+    assert INVENTORY in body["entitlements"]
+    assert REMOTE_CONTROL not in body["entitlements"]        # Expert-only
+
+    # Expert grants it by plan, no override needed.
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.plan = "expert"
+        await s.commit()
+    body = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()
+    assert REMOTE_CONTROL in body["entitlements"]
+
+    # And an override can still grant it to a lower tier — a pilot on Professional, say.
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.plan = "professional"
+        o.entitlement_overrides = {REMOTE_CONTROL: True}
+        await s.commit()
     body = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()
     assert REMOTE_CONTROL in body["entitlements"]

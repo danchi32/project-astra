@@ -47,11 +47,17 @@ async def _device(session_factory, org, machine="api-1", node_id=NODE):
 # ── The plan gate ─────────────────────────────────────────────────────────
 
 
-async def test_an_org_without_the_feature_is_told_to_upgrade_not_refused(
+async def test_an_org_below_expert_is_told_to_upgrade_not_refused(
     client, session_factory, org, admin_headers
 ):
     """402, not 403. The caller has the right role; their plan simply doesn't include
-    this, and "ask your administrator" and "upgrade" are different next steps."""
+    this — it is Expert-only — and "ask your administrator" and "upgrade" are different
+    next steps."""
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.plan = "professional"        # everything but the top tier
+        await s.commit()
+
     device_id = await _device(session_factory, org, "api-gate")
     r = await client.post("/api/v1/remote-sessions", headers=admin_headers,
                           json={"device_id": device_id, "reason": REASON})

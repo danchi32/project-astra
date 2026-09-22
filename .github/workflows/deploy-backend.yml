@@ -139,6 +139,16 @@ jobs:
           SECRETS=$SECRETS,ASTRA_PAYPAL_CLIENT_SECRET=ASTRA_PAYPAL_CLIENT_SECRET:latest
           SECRETS=$SECRETS,ASTRA_PAYPAL_PLAN_ID=ASTRA_PAYPAL_PLAN_ID:latest
           SECRETS=$SECRETS,ASTRA_PAYPAL_WEBHOOK_ID=ASTRA_PAYPAL_WEBHOOK_ID:latest
+          # Remote-support relay. These MUST be in this list, not attached by hand after a
+          # deploy: `gcloud run deploy` uses --set-secrets, which REPLACES the whole set, so
+          # anything not named here is dropped on the next deploy. They were added out-of-band
+          # once and silently disappeared on the following push — the backend lost the relay,
+          # remote control went dark, and nothing said why. Empty secret values are fine; a
+          # deployment with no relay simply reads them as unset and the feature stays off.
+          SECRETS=$SECRETS,ASTRA_MESHCENTRAL_URL=ASTRA_MESHCENTRAL_URL:latest
+          SECRETS=$SECRETS,ASTRA_MESHCENTRAL_USER=ASTRA_MESHCENTRAL_USER:latest
+          SECRETS=$SECRETS,ASTRA_MESHCENTRAL_TOKEN=ASTRA_MESHCENTRAL_TOKEN:latest
+          SECRETS=$SECRETS,ASTRA_MESHCENTRAL_COOKIE_KEY=ASTRA_MESHCENTRAL_COOKIE_KEY:latest
 
           ENVVARS=RUN_MIGRATIONS_ON_START=false
           ENVVARS=$ENVVARS,ASTRA_ENVIRONMENT=production

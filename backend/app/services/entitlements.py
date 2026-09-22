@@ -45,13 +45,15 @@ SHARED_EMAIL_SENDER = "shared_email_sender"
 
 #: Taking control of someone's screen, with their consent, from the portal.
 #:
-#: Deliberately in NO plan below, which is what keeps the feature dark while it is built:
-#: `features_for` grants only what a plan lists, and the fallback for an unknown plan is
-#: Expert — which does not list this either. An organization gets it by an explicit
-#: override, one org at a time, which is how a pilot should start anyway.
+#: Expert tier only — see _EXPERT. It is the most powerful action in the product and the
+#: only one with a per-hour running cost, so it sits at the top and nowhere below.
 #:
-#: Tier it when it ships. The natural home is Professional and above: it is the same
-#: promise as AI_ACT — ASTRA doing something to a machine rather than reporting on it.
+#: The entitlement is necessary but not sufficient: an org must ALSO have a relay device
+#: group (Organization.meshcentral_mesh_id), which an operator creates per customer. That
+#: second switch is what makes the Expert plan grant only the right to remote control, not
+#: a working one, until somebody provisions the customer — and it is also why the
+#: unknown-plan-falls-back-to-Expert rule cannot accidentally hand a live remote-access
+#: capability to a legacy org: it would get the entitlement but no device group.
 REMOTE_CONTROL = "remote_control"
 
 # ── Plans ──────────────────────────────────────────────────────────────────
@@ -85,6 +87,13 @@ _PROFESSIONAL: frozenset[str] = _ESSENTIAL | frozenset({
 _EXPERT: frozenset[str] = _PROFESSIONAL | frozenset({
     COMPLIANCE, BANNED_SOFTWARE, FLEET_CORRELATION, FLEET_REMEDIATION,
     AUDIT_EXPORT, ADVANCED_RBAC,
+    # Expert only. Taking over someone's screen is the most powerful thing the product
+    # does, and it carries a real running cost (relay egress), so it belongs at the top
+    # tier and nowhere below it. The entitlement being present is still not enough on its
+    # own — an org also needs a relay device group (meshcentral_mesh_id), which an operator
+    # creates per customer. So even the Expert plan grants only the RIGHT to remote control,
+    # not a working one, until that group exists. See REMOTE_CONTROL.
+    REMOTE_CONTROL,
 })
 
 PLANS: dict[str, frozenset[str]] = {

@@ -278,18 +278,35 @@ async def test_a_device_in_another_org_is_not_found(
 # ── The gate ──────────────────────────────────────────────────────────────
 
 
-async def test_the_feature_is_off_until_an_org_is_given_it(
-    session_factory, org, admin_user
-):
-    """No plan grants remote control — including the Expert fallback an unknown plan
-    lands on. Until somebody switches it on for one organization, it does not exist."""
+async def test_remote_control_is_expert_only(session_factory, org, admin_user):
+    """Only the Expert plan carries it. An org below that cannot request a session at all,
+    however online the device or willing the technician — the plan is the gate."""
+    from app.models import Organization
+
     device_id = await _device(session_factory, org, "rc-10")
+
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.plan = "essential"
+        await s.commit()
 
     async with session_factory() as s:
         actor = await s.get(User, admin_user.id)
         with pytest.raises(RemoteControlError, match="plan"):
             await RemoteControlService(s).request(
                 actor=actor, device_id=device_id, reason=REASON)
+
+    # Move the same org up to Expert and it is allowed — no override needed.
+    async with session_factory() as s:
+        o = await s.get(Organization, org.id)
+        o.plan = "expert"
+        await s.commit()
+
+    async with session_factory() as s:
+        actor = await s.get(User, admin_user.id)
+        rs = await RemoteControlService(s).request(
+            actor=actor, device_id=device_id, reason=REASON)
+        assert rs.status is RemoteSessionStatus.PENDING
 
 
 # ── The arc ───────────────────────────────────────────────────────────────
