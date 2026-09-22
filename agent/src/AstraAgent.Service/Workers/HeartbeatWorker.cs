@@ -159,9 +159,30 @@ public sealed class HeartbeatWorker(
             UsbStorageBlocked: Remediation.UsbStorageManager.IsBlocked(),
             TrayVersion: ReadTrayVersion(),
             RemoteNodeId: Remediation.RemoteSupportAgent.GetNodeId());
-        var result = await api.HeartbeatAsync(token, request, ct);
+        // Wrapped so a heartbeat that throws cannot skip the provisioning check below it.
+        // HeartbeatAsync surfaces a network fault as an exception (the provisioning call
+        // swallows one and returns null), so on a device that reaches the API only
+        // intermittently every failed beat used to abort here — and the support agent, whose
+        // install only runs from that check, never got provisioned. The failure is still
+        // counted as one (result stays null -> return false), so the backoff is unchanged.
+        HeartbeatResult? result = null;
+        try
+        {
+            result = await api.HeartbeatAsync(token, request, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;   // service stopping — let it unwind
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Heartbeat request failed");
+        }
 
         await MaybeProvisionRemoteSupportAsync(token, ct);
+
+        if (result is null)
+            return false;
 
         if (result.Status == HeartbeatStatus.Unauthorized)
         {

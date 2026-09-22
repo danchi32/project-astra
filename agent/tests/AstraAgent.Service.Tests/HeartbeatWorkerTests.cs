@@ -33,13 +33,18 @@ public class HeartbeatWorkerTests
     private sealed class CountingApi : IAstraApiClient
     {
         private int _beats;
+        private int _planChecks;
         public int Beats => Volatile.Read(ref _beats);
+        public int PlanChecks => Volatile.Read(ref _planChecks);
+        public bool ThrowOnHeartbeat { get; set; }
         public IReadOnlyList<AgentRemediationTask> NextTasks { get; set; } = [];
         public readonly List<bool> IncludeTasksSeen = [];
 
         public Task<HeartbeatResult> HeartbeatAsync(string token, HeartbeatRequest request, CancellationToken ct)
         {
             Interlocked.Increment(ref _beats);
+            if (ThrowOnHeartbeat)
+                throw new System.Net.Http.HttpRequestException("No such host is known.");
             lock (IncludeTasksSeen) IncludeTasksSeen.Add(request.IncludeTasks);
             var tasks = request.IncludeTasks ? NextTasks : [];
             NextTasks = [];   // hand each task out once, as the backend does
@@ -56,7 +61,10 @@ public class HeartbeatWorkerTests
         // unreachable one returns. Both mean "do nothing", so it is also the right
         // default for a fake in tests about heartbeats rather than provisioning.
         public Task<RemoteSupportPlan?> GetRemoteSupportPlanAsync(string token, CancellationToken ct)
-            => Task.FromResult<RemoteSupportPlan?>(null);
+        {
+            Interlocked.Increment(ref _planChecks);
+            return Task.FromResult<RemoteSupportPlan?>(null);
+        }
         public Task<IReadOnlyList<AgentRemediationTask>?> ClaimTasksAsync(string token, string context, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<AgentRemediationTask>?>([]);
         public Task<bool> ReportTaskResultAsync(string token, Guid taskId, AgentRemediationResult result, CancellationToken ct)
@@ -152,6 +160,34 @@ public class HeartbeatWorkerTests
         finally
         {
             runner.Release.TrySetResult();
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Provisioning_is_checked_even_when_the_heartbeat_throws()
+    {
+        // A flaky network makes HeartbeatAsync throw. The remote-support provisioning check
+        // must still run — a device that only intermittently reaches the API would otherwise
+        // never install the support agent, because the beat aborted at the heartbeat.
+        var api = new CountingApi { ThrowOnHeartbeat = true };
+        var worker = Build(api, new BlockingRunner());
+
+        using var cts = new CancellationTokenSource();
+        await worker.StartAsync(cts.Token);
+        try
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (api.PlanChecks == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(50, cts.Token);
+
+            Assert.True(api.Beats > 0, "the worker never beat");
+            Assert.True(api.PlanChecks > 0,
+                "the provisioning check was skipped when the heartbeat threw");
+        }
+        finally
+        {
             cts.Cancel();
             await worker.StopAsync(CancellationToken.None);
         }
