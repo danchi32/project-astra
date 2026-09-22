@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ScreenShare, X, Loader2, ShieldCheck, Hourglass } from "lucide-react";
+import { ScreenShare, X, Loader2, ShieldCheck, Hourglass, ExternalLink } from "lucide-react";
 import {
   requestRemoteSession, getRemoteSession, endRemoteSession,
   MIN_REASON_LENGTH, type RemoteSession,
@@ -59,12 +59,18 @@ export function RemoteControlButton({
   const phaseRef = useRef(phase);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
-  // The viewer URL, FROZEN at the moment the frame opens. The backend mints a fresh one
-  // (new cookie, new IV) on every GET, so binding the iframe to session.viewer_url would
-  // swap its src every poll — the frame reloads twice a second, blinks, and the desktop
-  // connection never lives long enough to raise the consent prompt. Captured once here, it
-  // stays put; the poll still updates `session` for status, just not the src.
+  // The viewer URL, FROZEN the first time it appears. The backend mints a fresh one (new
+  // cookie, new IV) on every GET, so re-reading it each poll would hand back a different
+  // link; captured once, it stays put and the poll still updates `session` for status.
   const viewerUrlRef = useRef<string | null>(null);
+
+  // The remote desktop opens as its OWN top-level browser tab, not an embedded iframe. In
+  // the portal's iframe the relay's desktop connection churns and dies every 15-40s and
+  // reconnects — proven by isolating it: the identical viewer URL opened as a normal tab
+  // runs rock-solid for minutes. So we hold that tab's window here to point it at the link,
+  // refocus it, and close it on disconnect. Opened inside the click that asks (see `ask`),
+  // never from an async callback, or the browser blocks it as an unsolicited popup.
+  const viewerWindowRef = useRef<Window | null>(null);
 
   // Stop polling when the component goes away — a device page left in a background tab
   // should not keep asking the server about a session nobody is watching.
@@ -72,28 +78,48 @@ export function RemoteControlButton({
 
   function reset() {
     if (timer.current) clearTimeout(timer.current);
+    if (viewerWindowRef.current && !viewerWindowRef.current.closed) viewerWindowRef.current.close();
+    viewerWindowRef.current = null;
     viewerUrlRef.current = null;
     setPhase("idle"); setReason(""); setSession(null); setError(null); setBusy(false);
   }
 
+  // Point the already-open tab at the desktop (no user gesture needed to navigate a window
+  // we own), or open one if it was blocked or the person closed it. The fallback only
+  // succeeds from a user gesture — which "Reopen" is, and the async poll is not, so a tab
+  // opened up front in `ask` is what makes the seamless case work.
+  function pointViewerAt(url: string) {
+    const win = viewerWindowRef.current;
+    if (win && !win.closed) { win.location.href = url; win.focus(); }
+    else { viewerWindowRef.current = window.open(url, "_blank"); }
+  }
+
   async function ask() {
     if (reason.trim().length < MIN_REASON_LENGTH) return;
+    // Open the desktop's tab NOW, synchronously inside this click, so the browser treats it
+    // as user-initiated and does not block it. It starts blank and gets pointed at the link
+    // the moment one is minted. It must be its own top-level tab, not an iframe — see the
+    // note on viewerWindowRef for why an embedded frame will not hold the connection.
+    viewerWindowRef.current = window.open("about:blank", "_blank");
     setBusy(true); setError(null);
     try {
       const created = await requestRemoteSession({ device_id: deviceId, reason: reason.trim() });
       setSession(created);
-      // Open the viewer straight away. Opening it is what puts the prompt on the person's
-      // screen — there is no separate "ask" step to wait through. The relay then holds the
-      // stream until they allow it, and shows its own waiting state inside the frame, so a
-      // spinner out here would only cover up the thing worth watching.
+      // The link is issued with the pending session, because opening it is what puts the
+      // prompt on the person's screen — there is no separate step to wait through. The relay
+      // holds the stream until they allow it and shows its own waiting state in the tab.
       if (created.viewer_url) {
         viewerUrlRef.current = created.viewer_url;   // freeze it once
+        pointViewerAt(created.viewer_url);
         setPhase("viewing");
       } else {
-        setPhase("waiting");
+        setPhase("waiting");   // keep the blank tab; the poll points it once a link appears
       }
       poll(created.id);
     } catch (e) {
+      // No session — do not leave an empty tab sitting open.
+      if (viewerWindowRef.current && !viewerWindowRef.current.closed) viewerWindowRef.current.close();
+      viewerWindowRef.current = null;
       setError(apiErrorMessage(e, "Couldn't reach the server."));
     } finally {
       setBusy(false);
@@ -111,11 +137,12 @@ export function RemoteControlButton({
         if (["declined", "no_response", "expired", "failed", "ended"].includes(next.status)) {
           setPhase("done"); return;
         }
-        // First time a link appears, freeze it and open the frame. Never re-freeze — the
-        // next poll's link is a different cookie for the same session, and swapping it in
-        // would reload the frame.
+        // First time a link appears, freeze it and point the waiting tab at it. Never
+        // re-point — the next poll's link is a different cookie for the same session, and
+        // navigating the tab again would reload the desktop mid-session.
         if (next.viewer_url && !viewerUrlRef.current) {
           viewerUrlRef.current = next.viewer_url;
+          pointViewerAt(next.viewer_url);
           setPhase("viewing");
         }
         poll(id);
@@ -211,32 +238,26 @@ export function RemoteControlButton({
         </Overlay>
       )}
 
-      {/* View ----------------------------------------------------------- */}
+      {/* View — the desktop runs in its own tab; this panel tracks and ends it -------- */}
       {phase === "viewing" && viewerUrlRef.current && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "var(--bg)" }}>
-          <div className="flex items-center justify-between gap-3 px-4 h-12 shrink-0"
-            style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
-            <div className="flex items-center gap-2 text-sm font-medium truncate"
-              style={{ color: "var(--text-primary)" }}>
-              <ShieldCheck size={15} style={{ color: "#10b981" }} />
-              Connected to {hostname}
-              <span className="text-xs font-normal truncate" style={{ color: "var(--text-secondary)" }}>
-                — they can end this at any time
-              </span>
-            </div>
-            <button onClick={finish}
-              className="inline-flex items-center gap-2 px-3 h-8 rounded-lg text-sm font-medium shrink-0"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#ef4444" }}>
-              <X size={14} /> Disconnect
-            </button>
+        <Overlay onClose={finish}>
+          <Head title={`Connected to ${hostname}`} onClose={finish} />
+          <div className="flex items-start gap-3 py-1">
+            <ShieldCheck size={16} className="mt-0.5 shrink-0" style={{ color: "#10b981" }} />
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              The remote desktop opened in a new browser tab. Keep that tab open while you
+              work — the person can end the session at any time. If it didn't open, or you
+              closed it, reopen it below.
+            </p>
           </div>
-          <iframe
-            src={viewerUrlRef.current}
-            title={`Remote desktop — ${hostname}`}
-            className="flex-1 w-full"
-            style={{ border: "none" }}
-          />
-        </div>
+          {error && <Error text={error} />}
+          <Actions>
+            <Ghost onClick={() => viewerUrlRef.current && pointViewerAt(viewerUrlRef.current)}>
+              <span className="inline-flex items-center gap-1.5"><ExternalLink size={14} /> Reopen desktop</span>
+            </Ghost>
+            <Primary onClick={finish}>Disconnect</Primary>
+          </Actions>
+        </Overlay>
       )}
 
       {/* Outcome -------------------------------------------------------- */}
