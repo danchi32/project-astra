@@ -127,6 +127,33 @@ async def test_apps_services_updates_visible(client, admin_headers):
     assert updates.json()[0]["is_installed"] is False
 
 
+async def test_telemetry_with_nul_bytes_is_accepted_and_scrubbed(client, admin_headers):
+    """A Windows inventory string can carry a NUL (0x00) — an app name off a mangled
+    registry value. Postgres refuses it, and it used to 500 the whole push; because that
+    push rides the heartbeat, it stalled the remote-support provisioning check too. Now the
+    NUL is stripped: the push succeeds and what is stored is clean, not rejected wholesale."""
+    import copy
+
+    device_token = await _enroll_device(client, admin_headers)
+    headers = {"Authorization": f"Bearer {device_token}"}
+    payload = copy.deepcopy(TELEMETRY_PAYLOAD)
+    payload["installed_apps"] = [
+        {"name": "Bad\x00App", "version": "1.\x000", "publisher": "Ac\x00me", "install_date": "20240101"}
+    ]
+    payload["event_logs"][0]["message"] = "termin\x00ated"
+
+    r = await client.post("/api/v1/agent/telemetry", json=payload, headers=headers)
+    assert r.status_code == 200, r.text          # was a 500 before the NUL was stripped
+
+    devices = await client.get("/api/v1/devices", headers=admin_headers)
+    device_id = devices.json()[0]["id"]
+    apps = await client.get(f"/api/v1/devices/{device_id}/apps", headers=admin_headers)
+    app = apps.json()[0]
+    assert app["name"] == "BadApp"               # the byte is gone, the app is not
+    assert app["version"] == "1.0" and app["publisher"] == "Acme"
+    assert not any("\x00" in (a.get("name") or "") for a in apps.json())
+
+
 async def test_dashboard_summary_reflects_telemetry(client, admin_headers):
     device_token = await _enroll_device(client, admin_headers)
     beat = await client.post(

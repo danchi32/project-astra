@@ -2,21 +2,49 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.telemetry import UPDATE_INSTALLED, UPDATE_PENDING
 
 
 # ── Agent → Backend (ingestion) ────────────────────────────────────────────
 
-class DiskInfo(BaseModel):
+
+def _strip_nul(value: Any) -> Any:
+    """Remove NUL (0x00) from strings anywhere in an incoming value.
+
+    Postgres text columns cannot hold a NUL, and Windows inventory strings occasionally
+    carry one — an app name read from a mangled registry value, an event-log message. asyncpg
+    rejects the whole INSERT with CharacterNotInRepertoireError, which 500s the entire
+    telemetry push; and because that push rides the same heartbeat as everything else the
+    agent does that cycle, one stray byte on one machine was quietly stalling the beat —
+    including the remote-support provisioning check, so the relay agent never installed.
+    A NUL carries no meaning here, so drop it rather than reject a whole machine's telemetry.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_strip_nul(v) for v in value]
+    return value
+
+
+class _SanitizedInput(BaseModel):
+    """Base for every agent-supplied model: scrub NUL bytes off strings before validation."""
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _drop_nul_bytes(cls, value: Any) -> Any:
+        return _strip_nul(value)
+
+
+class DiskInfo(_SanitizedInput):
     drive: str
     total_gb: float
     used_gb: float
     free_gb: float
 
 
-class EventLogEntry(BaseModel):
+class EventLogEntry(_SanitizedInput):
     log_name: str
     source: str
     event_id: int
@@ -25,21 +53,21 @@ class EventLogEntry(BaseModel):
     occurred_at: datetime
 
 
-class InstalledAppEntry(BaseModel):
+class InstalledAppEntry(_SanitizedInput):
     name: str = Field(max_length=300)
     version: str | None = Field(default=None, max_length=100)
     publisher: str | None = Field(default=None, max_length=200)
     install_date: str | None = Field(default=None, max_length=20)
 
 
-class ServiceEntry(BaseModel):
+class ServiceEntry(_SanitizedInput):
     name: str = Field(max_length=200)
     display_name: str = Field(max_length=300)
     status: str = Field(max_length=30)
     start_type: str = Field(max_length=30)
 
 
-class WindowsUpdateEntry(BaseModel):
+class WindowsUpdateEntry(_SanitizedInput):
     kb_article_id: str = Field(max_length=30)
     title: str = Field(max_length=400)
     is_installed: bool
@@ -57,7 +85,7 @@ class WindowsUpdateEntry(BaseModel):
         return UPDATE_INSTALLED if self.is_installed else UPDATE_PENDING
 
 
-class SessionEntry(BaseModel):
+class SessionEntry(_SanitizedInput):
     """One Windows logon session, as the agent enumerated it via the WTS APIs.
 
     `state` and `connection` are Literals rather than free strings: the agent already
@@ -75,7 +103,7 @@ class SessionEntry(BaseModel):
     idle_seconds: int | None = Field(default=None, ge=0)
 
 
-class HardwareInfo(BaseModel):
+class HardwareInfo(_SanitizedInput):
     manufacturer: str | None = Field(default=None, max_length=150)
     model: str | None = Field(default=None, max_length=150)
     cpu_name: str | None = Field(default=None, max_length=200)
@@ -83,7 +111,7 @@ class HardwareInfo(BaseModel):
     total_storage_gb: float | None = Field(default=None, ge=0)
 
 
-class TelemetryPush(BaseModel):
+class TelemetryPush(_SanitizedInput):
     """Single payload the agent sends each cycle."""
 
     collected_at: datetime
