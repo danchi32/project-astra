@@ -76,6 +76,10 @@ _COOKIE_ACCESS_LEVEL = 3
 #: is it, so nothing here may assume a longer life.
 COOKIE_MAX_AGE_SECONDS = 3600
 
+#: The relay user id, resolved from the token once and cached for the process — it does
+#: not change for a given token. Module-level so every client instance shares one lookup.
+_RESOLVED_USER_ID: str | None = None
+
 
 class MeshCentralError(Exception):
     pass
@@ -141,6 +145,7 @@ class MeshCentralClient:
         self.user = user or settings.meshcentral_user
         self.token = token or settings.meshcentral_token
         self.cookie_key = cookie_key or settings.meshcentral_cookie_key
+        self.user_id = settings.meshcentral_user_id
         self.insecure_tls = (
             settings.meshcentral_insecure_tls if insecure_tls is None else insecure_tls
         )
@@ -286,6 +291,26 @@ class MeshCentralClient:
                 if msg.get("action") == "userinfo":
                     return msg.get("userinfo", {})
         raise MeshCentralError("The relay did not identify itself.")
+
+    async def resolve_user_id(self) -> str | None:
+        """The relay user id the viewer URL must log in as (e.g. "user//astraadmin").
+
+        This is NOT `self.user`. That is the login-token username (`~t:...`) the control
+        channel authenticates with; the cookie's `u` field has to be the id of the USER
+        that token belongs to, and the relay drops the viewer to its login page for
+        anything else — silently, because the cookie itself decodes fine.
+
+        Configured value wins; otherwise ask the relay once (userinfo carries the id) and
+        cache it for the process, since it never changes for a given token.
+        """
+        global _RESOLVED_USER_ID
+        if self.user_id:
+            return self.user_id
+        if _RESOLVED_USER_ID is not None:
+            return _RESOLVED_USER_ID
+        info = await self.ping()
+        _RESOLVED_USER_ID = info.get("_id")
+        return _RESOLVED_USER_ID
 
     async def events(self, *, limit: int = 100) -> list[RelayEvent]:
         """Recent events, newest last. Used to catch up after the listener restarts."""

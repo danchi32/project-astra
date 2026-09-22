@@ -5,6 +5,7 @@ logs its bearer into the relay as the technician and puts them on a named device
 is minted per request, handed only to the person who asked, and never written to the
 database. A column holding these would be a table of live keys to other people's screens.
 """
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,13 +19,15 @@ from app.schemas.pagination import Page, build, clamp
 from app.schemas.remote_control import RemoteSessionRead, RemoteSessionRequest
 from app.services.entitlements import REMOTE_CONTROL
 from app.services.exceptions import NotFoundError
-from app.services.meshcentral import MeshCentralClient, MeshCentralNotConfigured
+from app.services.meshcentral import MeshCentralClient
 from app.services.remote_control import (
     CONSENT_TIMEOUT,
     RemoteControlError,
     RemoteControlService,
     SessionAlreadyOpenError,
 )
+
+logger = logging.getLogger(__name__)
 
 # Gated at the router so a new endpoint in this file cannot ship ungated by somebody
 # forgetting the decorator — the same discipline the compliance and fleet routers use.
@@ -81,13 +84,21 @@ async def _render(
     ):
         client = MeshCentralClient()
         try:
+            # The user the browser logs in AS — the relay user id, not the control-channel
+            # token username. Resolved from the relay and cached; passing the token
+            # username here mints a cookie the relay rejects to its login page.
+            user_id = await client.resolve_user_id()
             out.viewer_url = client.viewer_url(
                 node_id=device.meshcentral_node_id,
-                user_id=client.user or "",
+                user_id=user_id or "",
             )
-        except MeshCentralNotConfigured:
-            # The session is real and its record stands; there is just no relay to show
-            # it through. Leaving the field empty says exactly that.
+        except Exception:
+            # The session is real and its record stands; a relay that is unset, or briefly
+            # unreachable while resolving the user id, just means no link to show right now.
+            # Degrade to an empty field rather than failing the whole status response —
+            # the technician can retry, and the record is unaffected.
+            logger.warning("could not mint a viewer URL for session %s",
+                           remote_session.id, exc_info=True)
             out.viewer_url = None
     return out
 

@@ -370,3 +370,5 @@ def _relay(monkeypatch):
     monkeypatch.setattr(s, "meshcentral_user", "~t:test", raising=False)
     monkeypatch.setattr(s, "meshcentral_token", "test-token", raising=False)
     monkeypatch.setattr(s, "meshcentral_cookie_key", "ab" * 80, raising=False)
+    # Pin the user id so resolve_user_id needs no relay round-trip in tests.
+    monkeypatch.setattr(s, "meshcentral_user_id", "user//test", raising=False)
