@@ -52,6 +52,11 @@ public class HeartbeatWorkerTests
             => Task.FromResult(true);
         public Task<UpdateEnvelope?> GetUpdateAsync(string token, CancellationToken ct)
             => Task.FromResult<UpdateEnvelope?>(null);
+        // Null is what a backend too old to know this endpoint returns, and what an
+        // unreachable one returns. Both mean "do nothing", so it is also the right
+        // default for a fake in tests about heartbeats rather than provisioning.
+        public Task<RemoteSupportPlan?> GetRemoteSupportPlanAsync(string token, CancellationToken ct)
+            => Task.FromResult<RemoteSupportPlan?>(null);
         public Task<IReadOnlyList<AgentRemediationTask>?> ClaimTasksAsync(string token, string context, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<AgentRemediationTask>?>([]);
         public Task<bool> ReportTaskResultAsync(string token, Guid taskId, AgentRemediationResult result, CancellationToken ct)
