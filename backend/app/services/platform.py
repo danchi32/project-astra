@@ -125,14 +125,23 @@ class PlatformService:
         self.orgs = OrganizationRepository(session)
         self.audit = AuditService(session)
 
-    async def _platform_org_ids(self) -> set[uuid.UUID]:
+    async def _platform_org_ids(self, *, include_demo: bool = True) -> set[uuid.UUID]:
         """Organizations that contain a platform admin are the operator's OWN internal
         workspace — not paying customers. They're excluded from every customer-facing
         list and revenue/growth rollup so the operator's own org never shows up as a
-        customer or distorts the numbers."""
-        return set((await self.session.execute(
+        customer or distorts the numbers.
+
+        Demo orgs (`is_demo`) are excluded from the rollups too — their fleet is invented.
+        The org lists pass include_demo=False: the operator still has to find the demo
+        tenant there to manage it (plan, remote-control toggle)."""
+        ids = set((await self.session.execute(
             select(User.org_id).where(User.is_platform_admin.is_(True)).distinct()
         )).scalars().all())
+        if include_demo:
+            ids |= set((await self.session.execute(
+                select(Organization.id).where(Organization.is_demo.is_(True))
+            )).scalars().all())
+        return ids
 
     _ORG_SORTS = {
         "name": Organization.name,
@@ -163,7 +172,7 @@ class PlatformService:
         """
         from app.schemas.pagination import paginate
 
-        platform_ids = await self._platform_org_ids()
+        platform_ids = await self._platform_org_ids(include_demo=False)
         stmt = select(Organization)
         if platform_ids:
             # The operator's own internal org is not a customer and never appears here.
@@ -210,7 +219,7 @@ class PlatformService:
         return items, total, page, page_size
 
     async def list_organizations(self) -> list[OrganizationAdminRead]:
-        platform_ids = await self._platform_org_ids()
+        platform_ids = await self._platform_org_ids(include_demo=False)
         orgs = [
             o for o in (await self.session.execute(
                 select(Organization).order_by(Organization.created_at)

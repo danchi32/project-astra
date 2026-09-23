@@ -93,6 +93,31 @@ async def test_the_operators_own_organization_is_not_a_customer(session_factory,
     )
 
 
+async def test_a_demo_organization_is_not_a_customer(session_factory, org):
+    """The sales-demo tenant's fleet is invented; on the homepage it would be a lie."""
+    from sqlalchemy import func, select
+
+    from app.models import Device, Organization
+    from app.services.platform import PlatformService
+
+    async with session_factory() as session:
+        demo = Organization(name="Demo tenant", is_demo=True)
+        session.add(demo)
+        await session.flush()
+        session.add(Device(org_id=demo.id, hostname="DEMO-01", machine_id="demo-01",
+                           os_version="Windows 11", agent_version="0.10.1", token_hash="d" * 64))
+        await session.commit()
+
+        orgs = (await session.execute(
+            select(func.count()).select_from(Organization)
+        )).scalar_one()
+        devices = (await session.execute(select(func.count()).select_from(Device))).scalar_one()
+        stats = await PlatformService(session).public_stats()
+
+    assert stats.organizations == orgs - 1
+    assert stats.devices == devices - 1
+
+
 async def test_the_answer_is_cached(client, monkeypatch):
     """Every homepage visit calls this. Without a cache it is a database query per view."""
     calls = {"n": 0}

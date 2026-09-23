@@ -86,6 +86,14 @@ class Organization(TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
 
+    # A sales-demo tenant (scripts/seed_presentation.py): invented fleet, invented people.
+    # Kept out of every customer rollup — public homepage stats, MRR, growth — exactly like
+    # the operator's own org, so a prospect is never shown fabricated devices as customers.
+    # Also the seed script's wipe guard: it will only ever delete an org carrying this flag.
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
     # The relay device group this org's machines enroll into. NULL means remote support
     # cannot be provisioned here, which is the right state for an org nobody has set one
     # up for — and for every org that exists today.
