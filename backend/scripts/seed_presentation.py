@@ -66,9 +66,9 @@ if LOCAL:
     DB_PATH = os.path.join(BACKEND_DIR, "astra-demo.db").replace("\\", "/")
     os.environ["ASTRA_DATABASE_URL"] = f"sqlite+aiosqlite:///{DB_PATH}"
     os.environ.setdefault("ASTRA_JWT_SECRET_KEY", "demo-secret-key-local-only-not-for-prod")
-    # Same demo-only key as run_demo.py, so the seeded helpdesk credential is one the
-    # running backend can decrypt.
-    os.environ.setdefault("ASTRA_SECRETS_KEY", "9gkUVnv59YVP4yxp0Ub1ygjj58nJR1kwKdrLdUh9Io4=")
+    # ASTRA_SECRETS_KEY comes from backend/.env (loaded above), the same file run_demo.py
+    # reads — so the seeded helpdesk credential is one the running backend can decrypt.
+    # Not written here: a literal Fernet key is what the secret scan exists to stop.
 elif not os.environ.get("ASTRA_DEMO_PASSWORD"):
     sys.exit("ASTRA_DEMO_PASSWORD is required outside the local demo database.")
 
