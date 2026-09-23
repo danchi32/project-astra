@@ -63,12 +63,19 @@ def _with_entitlements(org) -> OrganizationAdminRead:
     Resolved on read rather than stored so the console always shows what the server would
     actually enforce — a console that disagrees with the gate is worse than no console.
     """
-    from app.services.entitlements import features_for, normalise_plan
+    from app.services.entitlements import REMOTE_CONTROL, features_for, normalise_plan
 
     read = OrganizationAdminRead.model_validate(org)
     read.plan_tier = normalise_plan(org.plan)
-    read.entitlements = sorted(features_for(org.plan, org.entitlement_overrides))
+    entitlements = features_for(org.plan, org.entitlement_overrides)
+    read.entitlements = sorted(entitlements)
     read.entitlement_overrides = org.entitlement_overrides or None
+    # Usable, not just entitled: the entitlement AND both relay objects. See the field's note.
+    read.remote_control_active = bool(
+        REMOTE_CONTROL in entitlements
+        and org.meshcentral_mesh_id
+        and org.meshcentral_user_id
+    )
     return read
 
 

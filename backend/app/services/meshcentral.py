@@ -77,6 +77,21 @@ _COOKIE_ACCESS_LEVEL = 3
 #: is it, so nothing here may assume a longer life.
 COOKIE_MAX_AGE_SECONDS = 3600
 
+#: The rights a per-org remote-support account gets on ITS device group and nothing else:
+#: remote desktop control, with the terminal, files and Intel AMT tabs explicitly denied.
+#: The viewer is desktop-only (hide=31) and the account exists solely to be logged into as,
+#: so it is scoped as tightly as the feature allows.
+#:
+#: These are the real MeshCentral MESHRIGHT_* mesh-rights bits: REMOTECONTROL 8 (the only
+#: GRANT here), NOTERMINAL 512, NOFILES 1024, NOAMT 2048 (denials). Everything not granted is
+#: already denied, so no separate "registry"/"software" bit is needed — and MeshCentral has
+#: none: mesh rights top out at RELAY 0x200000, so any higher bit is undefined. We deliberately
+#: never set MANAGEUSERS 2, MANAGECOMPUTERS 4, AGENTCONSOLE 16 or REMOTECOMMAND 131072, which is
+#: what keeps this account from pivoting to other groups or running commands. Setting undefined
+#: bits was worse than useless: it protected nothing and could silently mean "grant" if a future
+#: relay build assigned that bit — so the mask is exactly the four rights above.
+REMOTE_CONTROL_MESH_RIGHTS = 8 | 512 | 1024 | 2048
+
 
 class MeshCentralError(Exception):
     pass
@@ -295,6 +310,89 @@ class MeshCentralClient:
                 if msg.get("action") == "userinfo":
                     return msg.get("userinfo", {})
         raise MeshCentralError("The relay did not identify itself.")
+
+    async def _await_result(self, ws: Any, payload: dict[str, Any], action: str) -> dict[str, Any]:
+        """Send one control-channel command and read back its matching reply.
+
+        Unlike the event stream, these admin commands DO echo their `action` (and the
+        `responseid` we set), so a reply can be matched to its command — verified against the
+        live relay. Everything else on the socket is skipped until that reply arrives.
+        """
+        await ws.send(json.dumps(payload))
+        for _ in range(30):
+            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+            if msg.get("action") == action:
+                return msg
+        raise MeshCentralError(f"The relay did not answer '{action}'.")
+
+    async def provision_scoped_access(
+        self, *, mesh_name: str, user_slug: str, password: str, rights: int
+    ) -> tuple[str, str]:
+        """Stand up one org's remote support on the relay, and return (mesh_id, user_id).
+
+        The whole of enabling the feature for an organisation: one device group its machines
+        enroll into, and one account — deliberately NOT a site admin — scoped to that group
+        alone, which the viewer cookie names. That pairing is the cross-tenant boundary: the
+        account can reach this org's group and no other. Done over the control channel in a
+        single connection.
+
+        The account password is random and never used — the browser logs in by a cookie ASTRA
+        signs, never by password — so the account exists only to hold the group grant. Adding
+        an account that already exists is treated as success, so a retry after a half-finished
+        run completes rather than failing.
+
+        When the account already existed, it is verified to be a NON site-admin before the group
+        is granted to it: a viewer cookie names this account, and a cookie naming a site admin
+        would see every org's devices regardless of any mesh grant. A freshly created account is
+        a normal user by construction, so the check is only needed on the "already exists" path.
+        """
+        self._require()
+        async with self.connect() as ws:
+            mesh = await self._await_result(ws, {
+                "action": "createmesh", "meshname": mesh_name, "meshtype": 2,
+                "desc": "ASTRA remote support", "responseid": "astra"}, "createmesh")
+            mesh_id = mesh.get("meshid")
+            if not mesh_id:
+                raise MeshCentralError(
+                    f"The relay did not return a device group id ({mesh.get('result')}).")
+
+            user = await self._await_result(ws, {
+                "action": "adduser", "username": user_slug, "pass": password,
+                "responseid": "astra"}, "adduser")
+            result = str(user.get("result", "")).lower()
+            if result not in ("ok", "") and "exist" not in result:
+                raise MeshCentralError(f"The relay refused to create the account ({result}).")
+            # Adopting a pre-existing account — refuse to bind a viewer cookie to it unless it is
+            # a plain user. `siteadmin` is a bitmask; 0/None is a non-admin. A freshly created
+            # account is a normal user by construction, so this only runs on the "exists" path.
+            if "exist" in result and await self._user_siteadmin(ws, "user//" + user_slug):
+                raise MeshCentralError(
+                    "An account with this name already exists on the relay and is a site "
+                    "administrator — refusing to scope remote support to it.")
+
+            grant = await self._await_result(ws, {
+                "action": "addmeshuser", "meshid": mesh_id, "usernames": [user_slug],
+                "meshadmin": rights, "responseid": "astra"}, "addmeshuser")
+            if not grant.get("success"):
+                raise MeshCentralError(
+                    f"The relay refused to grant group rights ({grant.get('result')}).")
+
+            return mesh_id, "user//" + user_slug
+
+    async def _user_siteadmin(self, ws: Any, user_id: str) -> int:
+        """The `siteadmin` bitmask of one relay account, or 0 if it can't be found.
+
+        Used to refuse binding a viewer cookie to a pre-existing site-admin account. The
+        `users` reply carries the account list as either a list of records or a dict keyed by
+        id, depending on relay version — both are handled.
+        """
+        reply = await self._await_result(ws, {"action": "users", "responseid": "astra"}, "users")
+        users = reply.get("users", [])
+        records = users.values() if isinstance(users, dict) else users
+        for record in records:
+            if isinstance(record, dict) and record.get("_id") == user_id:
+                return int(record.get("siteadmin") or 0)
+        return 0
 
     async def set_user_realname(self, *, user_id: str, realname: str) -> None:
         """Set a relay account's display name — the `{0}` the endpoint's consent prompt shows.

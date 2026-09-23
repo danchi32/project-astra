@@ -29,6 +29,11 @@ class OrganizationAdminRead(BaseModel):
     plan_tier: str = "expert"
     entitlements: list[str] = []
     entitlement_overrides: dict[str, bool] | None = None
+    # Whether remote control is actually USABLE for this org, not just entitled. It needs the
+    # entitlement AND the relay stood up (a device group and a scoped account). A trial or
+    # Expert plan grants the entitlement by default, so the bare entitlement over-reports; the
+    # operator toggle reflects this instead. Derived on read, never stored.
+    remote_control_active: bool = False
 
 
 class RemediationActionOption(BaseModel):
@@ -265,3 +270,12 @@ class OrganizationUpdate(BaseModel):
     #: mis-granted entitlement cannot push a remote-access agent onto a fleet, and a
     #: missing group cannot land one customer's machines in another's.
     meshcentral_mesh_id: str | None = Field(default=None, max_length=128)
+
+
+class RemoteControlToggle(BaseModel):
+    """Turn remote control on or off for an org, provisioning the relay on the way in.
+
+    Distinct from OrganizationUpdate's raw fields: enabling here CREATES the org's device
+    group and scoped account on the relay if they are missing, rather than asking the
+    operator to paste ids they would have to have made by hand."""
+    enabled: bool

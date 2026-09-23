@@ -37,6 +37,10 @@ async def _device(session_factory, org, machine="rc-1") -> uuid.UUID:
             org_id=org.id, hostname="RC-PC", machine_id=machine,
             os_version="Windows 11", agent_version="0.6.4",
             token_hash=hash_opaque_token(f"tok-{machine}"), last_seen_at=utcnow(),
+            # A device that can actually be requested has reported its relay node id in — a
+            # request is refused without one (see the guard in remote_control.request). These
+            # tests exercise the flow past that point, so the fixture stands for a ready device.
+            meshcentral_node_id=f"node//{machine}",
         )
         s.add(device)
         await s.commit()

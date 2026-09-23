@@ -3,7 +3,7 @@ requires a platform admin."""
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_platform_admin
@@ -38,6 +38,7 @@ from app.schemas.platform import (
     PlatformOverview,
     PlatformReports,
     RemediationActionOption,
+    RemoteControlToggle,
     ViewAsToken,
 )
 from app.schemas.remediation import RemediationTaskRead
@@ -55,6 +56,10 @@ from app.services.assets import AssetService
 from app.services.billing_profile import BillingProfileService
 from app.services.exceptions import NotFoundError
 from app.services.platform import PlatformService
+from app.services.remote_control_admin import (
+    RemoteControlAdminError,
+    RemoteControlAdminService,
+)
 from app.services.support_requests import SupportRequestService
 from app.services.remediation.actions import ACTIONS
 from app.api.v1.support import thread_detail
@@ -547,6 +552,31 @@ async def update_organization(
     session: AsyncSession = Depends(get_db),
 ) -> OrganizationAdminRead:
     return await PlatformService(session).update_organization(actor=actor, org_id=org_id, data=body)
+
+
+@router.post(
+    "/organizations/{org_id}/remote-control",
+    response_model=OrganizationAdminRead,
+    summary="Enable or disable remote control for an org, provisioning the relay (platform admin)",
+)
+async def set_org_remote_control(
+    org_id: uuid.UUID,
+    body: RemoteControlToggle,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> OrganizationAdminRead:
+    """One switch for the operator: flip remote control on and the org's device group and
+    scoped relay account are created if missing before the entitlement is set; flip it off
+    and only the entitlement changes, leaving the relay objects in place for a clean
+    re-enable. Relay or half-provisioned failures surface as 400s with the reason; the
+    entitlement is not touched unless provisioning succeeded."""
+    try:
+        await RemoteControlAdminService(session).set_enabled(
+            actor=actor, org_id=org_id, enabled=body.enabled
+        )
+    except RemoteControlAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return await PlatformService(session).get_organization(org_id)
 
 
 @router.post(
