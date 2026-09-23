@@ -230,12 +230,24 @@ Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Na
 # A scheduled task with /ru INTERACTIVE runs as whoever is logged on at the console, which
 # is the account the tray must act for. Run once, then remove the task — the Run key above
 # is what starts it at every subsequent logon.
+#
+# The ScheduledTasks cmdlets, not schtasks.exe: Windows PowerShell 5.1 (what the .exe
+# installer runs) strips the embedded quotes from a native command's argument, so
+# `/tr "wscript.exe "<path>""` reached schtasks unquoted and split at "Program Files".
+# schtasks then failed, the catch below never saw it (native errors don't throw), and the
+# log said "started" while no tray ran. Here the path is its own argument and a failure
+# throws. S-1-5-4 is INTERACTIVE, by SID so a localized Windows resolves it too.
 $trayTask = "AstraTrayFirstRun"
 try {
-    schtasks /create /tn $trayTask /tr "wscript.exe `"$vbs`"" /sc ONCE /st 00:00 /ru INTERACTIVE /f | Out-Null
-    schtasks /run /tn $trayTask | Out-Null
-    Start-Sleep -Seconds 2
-    schtasks /delete /tn $trayTask /f | Out-Null
+    $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`""
+    $principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-4"
+    Register-ScheduledTask -TaskName $trayTask -Action $action -Principal $principal -Force -ErrorAction Stop | Out-Null
+    Start-ScheduledTask -TaskName $trayTask -ErrorAction Stop
+    Start-Sleep -Seconds 5
+    Unregister-ScheduledTask -TaskName $trayTask -Confirm:$false -ErrorAction SilentlyContinue
+    $trayRunning = Get-CimInstance Win32_Process -Filter "Name='dotnet.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'AstraAgent\.Tray' }
+    if (-not $trayRunning) { throw "tray did not start" }
     Write-Host "Tray chat installed and started in the signed-in user's session." -ForegroundColor Green
 } catch {
     # Nobody logged on (a provisioning-time install), or the task API refused. Not fatal:

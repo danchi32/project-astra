@@ -310,7 +310,7 @@ async def main() -> None:
         else:
             await wipe(s, org.id)
 
-        org.plan = "pro"
+        org.plan = "expert"  # every feature a prospect might ask to see
         org.subscription_status = SubscriptionStatus.ACTIVE
         org.license_count = 250
         org.ai_pro = True

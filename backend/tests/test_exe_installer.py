@@ -185,3 +185,16 @@ def test_installer_accepts_the_ticket_length_we_actually_issue():
     assert match, f"length bound not found in {KEYPARSE_ISS}"
     low, high = int(match.group(1)), int(match.group(2))
     assert low <= len(generate_installer_ticket()) <= high
+
+
+def test_tray_first_run_does_not_hand_a_quoted_path_to_schtasks():
+    """The installer runs under Windows PowerShell 5.1, which strips the embedded quotes
+    from a native command's argument. `schtasks /tr "wscript.exe "<path>""` therefore reached
+    schtasks unquoted, split at "Program Files", and no tray ever started on a fresh machine
+    — while the log said it had. The ScheduledTasks cmdlets take the path as its own argument."""
+    script = agent_installer.build_portable_install_script(
+        server_url="https://api.example", enrollment_token="t", backend_ip="",
+    )
+    assert "schtasks /create" not in script
+    assert "Register-ScheduledTask" in script
+    assert "Start-ScheduledTask" in script
