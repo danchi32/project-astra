@@ -3,17 +3,17 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles } from "lucide-react";
+import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken,
-  updateOrganization, getOrgBillingProfile, getPlatformInvoices,
+  updateOrganization, setOrgRemoteControl, getOrgBillingProfile, getPlatformInvoices,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
 import { InvoiceTable } from "@/components/invoice-table";
 import { PLAN_TIERS, FEATURE_LABELS, type PlanTier } from "@/lib/api/types";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
-import { formatRam, formatStorage } from "@/lib/utils";
+import { formatRam, formatStorage, apiErrorMessage } from "@/lib/utils";
 import type { SubscriptionStatus } from "@/lib/api/types";
 
 type OrgTab = "overview" | "billing" | "users" | "devices" | "healing" | "assets";
@@ -39,6 +39,11 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   const router = useRouter();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<OrgTab>("overview");
+  // Remote control is its own operator action, not a plan toggle: enabling it stands the org
+  // up on the relay (a device group + a scoped account), which can fail downstream — so it
+  // carries its own in-flight and error state rather than sharing the plan card's.
+  const [rcBusy, setRcBusy] = useState(false);
+  const [rcError, setRcError] = useState<string | null>(null);
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: profile } = useQuery({
     queryKey: ["platform-org-billing-profile", id], queryFn: () => getOrgBillingProfile(id),
@@ -76,6 +81,23 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
     const next = await updateOrganization(id, { ai_pro: !org.ai_pro });
     queryClient.setQueryData(["platform-org", id], next);
     queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
+  }
+
+  async function toggleRemoteControl() {
+    if (!org || rcBusy) return;
+    setRcBusy(true);
+    setRcError(null);
+    try {
+      const next = await setOrgRemoteControl(id, !org.remote_control_active);
+      queryClient.setQueryData(["platform-org", id], next);
+      queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
+    } catch (e) {
+      // A relay or half-provisioned failure comes back as a 400 with the reason — show it,
+      // because the fix ("reconcile the relay", "configure MeshCentral") is the operator's.
+      setRcError(apiErrorMessage(e, "Couldn't change remote control. Try again."));
+    } finally {
+      setRcBusy(false);
+    }
   }
 
   if (me && !me.is_platform_admin) {
@@ -213,6 +235,55 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </button>
           </div>
         )}
+        {/* Remote control — its own switch, not a plan checkbox, because turning it ON stands
+            the org up on the relay: a device group its machines enroll into and a scoped
+            account the viewer logs in as. Once on, the fleet's agents provision themselves;
+            turning it off withdraws the entitlement and the agents uninstall the relay agent
+            on their own, while the relay group/account stay for a clean re-enable. */}
+        {org && (() => {
+          const remoteOn = org.remote_control_active;
+          return (
+            <div className="rounded-xl p-5 flex flex-col gap-3" style={card}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg shrink-0" style={{ background: remoteOn ? "rgba(16,185,129,0.12)" : "rgba(100,116,139,0.12)", color: remoteOn ? "#10b981" : "var(--text-secondary)" }}>
+                    <MonitorSmartphone size={18} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Remote control</h2>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                        style={remoteOn
+                          ? { color: "#10b981", background: "rgba(16,185,129,0.12)" }
+                          : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
+                        {remoteOn ? "Enabled" : "Off"}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-secondary)" }}>
+                      {remoteOn
+                        ? "This org's technicians can remotely view and control enrolled devices, with the person's on-screen consent. Their machines are provisioned onto the relay."
+                        : "Enable to let this org's technicians remotely support their devices. Turning it on creates the org's isolated device group and account on the relay automatically."}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={toggleRemoteControl} disabled={rcBusy}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0 disabled:opacity-60"
+                  style={remoteOn
+                    ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
+                    : { background: "#10b981", color: "#fff" }}>
+                  <MonitorSmartphone size={15} />
+                  {rcBusy ? "Working…" : remoteOn ? "Disable" : "Enable & provision"}
+                </button>
+              </div>
+              {rcError && (
+                <p className="text-xs px-3 py-2 rounded-lg"
+                  style={{ color: "#ef4444", background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.30)" }}>
+                  {rcError}
+                </p>
+              )}
+            </div>
+          );
+        })()}
             </>
           )}
 

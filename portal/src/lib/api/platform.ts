@@ -166,6 +166,15 @@ export const updateOrganization = (
   }>
 ) => apiClient.patch<OrganizationAdmin>(`/platform/organizations/${id}`, data).then((r) => r.data);
 
+/** Turn remote control on or off for an org. Enabling provisions the org's device group
+ *  and scoped account on the relay if they're missing before the entitlement is set, so the
+ *  operator never has to create or paste relay ids by hand. Disabling only flips the
+ *  entitlement — the relay objects are left in place for a clean re-enable. */
+export const setOrgRemoteControl = (id: string, enabled: boolean) =>
+  apiClient
+    .post<OrganizationAdmin>(`/platform/organizations/${id}/remote-control`, { enabled })
+    .then((r) => r.data);
+
 export const deleteOrganization = (id: string) =>
   apiClient.delete(`/platform/organizations/${id}`).then((r) => r.data);
 

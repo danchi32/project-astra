@@ -197,6 +197,10 @@ export interface OrganizationAdmin {
   plan_tier: PlanTier;
   entitlements: string[];
   entitlement_overrides: Record<string, boolean> | null;
+  /** Remote control actually usable — the entitlement AND the relay provisioned. The bare
+   *  entitlement over-reports (a trial/Expert plan grants it by default), so the operator's
+   *  remote-control toggle reflects this, not `entitlements.includes("remote_control")`. */
+  remote_control_active: boolean;
 }
 
 export interface PlatformOverview {
