@@ -30,6 +30,14 @@ import {
   UsersRound,
 } from "lucide-react";
 import { Badge, Button, Container, Section, SectionHeading } from "@/components/ui";
+import {
+  GroupAccess,
+  LoginReport,
+  MaskedFill,
+  OneTimeCodes,
+  PolicyPanel,
+  VaultDashboard,
+} from "@/components/vault-visuals";
 import { bookDemo, site } from "@/lib/site";
 
 const vaultUrl = "https://vault.technomateai.com";
@@ -150,6 +158,7 @@ export default function VaultPage() {
     <>
       <section className="aurora grain relative -mt-16 overflow-hidden pb-16 pt-28 sm:pt-36">
         <Container>
+          <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
           <div className="max-w-3xl">
             <Badge>
               <LockKeyhole className="h-3.5 w-3.5 text-brand-500" /> Secure Vault
@@ -174,6 +183,8 @@ export default function VaultPage() {
             <p className="mt-5 text-sm text-secondary-token">
               Built by {site.company} for teams who share portal access and cannot share the password.
             </p>
+          </div>
+          <VaultDashboard />
           </div>
         </Container>
       </section>
@@ -214,6 +225,9 @@ export default function VaultPage() {
               </div>
             ))}
           </div>
+          <div className="mx-auto mt-12 max-w-3xl">
+            <OneTimeCodes />
+          </div>
         </Container>
       </Section>
 
@@ -238,15 +252,16 @@ export default function VaultPage() {
                 time-limited and written to the audit log.
               </p>
             </div>
-            <ul className="grid gap-3">
-              {neverSeen.map((line) => (
-                <li key={line} className="flex items-start gap-3 rounded-xl border border-token bg-surface px-4 py-3">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-500" />
-                  <span className="text-sm leading-relaxed text-secondary-token">{line}</span>
-                </li>
-              ))}
-            </ul>
+            <MaskedFill />
           </div>
+          <ul className="mx-auto mt-12 grid max-w-5xl gap-3 sm:grid-cols-2">
+            {neverSeen.map((line) => (
+              <li key={line} className="flex items-start gap-3 rounded-xl border border-token bg-surface px-4 py-3">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-500" />
+                <span className="text-sm leading-relaxed text-secondary-token">{line}</span>
+              </li>
+            ))}
+          </ul>
         </Container>
       </Section>
 
@@ -265,6 +280,10 @@ export default function VaultPage() {
                 <p className="mt-2 text-sm leading-relaxed text-secondary-token">{feature.body}</p>
               </div>
             ))}
+          </div>
+          <div className="mt-14 grid gap-6 lg:grid-cols-2">
+            <GroupAccess />
+            <LoginReport />
           </div>
         </Container>
       </Section>
@@ -314,6 +333,8 @@ export default function VaultPage() {
                 </Button>
               </div>
             </div>
+            <div className="grid gap-6">
+              <PolicyPanel />
             <ul className="grid gap-3">
               {controls.map((line) => (
                 <li key={line} className="flex items-start gap-3 rounded-xl border border-token bg-surface px-4 py-3">
@@ -322,6 +343,7 @@ export default function VaultPage() {
                 </li>
               ))}
             </ul>
+            </div>
           </div>
         </Container>
       </Section>
