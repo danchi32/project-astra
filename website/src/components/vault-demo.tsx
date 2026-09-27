@@ -113,7 +113,7 @@ function SceneOpen() {
   const portals = [
     { name: "Northwind Portal", letter: "N" },
     { name: "Lakeside VMS", letter: "L" },
-    { name: "Redwood Staffing", letter: "R" },
+    { name: "Redwood Systems", letter: "R" },
   ];
   return (
     <div className="relative space-y-2">
@@ -164,7 +164,7 @@ function SceneCover() {
 /* -- 3. The point of the product: filled, submitted, and never readable. ------------------- */
 function SceneFill() {
   const fields = [
-    { label: "Username", value: "recruiter@company.com", delay: 0.1 },
+    { label: "Username", value: "a.morgan@company.com", delay: 0.1 },
     { label: "Password", value: "Th3-P0rtal-Secret", delay: 0.5 },
   ];
   return (
@@ -229,7 +229,7 @@ function SceneRecord() {
       </div>
       {[
         { user: "r•••t@company.com", portal: "Lakeside VMS", from: "203.0.113.18 · Edge", fresh: false },
-        { user: "m•••a@company.com", portal: "Redwood Staffing", from: "198.51.100.7 · Firefox", fresh: false },
+        { user: "m•••a@company.com", portal: "Redwood Systems", from: "198.51.100.7 · Firefox", fresh: false },
       ].map((entry) => (
         <div key={entry.user} className="grid grid-cols-12 items-center gap-2 rounded-lg border border-token bg-surface-2 px-3 py-2.5 opacity-60">
           <div className="col-span-4 truncate text-[11px] font-semibold">{entry.user}</div>

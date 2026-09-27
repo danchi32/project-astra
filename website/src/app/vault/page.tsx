@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Container, Reveal, Section, SectionHeading } from "@/components/ui";
 import { VaultDemo } from "@/components/vault-demo";
+import { WayFromExtension, WayFromVault, WayOnThePage } from "@/components/vault-ways";
 import {
   GroupAccess,
   LoginReport,
@@ -45,7 +46,6 @@ export const metadata: Metadata = {
   keywords: [
     "shared password manager for teams",
     "portal credential management",
-    "staffing portal logins",
     "enterprise password vault",
     "credential autofill extension",
   ],
@@ -192,8 +192,24 @@ export default function VaultPage() {
         </Container>
       </section>
 
+      {/* Three entry points, because the answer to "how much has to change for us" is none. */}
+      <Section className="border-y border-token bg-surface/50">
+        <Container>
+          <SectionHeading
+            eyebrow="Three ways in"
+            title="However they reach the portal"
+            subtitle="The same credential, the same masking and the same record, whichever door they come through."
+          />
+          <div className="mt-14 grid gap-6 lg:grid-cols-3">
+            <Reveal><WayFromVault /></Reveal>
+            <Reveal delay={0.1}><WayFromExtension /></Reveal>
+            <Reveal delay={0.2}><WayOnThePage /></Reveal>
+          </div>
+        </Container>
+      </Section>
+
       {rows.map((entry, index) => (
-        <Section key={entry.title} className={index % 2 === 1 ? "border-y border-token bg-surface/50" : ""}>
+        <Section key={entry.title} className={index % 2 === 0 ? "" : "border-y border-token bg-surface/50"}>
           <Container>
             <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
               <Reveal className={index % 2 === 1 ? "lg:order-2" : ""}>

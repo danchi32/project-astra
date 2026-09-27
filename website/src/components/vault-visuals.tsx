@@ -48,7 +48,7 @@ export function VaultDashboard() {
   const portals = [
     { name: "Northwind Portal", host: "northwind.example.com", letter: "N" },
     { name: "Lakeside VMS", host: "lakeside.example.net", letter: "L" },
-    { name: "Redwood Staffing", host: "redwood.example.org", letter: "R" },
+    { name: "Redwood Systems", host: "redwood.example.org", letter: "R" },
   ];
   return (
     <Chrome title="My access — Secure Vault">
@@ -104,7 +104,7 @@ export function MaskedFill() {
       <div className="relative">
         <div className="space-y-3 rounded-lg border border-token bg-surface-2 p-4">
           {[
-            { label: "Username", value: "recruiter@company.com" },
+            { label: "Username", value: "a.morgan@company.com" },
             { label: "Password", value: "Th3-P0rtal-Secret" },
           ].map((field) => (
             <div key={field.label}>
@@ -144,8 +144,8 @@ export function MaskedFill() {
  * ------------------------------------------------------------------------- */
 export function GroupAccess() {
   const groups = [
-    { name: "Recruiting team", members: 14, logins: 6 },
-    { name: "Delivery team", members: 9, logins: 4 },
+    { name: "Operations team", members: 14, logins: 6 },
+    { name: "Support team", members: 9, logins: 4 },
     { name: "Finance", members: 3, logins: 2 },
   ];
   return (
@@ -181,7 +181,7 @@ export function LoginReport() {
   const rows = [
     { user: "a•••a@company.com", portal: "Northwind Portal", ip: "203.0.113.41", agent: "Chrome · Windows" },
     { user: "r•••t@company.com", portal: "Lakeside VMS", ip: "203.0.113.18", agent: "Edge · Windows" },
-    { user: "m•••a@company.com", portal: "Redwood Staffing", ip: "198.51.100.7", agent: "Firefox · Windows" },
+    { user: "m•••a@company.com", portal: "Redwood Systems", ip: "198.51.100.7", agent: "Firefox · Windows" },
   ];
   return (
     <Chrome title="Login report — admin console">
