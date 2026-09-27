@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LegalPage, CounselTodo } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -14,7 +14,8 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of Service"
-      effective="2026-08-27"
+      effective="2026-09-26"
+      reviewed
       intro={
         <>
           These terms govern your organisation&rsquo;s use of ASTRA, supplied by{" "}
@@ -144,7 +145,19 @@ export default function TermsPage() {
         </li>
       </ul>
 
-      <h3>4.4 Kill switch</h3>
+      <h3>4.4 Remote support</h3>
+      <p>
+        Where your plan includes remote support and it is switched on for your
+        organisation, your authorised technicians may ask to view and control an enrolled
+        device&rsquo;s screen. Each session starts only after the person at the device
+        accepts an on-screen prompt naming the technician and the reason, is not recorded,
+        has file transfer and command-line access disabled, and is logged in your audit
+        trail. Only your people can start a session; ASTRA&rsquo;s AI cannot. You are
+        responsible for deciding who in your organisation may request sessions and for
+        how your technicians use them.
+      </p>
+
+      <h3>4.5 Kill switch</h3>
       <p>
         You may disable automatic approval for your whole organisation at any time from
         the portal. We additionally operate volume limits that suspend automatic approval
@@ -166,7 +179,9 @@ export default function TermsPage() {
         fact.
       </p>
       <p>
-        Customers requiring a Data Processing Agreement should contact{" "}
+        Where we process personal data for you, the{" "}
+        <a href="/dpa/">Data Processing Agreement</a> applies and forms part of these
+        terms. Customers who need a countersigned copy should contact{" "}
         <a href={`mailto:${site.contact.privacy}`}>{site.contact.privacy}</a>.
       </p>
 
@@ -176,12 +191,31 @@ export default function TermsPage() {
         Trials, renewals, cancellation and refunds are governed by the{" "}
         <a href="/refund-policy/">Refund &amp; Cancellation Policy</a>.
       </p>
-      <CounselTodo>
-        Complete the billing terms once the payment rail is live: currency by region,
-        whether prices are exclusive of GST and other applicable taxes, payment period,
-        consequences of non-payment, and which entity is the seller of record for
-        international sales where a Merchant of Record is used.
-      </CounselTodo>
+      <ul>
+        <li>
+          <strong>Currency and seller.</strong> Customers in India are billed in Indian
+          rupees by {legal.displayName} through Razorpay. International customers are
+          billed in US dollars through Paddle, which acts as Merchant of Record: Paddle is
+          the seller on those transactions, issues the invoice, and handles the
+          applicable sales taxes. International customers who pay through PayPal buy
+          from {legal.displayName} directly.
+        </li>
+        <li>
+          <strong>Taxes.</strong> Prices are exclusive of GST and other applicable taxes,
+          which are added to the invoice at the rate in force.
+        </li>
+        <li>
+          <strong>Payment.</strong> Subscriptions are paid in advance for each monthly or
+          annual period and renew automatically until cancelled. Invoiced customers pay
+          within 15 days of the invoice date.
+        </li>
+        <li>
+          <strong>Non-payment.</strong> If a payment fails or is overdue, we will tell you
+          and allow 7 days to settle it. After that the account becomes read-only
+          &mdash; you can still sign in and export your data, but remediation and new
+          enrolments stop &mdash; until the balance is paid.
+        </li>
+      </ul>
 
       <h2>7. Intellectual property</h2>
       <p>
@@ -199,31 +233,113 @@ export default function TermsPage() {
       <p>
         You must not use ASTRA to access devices you do not control, to circumvent the
         tier controls, to reverse engineer the service, or in breach of applicable law.
+        The full rules are in the <a href="/acceptable-use/">Acceptable Use Policy</a>,
+        which forms part of these terms.
       </p>
 
       <h2>9. Warranties, liability and indemnity</h2>
-      <CounselTodo>
-        This section must be drafted by counsel and is deliberately left unfinished. It
-        needs, at minimum: the service warranty and its disclaimers; a limitation of
-        liability with an appropriate cap; and specific treatment of{" "}
-        <strong>liability for remediation outcomes</strong> &mdash; loss or damage arising
-        from an action executed on a customer device. That last item is the distinguishing
-        risk of this product and a generic software liability clause does not address it.
-        Coordinate the cap with the professional indemnity cover actually held.
-      </CounselTodo>
+
+      <h3>9.1 Our warranty</h3>
+      <p>
+        We will provide the service with reasonable skill and care, and it will perform
+        materially as described in its documentation. If it does not, tell us: we will
+        correct the problem or, if we cannot within a reasonable time, you may terminate
+        and receive a refund of fees prepaid for the period after termination. That is
+        your remedy for a breach of this warranty.
+      </p>
+      <p>
+        Otherwise, and to the extent the law allows, the service is provided &ldquo;as
+        is&rdquo;. We do not warrant that it will be uninterrupted or error-free, or that
+        the AI&rsquo;s diagnoses will always be correct &mdash; which is why actions that
+        change a device are governed by the tiers in section 4.
+      </p>
+
+      <h3>9.2 Remediation outcomes</h3>
+      <p>
+        ASTRA changes a device only through the actions in its fixed catalogue, at the
+        tier you configured. We are responsible for each action doing what its catalogue
+        entry says. We are not responsible for the consequences of an action you or your
+        people approved, or enabled for automatic approval, where the action did what it
+        describes. If an agent release we publish causes a device fault, we will withdraw
+        or correct it promptly and help you restore affected devices at no charge.
+      </p>
+
+      <h3>9.3 Limitation of liability</h3>
+      <ul>
+        <li>
+          Each party&rsquo;s total liability arising out of or in connection with this
+          agreement, in any 12-month period, is limited to the fees you paid or were due
+          to pay us in the 12 months before the event giving rise to the claim.
+        </li>
+        <li>
+          Neither party is liable for indirect, special or consequential loss, loss of
+          profits, revenue or goodwill, or loss of data that could have been restored from
+          a backup you are required to keep under section 4.3.
+        </li>
+        <li>
+          These limits do not apply to your obligation to pay fees, to either
+          party&rsquo;s indemnity under 9.4, or to liability that cannot be limited by
+          law, including for fraud.
+        </li>
+      </ul>
+
+      <h3>9.4 Indemnities</h3>
+      <p>
+        We will defend you against a third-party claim that the service infringes that
+        party&rsquo;s intellectual property rights, and pay any resulting damages awarded.
+        You will defend us against a third-party claim arising from your installing the
+        agent on a device you were not entitled to control, or from failing to give your
+        personnel the notice or obtain the consent section 4.3 requires. The party seeking
+        protection must notify the other promptly and let it control the defence.
+      </p>
 
       <h2>10. Term, suspension and termination</h2>
-      <CounselTodo>
-        Term and renewal mechanics; suspension for non-payment or abuse; termination for
-        cause and for convenience; and what happens to customer data on termination
-        &mdash; the return-or-delete commitment and the window for it.
-      </CounselTodo>
+      <ul>
+        <li>
+          <strong>Term.</strong> This agreement starts when you create an account and
+          continues through your trial and every paid period, renewing automatically
+          until either party ends it.
+        </li>
+        <li>
+          <strong>Cancellation.</strong> You may cancel at any time from the Billing page;
+          the subscription runs to the end of the paid period, as set out in the{" "}
+          <a href="/refund-policy/">Refund &amp; Cancellation Policy</a>. We may end the
+          agreement for convenience on 30 days&rsquo; written notice, refunding any
+          prepaid fees for the unused period.
+        </li>
+        <li>
+          <strong>Suspension.</strong> We may suspend the service for non-payment (after
+          the notice in section 6), or immediately where needed to stop a security threat
+          or a breach of section 8. We will restore it once the cause is resolved.
+        </li>
+        <li>
+          <strong>Termination for cause.</strong> Either party may terminate if the other
+          materially breaches this agreement and does not fix the breach within 30 days
+          of written notice.
+        </li>
+        <li>
+          <strong>Your data on termination.</strong> For 30 days after termination your
+          account stays available read-only so you can export your data. After that we
+          delete it from the live system, and backup copies expire within a further 30
+          days, except where the law requires us to keep records longer.
+        </li>
+        <li>
+          Sections 5, 7, 9, 11 and anything else that by its nature should survive,
+          survive termination.
+        </li>
+      </ul>
 
       <h2>11. Governing law and disputes</h2>
-      <CounselTodo>
-        Governing law and the forum for disputes. The registered office is in Uttar
-        Pradesh; confirm the jurisdiction clause and whether arbitration is preferred.
-      </CounselTodo>
+      <p>
+        This agreement is governed by the laws of India. The parties will first try to
+        resolve any dispute by good-faith discussion between senior representatives for
+        30 days. A dispute not resolved that way will be referred to a sole arbitrator
+        appointed by mutual agreement under the Arbitration and Conciliation Act, 1996.
+        The seat and venue of arbitration is Gautam Budh Nagar, Uttar Pradesh, and the
+        proceedings are in English. Subject to that, the courts at Gautam Budh Nagar,
+        Uttar Pradesh have exclusive jurisdiction. Either party may seek urgent interim
+        relief from a competent court.
+      </p>
 
       <h2>12. Changes to these terms</h2>
       <p>

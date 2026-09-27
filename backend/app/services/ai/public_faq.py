@@ -76,6 +76,11 @@ Evidence before action is the rule: it gathers before it acts, never the other w
   falls is dropped.
 - Asset assignment and acknowledgement: hand over a laptop and the employee is emailed to
   confirm receipt, from your own verified domain, with the signature kept on the record.
+- Remote support (Expert): a technician takes control of a user's screen from the portal.
+  The user sees a prompt naming the technician and the reason, and nothing connects until
+  they click Allow; silence is not consent. Live only, never recorded; clipboard shared,
+  file transfer and command line disabled; every session audited. Only people can start
+  one — the AI cannot.
 - Reporting, dashboards, proactive notifications, and a full audit trail.
 
 ## Plans and pricing (USD, per device)
@@ -88,8 +93,8 @@ Evidence before action is the rule: it gathers before it acts, never the other w
   notifications and proactive alerts, priority support.
 - Expert — $8.99/device/month, or $89.90/device/year. Everything in Professional, plus the
   compliance and security-posture dashboard, restricted-software detection, fleet
-  cross-device correlation, one-click mass remediation, full audit trail and export,
-  advanced RBAC (SSO in progress), a dedicated success manager.
+  cross-device correlation, one-click mass remediation, consented remote support (screen
+  control), full audit trail and export, advanced RBAC (SSO in progress), a dedicated success manager.
 Annual billing saves about 17%. Taxes may apply. Above 50 devices, sales quotes volume
 pricing. A free trial is available and needs no credit card. Plans can change at any time;
 billing adjusts on the next cycle from the active device count.
@@ -193,7 +198,8 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
             "cognitive engine with automatic self-healing, approval tiers, secure offboarding, "
             "conversational AI for employees, proactive notifications and priority support. "
             "Expert ($8.99) adds the compliance dashboard, restricted-software detection, "
-            "fleet correlation, one-click mass remediation, full audit export, advanced RBAC "
+            "fleet correlation, one-click mass remediation, consented remote support, full "
+            "audit export, advanced RBAC "
             "and a dedicated success manager."
         ),
         keywords=("plan", "plans", "tier", "tiers", "essential", "professional", "expert",
@@ -374,12 +380,28 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
             "Operational telemetry: CPU, RAM and disk usage, Windows event-log errors, "
             "installed and running applications, services, and Windows Update status — the "
             "evidence needed to diagnose a fault. It is an IT operations tool, not employee "
-            "monitoring: no keystrokes, no screen recording, no browsing history."
+            "monitoring: no keystrokes, no screen recording, no browsing history. On the "
+            "Expert plan a technician can view a screen live for remote support, but only "
+            "after the user clicks Allow, and the session is never recorded."
         ),
         keywords=("data", "collect", "collected", "privacy", "monitor", "monitoring",
                   "monitored", "surveillance", "keylogger", "screen", "spy", "spying",
                   "telemetry", "gdpr", "personal", "employee", "employees", "staff",
                   "worker", "track", "tracking"),
+    ),
+    FaqEntry(
+        question="Can a technician remote into a user's computer?",
+        answer=(
+            "Yes, on the Expert plan. From the portal a technician requests remote support "
+            "and gives a reason. The user sees an ASTRA Remote Support prompt naming the "
+            "technician and the reason, and nothing connects until they click Allow — an "
+            "unanswered prompt lapses after about two minutes and is never treated as a yes. "
+            "The session is live only and never recorded; the clipboard is shared, file "
+            "transfer and the command line are disabled, and every session is written to the "
+            "audit log. Only a person can start one — the AI cannot."
+        ),
+        keywords=("remote", "desktop", "screen", "control", "takeover", "teamviewer",
+                  "anydesk", "rdp", "share", "sharing", "connect", "consent"),
     ),
     FaqEntry(
         question="Can the AI do something we didn't approve?",

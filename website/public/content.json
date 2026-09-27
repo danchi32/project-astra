@@ -275,6 +275,10 @@
       {
         "title": "Asset Assignment & Acknowledgement",
         "desc": "Hand a laptop to an employee and ASTRA emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record."
+      },
+      {
+        "title": "Remote Support with Consent",
+        "desc": "Take control of a user's screen from the portal in one click. They see who is asking and why, and nothing connects until they click Allow. Live only, never recorded, fully audited."
       }
     ],
     "inventory": {
@@ -393,6 +397,7 @@
           "Restricted-software detection",
           "Fleet cross-device correlation",
           "One-click mass remediation",
+          "Remote support — screen control with user consent",
           "Full audit trail & export",
           "Advanced RBAC (SSO in progress)",
           "Dedicated success manager"

@@ -5,12 +5,13 @@ CIN: U62099UW2026PTC257827
 Registered office: Ayodhya Ganj, Dadri, Gautam Budh Nagar,
 Uttar Pradesh 203207, India
 
-Version 2026-08-27
+Version 2026-09-26
 The current version is published at https://technomateai.com/eula/
 
-DRAFT - PENDING LEGAL REVIEW. Sections 9 and 10 are deliberately
-incomplete and must be settled by counsel before this software is
-distributed to customers.
+Please read this licence before installing. By clicking "I accept"
+you confirm that you are installing the agent on behalf of the
+organisation that owns or controls this device, and that you are
+authorised to accept this licence for it.
 
 --------------------------------------------------------------------
 1. LICENCE
@@ -60,7 +61,27 @@ of documents or email, monitor browsing history, or access personal
 files.
 
 --------------------------------------------------------------------
-4. DEPLOYMENT AND CONSENT
+4. REMOTE SUPPORT
+--------------------------------------------------------------------
+If your organisation's plan includes remote support and it has been
+switched on, the agent installs a separate remote-support service on
+this device. It lets your organisation's technicians ask to view and
+control this screen in order to help you. Every session:
+
+  * starts ONLY after the person at this device clicks "Allow" on a
+    prompt titled "ASTRA Remote Support" that names the technician
+    and the reason they gave - an unanswered prompt is never a yes;
+  * is streamed live and is NOT recorded;
+  * shares the clipboard both ways, with file transfer and
+    command-line access disabled;
+  * is written to your organisation's audit log;
+  * can be started only by a person, never by ASTRA's AI.
+
+The remote-support service is removed automatically when the feature
+is switched off for your organisation, and when the agent is removed.
+
+--------------------------------------------------------------------
+5. DEPLOYMENT AND CONSENT
 --------------------------------------------------------------------
 This agent is deployed by the organisation that owns or controls this
 device. That organisation is responsible for giving its personnel the
@@ -70,7 +91,7 @@ What is collected, where it is held and for how long is set out in the
 Privacy Policy at https://technomateai.com/privacy/
 
 --------------------------------------------------------------------
-5. AUTOMATIC UPDATES
+6. AUTOMATIC UPDATES
 --------------------------------------------------------------------
 The agent checks for updates periodically and applies them
 automatically. Updates are cryptographically signed, and the agent
@@ -83,7 +104,7 @@ compromise of Technomate's servers cannot push software to your
 devices.
 
 --------------------------------------------------------------------
-6. RESTRICTIONS
+7. RESTRICTIONS
 --------------------------------------------------------------------
 You must not:
 
@@ -95,39 +116,57 @@ You must not:
   * redistribute, sublicense, rent or resell the agent.
 
 --------------------------------------------------------------------
-7. REMOVAL
+8. REMOVAL
 --------------------------------------------------------------------
 The agent can be removed at any time using the supplied uninstaller or
 standard Windows uninstall. Removing it stops all collection from this
 device.
 
 --------------------------------------------------------------------
-8. OWNERSHIP
+9. OWNERSHIP
 --------------------------------------------------------------------
 The agent is licensed, not sold. All intellectual property in it
 remains with Technomate IT-Solution Private Limited.
 
 --------------------------------------------------------------------
-9. WARRANTY AND LIABILITY
+10. WARRANTY AND LIABILITY
 --------------------------------------------------------------------
-[TO BE COMPLETED BY COUNSEL]
+Technomate warrants that the agent will perform materially as
+described in this licence while your subscription is active. If it
+does not, Technomate will correct the defect or, if it cannot within a
+reasonable time, you may end your subscription and recover the fees
+paid for the period after the defect was reported. Beyond that, and to
+the extent the law allows, the agent is provided "as is".
 
-This section must specifically address liability for the effects of a
-remediation action executed on a customer device, and for a defective
-agent release distributed through the automatic update channel. Those
-are the two ways this software can cause loss, and they should be
-addressed by name rather than left to a general disclaimer. The
-position must align with the Terms of Service and with the
-professional indemnity cover actually held.
+Remediation actions. The agent changes a device only through the
+actions in its built-in catalogue and at the tier your organisation
+configured. Technomate is responsible for an action doing what its
+catalogue entry says. It is not responsible for the consequences of an
+action your organisation approved or enabled for automatic approval,
+where the action did what it describes.
+
+Automatic updates. If an agent release published by Technomate causes
+a device fault, Technomate will withdraw or correct that release
+promptly and help you restore affected devices at no charge.
+
+Limits. Technomate's total liability arising out of the agent is
+limited to the fees you paid in the 12 months before the claim.
+Technomate is not liable for indirect or consequential loss, lost
+profits, or loss of data that could have been restored from a backup.
+Nothing in this licence limits liability that cannot be limited by
+law, including for fraud. The full terms are in section 9 of the Terms
+of Service.
 
 --------------------------------------------------------------------
-10. GOVERNING LAW
+11. GOVERNING LAW
 --------------------------------------------------------------------
-[TO BE COMPLETED BY COUNSEL - to match the governing-law clause
-settled in the Terms of Service.]
+This licence is governed by the laws of India. Any dispute will be
+resolved by arbitration under the Arbitration and Conciliation Act,
+1996, seated in Gautam Budh Nagar, Uttar Pradesh, and the courts there
+have exclusive jurisdiction.
 
 --------------------------------------------------------------------
-11. CONTACT
+12. CONTACT
 --------------------------------------------------------------------
 Technomate IT-Solution Private Limited
 Ayodhya Ganj, Dadri, Gautam Budh Nagar, Uttar Pradesh 203207, India

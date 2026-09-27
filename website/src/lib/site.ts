@@ -129,5 +129,7 @@ export const legalNav = [
   { label: "Refund & Cancellation", href: "/refund-policy" },
   { label: "Cookie Policy", href: "/cookies" },
   { label: "Agent EULA", href: "/eula" },
+  { label: "Data Processing Agreement", href: "/dpa" },
+  { label: "Acceptable Use", href: "/acceptable-use" },
   { label: "Sub-processors", href: "/sub-processors" },
 ] as const;

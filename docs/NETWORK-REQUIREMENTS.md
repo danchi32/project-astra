@@ -11,6 +11,7 @@ security controls — it works *with* them.
 |---|---|
 | Enrollment, heartbeat, telemetry, remediation, chat | `https://api.astra.technomateai.com` |
 | Signed agent auto-update | `https://github.com` and `https://objects.githubusercontent.com` (GitHub Releases CDN) |
+| Remote support (Expert plan, only when enabled for your org) | `https://remote.astra.technomateai.com` (the agent's remote-support service keeps one outbound WebSocket open here; screen traffic of a user-accepted session flows over it) |
 | One-time .NET 8 runtime (only if missing at install) | `https://aka.ms` and `https://dotnet.microsoft.com` / `https://download.visualstudio.microsoft.com` |
 
 - **No inbound ports** are required. The agent only *initiates* connections.

@@ -62,6 +62,7 @@ const TIERS: Tier[] = [
       "Restricted-software detection",
       "Fleet cross-device correlation",
       "One-click mass remediation",
+      "Remote support — screen control with user consent",
       "Full audit trail & export",
       "Advanced RBAC (SSO in progress)",
       "Dedicated success manager",

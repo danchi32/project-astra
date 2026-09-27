@@ -14,6 +14,7 @@ export default function CookiesPage() {
     <LegalPage
       title="Cookie Policy"
       effective="2026-08-27"
+      reviewed
       intro={
         <>
           This page lists the cookies and similar storage used on{" "}

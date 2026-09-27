@@ -28,6 +28,7 @@ import {
   Ticket,
   GraduationCap,
   MailCheck,
+  ScreenShare,
 } from "lucide-react";
 import {
   Container,
@@ -55,7 +56,7 @@ import { site, bookDemo } from "@/lib/site";
 const featureIcons = [
   Boxes, Activity, BrainCircuit, Wrench, DownloadCloud,
   UserX, MessageSquare, ShieldCheck, FileBarChart, Bell, ScrollText,
-  ClipboardCheck, Ban, Network, Ticket, GraduationCap, MailCheck,
+  ClipboardCheck, Ban, Network, Ticket, GraduationCap, MailCheck, ScreenShare,
 ];
 const featureDefaults = [
   { title: "Asset Inventory", desc: "A live, auto-discovered registry of every device, spec, app and license across your fleet." },
@@ -75,6 +76,7 @@ const featureDefaults = [
   { title: "Helpdesk Integration", desc: "Connect Freshservice and let ASTRA raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees." },
   { title: "Self-Learning Knowledge Base", desc: "Every confirmed fix teaches the knowledge base. ASTRA publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type." },
   { title: "Asset Assignment & Acknowledgement", desc: "Hand a laptop to an employee and ASTRA emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record." },
+  { title: "Remote Support with Consent", desc: "Take control of a user's screen from the portal in one click. They see who is asking and why, and nothing connects until they click Allow. Live only, never recorded, fully audited." },
 ];
 
 const workflowIcons = [Search, BrainCircuit, Activity, Gauge, Wrench, BadgeCheck];

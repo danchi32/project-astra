@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LegalPage, CounselTodo } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -13,7 +13,8 @@ export default function RefundPolicyPage() {
   return (
     <LegalPage
       title="Refund &amp; Cancellation Policy"
-      effective="2026-08-27"
+      effective="2026-09-26"
+      reviewed
       intro={
         <>
           How trials, billing, cancellation and refunds work for ASTRA subscriptions from{" "}
@@ -79,23 +80,56 @@ export default function RefundPolicyPage() {
       </ul>
 
       <h2>5. Refunds</h2>
-      <CounselTodo>
-        Set the refund position before the payment rail goes live. Decide and state: any
-        money-back window for a first paid month; whether annual plans are refundable and
-        on what basis; the position on partial periods and unused licences; how a refund
-        for a service failure attributable to us is handled; and the timeline for
-        processing an approved refund back to the original payment method. Note that the
-        answer differs by rail &mdash; where a Merchant of Record is the seller for
-        international sales, their refund mechanics apply and must be described
-        accurately.
-      </CounselTodo>
+      <p>
+        The 14-day free trial is how we let you evaluate ASTRA before paying, so paid
+        subscriptions are <strong>not refundable</strong> once a billing period has
+        started. That applies to monthly and annual plans, to partial periods, and to
+        licences you bought but did not use. You can cancel at any time to stop the next
+        renewal.
+      </p>
+      <p>We will refund you in full in these cases:</p>
+      <ul>
+        <li>
+          <strong>Duplicate or incorrect charge</strong> &mdash; you were charged twice,
+          or charged an amount different from your order.
+        </li>
+        <li>
+          <strong>Service failure on our side</strong> &mdash; the service was materially
+          unavailable or did not work as described for reasons within our control, and we
+          could not fix it within a reasonable time after you reported it. We refund the
+          fees for the affected period.
+        </li>
+        <li>
+          <strong>We end the agreement for convenience</strong> &mdash; we refund the
+          prepaid fees for the unused period, as the <a href="/terms/">Terms of
+          Service</a> set out.
+        </li>
+      </ul>
+      <p>
+        Approved refunds go back to the original payment method within 7 working days of
+        approval; your bank or card issuer may take a further 5&ndash;7 working days to
+        show it. For international purchases made through Paddle, Paddle is the seller and
+        processes the refund under its own buyer terms; we will raise it with Paddle on
+        your behalf.
+      </p>
 
       <h2>6. Taxes</h2>
-      <CounselTodo>
-        State whether displayed prices are inclusive or exclusive of GST and other
-        applicable taxes, the currency charged in each region, and how tax is shown on the
-        invoice. This section cannot be completed until GST registration is issued.
-      </CounselTodo>
+      <ul>
+        <li>
+          Prices shown are <strong>exclusive of GST</strong> and other applicable taxes.
+        </li>
+        <li>
+          Customers in India are billed in Indian rupees by {site.legal.displayName}. GST
+          is added at the applicable rate and shown separately on the tax invoice, with our
+          GSTIN and yours where you provide it.
+        </li>
+        <li>
+          International customers are billed in US dollars. Through Paddle, which as
+          Merchant of Record calculates, collects and remits any sales tax or VAT due in
+          your country and issues the invoice; or through PayPal, where we issue the
+          invoice.
+        </li>
+      </ul>
 
       <h2>7. How to request a refund or raise a billing issue</h2>
       <p>

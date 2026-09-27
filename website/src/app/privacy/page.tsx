@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LegalPage, CounselTodo } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -14,7 +14,8 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      effective="2026-08-27"
+      effective="2026-09-26"
+      reviewed
       intro={
         <>
           This policy explains how {legal.displayName} (&ldquo;Technomate&rdquo;,
@@ -129,8 +130,50 @@ export default function PrivacyPage() {
       <p>
         <strong>What the agent does not do:</strong> it does not capture keystrokes,
         record the screen, read the contents of documents or email, monitor browsing
-        history, or access personal files.
+        history, or access personal files. The only way anyone sees a device&rsquo;s
+        screen is a live remote support session that the person at the device has
+        agreed to (section 2.4).
       </p>
+
+      <h3>2.4 Remote support sessions</h3>
+      <p>
+        Where an organisation&rsquo;s plan includes remote support and it has been switched
+        on for that organisation, one of its technicians can ask to view and control a
+        managed device&rsquo;s screen to help the person using it. When that happens:
+      </p>
+      <ul>
+        <li>
+          <strong>The person at the device is asked first.</strong> A prompt titled
+          &ldquo;ASTRA Remote Support&rdquo; appears on their screen, naming the technician
+          and the reason they gave. Nothing connects unless they click Allow. If they do
+          not answer within about two minutes the request lapses; silence is never treated
+          as a yes.
+        </li>
+        <li>
+          While the session is open, the technician sees the screen live and can use the
+          mouse and keyboard. The clipboard is shared both ways so text can be copied
+          between the two machines. File transfer and command-line access are disabled
+          for these sessions.
+        </li>
+        <li>
+          <strong>The session is not recorded.</strong> The screen is streamed to the
+          technician in real time through our relay server and is not stored by us.
+        </li>
+        <li>
+          We keep a record <em>about</em> the session &mdash; who asked, for which device,
+          the reason given, whether the person allowed or declined, and when it started
+          and ended &mdash; in the organisation&rsquo;s audit log.
+        </li>
+        <li>
+          To make this possible a separate remote-support service is installed on the
+          device, and only on devices of organisations that have the feature enabled. It
+          is removed automatically when the feature is switched off.
+        </li>
+        <li>
+          Remote support can only be started by a person. ASTRA&rsquo;s AI cannot request,
+          start or join a remote session.
+        </li>
+      </ul>
 
       <h2>3. Why we process it</h2>
       <ul>
@@ -146,11 +189,79 @@ export default function PrivacyPage() {
         </li>
         <li>To detect and prevent abuse, and to keep an audit trail of what was done.</li>
       </ul>
-      <CounselTodo>
-        State the lawful basis for each purpose in the form the applicable
-        data-protection legislation requires, and confirm the position on consent versus
-        legitimate use for the marketing communications described above.
-      </CounselTodo>
+
+      <h3>3.1 Lawful basis</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Purpose</th>
+            <th>Basis</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Providing, securing and supporting the ASTRA service</td>
+            <td>
+              Our contract with the customer; for device data, the customer&rsquo;s own
+              lawful basis as Data Fiduciary, on whose instructions we act
+            </td>
+          </tr>
+          <tr>
+            <td>Remote support sessions</td>
+            <td>
+              The customer&rsquo;s instruction, together with the live consent of the
+              person at the device, given separately for each session
+            </td>
+          </tr>
+          <tr>
+            <td>Billing, tax and accounting records</td>
+            <td>Compliance with legal obligations</td>
+          </tr>
+          <tr>
+            <td>Answering an enquiry you send us</td>
+            <td>Your request, and the details you chose to give us for it</td>
+          </tr>
+          <tr>
+            <td>Marketing email</td>
+            <td>
+              Your consent. Every such email carries an unsubscribe link, and you may
+              withdraw consent at any time
+            </td>
+          </tr>
+          <tr>
+            <td>Analytics and advertising cookies</td>
+            <td>
+              Your consent, given through the cookie banner &mdash; see the{" "}
+              <a href="/cookies/">Cookie Policy</a>
+            </td>
+          </tr>
+          <tr>
+            <td>Security, abuse prevention and the audit trail</td>
+            <td>Legitimate uses permitted by law, and our contract with the customer</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.2 Who we share it with</h3>
+      <p>
+        We do not sell personal data, and we do not share it for other companies&rsquo;
+        advertising. We share it only with:
+      </p>
+      <ul>
+        <li>
+          the providers listed on the <a href="/sub-processors/">sub-processors page</a>,
+          under contract, and only as far as they need it to provide their service to us;
+        </li>
+        <li>systems the customer deliberately connects, such as their own helpdesk;</li>
+        <li>
+          a court, regulator or law-enforcement authority where the law requires it
+          &mdash; where we are allowed to, we tell the affected customer first;
+        </li>
+        <li>
+          a successor to our business, bound by this policy, if the company is merged or
+          sold.
+        </li>
+      </ul>
 
       <h2>4. Artificial intelligence</h2>
       <p>
@@ -173,11 +284,14 @@ export default function PrivacyPage() {
         sub-processors operate elsewhere, including the United States. Full detail, with
         locations, is on the <a href="/sub-processors/">sub-processors page</a>.
       </p>
-      <CounselTodo>
-        Confirm the cross-border transfer position under applicable Indian law and, if the
-        company sells into the EEA or the UK, add the transfer mechanism and any
-        additional required disclosures.
-      </CounselTodo>
+      <p>
+        We transfer personal data outside India only to countries not restricted by the
+        Government of India under the Digital Personal Data Protection Act, 2023, and only
+        to providers contractually bound to protect it to the standard in this policy.
+        Customers who need a signed commitment on transfers can have one through our{" "}
+        <a href="/dpa/">Data Processing Agreement</a>. If your organisation needs its data
+        held in India, tell us before you sign.
+      </p>
 
       <h2>6. How long we keep it</h2>
       <table>
@@ -201,14 +315,26 @@ export default function PrivacyPage() {
             <td>Replaced on each collection; deleted when the device is removed</td>
           </tr>
           <tr>
-            <td>Audit logs and remediation history</td>
+            <td>Remote support screen video</td>
+            <td>Not stored &mdash; streamed live only</td>
+          </tr>
+          <tr>
+            <td>Audit logs, remediation and remote-session history</td>
             <td>Retained for the life of the account</td>
           </tr>
           <tr>
             <td>Account and billing records</td>
             <td>
-              Retained while the account is active, then for the period our tax and
-              company-law obligations require
+              Retained while the account is active, then for eight years from the end of
+              the financial year they relate to, as Indian company and tax law requires
+              for books of account
+            </td>
+          </tr>
+          <tr>
+            <td>Customer data after the account closes</td>
+            <td>
+              Available for export for 30 days, then deleted from the live system; backup
+              copies expire within a further 30 days
             </td>
           </tr>
           <tr>
@@ -217,10 +343,6 @@ export default function PrivacyPage() {
           </tr>
         </tbody>
       </table>
-      <CounselTodo>
-        Confirm the statutory retention period for books of account and invoices, and
-        state it as a definite number of years here.
-      </CounselTodo>
 
       <h2>7. Security</h2>
       <ul>
@@ -253,8 +375,24 @@ export default function PrivacyPage() {
         <a href={`mailto:${site.contact.privacy}`}>{site.contact.privacy}</a>.
       </p>
       <p>
+        You may also nominate someone to exercise these rights for you in the event of
+        your death or incapacity. We answer requests within 30 days, may first need to
+        confirm your identity, and do not charge for this.
+      </p>
+      <p>
         If the data concerns a device managed by your employer, we will refer your request
         to them, because it is their data and their decision.
+      </p>
+      <p>
+        <strong>Children.</strong> ASTRA and this website are for businesses. We do not
+        knowingly collect personal data from anyone under 18; if you believe we have,
+        write to us and we will delete it.
+      </p>
+      <p>
+        <strong>Breaches.</strong> If a breach affects personal data we hold, we inform
+        affected customers without undue delay and within 72 hours of confirming it, and
+        notify the Data Protection Board of India and affected individuals as the law
+        requires.
       </p>
 
       <h2>9. Grievance Officer</h2>
@@ -273,9 +411,11 @@ export default function PrivacyPage() {
         <br />
         {legal.registeredOffice.join(", ")}
       </p>
-      <CounselTodo>
-        Confirm the response timeline that must be committed to here.
-      </CounselTodo>
+      <p>
+        We acknowledge a complaint within 48 hours and aim to resolve it within 30 days.
+        If you are not satisfied with our response, you may complain to the Data
+        Protection Board of India.
+      </p>
 
       <h2>10. Changes</h2>
       <p>

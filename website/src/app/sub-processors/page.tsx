@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LegalPage, CounselTodo } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -13,7 +13,8 @@ export default function SubProcessorsPage() {
   return (
     <LegalPage
       title="Sub-processors"
-      effective="2026-08-27"
+      effective="2026-09-26"
+      reviewed
       intro={
         <>
           When you use ASTRA, {site.legal.displayName} processes data on your behalf. To
@@ -44,6 +45,19 @@ export default function SubProcessorsPage() {
             <td>Managed PostgreSQL — the primary database</td>
             <td>All service data at rest</td>
             <td>Singapore (ap-southeast-1)</td>
+          </tr>
+          <tr>
+            <td>Google Cloud Platform</td>
+            <td>
+              Compute Engine server running our remote-support relay (open-source
+              MeshCentral, operated by us) &mdash; only for organisations with remote
+              support enabled
+            </td>
+            <td>
+              Live screen, keyboard, mouse and clipboard traffic of a consented remote
+              session, in transit only; not recorded
+            </td>
+            <td>Singapore (asia-southeast1)</td>
           </tr>
           <tr>
             <td>Vercel</td>
@@ -89,10 +103,12 @@ export default function SubProcessorsPage() {
         it. Model providers are not permitted to train on data sent through the ASTRA
         service.
       </p>
-      <CounselTodo>
-        Confirm the exact contractual training-and-retention position with the model
-        provider and restate it here in the provider&rsquo;s own terms.
-      </CounselTodo>
+      <p>
+        We use Anthropic through its commercial API. Under Anthropic&rsquo;s Commercial
+        Terms of Service, Anthropic does not train its models on inputs or outputs sent
+        through the API. It keeps them only for a limited period for safety and abuse
+        monitoring, then deletes them.
+      </p>
 
       <h2>Communications</h2>
       <table>
@@ -121,13 +137,50 @@ export default function SubProcessorsPage() {
       </table>
 
       <h2>Payments</h2>
-      <CounselTodo>
-        Complete this section once the payment rail is live. The intended arrangement is
-        Razorpay for customers in India, with {site.legal.displayName} as the seller of
-        record, and Paddle for international customers, where Paddle is the Merchant of
-        Record and therefore the seller. That distinction changes who issues the invoice
-        and who is responsible for transaction taxes, and it must be stated accurately.
-      </CounselTodo>
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Purpose</th>
+            <th>Data processed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Razorpay</td>
+            <td>
+              Payments from customers in India. {site.legal.displayName} is the seller and
+              issues the tax invoice
+            </td>
+            <td>
+              Billing contact name, email and phone; payment details are entered on
+              Razorpay&rsquo;s own page and never reach us
+            </td>
+          </tr>
+          <tr>
+            <td>Paddle</td>
+            <td>
+              Payments from international customers. Paddle is the Merchant of Record: it
+              is the seller, issues the invoice, and handles sales tax and VAT
+            </td>
+            <td>
+              Billing contact name, email, country and tax ID; payment details are entered
+              on Paddle&rsquo;s own checkout and never reach us
+            </td>
+          </tr>
+          <tr>
+            <td>PayPal</td>
+            <td>
+              Alternative payment method for international customers.{" "}
+              {site.legal.displayName} is the seller and issues the invoice
+            </td>
+            <td>
+              Billing contact name, email and country; payment details are entered with
+              PayPal and never reach us
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       <h2>Marketing website analytics</h2>
       <p>

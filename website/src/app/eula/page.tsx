@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LegalPage, CounselTodo } from "@/components/LegalPage";
+import { LegalPage } from "@/components/LegalPage";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -14,7 +14,8 @@ export default function EulaPage() {
   return (
     <LegalPage
       title="ASTRA Agent — End User Licence Agreement"
-      effective="2026-08-27"
+      effective="2026-09-26"
+      reviewed
       intro={
         <>
           These terms govern the ASTRA Windows agent &mdash; the software installed on
@@ -68,6 +69,31 @@ export default function EulaPage() {
         or email, monitor browsing history, or access personal files.
       </p>
 
+      <h2>3A. Remote support</h2>
+      <p>
+        If the organisation that enrolled the device has remote support on its plan and
+        switched on, the agent installs a separate remote-support service on the device.
+        It lets that organisation&rsquo;s technicians ask to view and control the screen
+        to help the person using it. Every session:
+      </p>
+      <ul>
+        <li>
+          starts only after the person at the device clicks <strong>Allow</strong> on a
+          prompt that names the technician and the reason;
+        </li>
+        <li>is streamed live and is not recorded;</li>
+        <li>
+          shares the clipboard both ways, and has file transfer and command-line access
+          disabled;
+        </li>
+        <li>is logged in the organisation&rsquo;s audit trail;</li>
+        <li>can be started only by a person, never by ASTRA&rsquo;s AI.</li>
+      </ul>
+      <p>
+        The remote-support service is removed automatically when the feature is switched
+        off for the organisation, and with the agent.
+      </p>
+
       <h2>4. Deployment and consent</h2>
       <p>
         The agent is deployed by the organisation that owns or controls the device. That
@@ -112,20 +138,41 @@ export default function EulaPage() {
       </p>
 
       <h2>9. Warranty and liability</h2>
-      <CounselTodo>
-        To be drafted by counsel. This section must specifically address liability for the
-        effects of a remediation action executed on a customer device, and for a defective
-        agent release distributed through the automatic update channel. Those are the two
-        ways this software can cause loss, and they should be addressed by name rather
-        than left to a general disclaimer. Align the position with the{" "}
-        <a href="/terms/">Terms of Service</a> and with the professional indemnity cover
-        actually held.
-      </CounselTodo>
+      <p>
+        We warrant that the agent will perform materially as described in this licence
+        while your subscription is active. If it does not, we will correct the defect or,
+        if we cannot within a reasonable time, you may end your subscription and recover
+        the fees paid for the period after the defect was reported. Beyond that, and to
+        the extent the law allows, the agent is provided &ldquo;as is&rdquo;.
+      </p>
+      <p>
+        <strong>Remediation actions.</strong> The agent changes a device only through the
+        actions in its built-in catalogue and at the tier your organisation configured. We
+        are responsible for an action doing what its catalogue entry says; we are not
+        responsible for the consequences of an action your organisation approved or
+        enabled for automatic approval, where the action did what it describes.
+      </p>
+      <p>
+        <strong>Automatic updates.</strong> If an agent release we publish causes a
+        device fault, we will withdraw or correct that release promptly and help you
+        restore affected devices at no charge.
+      </p>
+      <p>
+        <strong>Limits.</strong> Our total liability arising out of the agent is subject
+        to the limits in section 9 of the <a href="/terms/">Terms of Service</a> &mdash;
+        in summary, the fees you paid in the 12 months before the claim, with no liability
+        for indirect or consequential loss, loss of data you could have restored from a
+        backup, or lost profits. Nothing in this licence limits liability that cannot be
+        limited by law, including for fraud.
+      </p>
 
       <h2>10. Governing law</h2>
-      <CounselTodo>
-        To match the governing-law clause settled in the Terms of Service.
-      </CounselTodo>
+      <p>
+        This licence is governed by the laws of India. Disputes are resolved as set out in
+        section 11 of the <a href="/terms/">Terms of Service</a>: by arbitration seated in
+        Gautam Budh Nagar, Uttar Pradesh, with the courts there having exclusive
+        jurisdiction.
+      </p>
 
       <h2>11. Contact</h2>
       <p>

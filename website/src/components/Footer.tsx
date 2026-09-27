@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Mail, MapPin, Phone, Headset, Linkedin, Twitter, Instagram } from "lucide-react";
-import { nav, site } from "@/lib/site";
+import { legalNav, nav, site } from "@/lib/site";
 import { BrandLogo } from "./BrandLogo";
 import { useContent, Rich } from "@/lib/content";
 
@@ -210,15 +210,11 @@ export function Footer() {
           </p>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <Link href="/terms" className="hover:text-brand-500">
-              Terms and conditions
-            </Link>
-            <Link href="/privacy" className="hover:text-brand-500">
-              Privacy Policy
-            </Link>
-            <Link href="/refund-policy" className="hover:text-brand-500">
-              Refunds
-            </Link>
+            {legalNav.map((l) => (
+              <Link key={l.href} href={l.href} className="hover:text-brand-500">
+                {l.label}
+              </Link>
+            ))}
           </div>
 
           {socials.length > 0 && (
