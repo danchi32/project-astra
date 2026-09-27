@@ -46,9 +46,9 @@ const row = (index: number) => ({
  * ------------------------------------------------------------------------- */
 export function VaultDashboard() {
   const portals = [
-    { name: "VectorVMS", host: "vendor.example.com", letter: "V" },
-    { name: "Fieldglass", host: "fg.example.net", letter: "F" },
-    { name: "Beeline", host: "beeline.example.org", letter: "B" },
+    { name: "Northwind Portal", host: "northwind.example.com", letter: "N" },
+    { name: "Lakeside VMS", host: "lakeside.example.net", letter: "L" },
+    { name: "Redwood Staffing", host: "redwood.example.org", letter: "R" },
   ];
   return (
     <Chrome title="My access — Secure Vault">
@@ -100,7 +100,7 @@ export function VaultDashboard() {
  * ------------------------------------------------------------------------- */
 export function MaskedFill() {
   return (
-    <Chrome title="vendor.example.com — signing in">
+    <Chrome title="northwind.example.com — signing in">
       <div className="relative">
         <div className="space-y-3 rounded-lg border border-token bg-surface-2 p-4">
           {[
@@ -144,9 +144,9 @@ export function MaskedFill() {
  * ------------------------------------------------------------------------- */
 export function GroupAccess() {
   const groups = [
-    { name: "Healthcare recruiters", members: 14, logins: 6 },
-    { name: "Enterprise delivery", members: 9, logins: 4 },
-    { name: "Finance & billing", members: 3, logins: 2 },
+    { name: "Recruiting team", members: 14, logins: 6 },
+    { name: "Delivery team", members: 9, logins: 4 },
+    { name: "Finance", members: 3, logins: 2 },
   ];
   return (
     <Chrome title="Groups & access — admin console">
@@ -179,9 +179,9 @@ export function GroupAccess() {
  * ------------------------------------------------------------------------- */
 export function LoginReport() {
   const rows = [
-    { user: "a•••a@company.com", portal: "VectorVMS", ip: "203.0.113.41", agent: "Chrome · Windows" },
-    { user: "r•••t@company.com", portal: "Fieldglass", ip: "203.0.113.18", agent: "Edge · Windows" },
-    { user: "m•••a@company.com", portal: "Beeline", ip: "198.51.100.7", agent: "Firefox · macOS" },
+    { user: "a•••a@company.com", portal: "Northwind Portal", ip: "203.0.113.41", agent: "Chrome · Windows" },
+    { user: "r•••t@company.com", portal: "Lakeside VMS", ip: "203.0.113.18", agent: "Edge · Windows" },
+    { user: "m•••a@company.com", portal: "Redwood Staffing", ip: "198.51.100.7", agent: "Firefox · Windows" },
   ];
   return (
     <Chrome title="Login report — admin console">
@@ -252,7 +252,7 @@ export function OneTimeCodes() {
 export function PolicyPanel() {
   const rules = [
     { icon: Network, label: "Block 0.0.0.0/0 outside office", tone: "text-red-500 bg-red-500/10", state: "Block" },
-    { icon: Globe, label: "Allow 203.0.113.0/24 — Noida office", tone: "text-emerald-500 bg-emerald-500/10", state: "Allow" },
+    { icon: Globe, label: "Allow 203.0.113.0/24 — head office", tone: "text-emerald-500 bg-emerald-500/10", state: "Allow" },
     { icon: ShieldCheck, label: "Require Microsoft SSO for everyone", tone: "text-brand-500 bg-brand-500/10", state: "On" },
     { icon: Timer, label: "Close an idle portal after 15 minutes", tone: "text-brand-500 bg-brand-500/10", state: "On" },
   ];
