@@ -4,7 +4,6 @@ import {
   BadgeCheck,
   Boxes,
   Building2,
-  CheckCircle2,
   Chrome,
   Download,
   EyeOff,
@@ -27,6 +26,7 @@ import {
 } from "lucide-react";
 import { Badge, Button, Container, Reveal, Section, SectionHeading } from "@/components/ui";
 import { VaultDemo } from "@/components/vault-demo";
+import { OnPageSignIn } from "@/components/vault-onpage";
 import { WayFromExtension, WayFromVault, WayOnThePage } from "@/components/vault-ways";
 import {
   GroupAccess,
@@ -57,36 +57,37 @@ const rows = [
   {
     eyebrow: "Non-revealing",
     title: "Filled in front of them, still unreadable",
-    body: "Most password managers hide a credential until somebody presses the eye icon. This one has no eye icon. A credential can be used by someone who could not repeat it if they were asked.",
-    points: ["No reveal control anywhere", "Copying out is blocked", "The site's own eye toggle is reversed"],
+    body: "No eye icon, anywhere. A credential can be used by someone who could not repeat it if they were asked.",
     visual: <MaskedFill />,
+  },
+  {
+    eyebrow: "On the portal's own page",
+    title: "They never even opened the vault",
+    body: "Reached the portal from their own bookmark? The badge appears in the field, offers the logins that belong to that site, and signs them in there.",
+    visual: <OnPageSignIn />,
   },
   {
     eyebrow: "Access",
     title: "Access you grant, not access you send",
-    body: "Group portals and people, or assign a portal straight to a person. Nothing is redistributed and nothing is rotated when somebody leaves — you remove them.",
-    points: ["Bulk assign from either list", "Direct logins for one-off access", "Removal takes effect at once"],
+    body: "Group portals and people, or assign one straight to a person. Nothing to redistribute, nothing to rotate when somebody leaves.",
     visual: <GroupAccess />,
   },
   {
     eyebrow: "Evidence",
     title: "Every sign-in, on the record",
-    body: "A shared login answers to everyone and to no one. Here each launch is written down with the person, the portal, the address and the browser.",
-    points: ["Filter by person, portal and date", "Export as CSV", "Reveals and policy changes audited too"],
+    body: "Each launch written down with the person, the portal, the address and the browser. Filterable, and exportable.",
     visual: <LoginReport />,
   },
   {
     eyebrow: "One-time codes",
     title: "The second factor, handled for them",
-    body: "Portals that ask for a code get one without anybody reaching for a phone or opening a mailbox.",
-    points: ["Authenticator codes from a stored secret", "Emailed codes read over IMAP", "Entered and submitted automatically"],
+    body: "Authenticator codes from a stored secret, emailed codes read over IMAP. Nobody reaches for a phone.",
     visual: <OneTimeCodes />,
   },
   {
     eyebrow: "Policy",
     title: "Rules you set once",
-    body: "Network restrictions, enforced Microsoft sign-in, session lifetimes and idle limits — applied across the organization, to one group, or to one person.",
-    points: ["Applies to passwords, SSO, API and pairing", "One browser trusted at a time", "Idle portals closed out"],
+    body: "Network restrictions, enforced Microsoft sign-in, session lifetimes and idle limits — across the organization, a group, or one person.",
     visual: <PolicyPanel />,
   },
 ];
@@ -216,14 +217,6 @@ export default function VaultPage() {
                 <span className="text-sm font-semibold uppercase tracking-wider text-brand-500">{entry.eyebrow}</span>
                 <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{entry.title}</h2>
                 <p className="mt-5 text-base leading-relaxed text-secondary-token">{entry.body}</p>
-                <ul className="mt-6 grid gap-2.5">
-                  {entry.points.map((point) => (
-                    <li key={point} className="flex items-start gap-2.5">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-500" />
-                      <span className="text-sm text-secondary-token">{point}</span>
-                    </li>
-                  ))}
-                </ul>
               </Reveal>
               <Reveal delay={0.1} className={index % 2 === 1 ? "lg:order-1" : ""}>
                 {entry.visual}
