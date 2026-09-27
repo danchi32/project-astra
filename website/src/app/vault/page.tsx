@@ -6,37 +6,33 @@ import {
   Building2,
   CheckCircle2,
   Chrome,
-  Clock,
   Download,
   EyeOff,
-  FileClock,
   FileSpreadsheet,
   Fingerprint,
   Globe,
+  HelpCircle,
   KeyRound,
   Layers,
   LockKeyhole,
-  LogOut,
   Mail,
   MonitorSmartphone,
   Network,
-  Puzzle,
   RefreshCcw,
   ScrollText,
-  ShieldAlert,
   ShieldCheck,
   Timer,
   UserPlus,
   UsersRound,
 } from "lucide-react";
-import { Badge, Button, Container, Section, SectionHeading } from "@/components/ui";
+import { Badge, Button, Container, Reveal, Section, SectionHeading } from "@/components/ui";
+import { VaultDemo } from "@/components/vault-demo";
 import {
   GroupAccess,
   LoginReport,
   MaskedFill,
   OneTimeCodes,
   PolicyPanel,
-  VaultDashboard,
 } from "@/components/vault-visuals";
 import { bookDemo, site } from "@/lib/site";
 
@@ -45,89 +41,80 @@ const vaultUrl = "https://vault.technomateai.com";
 export const metadata: Metadata = {
   title: "Secure Vault — shared portal logins nobody has to see",
   description:
-    "Secure Vault stores your team's staffing and vendor portal logins encrypted, assigns them by group, fills them through a browser extension without ever showing them, and records every sign-in.",
+    "Secure Vault keeps your team's portal logins encrypted, assigns them by group, fills them through a browser extension without showing them, and records every sign-in.",
   keywords: [
     "shared password manager for teams",
     "portal credential management",
     "staffing portal logins",
     "enterprise password vault",
     "credential autofill extension",
-    "VMS portal access control",
   ],
   alternates: { canonical: "/vault/" },
 };
 
-const problems = [
+/* One claim per row, each with the panel that shows it happening. */
+const rows = [
   {
-    icon: ShieldAlert,
-    title: "The password travels",
-    body: "Spreadsheets, chat threads, forwarded emails. Every copy is one more place it can leak from, and none can be taken back.",
+    eyebrow: "Non-revealing",
+    title: "Filled in front of them, still unreadable",
+    body: "Most password managers hide a credential until somebody presses the eye icon. This one has no eye icon. A credential can be used by someone who could not repeat it if they were asked.",
+    points: ["No reveal control anywhere", "Copying out is blocked", "The site's own eye toggle is reversed"],
+    visual: <MaskedFill />,
   },
   {
-    icon: LogOut,
-    title: "Leavers keep their access",
-    body: "The password is still in their head. Rotating it means changing every portal by hand and telling everyone who still needs it.",
+    eyebrow: "Access",
+    title: "Access you grant, not access you send",
+    body: "Group portals and people, or assign a portal straight to a person. Nothing is redistributed and nothing is rotated when somebody leaves — you remove them.",
+    points: ["Bulk assign from either list", "Direct logins for one-off access", "Removal takes effect at once"],
+    visual: <GroupAccess />,
   },
   {
-    icon: FileClock,
-    title: "Nobody can say who signed in",
-    body: "A shared login answers to everyone and to no one. When a portal asks who made a change, you have no record that can answer.",
-  },
-];
-
-const steps = [
-  {
-    icon: Boxes,
-    title: "Add the portal once",
-    body: "URL, username, password — plus a tenant code and a one-time-code method if the portal asks. Everything sensitive is encrypted before storage. Import a spreadsheet if there are many.",
+    eyebrow: "Evidence",
+    title: "Every sign-in, on the record",
+    body: "A shared login answers to everyone and to no one. Here each launch is written down with the person, the portal, the address and the browser.",
+    points: ["Filter by person, portal and date", "Export as CSV", "Reveals and policy changes audited too"],
+    visual: <LoginReport />,
   },
   {
-    icon: UsersRound,
-    title: "Assign who may use it",
-    body: "Assign by group, or straight to a person. Changes take effect at once — nothing to redistribute, nothing to rotate when somebody leaves.",
+    eyebrow: "One-time codes",
+    title: "The second factor, handled for them",
+    body: "Portals that ask for a code get one without anybody reaching for a phone or opening a mailbox.",
+    points: ["Authenticator codes from a stored secret", "Emailed codes read over IMAP", "Entered and submitted automatically"],
+    visual: <OneTimeCodes />,
   },
   {
-    icon: Puzzle,
-    title: "They click, the extension signs in",
-    body: "They open it from their dashboard. The extension fills and submits behind a cover screen, handling the one-time code. The credential reaches the portal and nothing else.",
+    eyebrow: "Policy",
+    title: "Rules you set once",
+    body: "Network restrictions, enforced Microsoft sign-in, session lifetimes and idle limits — applied across the organization, to one group, or to one person.",
+    points: ["Applies to passwords, SSO, API and pairing", "One browser trusted at a time", "Idle portals closed out"],
+    visual: <PolicyPanel />,
   },
-];
-
-const neverSeen = [
-  "Fields are masked as they are filled, and stay masked afterwards",
-  "There is no reveal control — not in the dashboard, not in the extension",
-  "Copying out of a protected field is blocked",
-  "A portal's own show-password toggle is intercepted and reversed",
-  "A cover screen hides the sign-in while it happens",
-  "If that cover screen ends early, the credentials underneath stay unreadable",
-  "The browser's own offer to save the password is held off over your portals",
-  "Usernames are shortened wherever they are listed, never shown whole",
 ];
 
 const features = [
-  { icon: Boxes, title: "Portal catalogue", body: "Every portal you use, credentials encrypted at rest. Added one at a time or imported." },
-  { icon: Layers, title: "Groups and access", body: "Group portals and people, then assign in bulk from either list. A portal with no group stays a direct login." },
-  { icon: Puzzle, title: "Browser extension", body: "Chrome, Edge, Brave and Opera from a packaged build; Firefox installs in one click and updates itself." },
-  { icon: Fingerprint, title: "Authenticator codes", body: "Store the TOTP secret and the extension generates the code at sign-in. Nobody reaches for a phone." },
-  { icon: Mail, title: "Codes sent by email", body: "Point the vault at a mailbox over IMAP and it reads the emailed code out and enters it." },
-  { icon: KeyRound, title: "Microsoft Entra ID SSO", body: "Sign in with a Microsoft work account. Entra proves who they are; the vault decides what they may open." },
-  { icon: ShieldCheck, title: "Enforced MFA", body: "Require Microsoft sign-in, and password sign-in is refused for that organization." },
-  { icon: Network, title: "IP allow and block rules", body: "Restrict by network — per organization, group or person. Applies to passwords, SSO, the API and pairing alike." },
-  { icon: MonitorSmartphone, title: "One browser at a time", body: "A new sign-in ends the previous session; a new pairing revokes the old one. Access follows the person, not a machine." },
-  { icon: Timer, title: "Session and idle limits", body: "How long a sign-in lasts, how long a browser stays trusted, how long an open portal may sit idle." },
-  { icon: RefreshCcw, title: "Walk-away protection", body: "Cookies, local storage and indexed databases are cleared when a portal session ends — not just the cookie." },
-  { icon: ScrollText, title: "Audit timeline", body: "Sign-ins, launches, reveals, policy and access changes, recorded as they happen." },
-  { icon: Download, title: "Login report", body: "Who opened what, from which IP and browser, and when. Filterable, and exportable as CSV." },
-  { icon: FileSpreadsheet, title: "Bulk import", body: "Users from CSV, portals from Excel or CSV, with a per-row report of anything that failed." },
-  { icon: UserPlus, title: "Self-service password change", body: "People change their own password, and every other browser is signed out the moment they do." },
-  { icon: Building2, title: "Your branding", body: "Your logo across the dashboard and admin console." },
-  { icon: BadgeCheck, title: "Licences and validity", body: "Seat counts and a validity date enforced at sign-in, so access stops when an agreement does." },
-  { icon: Globe, title: "Single sign-on portals", body: "Name the identity host a portal hands off to, and the vault follows it through the redirect." },
+  { icon: Boxes, title: "Portal catalogue", body: "Every portal you use, credentials encrypted at rest." },
+  { icon: Layers, title: "Groups and access", body: "Group portals and people, then assign in bulk." },
+  { icon: Fingerprint, title: "Authenticator codes", body: "Generated from the stored secret at sign-in." },
+  { icon: Mail, title: "Emailed codes", body: "Read over IMAP from a mailbox you nominate." },
+  { icon: KeyRound, title: "Microsoft Entra SSO", body: "Sign in with a Microsoft work account." },
+  { icon: ShieldCheck, title: "Enforced MFA", body: "Require Microsoft sign-in for an organization." },
+  { icon: Network, title: "IP allow and block", body: "Per organization, group or person." },
+  { icon: MonitorSmartphone, title: "One browser at a time", body: "A new pairing revokes the old one." },
+  { icon: Timer, title: "Session and idle limits", body: "How long a sign-in and an open portal last." },
+  { icon: RefreshCcw, title: "Walk-away protection", body: "Cookies, local storage and databases cleared." },
+  { icon: ScrollText, title: "Audit timeline", body: "Recorded per organization as it happens." },
+  { icon: Download, title: "Login report", body: "Filterable, and exportable as CSV." },
+  { icon: FileSpreadsheet, title: "Bulk import", body: "Users from CSV, portals from Excel." },
+  { icon: UserPlus, title: "Self-service password", body: "Changed without an administrator." },
+  { icon: Building2, title: "Your branding", body: "Your logo across dashboard and console." },
+  { icon: BadgeCheck, title: "Licences and validity", body: "Seats and dates enforced at sign-in." },
+  { icon: Globe, title: "SSO portals", body: "Followed through the identity redirect." },
+  { icon: EyeOff, title: "Audited reveals", body: "Time-limited, and written to the log." },
 ];
 
 const encryption = [
   {
-    title: "Your organization's portal catalogue",
+    title: "Your organization's catalogue",
     body: "AES-256-GCM under a data key belonging to your organization alone, itself wrapped by the deployment master key. A leaked master key opens nothing on its own.",
     caveat:
       "Stated plainly: because the service unwraps those keys to fill a portal for you, this catalogue is not zero-knowledge. That is the trade for credentials nobody has to know.",
@@ -144,146 +131,112 @@ const encryption = [
   },
 ];
 
-const controls = [
-  "Session cookies are HttpOnly, Secure and SameSite-Strict",
-  "Credentials are released only to an authorised, paired browser",
-  "Every administrator action is recorded against the organization it affected",
-  "Revealing a stored credential in the admin console is time-limited and audited",
-  "Deactivating a person signs them out of every browser and extension at once",
-  "Suspending an organization stops its people signing in without deleting anything",
+const faqs = [
+  {
+    q: "Can our people see the portal passwords?",
+    a: "No. There is no reveal control in the dashboard or the extension, fields stay masked after they are filled, and copying out of them is blocked. An administrator can reveal a stored credential when they genuinely need to; that reveal is time-limited and written to the audit log.",
+  },
+  {
+    q: "What happens when somebody leaves?",
+    a: "You remove them, or deactivate them. Every browser and paired extension they used is signed out at once. Nothing has to be rotated, because they never knew the password.",
+  },
+  {
+    q: "Does it work with portals that ask for a code?",
+    a: "Yes, both kinds. Authenticator codes are generated from a secret you store once. Codes sent by email are read from a mailbox you nominate over IMAP, and entered automatically.",
+  },
+  {
+    q: "Which browsers are supported?",
+    a: "Chrome, Edge, Brave and Opera install a packaged build from your own vault. Firefox installs in one click from a Mozilla-signed build and keeps itself up to date.",
+  },
+  {
+    q: "Can we restrict where people sign in from?",
+    a: "Yes. Allow and block rules by network apply to password sign-in, Microsoft SSO, the API and extension pairing alike, and can be set for the whole organization, one group, or one person.",
+  },
+  {
+    q: "Is it zero-knowledge?",
+    a: "A person's own vault is: it is encrypted in their browser and the server cannot read it. The shared organization catalogue is not, because the service has to unwrap those keys to fill a portal on someone's behalf. We would rather say so than let you find out later.",
+  },
 ];
 
 export default function VaultPage() {
   return (
     <>
-      <section className="aurora grain relative -mt-16 overflow-hidden pb-16 pt-28 sm:pt-36">
+      {/* The product plays itself rather than being described first. */}
+      <section className="aurora grain relative -mt-16 overflow-hidden pb-20 pt-28 sm:pt-36">
         <Container>
-          <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <div className="max-w-3xl">
-            <Badge>
-              <LockKeyhole className="h-3.5 w-3.5 text-brand-500" /> Secure Vault
-            </Badge>
-            <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
-              Your team signs in once. They never see the password.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-relaxed text-secondary-token">
-              Shared portal logins end up in spreadsheets. Secure Vault keeps them
-              encrypted, hands them out by group, and fills them in through a browser
-              extension — masked the whole way, and recorded every time.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button href={vaultUrl} external>
-                Open the vault <ArrowRight className="h-4 w-4" />
-              </Button>
-              <Button href={bookDemo.href} external={bookDemo.external} variant="secondary">
-                Book a walkthrough
-              </Button>
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+            <div>
+              <Badge>
+                <LockKeyhole className="h-3.5 w-3.5 text-brand-500" /> Secure Vault
+              </Badge>
+              <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
+                Your team signs in once. They never see the password.
+              </h1>
+              <p className="mt-6 max-w-xl text-lg leading-relaxed text-secondary-token">
+                Shared portal logins end up in spreadsheets. Secure Vault keeps them encrypted,
+                hands them out by group, and fills them in through a browser extension — masked
+                the whole way, and recorded every time.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Button href={vaultUrl} external>
+                  Open the vault <ArrowRight className="h-4 w-4" />
+                </Button>
+                <Button href={bookDemo.href} external={bookDemo.external} variant="secondary">
+                  Book a walkthrough
+                </Button>
+              </div>
+              <p className="mt-5 text-sm text-secondary-token">Built by {site.company}.</p>
             </div>
-            <p className="mt-5 text-sm text-secondary-token">
-              Built by {site.company}.
-            </p>
-          </div>
-          <VaultDashboard />
+            <VaultDemo />
           </div>
         </Container>
       </section>
 
-      <Section>
-        <Container>
-          <SectionHeading
-            eyebrow="Why it exists"
-            title="A shared login is a password with no owner"
-            subtitle="The moment a credential is typed by more than one person, three problems arrive together."
-          />
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
-            {problems.map((item) => (
-              <div key={item.title} className="rounded-2xl border border-token bg-surface p-7">
-                <item.icon className="h-6 w-6 text-brand-500" />
-                <h3 className="mt-4 text-lg font-semibold">{item.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-secondary-token">{item.body}</p>
-              </div>
-            ))}
-          </div>
-        </Container>
-      </Section>
-
-      <Section className="border-y border-token bg-surface/50">
-        <Container>
-          <SectionHeading
-            eyebrow="How it works"
-            title="Three steps, and nobody learns a password"
-            subtitle="Set a portal up once. After that, access is granted and withdrawn — never sent."
-          />
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
-            {steps.map((step, index) => (
-              <div key={step.title} className="relative rounded-2xl border border-token bg-surface p-7">
-                <span className="text-sm font-semibold text-brand-500">Step {index + 1}</span>
-                <step.icon className="mt-4 h-6 w-6 text-brand-500" />
-                <h3 className="mt-4 text-lg font-semibold">{step.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-secondary-token">{step.body}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mx-auto mt-12 max-w-3xl">
-            <OneTimeCodes />
-          </div>
-        </Container>
-      </Section>
-
-      <Section>
-        <Container>
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-start">
-            <div>
-              <Badge>
-                <EyeOff className="h-3.5 w-3.5 text-brand-500" /> Non-revealing by design
-              </Badge>
-              <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
-                Filled in front of them, and still unreadable
-              </h2>
-              <p className="mt-5 text-base leading-relaxed text-secondary-token">
-                Most password managers hide a credential until somebody presses the eye icon.
-                This one has no eye icon. A credential can be used by someone who could not
-                repeat it if they were asked. When an administrator genuinely needs to read one,
-                that reveal is time-limited and audited.
-              </p>
+      {rows.map((entry, index) => (
+        <Section key={entry.title} className={index % 2 === 1 ? "border-y border-token bg-surface/50" : ""}>
+          <Container>
+            <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+              <Reveal className={index % 2 === 1 ? "lg:order-2" : ""}>
+                <span className="text-sm font-semibold uppercase tracking-wider text-brand-500">{entry.eyebrow}</span>
+                <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{entry.title}</h2>
+                <p className="mt-5 text-base leading-relaxed text-secondary-token">{entry.body}</p>
+                <ul className="mt-6 grid gap-2.5">
+                  {entry.points.map((point) => (
+                    <li key={point} className="flex items-start gap-2.5">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-500" />
+                      <span className="text-sm text-secondary-token">{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
+              <Reveal delay={0.1} className={index % 2 === 1 ? "lg:order-1" : ""}>
+                {entry.visual}
+              </Reveal>
             </div>
-            <MaskedFill />
-          </div>
-          <ul className="mx-auto mt-12 grid max-w-5xl gap-3 sm:grid-cols-2">
-            {neverSeen.map((line) => (
-              <li key={line} className="flex items-start gap-3 rounded-xl border border-token bg-surface px-4 py-3">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-500" />
-                <span className="text-sm leading-relaxed text-secondary-token">{line}</span>
-              </li>
-            ))}
-          </ul>
-        </Container>
-      </Section>
+          </Container>
+        </Section>
+      ))}
 
-      <Section className="border-y border-token bg-surface/50">
+      <Section className="border-t border-token">
         <Container>
           <SectionHeading
             eyebrow="Everything in the box"
             title="What Secure Vault does"
             subtitle="The credentials, the people who may use them, the rules around both, and the record of what happened."
           />
-          <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
-              <div key={feature.title} className="rounded-2xl border border-token bg-surface p-6">
+              <div key={feature.title} className="rounded-2xl border border-token bg-surface p-5">
                 <feature.icon className="h-5 w-5 text-brand-500" />
-                <h3 className="mt-4 text-base font-semibold">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-secondary-token">{feature.body}</p>
+                <h3 className="mt-3 text-sm font-semibold">{feature.title}</h3>
+                <p className="mt-1.5 text-xs leading-relaxed text-secondary-token">{feature.body}</p>
               </div>
             ))}
-          </div>
-          <div className="mt-14 grid gap-6 lg:grid-cols-2">
-            <GroupAccess />
-            <LoginReport />
           </div>
         </Container>
       </Section>
 
-      <Section>
+      <Section className="border-y border-token bg-surface/50">
         <Container>
           <SectionHeading
             eyebrow="How credentials are stored"
@@ -292,52 +245,18 @@ export default function VaultPage() {
           />
           <div className="mx-auto mt-14 grid max-w-4xl gap-6">
             {encryption.map((block) => (
-              <div key={block.title} className="rounded-2xl border border-token bg-surface p-7">
-                <h3 className="text-lg font-semibold">{block.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-secondary-token">{block.body}</p>
-                {block.caveat && (
-                  <p className="mt-4 rounded-xl border border-brand-500/25 bg-brand-500/5 px-4 py-3 text-sm leading-relaxed text-secondary-token">
-                    {block.caveat}
-                  </p>
-                )}
-              </div>
+              <Reveal key={block.title}>
+                <div className="rounded-2xl border border-token bg-surface p-7">
+                  <h3 className="text-lg font-semibold">{block.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-secondary-token">{block.body}</p>
+                  {block.caveat && (
+                    <p className="mt-4 rounded-xl border border-brand-500/25 bg-brand-500/5 px-4 py-3 text-sm leading-relaxed text-secondary-token">
+                      {block.caveat}
+                    </p>
+                  )}
+                </div>
+              </Reveal>
             ))}
-          </div>
-        </Container>
-      </Section>
-
-      <Section className="border-y border-token bg-surface/50">
-        <Container>
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-start">
-            <div>
-              <Badge>
-                <ShieldCheck className="h-3.5 w-3.5 text-brand-500" /> Controls
-              </Badge>
-              <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
-                Access you can withdraw as fast as you granted it
-              </h2>
-              <p className="mt-5 text-base leading-relaxed text-secondary-token">
-                Nobody knows the portal password, so withdrawing access is one change in the
-                vault rather than a rotation across every portal. Removing a person from a
-                group is immediate; so is deactivating them entirely.
-              </p>
-              <div className="mt-8">
-                <Button href={`mailto:${site.contact.security}`} variant="secondary" external>
-                  Ask our security team a question
-                </Button>
-              </div>
-            </div>
-            <div className="grid gap-6">
-              <PolicyPanel />
-            <ul className="grid gap-3">
-              {controls.map((line) => (
-                <li key={line} className="flex items-start gap-3 rounded-xl border border-token bg-surface px-4 py-3">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-brand-500" />
-                  <span className="text-sm leading-relaxed text-secondary-token">{line}</span>
-                </li>
-              ))}
-            </ul>
-            </div>
           </div>
         </Container>
       </Section>
@@ -366,22 +285,41 @@ export default function VaultPage() {
             </div>
           </div>
           <p className="mx-auto mt-8 max-w-2xl text-center text-sm text-secondary-token">
-            Each person connects their browser once. A new pairing ends the previous one, so
-            access never quietly accumulates across machines.
+            Each person connects their browser once. A new pairing ends the previous one, so access
+            never quietly accumulates across machines.
           </p>
         </Container>
       </Section>
 
-      <Section className="border-t border-token">
+      <Section className="border-y border-token bg-surface/50">
+        <Container>
+          <SectionHeading eyebrow="FAQ" title="Questions, answered" />
+          <div className="mx-auto mt-12 max-w-3xl space-y-4">
+            {faqs.map((faq, index) => (
+              <Reveal key={faq.q} delay={index * 0.06}>
+                <div className="rounded-2xl border border-token bg-surface p-6">
+                  <h3 className="flex items-start gap-2 text-base font-semibold">
+                    <HelpCircle className="mt-0.5 h-5 w-5 flex-none text-brand-500" />
+                    {faq.q}
+                  </h3>
+                  <p className="mt-2 pl-7 text-sm leading-relaxed text-secondary-token">{faq.a}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </Container>
+      </Section>
+
+      <Section>
         <Container>
           <div className="mx-auto max-w-3xl rounded-3xl border border-token bg-surface p-10 text-center sm:p-14">
-            <Clock className="mx-auto h-7 w-7 text-brand-500" />
+            <UsersRound className="mx-auto h-7 w-7 text-brand-500" />
             <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">
               Stop sending passwords around
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-secondary-token">
-              We will set up your portals, import your people, and show you the audit trail on
-              your own data.
+              We will set up your portals, import your people, and show you the audit trail on your
+              own data.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Button href={bookDemo.href} external={bookDemo.external}>
