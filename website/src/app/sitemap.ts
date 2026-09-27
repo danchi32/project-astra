@@ -11,6 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const routes: { path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"] }[] = [
     { path: "/", priority: 1.0, changeFrequency: "weekly" },
     { path: "/astra/", priority: 0.9, changeFrequency: "weekly" },
+    { path: "/vault/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/ai-it-support-india/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/windows-endpoint-automation/", priority: 0.9, changeFrequency: "monthly" },
     { path: "/self-healing-it/", priority: 0.9, changeFrequency: "monthly" },
