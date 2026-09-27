@@ -165,7 +165,7 @@ export default function VaultPage() {
       {/* The product plays itself rather than being described first. */}
       <section className="aurora grain relative -mt-16 overflow-hidden pb-20 pt-28 sm:pt-36">
         <Container>
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+          <div className="grid gap-10 md:grid-cols-2 md:items-center">
             <div>
               <Badge>
                 <LockKeyhole className="h-3.5 w-3.5 text-brand-500" /> Secure Vault
@@ -212,13 +212,13 @@ export default function VaultPage() {
       {rows.map((entry, index) => (
         <Section key={entry.title} className={index % 2 === 0 ? "" : "border-y border-token bg-surface/50"}>
           <Container>
-            <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-              <Reveal className={index % 2 === 1 ? "lg:order-2" : ""}>
+            <div className="grid gap-10 md:grid-cols-2 md:items-center">
+              <Reveal className={index % 2 === 1 ? "md:order-2" : ""}>
                 <span className="text-sm font-semibold uppercase tracking-wider text-brand-500">{entry.eyebrow}</span>
                 <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{entry.title}</h2>
                 <p className="mt-5 text-base leading-relaxed text-secondary-token">{entry.body}</p>
               </Reveal>
-              <Reveal delay={0.1} className={index % 2 === 1 ? "lg:order-1" : ""}>
+              <Reveal delay={0.1} className={index % 2 === 1 ? "md:order-1" : ""}>
                 {entry.visual}
               </Reveal>
             </div>
