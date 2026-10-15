@@ -1,0 +1,82 @@
+"""Workforce Insights ("Tracker") — attendance reads for the portal.
+
+Gated at the router on the `workforce_insights` entitlement, so a new endpoint added to this
+file cannot ship ungated by someone forgetting the decorator — the same discipline the
+remote-control, compliance and fleet routers use. This is employee-monitoring data, so the
+gate is the point, not a formality: without the per-org entitlement there is no route.
+
+Staff only in P1 (admin / technician). Employee self-view and team-manager scoping both need
+a Windows-account → directory-user mapping that does not exist yet (daily_user_summary.user_id
+is the reserved hook); they arrive with that enrichment, not here.
+"""
+import uuid
+from datetime import date, timedelta
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import require_roles, requires
+from app.core.database import get_db
+from app.models import User, UserRole
+from app.models.base import utcnow
+from app.schemas.workforce import DailyUserSummaryRead, WorkSessionRead
+from app.services.entitlements import WORKFORCE_INSIGHTS
+from app.services.workforce import WorkforceService
+
+router = APIRouter(
+    prefix="/tracker",
+    tags=["workforce insights"],
+    dependencies=[Depends(requires(WORKFORCE_INSIGHTS))],
+)
+
+staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
+
+# Cap a single query's span so a wide range can't scan a year of rows by accident; the
+# portal pages by moving the date window, not by offset.
+_MAX_RANGE_DAYS = 92
+
+
+@router.get(
+    "/attendance",
+    response_model=list[DailyUserSummaryRead],
+    summary="Per-user attendance (first-in, last-out, worked) over a date range",
+)
+async def attendance(
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    device_id: uuid.UUID | None = Query(default=None),
+    username: str | None = Query(default=None),
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[DailyUserSummaryRead]:
+    """Defaults to the last 7 days (UTC) when no range is given. The range is clamped to
+    ~3 months so one call cannot sweep an unbounded history."""
+    today = utcnow().date()
+    day_to = date_to or today
+    day_from = date_from or (day_to - timedelta(days=6))
+    if day_from > day_to:
+        day_from = day_to
+    if (day_to - day_from).days > _MAX_RANGE_DAYS:
+        day_from = day_to - timedelta(days=_MAX_RANGE_DAYS)
+
+    return await WorkforceService(session).attendance(
+        actor=actor, day_from=day_from, day_to=day_to,
+        device_id=device_id, username=username,
+    )
+
+
+@router.get(
+    "/attendance/sessions",
+    response_model=list[WorkSessionRead],
+    summary="The work/break spans behind one account's day",
+)
+async def day_sessions(
+    device_id: uuid.UUID = Query(...),
+    username: str = Query(...),
+    day: date = Query(...),
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[WorkSessionRead]:
+    return await WorkforceService(session).day_sessions(
+        actor=actor, device_id=device_id, username=username, day=day,
+    )

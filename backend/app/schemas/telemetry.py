@@ -103,6 +103,24 @@ class SessionEntry(_SanitizedInput):
     idle_seconds: int | None = Field(default=None, ge=0)
 
 
+class ActivityEvent(_SanitizedInput):
+    """One Workforce Insights ("Tracker") presence transition the agent observed.
+
+    Rides the same 60 s telemetry push as everything else, so tracking adds no new request
+    per device. The agent buffers these in its offline queue, so `occurred_at` is when the
+    transition happened on the machine and may predate this push by a long offline spell.
+
+    `kind` is a closed set: the agent has already reduced Windows' session/notification
+    signals to these six, and anything else arriving here is an agent and a backend that
+    disagree about what a presence event is — better rejected than stored as a state nothing
+    can aggregate.
+    """
+    username: str = Field(max_length=150)
+    kind: Literal["logon", "logoff", "lock", "unlock", "active", "idle"]
+    session_id: int | None = Field(default=None, ge=0)
+    occurred_at: datetime
+
+
 class HardwareInfo(_SanitizedInput):
     manufacturer: str | None = Field(default=None, max_length=150)
     model: str | None = Field(default=None, max_length=150)
@@ -138,6 +156,13 @@ class TelemetryPush(_SanitizedInput):
     # machine genuinely has nobody signed in", and the rows are cleared. Collapsing the two
     # would make every device look deserted the moment an old agent checked in.
     sessions: list[SessionEntry] | None = None
+
+    # Workforce Insights ("Tracker") presence events. None = this agent build does not report
+    # activity; [] = it does, but nothing happened since the last push. Either way nothing is
+    # stored. Even when present, events are persisted ONLY if the org holds the
+    # workforce_insights entitlement — the ingest path checks, so a stray payload from an
+    # untracked org is dropped rather than quietly collected.
+    activity: list[ActivityEvent] | None = None
 
 
 class TelemetryPushResponse(BaseModel):
