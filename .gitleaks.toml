@@ -1,21 +1,36 @@
+# gitleaks configuration for the `security` workflow (gitleaks/gitleaks-action@v2).
+#
+# The default ruleset is kept in full — this file only ADDS an allowlist for strings that
+# are deliberately not secrets and must not fail the scan. Everything else is still caught,
+# so a real secret landing anywhere in the tree or history still turns this job red.
+#
+# Why each entry is safe:
+#   1. fs-… — invented Freshservice credentials in the helpdesk tests. The tests need
+#      something key-shaped to encrypt, store, mask and assert on, so the generic-api-key
+#      rule fires on strings that were typed by hand and open nothing. Matched by the
+#      invented prefix rather than by path: exempting backend/tests/** wholesale would hide
+#      a real key someone pastes into a fixture one day, which is the leak this scan catches.
+#   2. "demo-secret-key-local-only-not-for-prod" — the JWT secret the local demo database
+#      seeds with (backend/scripts/seed_presentation.py). It is labelled in the value itself
+#      and is never used by any deployed environment; prod reads its real secret from Secret
+#      Manager. That same file is careful NOT to write a literal Fernet key, precisely
+#      because that is what this scan exists to stop.
+#   3. agent/install/tests/Run-KeyParseTests.ps1 — a synthetic 64-character token assembled
+#      to exercise every character of the installer's key alphabet. It is test input for the
+#      key-parser, not a credential to anything.
+
 title = "ASTRA secret scanning"
 
-# Everything gitleaks ships with, plus one narrow exception below.
+# Everything gitleaks ships with, plus the narrow exceptions below.
 [extend]
 useDefault = true
 
 [allowlist]
-description = """
-Invented credentials in the helpdesk tests.
-
-The Freshservice tests need something key-shaped to encrypt, store, mask and assert on, and
-a high-entropy literal is exactly what a credential looks like — so the generic-api-key rule
-fires on strings that were typed by hand and open nothing.
-
-Matched by the invented prefix rather than by path. Exempting backend/tests/** wholesale
-would hide a real key that someone pastes into a fixture one day, which is the leak this
-scan exists to catch.
-"""
+description = "Deliberately-fake credentials in tests and the local demo — not live secrets."
 regexes = [
   '''fs-(secret|api-key|secret-key|round-trip|key)[-a-z0-9]*''',
+  '''demo-secret-key-local-only-not-for-prod''',
+]
+paths = [
+  '''agent/install/tests/Run-KeyParseTests\.ps1''',
 ]
