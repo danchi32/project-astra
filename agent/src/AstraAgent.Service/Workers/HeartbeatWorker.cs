@@ -203,7 +203,7 @@ public sealed class HeartbeatWorker(
         // collection and drives the Tray's "Activity tracking: ON" indicator. Set only on a
         // confirmed-Ok beat, so a failed/unreadable beat leaves the last known answer in place
         // rather than flipping tracking off (and the Tray's indicator) on a transient blip.
-        trackingState.Set(result.ActivityTracking);
+        trackingState.Set(result.ActivityTracking, result.ActivityUrlMode);
 
         if (result.Tasks.Count > 0 && Interlocked.CompareExchange(ref _executing, 1, 0) == 0)
         {

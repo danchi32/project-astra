@@ -42,9 +42,11 @@ from app.services.entitlements import WORKFORCE_INSIGHTS, features_for
 from app.services.exceptions import NotFoundError
 from app.services.workforce_categories import (
     NEUTRAL,
+    PRIVATE_PLACEHOLDER,
     PRODUCTIVE,
     UNPRODUCTIVE,
     classify,
+    is_sensitive,
 )
 
 
@@ -79,7 +81,10 @@ def _productivity(samples: list[ActivitySample], *, sample_seconds: int) -> _Pro
     for s in samples:
         bucket, _label = classify(s.app, s.domain)
         bucket_counts[bucket] += 1
+        # The display label is the domain, plus the path when one was captured (path mode).
         label = s.domain or s.app or "Other"
+        if s.domain and s.path:
+            label = f"{s.domain}{s.path}"
         prev_bucket, prev_n = label_counts.get(label, (bucket, 0))
         label_counts[label] = (prev_bucket, prev_n + 1)
 
@@ -195,20 +200,7 @@ class WorkforceAggregator:
 
     async def ingest_events(self, *, device: Device, events: list[ActivityEvent]) -> None:
         now = utcnow()
-        self.session.add_all([
-            ActivitySample(
-                device_id=device.id,
-                org_id=device.org_id,
-                username=e.username,
-                kind=e.kind,
-                session_id=e.session_id,
-                occurred_at=e.occurred_at,
-                app=e.app,
-                # Host only, never a path/query — even if an agent sent one by mistake.
-                domain=(e.domain.split("/")[0].strip().lower() or None) if e.domain else None,
-            )
-            for e in events
-        ])
+        self.session.add_all([self._to_sample(device, e) for e in events])
         await self.session.flush()
 
         # Recompute every UTC day the batch touches — usually just today, but a device
@@ -219,6 +211,32 @@ class WorkforceAggregator:
 
         await self.repo.prune_samples(
             device.id, keep_days=get_settings().workforce_activity_retention_days
+        )
+
+    @staticmethod
+    def _to_sample(device: Device, e: ActivityEvent) -> ActivitySample:
+        # Host only — strip any path an agent put in the domain field by mistake.
+        domain = (e.domain.split("/")[0].strip().lower() or None) if e.domain else None
+        # Path, with the query string and fragment removed — belt to the agent's braces, since
+        # a stored query string is the one thing §6 never permits.
+        path = None
+        if e.path:
+            p = e.path.split("?")[0].split("#")[0].strip()
+            path = p or None
+        # Banking / health / gov: the path alone is sensitive, so it is dropped and the site
+        # is recorded as a placeholder, never its real domain.
+        if is_sensitive(domain):
+            domain, path = PRIVATE_PLACEHOLDER, None
+        return ActivitySample(
+            device_id=device.id,
+            org_id=device.org_id,
+            username=e.username,
+            kind=e.kind,
+            session_id=e.session_id,
+            occurred_at=e.occurred_at,
+            app=e.app,
+            domain=domain,
+            path=path,
         )
 
     async def recompute_day(self, *, device: Device, day: date, now: datetime) -> None:

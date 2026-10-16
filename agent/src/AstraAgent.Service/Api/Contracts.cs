@@ -47,7 +47,11 @@ public sealed record HeartbeatResponse(
     // collects activity only when it is true, and surfaces it to the Tray so the person
     // being tracked sees "Activity tracking: ON". False (or absent, on an older backend)
     // means do not collect. Server-decided on purpose — the agent never tracks covertly.
-    [property: JsonPropertyName("activity_tracking")] bool ActivityTracking = false);
+    [property: JsonPropertyName("activity_tracking")] bool ActivityTracking = false,
+    // How much of a browser URL this org records: "domain" (host only) or "path" (host +
+    // path, query always stripped). Only meaningful when ActivityTracking is true; defaults
+    // to the privacy-preserving "domain" on an older backend that does not send it.
+    [property: JsonPropertyName("activity_url_mode")] string ActivityUrlMode = "domain");
 
 // ── Remediation (elevated / system-context tasks the Service executes) ───────
 

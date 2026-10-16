@@ -96,6 +96,10 @@ class ActivitySample(TimestampMixin, Base):
     # (that is where tokens and private parameters live; see plan §6). Null for session events.
     app: Mapped[str | None] = mapped_column(String(260), nullable=True)
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The path, query-stripped, when the org opted into "path" URL mode (plan §6). Null in
+    # domain mode. Never holds a query string or fragment — enforced at the agent and again
+    # here on ingest.
+    path: Mapped[str | None] = mapped_column(String(400), nullable=True)
 
 
 class WorkSession(TimestampMixin, Base):

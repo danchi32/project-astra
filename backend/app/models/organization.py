@@ -86,6 +86,16 @@ class Organization(TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
 
+    # Workforce Insights ("Tracker") website-capture detail. "domain" (default) records only
+    # the host (github.com); "path" records the path too (github.com/anthropics/claude) but
+    # NEVER the query string or fragment — that is a hard red line (plan §6: tokens and
+    # reset-links live there). "path" is a deliberate per-org opt-in the operator sets after
+    # the customer attests they have given notice and completed a DPIA; it is proportionality
+    # the controller takes on, so it is off by default and never implied by the entitlement.
+    workforce_url_mode: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="domain", server_default="domain"
+    )
+
     # A sales-demo tenant (scripts/seed_presentation.py): invented fleet, invented people.
     # Kept out of every customer rollup — public homepage stats, MRR, growth — exactly like
     # the operator's own org, so a prospect is never shown fabricated devices as customers.

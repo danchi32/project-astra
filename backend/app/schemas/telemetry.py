@@ -124,6 +124,10 @@ class ActivityEvent(_SanitizedInput):
     # before sending (plan §6); the backend also ignores anything after the host.
     app: str | None = Field(default=None, max_length=260)
     domain: str | None = Field(default=None, max_length=255)
+    # The query-stripped path, only when the org is in "path" URL mode. The agent strips the
+    # query/fragment before sending; the backend strips again and drops it for sensitive
+    # domains. Never a query string.
+    path: str | None = Field(default=None, max_length=400)
 
 
 class HardwareInfo(_SanitizedInput):
@@ -172,6 +176,17 @@ class TelemetryPush(_SanitizedInput):
 
 class TelemetryPushResponse(BaseModel):
     status: str = "accepted"
+
+
+class ActivityPush(_SanitizedInput):
+    """Workforce Insights activity events pushed on their own, by the user-session Tray.
+
+    Foreground app/website samples can only be read from inside the user's session, which the
+    LocalSystem Service cannot reach — so the Tray collects them and posts them here, on the
+    device credential, separately from the Service's telemetry beat. Same events, same ingest,
+    same entitlement gate; just a different sender."""
+
+    activity: list[ActivityEvent] = []
 
 
 # ── Backend → Portal (read) ────────────────────────────────────────────────

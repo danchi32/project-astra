@@ -6,6 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- UI Automation (System.Windows.Automation) for reading the foreground browser's
+         address bar — the Workforce Insights website capture. It is a WPF-family assembly,
+         so this pulls the WindowsDesktop WPF ref pack; with EnableWindowsTargeting below it
+         still restores on the Linux release runner (publish stays win-x64, where it runs). -->
+    <UseWPF>true</UseWPF>
     <!-- Allow the signed-release CI (Linux runner) to cross-build this Windows/WinForms
          app; publish stays win-x64. No effect when building on Windows. -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>

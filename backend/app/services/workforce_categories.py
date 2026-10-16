@@ -80,6 +80,34 @@ _APP_CATEGORY: list[tuple[str, str]] = [
 ]
 
 
+# Domains whose PATH must never be stored, even in path mode — banking/health/gov, where a
+# path alone ("/accounts/transfer", "/patient/records") is sensitive (plan §6). A built-in
+# default; the admin's own exclusion list layers on top in a later phase. Matched generously
+# on purpose: over-excluding costs a little productivity detail, under-excluding stores
+# something that should never have been kept.
+_SENSITIVE_SUFFIXES = (".gov", ".gov.in", ".gov.uk", ".mil", ".nic.in")
+_SENSITIVE_DOMAINS = frozenset({
+    "paypal.com", "razorpay.com", "stripe.com", "hdfcbank.com", "icicibank.com",
+    "sbi.co.in", "axisbank.com", "kotak.com", "chase.com", "bankofamerica.com",
+    "wellsfargo.com", "nhs.uk", "who.int", "practo.com", "1mg.com", "apollopharmacy.in",
+})
+_SENSITIVE_KEYWORDS = ("bank", "insurance", "medical", "health", "hospital", "clinic", "pharma")
+
+#: What a sensitive site is recorded as — never its domain or path.
+PRIVATE_PLACEHOLDER = "(private site)"
+
+
+def is_sensitive(domain: str | None) -> bool:
+    if not domain:
+        return False
+    d = domain.strip().lower()
+    if d in _SENSITIVE_DOMAINS or any(d.endswith("." + s) for s in _SENSITIVE_DOMAINS):
+        return True
+    if any(d.endswith(suffix) for suffix in _SENSITIVE_SUFFIXES):
+        return True
+    return any(keyword in d for keyword in _SENSITIVE_KEYWORDS)
+
+
 def _normalise_domain(domain: str) -> str:
     d = domain.strip().lower()
     if d.startswith("www."):

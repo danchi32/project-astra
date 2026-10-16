@@ -21,7 +21,9 @@ public sealed record HeartbeatResult(
     // Whether this org holds the Workforce Insights entitlement, as the backend reported on
     // this beat. Always false on a non-Ok result or an unreadable body — the safe default
     // for monitoring is "do not collect".
-    bool ActivityTracking = false)
+    bool ActivityTracking = false,
+    // "domain" or "path" — how much of a browser URL to record. Defaults to "domain".
+    string ActivityUrlMode = "domain")
 {
     public static HeartbeatResult From(HeartbeatStatus status) => new(status, []);
 }
@@ -182,7 +184,8 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             var body = await response.Content.ReadFromJsonAsync<HeartbeatResponse>(ct);
             return new HeartbeatResult(
-                HeartbeatStatus.Ok, body?.Tasks ?? [], body?.ActivityTracking ?? false);
+                HeartbeatStatus.Ok, body?.Tasks ?? [], body?.ActivityTracking ?? false,
+                body?.ActivityUrlMode ?? "domain");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

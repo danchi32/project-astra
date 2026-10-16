@@ -135,6 +135,10 @@ class HeartbeatResponse(BaseModel):
     # discloses in the tray — when this says so. Off for every org that isn't entitled, and
     # invisible to agents too old to read it (they never tracked anyway).
     activity_tracking: bool = False
+    # How much of a browser URL this org records: "domain" (host only) or "path" (host + path,
+    # query always stripped). The agent reads it to decide what to capture; only meaningful
+    # when activity_tracking is true. Defaults to the privacy-preserving "domain".
+    activity_url_mode: str = "domain"
 
 
 class AgentUpdateEnvelope(BaseModel):

@@ -16,27 +16,29 @@ public sealed class ActivityTrackingState
 {
     internal const string KeyPath = @"SOFTWARE\Astra";
     internal const string ValueName = "ActivityTracking";
+    internal const string UrlModeValueName = "ActivityUrlMode";
 
     private volatile bool _enabled;
 
     /// <summary>Whether collection is on, for the in-process TelemetryWorker.</summary>
     public bool Enabled => _enabled;
 
-    /// <summary>Record the backend's answer: hold it in memory for this process and mirror it
-    /// to the registry for the Tray.</summary>
-    public void Set(bool enabled)
+    /// <summary>Record the backend's answer: hold tracking in memory for this process and
+    /// mirror both tracking and the URL mode to the registry for the Tray.</summary>
+    public void Set(bool enabled, string urlMode = "domain")
     {
         _enabled = enabled;
-        WriteRegistry(enabled);
+        WriteRegistry(enabled, urlMode == "path" ? "path" : "domain");
     }
 
-    private static void WriteRegistry(bool enabled)
+    private static void WriteRegistry(bool enabled, string urlMode)
     {
         try
         {
             using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
             using var key = baseKey.CreateSubKey(KeyPath, writable: true);
             key?.SetValue(ValueName, enabled ? 1 : 0, RegistryValueKind.DWord);
+            key?.SetValue(UrlModeValueName, urlMode, RegistryValueKind.String);
         }
         catch
         {
@@ -60,6 +62,22 @@ public sealed class ActivityTrackingState
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>The URL mode the Tray should capture at — "domain" or "path". Defaults to the
+    /// privacy-preserving "domain" on any failure or missing value.</summary>
+    public static string ReadUrlModeFromRegistry()
+    {
+        try
+        {
+            using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+            using var key = baseKey.OpenSubKey(KeyPath, writable: false);
+            return key?.GetValue(UrlModeValueName) as string == "path" ? "path" : "domain";
+        }
+        catch
+        {
+            return "domain";
         }
     }
 }

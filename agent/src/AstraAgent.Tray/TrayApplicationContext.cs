@@ -5,6 +5,7 @@ using AstraAgent.Service.Security;
 using AstraAgent.Service.Workforce;
 using AstraAgent.Tray.Remediation;
 using AstraAgent.Tray.Update;
+using AstraAgent.Tray.Workforce;
 using Microsoft.Extensions.Configuration;
 
 namespace AstraAgent.Tray;
@@ -16,6 +17,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly TrayChatClient _client;
     private readonly RemediationRunner _runner;
     private readonly TrayUpdater _updater;
+    private readonly ForegroundCollector _foreground;
     private readonly Icon _brandIcon = LoadBrandIcon();
     private ChatForm? _chatForm;
 
@@ -74,6 +76,12 @@ public sealed class TrayApplicationContext : ApplicationContext
         // copy and a signing key is pinned).
         _updater = new TrayUpdater(serverUrl, tokenStore, proxyUrl);
         _updater.Start();
+
+        // Workforce Insights foreground capture — self-gates on the tracking flag, so it
+        // collects nothing until the backend turns tracking on (and the indicator above shows
+        // it). Runs in the Tray because only the user session can see the foreground window.
+        _foreground = new ForegroundCollector(serverUrl, tokenStore, proxyUrl);
+        _foreground.Start();
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open ASTRA Assistant", null, (_, _) => ShowChat());
@@ -154,6 +162,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         if (disposing)
         {
             _trackingTimer.Dispose();
+            _foreground.Dispose();
             _updater.Dispose();
             _runner.Dispose();
             _icon.Visible = false;
