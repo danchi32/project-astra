@@ -22,22 +22,82 @@ from app.models import Device, Organization, User
 from app.models.base import as_utc, utcnow
 from app.models.workforce import (
     ACTIVITY_AWAY,
+    ACTIVITY_FOREGROUND,
     ACTIVITY_PRESENT,
     SPAN_WORK,
+    ActivitySample,
+    DailyAppUsage,
     DailyUserSummary,
     WorkSession,
 )
 from app.repositories.workforce import WorkforceRepository, day_bounds
 from app.schemas.telemetry import ActivityEvent
-from app.schemas.workforce import DailyUserSummaryRead, WorkSessionRead
+from app.schemas.workforce import (
+    AppUsageRead,
+    DailyUserSummaryRead,
+    UserDetailRead,
+    WorkSessionRead,
+)
 from app.services.entitlements import WORKFORCE_INSIGHTS, features_for
 from app.services.exceptions import NotFoundError
+from app.services.workforce_categories import (
+    NEUTRAL,
+    PRODUCTIVE,
+    UNPRODUCTIVE,
+    classify,
+)
 
 
 @dataclass
 class _Span:
     started_at: datetime
     ended_at: datetime | None   # None => still open (someone present right now, today)
+
+
+@dataclass
+class _Productivity:
+    active_minutes: int
+    productive_minutes: int
+    neutral_minutes: int
+    unproductive_minutes: int
+    # (label, bucket, minutes) per app/site, biggest first.
+    apps: list[tuple[str, str, int]]
+
+
+def _productivity(samples: list[ActivitySample], *, sample_seconds: int) -> _Productivity | None:
+    """Attribute foreground samples to productivity buckets and per-app totals.
+
+    Sampling, not timing: each foreground sample stands for `sample_seconds` of time in that
+    app (the agent's polling interval), so minutes = samples × seconds ÷ 60. Simple and
+    robust — no span maths, and a missed push just drops a sample rather than inflating a gap.
+    """
+    if not samples:
+        return None
+
+    bucket_counts: dict[str, int] = {PRODUCTIVE: 0, NEUTRAL: 0, UNPRODUCTIVE: 0}
+    label_counts: dict[str, tuple[str, int]] = {}
+    for s in samples:
+        bucket, _label = classify(s.app, s.domain)
+        bucket_counts[bucket] += 1
+        label = s.domain or s.app or "Other"
+        prev_bucket, prev_n = label_counts.get(label, (bucket, 0))
+        label_counts[label] = (prev_bucket, prev_n + 1)
+
+    def mins(n: int) -> int:
+        return int(round(n * sample_seconds / 60))
+
+    apps = sorted(
+        ((label, b, mins(n)) for label, (b, n) in label_counts.items()),
+        key=lambda t: t[2],
+        reverse=True,
+    )
+    return _Productivity(
+        active_minutes=mins(sum(bucket_counts.values())),
+        productive_minutes=mins(bucket_counts[PRODUCTIVE]),
+        neutral_minutes=mins(bucket_counts[NEUTRAL]),
+        unproductive_minutes=mins(bucket_counts[UNPRODUCTIVE]),
+        apps=[a for a in apps if a[2] > 0],
+    )
 
 
 def build_work_spans(
@@ -134,8 +194,6 @@ class WorkforceAggregator:
         return WORKFORCE_INSIGHTS in features_for(org.plan, org.entitlement_overrides)
 
     async def ingest_events(self, *, device: Device, events: list[ActivityEvent]) -> None:
-        from app.models.workforce import ActivitySample
-
         now = utcnow()
         self.session.add_all([
             ActivitySample(
@@ -145,6 +203,9 @@ class WorkforceAggregator:
                 kind=e.kind,
                 session_id=e.session_id,
                 occurred_at=e.occurred_at,
+                app=e.app,
+                # Host only, never a path/query — even if an agent sent one by mistake.
+                domain=(e.domain.split("/")[0].strip().lower() or None) if e.domain else None,
             )
             for e in events
         ])
@@ -161,31 +222,47 @@ class WorkforceAggregator:
         )
 
     async def recompute_day(self, *, device: Device, day: date, now: datetime) -> None:
+        sample_seconds = get_settings().workforce_foreground_sample_seconds
         samples = await self.repo.get_samples_for_day(device.id, day)
-        by_user: dict[str, list[tuple[str, datetime]]] = {}
+
+        # Split the day's raw samples: presence events drive attendance spans, foreground
+        # samples drive productivity. A user may have one, the other, or both.
+        presence_by_user: dict[str, list[tuple[str, datetime]]] = {}
+        fg_by_user: dict[str, list[ActivitySample]] = {}
         for s in samples:
-            by_user.setdefault(s.username, []).append((s.kind, as_utc(s.occurred_at)))
+            if s.kind == ACTIVITY_FOREGROUND:
+                fg_by_user.setdefault(s.username, []).append(s)
+            elif s.kind in ACTIVITY_PRESENT or s.kind in ACTIVITY_AWAY:
+                presence_by_user.setdefault(s.username, []).append((s.kind, as_utc(s.occurred_at)))
 
         all_spans: list[WorkSession] = []
-        for username, events in by_user.items():
+        all_app_usage: list[DailyAppUsage] = []
+        for username in set(presence_by_user) | set(fg_by_user):
             seed = await self.repo.was_present_at_day_start(device.id, username, day)
-            spans = build_work_spans(events, day=day, now=now, seed_present=seed)
+            spans = build_work_spans(
+                presence_by_user.get(username, []), day=day, now=now, seed_present=seed)
             for sp in spans:
                 all_spans.append(WorkSession(
-                    device_id=device.id,
-                    org_id=device.org_id,
-                    username=username,
-                    day=day,
-                    kind=SPAN_WORK,
-                    started_at=sp.started_at,
-                    ended_at=sp.ended_at,
+                    device_id=device.id, org_id=device.org_id, username=username, day=day,
+                    kind=SPAN_WORK, started_at=sp.started_at, ended_at=sp.ended_at,
                 ))
+
+            prod = _productivity(fg_by_user.get(username, []), sample_seconds=sample_seconds)
             await self._write_summary(
                 device=device, username=username, day=day,
-                summary=_summarize(spans, day=day, now=now),
+                attendance=_summarize(spans, day=day, now=now), prod=prod,
             )
+            if prod is not None:
+                all_app_usage.extend(
+                    DailyAppUsage(
+                        device_id=device.id, org_id=device.org_id, username=username, day=day,
+                        label=label[:260], bucket=bucket, minutes=minutes,
+                    )
+                    for label, bucket, minutes in prod.apps
+                )
 
         await self.repo.replace_work_sessions(device.id, day, all_spans)
+        await self.repo.replace_app_usage(device.id, day, all_app_usage)
 
     async def _write_summary(
         self,
@@ -193,29 +270,39 @@ class WorkforceAggregator:
         device: Device,
         username: str,
         day: date,
-        summary: tuple[datetime, datetime | None, int] | None,
+        attendance: tuple[datetime, datetime | None, int] | None,
+        prod: _Productivity | None,
     ) -> None:
         existing = await self.repo.get_summary(device.id, username, day)
-        if summary is None:
-            # No presence left for this account/day (e.g. a correction removed it).
+        if attendance is None and prod is None:
+            # Nothing left for this account/day (e.g. a correction removed it).
             if existing is not None:
                 await self.session.delete(existing)
             return
-        first_in, last_out, worked = summary
+
+        first_in, last_out, worked = attendance or (None, None, 0)
+        # Productivity columns stay NULL when there is no foreground data, so the UI shows
+        # "—" (not measured) rather than a misleading 0.
+        active = prod.active_minutes if prod else None
+        productive = prod.productive_minutes if prod else None
+        neutral = prod.neutral_minutes if prod else None
+        unproductive = prod.unproductive_minutes if prod else None
+
         if existing is None:
             self.session.add(DailyUserSummary(
-                device_id=device.id,
-                org_id=device.org_id,
-                username=username,
-                day=day,
-                first_in=first_in,
-                last_out=last_out,
-                worked_minutes=worked,
+                device_id=device.id, org_id=device.org_id, username=username, day=day,
+                first_in=first_in, last_out=last_out, worked_minutes=worked,
+                active_minutes=active, productive_minutes=productive,
+                neutral_minutes=neutral, unproductive_minutes=unproductive,
             ))
         else:
             existing.first_in = first_in
             existing.last_out = last_out
             existing.worked_minutes = worked
+            existing.active_minutes = active
+            existing.productive_minutes = productive
+            existing.neutral_minutes = neutral
+            existing.unproductive_minutes = unproductive
         await self.session.flush()
 
 
@@ -246,6 +333,51 @@ class WorkforceService:
             read.device_hostname = hostnames.get(r.device_id)
             out.append(read)
         return out
+
+    async def user_detail(
+        self, *, actor: User, username: str, day_from: date, day_to: date
+    ) -> UserDetailRead:
+        rows = await self.repo.list_summaries(
+            actor.org_id, day_from=day_from, day_to=day_to, username=username)
+        hostnames = await self.repo.hostnames_for({r.device_id for r in rows})
+
+        days: list[DailyUserSummaryRead] = []
+        for r in rows:
+            read = DailyUserSummaryRead.model_validate(r)
+            read.device_hostname = hostnames.get(r.device_id)
+            days.append(read)
+
+        def total(attr: str) -> int | None:
+            # Sum the measured days; None only when NONE of them measured it (so the UI can
+            # tell "nobody tracked apps" from "tracked, and it was zero").
+            vals = [getattr(r, attr) for r in rows if getattr(r, attr) is not None]
+            return sum(vals) if vals else None
+
+        # App/site breakdown, summed across days and devices by label.
+        usage = await self.repo.app_usage_for_user(
+            actor.org_id, username, day_from=day_from, day_to=day_to)
+        merged: dict[str, tuple[str, int]] = {}
+        for u in usage:
+            bucket, mins = merged.get(u.label, (u.bucket, 0))
+            merged[u.label] = (bucket, mins + u.minutes)
+        apps = [
+            AppUsageRead(label=label, bucket=bucket, minutes=mins)
+            for label, (bucket, mins) in sorted(
+                merged.items(), key=lambda kv: kv[1][1], reverse=True)
+        ]
+
+        return UserDetailRead(
+            username=username,
+            day_from=day_from,
+            day_to=day_to,
+            worked_minutes=sum(r.worked_minutes for r in rows),
+            active_minutes=total("active_minutes"),
+            productive_minutes=total("productive_minutes"),
+            neutral_minutes=total("neutral_minutes"),
+            unproductive_minutes=total("unproductive_minutes"),
+            days=days,
+            apps=apps,
+        )
 
     async def day_sessions(
         self,

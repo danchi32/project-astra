@@ -116,9 +116,14 @@ class ActivityEvent(_SanitizedInput):
     can aggregate.
     """
     username: str = Field(max_length=150)
-    kind: Literal["logon", "logoff", "lock", "unlock", "active", "idle"]
+    kind: Literal["logon", "logoff", "lock", "unlock", "active", "idle", "foreground"]
     session_id: int | None = Field(default=None, ge=0)
     occurred_at: datetime
+    # Only for kind="foreground" (P3): the active app's process/display name and, for a
+    # browser, the website DOMAIN — never a path or query string. The agent strips those
+    # before sending (plan §6); the backend also ignores anything after the host.
+    app: str | None = Field(default=None, max_length=260)
+    domain: str | None = Field(default=None, max_length=255)
 
 
 class HardwareInfo(_SanitizedInput):

@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, Download, Info, Search } from "lucide-react";
 import { getAttendance, type DailyUserSummary } from "@/lib/api/tracker";
@@ -243,8 +244,14 @@ export default function TrackerPage() {
                   <td className="px-5 py-3 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
                     {formatDay(r.day)}
                   </td>
-                  <td className="px-5 py-3 font-medium" style={{ color: "var(--text-primary)" }}>
-                    {r.username}
+                  <td className="px-5 py-3 font-medium">
+                    <Link
+                      href={`/tracker/${encodeURIComponent(r.username)}`}
+                      className="hover:underline"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      {r.username}
+                    </Link>
                   </td>
                   <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>
                     {r.device_hostname ?? "—"}

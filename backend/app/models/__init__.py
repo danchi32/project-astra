@@ -61,6 +61,7 @@ from app.models.user import User, UserRole
 from app.models.workforce import (
     ACTIVITY_ACTIVE,
     ACTIVITY_AWAY,
+    ACTIVITY_FOREGROUND,
     ACTIVITY_IDLE,
     ACTIVITY_KINDS,
     ACTIVITY_LOCK,
@@ -71,6 +72,7 @@ from app.models.workforce import (
     SPAN_BREAK,
     SPAN_WORK,
     ActivitySample,
+    DailyAppUsage,
     DailyUserSummary,
     WorkSession,
 )
@@ -147,6 +149,7 @@ __all__ = [
     "WebhookEvent",
     "ACTIVITY_ACTIVE",
     "ACTIVITY_AWAY",
+    "ACTIVITY_FOREGROUND",
     "ACTIVITY_IDLE",
     "ACTIVITY_KINDS",
     "ACTIVITY_LOCK",
@@ -157,6 +160,7 @@ __all__ = [
     "SPAN_BREAK",
     "SPAN_WORK",
     "ActivitySample",
+    "DailyAppUsage",
     "DailyUserSummary",
     "WorkSession",
 ]

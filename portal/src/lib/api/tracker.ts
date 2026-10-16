@@ -48,3 +48,27 @@ export const getDaySessions = (params: {
   apiClient
     .get<WorkSessionSpan[]>("/tracker/attendance/sessions", { params })
     .then((r) => r.data);
+
+/** Minutes in one app/website over the range, with its productivity bucket. */
+export interface AppUsage {
+  label: string;
+  bucket: "productive" | "neutral" | "unproductive";
+  minutes: number;
+}
+
+/** The per-user drill-down: per-day rows, productivity totals, and app breakdown. */
+export interface UserDetail {
+  username: string;
+  day_from: string;
+  day_to: string;
+  worked_minutes: number;
+  active_minutes: number | null;
+  productive_minutes: number | null;
+  neutral_minutes: number | null;
+  unproductive_minutes: number | null;
+  days: DailyUserSummary[];
+  apps: AppUsage[];
+}
+
+export const getUserDetail = (params: { username: string; from?: string; to?: string }) =>
+  apiClient.get<UserDetail>("/tracker/user", { params }).then((r) => r.data);

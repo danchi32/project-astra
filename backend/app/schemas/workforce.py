@@ -46,3 +46,29 @@ class WorkSessionRead(BaseModel):
     kind: str
     started_at: datetime
     ended_at: datetime | None
+
+
+class AppUsageRead(BaseModel):
+    """Minutes in one app/website over the requested range, with its productivity bucket."""
+    label: str
+    bucket: str          # productive | neutral | unproductive
+    minutes: int
+
+
+class UserDetailRead(BaseModel):
+    """Everything the per-user drill-down shows: the per-day attendance rows for the range,
+    the productivity totals, and the app/website breakdown."""
+    username: str
+    day_from: date
+    day_to: date
+
+    worked_minutes: int
+    # Null when no foreground data was collected for this user over the range at all — the
+    # UI then shows "—" instead of a measured 0.
+    active_minutes: int | None = None
+    productive_minutes: int | None = None
+    neutral_minutes: int | None = None
+    unproductive_minutes: int | None = None
+
+    days: list[DailyUserSummaryRead]
+    apps: list[AppUsageRead]

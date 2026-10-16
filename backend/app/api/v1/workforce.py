@@ -19,7 +19,7 @@ from app.api.deps import require_roles, requires
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.models.base import utcnow
-from app.schemas.workforce import DailyUserSummaryRead, WorkSessionRead
+from app.schemas.workforce import DailyUserSummaryRead, UserDetailRead, WorkSessionRead
 from app.services.entitlements import WORKFORCE_INSIGHTS
 from app.services.workforce import WorkforceService
 
@@ -62,6 +62,31 @@ async def attendance(
     return await WorkforceService(session).attendance(
         actor=actor, day_from=day_from, day_to=day_to,
         device_id=device_id, username=username,
+    )
+
+
+@router.get(
+    "/user",
+    response_model=UserDetailRead,
+    summary="One account's attendance + productivity + app breakdown over a date range",
+)
+async def user_detail(
+    username: str = Query(...),
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> UserDetailRead:
+    today = utcnow().date()
+    day_to = date_to or today
+    day_from = date_from or (day_to - timedelta(days=6))
+    if day_from > day_to:
+        day_from = day_to
+    if (day_to - day_from).days > _MAX_RANGE_DAYS:
+        day_from = day_to - timedelta(days=_MAX_RANGE_DAYS)
+
+    return await WorkforceService(session).user_detail(
+        actor=actor, username=username, day_from=day_from, day_to=day_to,
     )
 
 

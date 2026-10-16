@@ -46,10 +46,11 @@ ACTIVITY_LOCK = "lock"
 ACTIVITY_UNLOCK = "unlock"
 ACTIVITY_ACTIVE = "active"   # input resumed after an idle gap (P2)
 ACTIVITY_IDLE = "idle"       # no input past the threshold (P2)
+ACTIVITY_FOREGROUND = "foreground"  # a periodic sample of the active app/website (P3)
 
 ACTIVITY_KINDS = frozenset({
     ACTIVITY_LOGON, ACTIVITY_LOGOFF, ACTIVITY_LOCK, ACTIVITY_UNLOCK,
-    ACTIVITY_ACTIVE, ACTIVITY_IDLE,
+    ACTIVITY_ACTIVE, ACTIVITY_IDLE, ACTIVITY_FOREGROUND,
 })
 #: Events that mean the person is present and the clock should be running.
 ACTIVITY_PRESENT = frozenset({ACTIVITY_LOGON, ACTIVITY_UNLOCK, ACTIVITY_ACTIVE})
@@ -89,6 +90,12 @@ class ActivitySample(TimestampMixin, Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
+
+    # Only for kind == "foreground" (P3 productivity): the active app's process/display name
+    # and, for a browser, the website domain. Domain only — never a path or query string
+    # (that is where tokens and private parameters live; see plan §6). Null for session events.
+    app: Mapped[str | None] = mapped_column(String(260), nullable=True)
+    domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class WorkSession(TimestampMixin, Base):
@@ -165,3 +172,32 @@ class DailyUserSummary(TimestampMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+class DailyAppUsage(TimestampMixin, Base):
+    """Minutes one account spent in one app/website on one day, with its productivity bucket.
+
+    The breakdown behind a day's productive/neutral/unproductive split, and what the per-user
+    detail view lists as "top apps / sites". Recomputed with the daily summary (replaced per
+    device-day), so it is a projection of the raw foreground samples and cannot drift."""
+
+    __tablename__ = "daily_app_usage"
+    __table_args__ = (
+        UniqueConstraint("device_id", "username", "day", "label",
+                         name="uq_daily_app_usage_dev_user_day_label"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+
+    username: Mapped[str] = mapped_column(String(150), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+
+    # The app display name or the website domain — whatever the foreground sample identified.
+    label: Mapped[str] = mapped_column(String(260), nullable=False)
+    # productive | neutral | unproductive (resolved from the category engine).
+    bucket: Mapped[str] = mapped_column(String(20), nullable=False)
+    minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

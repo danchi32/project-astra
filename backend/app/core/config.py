@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # No keyboard/mouse input for at least this many minutes counts the session as a break
     # rather than worked time. 0 disables idle-splitting (every signed-in minute is worked).
     workforce_idle_threshold_minutes: int = 5
+    # How many seconds each foreground sample stands for when attributing app/website time —
+    # the agent's foreground polling interval. Each sample contributes this much time to its
+    # app's bucket, so productivity minutes = samples × this ÷ 60. Must match the agent.
+    workforce_foreground_sample_seconds: int = 30
 
     # ── Agent rate limiting ────────────────────────────────────────────────────
     # A healthy agent makes ~6 requests/min (heartbeat + telemetry + two remediation

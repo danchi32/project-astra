@@ -5,7 +5,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device import Device
-from app.models.workforce import ActivitySample, DailyUserSummary, WorkSession
+from app.models.workforce import ActivitySample, DailyAppUsage, DailyUserSummary, WorkSession
 
 
 def day_bounds(day: date) -> tuple[datetime, datetime]:
@@ -111,6 +111,32 @@ class WorkforceRepository:
         )
         self.session.add_all(spans)
         await self.session.flush()
+
+    async def replace_app_usage(
+        self, device_id: uuid.UUID, day: date, rows: list[DailyAppUsage]
+    ) -> None:
+        """Swap one (device, day)'s per-app rows for the freshly recomputed set — a
+        projection of the day's foreground samples, same discipline as work_sessions."""
+        await self.session.execute(
+            delete(DailyAppUsage).where(
+                DailyAppUsage.device_id == device_id, DailyAppUsage.day == day
+            )
+        )
+        self.session.add_all(rows)
+        await self.session.flush()
+
+    async def app_usage_for_user(
+        self, org_id: uuid.UUID, username: str, *, day_from: date, day_to: date
+    ) -> list[DailyAppUsage]:
+        result = await self.session.execute(
+            select(DailyAppUsage).where(
+                DailyAppUsage.org_id == org_id,
+                DailyAppUsage.username == username,
+                DailyAppUsage.day >= day_from,
+                DailyAppUsage.day <= day_to,
+            )
+        )
+        return list(result.scalars().all())
 
     async def get_summary(
         self, device_id: uuid.UUID, username: str, day: date
