@@ -28,6 +28,10 @@ public sealed class ForegroundCollector : IDisposable
     private const int FlushEverySamples = 6;
     // Don't let the buffer grow without bound while the backend is unreachable.
     private const int MaxBuffer = 240;
+    // No keyboard/mouse input for this many seconds marks the window idle (a break) rather than
+    // active. Mirrors the backend's workforce_idle_threshold_minutes default (5 min); a
+    // per-org value can ride the heartbeat later, like the tracking flag.
+    private const int IdleThresholdSeconds = 300;
 
     private readonly HttpClient _http;
     private readonly ITokenStore _store;
@@ -92,12 +96,16 @@ public sealed class ForegroundCollector : IDisposable
         if (sample is null)
             return;
 
-        // Mouse-only idle-faking signal — a flag for review, never the keyboard.
+        // Real idle vs active, from GetLastInputInfo (keyboard + mouse): no input past the
+        // threshold is a break, not worked-at-the-keyboard time.
+        var idle = ForegroundSampler.IdleSeconds() >= IdleThresholdSeconds;
+        // Mouse-only idle-faking signal — a flag for review, never the keyboard. A jiggler keeps
+        // the session non-idle while faking it, so this is the complement of `idle`.
         var suspect = JiggleHeuristic.Classify(positions, clicks) == InputQuality.Suspect;
 
         _buffer.Add(new ActivityDto(
             _username, "foreground", DateTimeOffset.UtcNow,
-            sample.App, sample.Domain, sample.Path, suspect));
+            sample.App, sample.Domain, sample.Path, idle, suspect));
         if (_buffer.Count > MaxBuffer)
             _buffer.RemoveRange(0, _buffer.Count - MaxBuffer);
     }
@@ -139,6 +147,7 @@ public sealed class ForegroundCollector : IDisposable
         [property: JsonPropertyName("app")] string? App,
         [property: JsonPropertyName("domain")] string? Domain,
         [property: JsonPropertyName("path")] string? Path,
+        [property: JsonPropertyName("idle")] bool Idle,
         [property: JsonPropertyName("idle_suspect")] bool IdleSuspect);
 
     private sealed record ActivityPushDto(

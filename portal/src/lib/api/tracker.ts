@@ -64,6 +64,7 @@ export interface UserDetail {
   day_to: string;
   worked_minutes: number;
   active_minutes: number | null;
+  idle_minutes: number | null;
   productive_minutes: number | null;
   neutral_minutes: number | null;
   unproductive_minutes: number | null;

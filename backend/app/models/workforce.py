@@ -101,6 +101,11 @@ class ActivitySample(TimestampMixin, Base):
     # domain mode. Never holds a query string or fragment — enforced at the agent and again
     # here on ingest.
     path: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # No keyboard/mouse input past the threshold during this window (P2) — a break, not
+    # at-keyboard time. Productivity is attributed from non-idle windows only.
+    idle: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     # This foreground window's input looked mechanically faked (a mouse jiggler). Mouse-only,
     # a flag for review — see JiggleHeuristic in the agent.
     idle_suspect: Mapped[bool] = mapped_column(

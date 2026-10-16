@@ -30,6 +30,30 @@ public static class ForegroundSampler
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    /// <summary>Seconds since the session last saw keyboard or mouse input, via GetLastInputInfo
+    /// — no hook, covers both devices, never the keyboard's CONTENT. This is how "idle" (a
+    /// break) is told from "active" (really at the keyboard). 0 on failure.</summary>
+    public static int IdleSeconds()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info))
+            return 0;
+        // Both are tick counts that wrap ~every 49 days; the unchecked unsigned subtraction
+        // stays correct across the wrap.
+        uint idleMs = unchecked((uint)Environment.TickCount - info.dwTime);
+        return (int)(idleMs / 1000);
+    }
+
     /// <summary>The current foreground app + domain (and, in "path" URL mode, the
     /// query-stripped path), or null when there is nothing attributable (no foreground window,
     /// the lock screen, or a window we cannot read).</summary>

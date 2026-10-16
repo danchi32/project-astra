@@ -51,11 +51,11 @@ class WorkforceRepository:
 
     async def foreground_counts_for_day(
         self, device_id: uuid.UUID, day: date
-    ) -> list[tuple[str, str | None, str | None, str | None, bool, int]]:
+    ) -> list[tuple[str, str | None, str | None, str | None, bool, bool, int]]:
         """Foreground samples rolled up in the database to one row per distinct
-        (username, app, domain, path, idle_suspect) with its count — productivity is counts,
-        so grouping in SQL avoids pulling a whole day of ~30s samples into Python on every push.
-        Returns (username, app, domain, path, idle_suspect, count)."""
+        (username, app, domain, path, idle, idle_suspect) with its count — productivity is
+        counts, so grouping in SQL avoids pulling a whole day of ~30s samples into Python on
+        every push. Returns (username, app, domain, path, idle, idle_suspect, count)."""
         start, end = day_bounds(day)
         result = await self.session.execute(
             select(
@@ -63,6 +63,7 @@ class WorkforceRepository:
                 ActivitySample.app,
                 ActivitySample.domain,
                 ActivitySample.path,
+                ActivitySample.idle,
                 ActivitySample.idle_suspect,
                 func.count(),
             )
@@ -77,10 +78,11 @@ class WorkforceRepository:
                 ActivitySample.app,
                 ActivitySample.domain,
                 ActivitySample.path,
+                ActivitySample.idle,
                 ActivitySample.idle_suspect,
             )
         )
-        return [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in result.all()]
+        return [(r[0], r[1], r[2], r[3], r[4], r[5], r[6]) for r in result.all()]
 
     async def was_present_at_day_start(
         self, device_id: uuid.UUID, username: str, day: date

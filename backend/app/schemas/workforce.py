@@ -68,6 +68,7 @@ class UserDetailRead(BaseModel):
     # Null when no foreground data was collected for this user over the range at all — the
     # UI then shows "—" instead of a measured 0.
     active_minutes: int | None = None
+    idle_minutes: int | None = None
     productive_minutes: int | None = None
     neutral_minutes: int | None = None
     unproductive_minutes: int | None = None

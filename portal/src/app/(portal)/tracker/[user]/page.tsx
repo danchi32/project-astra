@@ -152,10 +152,11 @@ export default function UserDetailPage() {
       </div>
 
       {/* Totals */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {([
           ["Worked", formatMinutes(data?.worked_minutes ?? 0)],
           ["Active", formatOptional(data?.active_minutes ?? null)],
+          ["Idle", formatOptional(data?.idle_minutes ?? null)],
           ["Productive", formatOptional(data?.productive_minutes ?? null)],
           ["Unproductive", formatOptional(data?.unproductive_minutes ?? null)],
         ] as const).map(([label, val]) => (

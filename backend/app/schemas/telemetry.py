@@ -128,6 +128,9 @@ class ActivityEvent(_SanitizedInput):
     # query/fragment before sending; the backend strips again and drops it for sensitive
     # domains. Never a query string.
     path: str | None = Field(default=None, max_length=400)
+    # Real idle for this sample window: no keyboard/mouse input past the threshold
+    # (GetLastInputInfo), i.e. a break rather than at-keyboard time.
+    idle: bool = False
     # Mouse-only idle-faking signal for this sample window: the cursor moved mechanically
     # (confined, no clicks) like a jiggler. A flag for review, never a verdict, and derived
     # from the mouse alone — never the keyboard (no keystroke logging).

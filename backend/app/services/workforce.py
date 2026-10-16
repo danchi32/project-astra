@@ -58,6 +58,7 @@ class _Span:
 @dataclass
 class _Productivity:
     active_minutes: int
+    idle_minutes: int
     productive_minutes: int
     neutral_minutes: int
     unproductive_minutes: int
@@ -66,16 +67,20 @@ class _Productivity:
     apps: list[tuple[str, str, int]]
 
 
-# One foreground group from the DB roll-up: (app, domain, path, idle_suspect, count).
-_FgGroup = tuple[str | None, str | None, str | None, bool, int]
+# One foreground group from the DB roll-up: (app, domain, path, idle, idle_suspect, count).
+_FgGroup = tuple[str | None, str | None, str | None, bool, bool, int]
 
 
 def _productivity(groups: list[_FgGroup], *, sample_seconds: int) -> _Productivity | None:
-    """Attribute foreground samples to productivity buckets and per-app totals.
+    """Attribute foreground samples to active/idle time, productivity buckets and per-app totals.
 
     Sampling, not timing: each foreground sample stands for `sample_seconds` of time in that
     app (the agent's polling interval), so minutes = samples × seconds ÷ 60. Fed pre-grouped
     counts (one row per distinct app/site) from SQL, so this never iterates raw samples.
+
+    Idle windows (no input past the threshold) count as idle time only — they are NOT attributed
+    to a productivity bucket or an app total, because time a person is away from the keyboard is
+    not time spent "in" that app. So active = productive + neutral + unproductive.
     """
     if not groups:
         return None
@@ -83,7 +88,11 @@ def _productivity(groups: list[_FgGroup], *, sample_seconds: int) -> _Productivi
     bucket_counts: dict[str, int] = {PRODUCTIVE: 0, NEUTRAL: 0, UNPRODUCTIVE: 0}
     label_counts: dict[str, tuple[str, int]] = {}
     suspect = 0
-    for app, domain, path, idle_suspect, count in groups:
+    idle = 0
+    for app, domain, path, is_idle, idle_suspect, count in groups:
+        if is_idle:
+            idle += count
+            continue
         bucket, _label = classify(app, domain)
         bucket_counts[bucket] += count
         if idle_suspect:
@@ -105,6 +114,7 @@ def _productivity(groups: list[_FgGroup], *, sample_seconds: int) -> _Productivi
     )
     return _Productivity(
         active_minutes=mins(sum(bucket_counts.values())),
+        idle_minutes=mins(idle),
         productive_minutes=mins(bucket_counts[PRODUCTIVE]),
         neutral_minutes=mins(bucket_counts[NEUTRAL]),
         unproductive_minutes=mins(bucket_counts[UNPRODUCTIVE]),
@@ -251,6 +261,7 @@ class WorkforceAggregator:
             app=e.app,
             domain=domain,
             path=path,
+            idle=e.idle,
             idle_suspect=e.idle_suspect,
         )
 
@@ -266,10 +277,10 @@ class WorkforceAggregator:
                 presence_by_user.setdefault(s.username, []).append((s.kind, as_utc(s.occurred_at)))
 
         fg_by_user: dict[str, list[_FgGroup]] = {}
-        for username, app, domain, path, suspect, count in await self.repo.foreground_counts_for_day(
-            device.id, day
+        for username, app, domain, path, idle, suspect, count in (
+            await self.repo.foreground_counts_for_day(device.id, day)
         ):
-            fg_by_user.setdefault(username, []).append((app, domain, path, suspect, count))
+            fg_by_user.setdefault(username, []).append((app, domain, path, idle, suspect, count))
 
         all_spans: list[WorkSession] = []
         all_app_usage: list[DailyAppUsage] = []
@@ -320,6 +331,7 @@ class WorkforceAggregator:
         # Productivity columns stay NULL when there is no foreground data, so the UI shows
         # "—" (not measured) rather than a misleading 0.
         active = prod.active_minutes if prod else None
+        idle = prod.idle_minutes if prod else None
         productive = prod.productive_minutes if prod else None
         neutral = prod.neutral_minutes if prod else None
         unproductive = prod.unproductive_minutes if prod else None
@@ -329,7 +341,7 @@ class WorkforceAggregator:
             self.session.add(DailyUserSummary(
                 device_id=device.id, org_id=device.org_id, username=username, day=day,
                 first_in=first_in, last_out=last_out, worked_minutes=worked,
-                active_minutes=active, productive_minutes=productive,
+                active_minutes=active, idle_minutes=idle, productive_minutes=productive,
                 neutral_minutes=neutral, unproductive_minutes=unproductive,
                 suspected_idle_minutes=suspected_idle,
             ))
@@ -338,6 +350,7 @@ class WorkforceAggregator:
             existing.last_out = last_out
             existing.worked_minutes = worked
             existing.active_minutes = active
+            existing.idle_minutes = idle
             existing.productive_minutes = productive
             existing.neutral_minutes = neutral
             existing.unproductive_minutes = unproductive
@@ -411,6 +424,7 @@ class WorkforceService:
             day_to=day_to,
             worked_minutes=sum(r.worked_minutes for r in rows),
             active_minutes=total("active_minutes"),
+            idle_minutes=total("idle_minutes"),
             productive_minutes=total("productive_minutes"),
             neutral_minutes=total("neutral_minutes"),
             unproductive_minutes=total("unproductive_minutes"),
