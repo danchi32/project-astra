@@ -128,6 +128,13 @@ class HeartbeatResponse(BaseModel):
     # Populated only when the request set include_tasks. Older agents don't read the
     # heartbeat body at all, so this is invisible to them.
     tasks: list[AgentRemediationTask] = Field(default_factory=list)
+    # Whether this org holds the workforce_insights ("Tracker") entitlement, so the agent
+    # knows whether to collect activity AND the tray knows whether to show "Activity
+    # tracking: ON". This is the signal that keeps tracking from being covert: the backend
+    # only stores activity for an entitled org, and the agent only collects — and only
+    # discloses in the tray — when this says so. Off for every org that isn't entitled, and
+    # invisible to agents too old to read it (they never tracked anyway).
+    activity_tracking: bool = False
 
 
 class AgentUpdateEnvelope(BaseModel):

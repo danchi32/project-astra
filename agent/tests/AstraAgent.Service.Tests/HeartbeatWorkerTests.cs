@@ -90,7 +90,8 @@ public class HeartbeatWorkerTests
     {
         var options = Options.Create(new AgentOptions { HeartbeatIntervalSeconds = 1 });
         return new HeartbeatWorker(
-            new FakeEnrollment(), api, new FakeIdentity(), runner, options,
+            new FakeEnrollment(), api, new FakeIdentity(), runner,
+            new AstraAgent.Service.Workforce.ActivityTrackingState(), options,
             NullLogger<HeartbeatWorker>.Instance);
     }
 

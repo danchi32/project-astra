@@ -42,7 +42,12 @@ public sealed record HeartbeatRequest(
 
 public sealed record HeartbeatResponse(
     [property: JsonPropertyName("status")] string Status,
-    [property: JsonPropertyName("tasks")] IReadOnlyList<AgentRemediationTask>? Tasks);
+    [property: JsonPropertyName("tasks")] IReadOnlyList<AgentRemediationTask>? Tasks,
+    // Whether this org holds the Workforce Insights ("Tracker") entitlement. The Service
+    // collects activity only when it is true, and surfaces it to the Tray so the person
+    // being tracked sees "Activity tracking: ON". False (or absent, on an older backend)
+    // means do not collect. Server-decided on purpose — the agent never tracks covertly.
+    [property: JsonPropertyName("activity_tracking")] bool ActivityTracking = false);
 
 // ── Remediation (elevated / system-context tasks the Service executes) ───────
 
@@ -103,6 +108,17 @@ public sealed record TelemetrySessionEntry(
     [property: JsonPropertyName("logon_at")] DateTimeOffset? LogonAt,
     [property: JsonPropertyName("idle_seconds")] int? IdleSeconds);
 
+/// <summary>One Workforce Insights ("Tracker") presence transition the agent observed —
+/// a logon, logoff, lock or unlock. Rides the same telemetry push as everything else, so
+/// tracking adds no new request. `OccurredAt` is when it happened on the machine (a logon
+/// carries the session's real logon time, not the moment the agent noticed), so attendance
+/// is accurate even across an agent restart.</summary>
+public sealed record TelemetryActivityEvent(
+    [property: JsonPropertyName("username")] string Username,
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("occurred_at")] DateTimeOffset OccurredAt,
+    [property: JsonPropertyName("session_id")] int? SessionId = null);
+
 public sealed record TelemetryHardware(
     [property: JsonPropertyName("manufacturer")] string? Manufacturer,
     [property: JsonPropertyName("model")] string? Model,
@@ -125,7 +141,11 @@ public sealed record TelemetryPush(
     // Sessions view is only worth having if it is current. Null means this build could not
     // enumerate them, which the backend treats as "leave what you have"; an empty list means
     // nobody is signed in, which it treats as "clear the rows". Older backends ignore both.
-    [property: JsonPropertyName("sessions")] IReadOnlyList<TelemetrySessionEntry>? Sessions = null);
+    [property: JsonPropertyName("sessions")] IReadOnlyList<TelemetrySessionEntry>? Sessions = null,
+    // Workforce Insights ("Tracker") presence transitions since the last push. Null when
+    // tracking is off for this org (the backend told us so on the heartbeat) — the field is
+    // simply absent, and the backend stores nothing. Only ever sent for an entitled org.
+    [property: JsonPropertyName("activity")] IReadOnlyList<TelemetryActivityEvent>? Activity = null);
 
 // ── Remote support provisioning ─────────────────────────────────────────────
 
