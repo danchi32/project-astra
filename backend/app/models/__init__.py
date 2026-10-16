@@ -58,6 +58,24 @@ from app.models.telemetry import (
     TelemetrySnapshot,
 )
 from app.models.user import User, UserRole
+from app.models.workforce import (
+    ACTIVITY_ACTIVE,
+    ACTIVITY_AWAY,
+    ACTIVITY_FOREGROUND,
+    ACTIVITY_IDLE,
+    ACTIVITY_KINDS,
+    ACTIVITY_LOCK,
+    ACTIVITY_LOGOFF,
+    ACTIVITY_LOGON,
+    ACTIVITY_PRESENT,
+    ACTIVITY_UNLOCK,
+    SPAN_BREAK,
+    SPAN_WORK,
+    ActivitySample,
+    DailyAppUsage,
+    DailyUserSummary,
+    WorkSession,
+)
 
 __all__ = [
     "AcknowledgementStatus",
@@ -129,4 +147,20 @@ __all__ = [
     "User",
     "UserRole",
     "WebhookEvent",
+    "ACTIVITY_ACTIVE",
+    "ACTIVITY_AWAY",
+    "ACTIVITY_FOREGROUND",
+    "ACTIVITY_IDLE",
+    "ACTIVITY_KINDS",
+    "ACTIVITY_LOCK",
+    "ACTIVITY_LOGOFF",
+    "ACTIVITY_LOGON",
+    "ACTIVITY_PRESENT",
+    "ACTIVITY_UNLOCK",
+    "SPAN_BREAK",
+    "SPAN_WORK",
+    "ActivitySample",
+    "DailyAppUsage",
+    "DailyUserSummary",
+    "WorkSession",
 ]

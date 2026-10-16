@@ -22,10 +22,12 @@ from app.schemas.devices import (
 )
 from app.schemas.devices import RemoteSupportPlan, REMOTE_SUPPORT_SERVICE_NAME
 from app.schemas.remediation import AgentRemediationResult, AgentRemediationTask
+from app.schemas.telemetry import ActivityPush, TelemetryPushResponse
 from app.services.agent_update import AgentUpdateService
 from app.services.conversations import ConversationService
 from app.services.devices import DeviceService
 from app.services.remediation.service import RemediationService
+from app.services.workforce import WorkforceAggregator
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -44,6 +46,12 @@ async def heartbeat(
 ) -> HeartbeatResponse:
     await DeviceService(session).heartbeat(device=device, data=body)
 
+    # Whether this org may collect Workforce Insights ("Tracker") activity, and how much of a
+    # browser URL it records. The agent reads both to decide what to collect; the tray reads
+    # the tracking flag (via the agent) to show "Activity tracking: ON" — the server deciding
+    # keeps the agent from tracking covertly.
+    tracking, url_mode = await _activity_settings(session, device.org_id)
+
     # Piggyback the elevated Service's work on the beat it already sends, so it needs no
     # separate 30s poll — roughly a fifth of all agent traffic. Strictly opt-in: claiming
     # marks a task dispatched, so handing tasks to an agent that doesn't read them would take
@@ -52,12 +60,48 @@ async def heartbeat(
     # Only "system" context here. The user-context Tray is a different process and claims its
     # own tasks; returning those here would steal them from it.
     if not body.include_tasks:
-        return HeartbeatResponse()
+        return HeartbeatResponse(activity_tracking=tracking, activity_url_mode=url_mode)
 
     tasks = await RemediationService(session).claim_for_device(device=device, context="system")
     return HeartbeatResponse(
-        tasks=[AgentRemediationTask(id=t.id, action_id=t.action_id, params=t.params) for t in tasks]
+        tasks=[AgentRemediationTask(id=t.id, action_id=t.action_id, params=t.params) for t in tasks],
+        activity_tracking=tracking,
+        activity_url_mode=url_mode,
     )
+
+
+@router.post(
+    "/activity",
+    response_model=TelemetryPushResponse,
+    summary="Submit Workforce Insights activity events (agent/tray only)",
+)
+async def push_activity(
+    body: ActivityPush,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> TelemetryPushResponse:
+    """The Tray's channel for foreground app/website samples. Stored and aggregated only when
+    the org holds the workforce_insights entitlement; a stray payload from an untracked org is
+    dropped (the same gate the Service's telemetry push applies to activity)."""
+    if body.activity and await WorkforceAggregator.enabled_for(session, device.org_id):
+        await WorkforceAggregator(session).ingest_events(device=device, events=body.activity)
+        await session.commit()
+    return TelemetryPushResponse()
+
+
+async def _activity_settings(session: AsyncSession, org_id: uuid.UUID) -> tuple[bool, str]:
+    """(tracking enabled, url mode) for this org. A lookup miss is (False, "domain") — the safe
+    failure for monitoring is NOT to collect, unlike remote support, which fails the other way
+    to avoid stripping a working feature during an outage."""
+    from app.models import Organization
+    from app.services.entitlements import WORKFORCE_INSIGHTS, features_for
+
+    org = await session.get(Organization, org_id)
+    if org is None:
+        return False, "domain"
+    tracking = WORKFORCE_INSIGHTS in features_for(org.plan, org.entitlement_overrides)
+    url_mode = "path" if org.workforce_url_mode == "path" else "domain"
+    return tracking, url_mode
 
 
 @router.get(

@@ -1,6 +1,7 @@
 using AstraAgent.Service.Api;
 using AstraAgent.Service.Enrollment;
 using AstraAgent.Service.Telemetry.Collectors;
+using AstraAgent.Service.Workforce;
 using Microsoft.Extensions.Options;
 
 namespace AstraAgent.Service.Workers;
@@ -19,6 +20,8 @@ public sealed class TelemetryWorker(
     IWindowsUpdateCollector updates,
     IHardwareCollector hardware,
     ISessionCollector sessions,
+    IActivityTracker activityTracker,
+    ActivityTrackingState trackingState,
     IOptions<AgentOptions> options,
     ILogger<TelemetryWorker> logger) : BackgroundService
 {
@@ -63,6 +66,16 @@ public sealed class TelemetryWorker(
         var eventList = events.GetRecentEntries();
         var sessionList = sessions.GetSessions();
 
+        // Workforce Insights ("Tracker"). Only when the backend has told us this org is
+        // entitled (via the heartbeat) — null otherwise, so nothing is collected or sent, and
+        // we don't even diff. Derived from the session list already in hand, so it costs a
+        // dictionary comparison, not another sweep of the machine.
+        var activityList = trackingState.Enabled
+            ? activityTracker.Diff(sessionList, now)
+                .Select(a => new TelemetryActivityEvent(a.Username, a.Kind, a.OccurredAt, a.SessionId))
+                .ToList()
+            : null;
+
         var payload = new TelemetryPush(
             CollectedAt: now,
             CpuPercent: cpuPct,
@@ -88,7 +101,8 @@ public sealed class TelemetryWorker(
             // when nobody has signed in or out since the last push.
             Sessions: sessionList.Select(x => new TelemetrySessionEntry(
                 x.SessionId, x.Username, x.State, x.Connection,
-                x.Station, x.ClientName, x.LogonAt, x.IdleSeconds)).ToList());
+                x.Station, x.ClientName, x.LogonAt, x.IdleSeconds)).ToList(),
+            Activity: activityList);
 
         if (await api.PushTelemetryAsync(token, payload, ct) && collectInventory)
             _lastInventoryAt = now.UtcDateTime;

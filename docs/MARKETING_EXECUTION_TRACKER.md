@@ -1,6 +1,6 @@
 # Technomate Marketing Execution Tracker
 
-Updated: 2026-08-30
+Updated: 2026-08-31
 
 Status legend: `DONE`, `IN PROGRESS`, `NEXT`, `BLOCKED`, `LATER`
 
@@ -47,6 +47,7 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 5. IT support for organizations with 50-500 employees landing page. - DONE; India-wide ASTRA software positioning and production build verified.
 6. Intune and ManageEngine comparison pages with dated sources. - DONE; official sources reviewed 30 August 2026 and production build verified.
 7. Publish two high-intent articles per month. - DONE for August; buyer guide and endpoint automation pilot checklist added and production build verified.
+8. Remote workforce IT support India landing page. - DONE; remote/hybrid startup ICP, controlled pilot CTA, SEO metadata, FAQ schema and sitemap entry implemented; production build verified.
 
 ## India-wide acquisition execution
 
@@ -56,8 +57,11 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 | Compliance-safe prospect tracker | DONE | Growth | CSV template captures source lineage, verification, lawful basis, opt-out and deletion date. |
 | Cold outreach sequence | DONE | Growth + Sales | Five-touch, 24-day sequence created without fabricated proof; first-touch CTA asks for a reply. |
 | LinkedIn organic campaign | DONE | Founder + Growth | Five posts and unique UTM links ready for founder/company publishing. |
-| First 25 verified accounts | IN PROGRESS | Growth | Discovery target reached: 25 sourced candidates across five batches. Next gate is deep verification and promotion of the strongest accounts; no record is send-ready yet. |
+| First 25 verified accounts | IN PROGRESS | Growth | Discovery target reached: 25 sourced candidates across five batches. Deep verification promoted EDAG India to `qualified_pending_contact` using official Windows endpoint evidence; S&B India and Epiroc Nashik remain research-only because endpoint ownership is not public. No record is send-ready yet. |
 | First controlled outreach batch | NEXT | Founder | Send to a maximum of 10 newly verified contacts per business day; stop on deliverability or complaint warnings. |
+| Remote/hybrid startup segment | IN PROGRESS | Growth + Engineering | Landing page is live. Buyer verification ranks TechUp (75) and Navana (70) as executive-sponsor hypotheses; account-specific qualification gates and discovery questions are documented. Both remain research-only pending supported Windows-fleet evidence. |
+
+Deep-verification evidence and remaining contact gates are recorded in `docs/ASTRA_TOP_ACCOUNT_VERIFICATION.md`.
 
 ## Decision log
 
@@ -65,3 +69,4 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 - Booked demo is the primary website conversion; sign-up and lead magnet are secondary.
 - No customer logos, testimonials or outcome numbers are published without approval and evidence.
 - Paid acquisition starts only after landing-page and conversion tracking are verified.
+- Initial outbound focus shifts to 70% remote/hybrid startups and SMBs, 20% growing multi-location companies and 10% enterprise experiments; existing research is retained rather than discarded.

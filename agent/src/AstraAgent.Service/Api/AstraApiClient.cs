@@ -17,7 +17,13 @@ public enum HeartbeatStatus
 /// this, which is exactly the old behaviour — the Service simply gets nothing to run.</summary>
 public sealed record HeartbeatResult(
     HeartbeatStatus Status,
-    IReadOnlyList<AgentRemediationTask> Tasks)
+    IReadOnlyList<AgentRemediationTask> Tasks,
+    // Whether this org holds the Workforce Insights entitlement, as the backend reported on
+    // this beat. Always false on a non-Ok result or an unreadable body — the safe default
+    // for monitoring is "do not collect".
+    bool ActivityTracking = false,
+    // "domain" or "path" — how much of a browser URL to record. Defaults to "domain".
+    string ActivityUrlMode = "domain")
 {
     public static HeartbeatResult From(HeartbeatStatus status) => new(status, []);
 }
@@ -177,7 +183,9 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         try
         {
             var body = await response.Content.ReadFromJsonAsync<HeartbeatResponse>(ct);
-            return new HeartbeatResult(HeartbeatStatus.Ok, body?.Tasks ?? []);
+            return new HeartbeatResult(
+                HeartbeatStatus.Ok, body?.Tasks ?? [], body?.ActivityTracking ?? false,
+                body?.ActivityUrlMode ?? "domain");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

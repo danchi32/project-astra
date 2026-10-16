@@ -2,8 +2,10 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using AstraAgent.Service.Security;
+using AstraAgent.Service.Workforce;
 using AstraAgent.Tray.Remediation;
 using AstraAgent.Tray.Update;
+using AstraAgent.Tray.Workforce;
 using Microsoft.Extensions.Configuration;
 
 namespace AstraAgent.Tray;
@@ -15,8 +17,26 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly TrayChatClient _client;
     private readonly RemediationRunner _runner;
     private readonly TrayUpdater _updater;
+    private readonly ForegroundCollector _foreground;
     private readonly Icon _brandIcon = LoadBrandIcon();
     private ChatForm? _chatForm;
+
+    // Transparency for Workforce Insights ("Tracker"): when the org is being tracked, the
+    // person sees it here — no covert mode. The Service writes the flag to the registry on
+    // every beat; the Tray polls it and reflects it. A disabled menu line and the tooltip
+    // say so; the item is hidden entirely when tracking is off.
+    private const string TrackingOnText = "● Activity tracking: ON";
+    private readonly ToolStripSeparator _trackingSeparator = new() { Visible = false };
+    private readonly ToolStripMenuItem _trackingItem = new(TrackingOnText)
+    {
+        Enabled = false,
+        Visible = false,
+        ToolTipText =
+            "Your organisation has activity tracking enabled. Work hours (sign-in, sign-out "
+            + "and active time) are recorded. No keystrokes, screenshots or screen recording.",
+    };
+    private readonly System.Windows.Forms.Timer _trackingTimer = new() { Interval = 60_000 };
+    private bool _trackingOn;
 
     /// <summary>The Technomate brand mark, embedded in this assembly. Falls back to a system
     /// icon if the resource is somehow missing, so the tray never fails to appear.</summary>
@@ -57,8 +77,16 @@ public sealed class TrayApplicationContext : ApplicationContext
         _updater = new TrayUpdater(serverUrl, tokenStore, proxyUrl);
         _updater.Start();
 
+        // Workforce Insights foreground capture — self-gates on the tracking flag, so it
+        // collects nothing until the backend turns tracking on (and the indicator above shows
+        // it). Runs in the Tray because only the user session can see the foreground window.
+        _foreground = new ForegroundCollector(serverUrl, tokenStore, proxyUrl);
+        _foreground.Start();
+
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open ASTRA Assistant", null, (_, _) => ShowChat());
+        menu.Items.Add(_trackingItem);
+        menu.Items.Add(_trackingSeparator);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => ExitThread());
 
@@ -75,12 +103,46 @@ public sealed class TrayApplicationContext : ApplicationContext
                 ShowChat();
         };
 
+        // Reflect the tracking flag now and keep it current. Polled rather than pushed: the
+        // Service owns the flag and writes it to the registry, and a minute's lag on a
+        // transparency indicator is immaterial.
+        RefreshTrackingStatus();
+        _trackingTimer.Tick += (_, _) => RefreshTrackingStatus();
+        _trackingTimer.Start();
+
         // Tell the user where the icon lives; clicking it opens the chat.
         _icon.ShowBalloonTip(
             5000, "ASTRA Assistant",
             "ASTRA is running. Click this icon whenever you need help. "
             + "(If you don't see the icon, click the ^ arrow near the clock.)",
             ToolTipIcon.Info);
+    }
+
+    /// <summary>Read the tracking flag the Service last wrote and show or hide the indicator.
+    /// On the transition OFF→ON, a one-time balloon makes sure the person is actually told,
+    /// not just shown a menu line they might never open.</summary>
+    private void RefreshTrackingStatus()
+    {
+        bool on;
+        try { on = ActivityTrackingState.ReadFromRegistry(); }
+        catch { on = false; }   // never let a status read crash the tray
+
+        if (on == _trackingOn)
+            return;
+        _trackingOn = on;
+
+        _trackingItem.Visible = on;
+        _trackingSeparator.Visible = on;
+        _icon.Text = on
+            ? "ASTRA — activity tracking is on"   // NotifyIcon.Text caps at 63 chars
+            : "ASTRA Assistant — click for help";
+
+        if (on)
+            _icon.ShowBalloonTip(
+                7000, "Activity tracking is on",
+                "Your organisation records work hours (sign-in, sign-out and active time) "
+                + "through ASTRA. No keystrokes, screenshots or screen recording.",
+                ToolTipIcon.Info);
     }
 
     private void ShowChat()
@@ -99,6 +161,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (disposing)
         {
+            _trackingTimer.Dispose();
+            _foreground.Dispose();
             _updater.Dispose();
             _runner.Dispose();
             _icon.Visible = false;

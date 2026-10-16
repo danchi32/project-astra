@@ -12,7 +12,8 @@ handler using your sales@ mailbox SMTP.
 1. Build the static site: `cd website && npm run build` → produces `out/`.
 2. In hPanel → File Manager, open **public_html**.
 3. Upload **everything inside `out/`** into `public_html/`.
-4. Upload **`contact.php`** into `public_html/`.
+4. The deployment workflow uploads **`contact.php`** automatically. For a
+   manual deployment, upload it into `public_html/`.
 5. Copy `mail-config.example.php` → `mail-config.php`, fill in the sales@
    password, and upload it into `public_html/` too.
 6. Done — the form at /contact posts to /contact.php and emails

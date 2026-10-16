@@ -53,6 +53,8 @@ portal/out/
 
 # Local demo artifacts
 backend/astra-demo.db
+# and the copies the seed leaves behind when it rebuilds the schema
+backend/astra-demo.db.*
 demo-enrollment-token.txt
 project-astra/
 
@@ -67,3 +69,4 @@ agent/install/dist-tray-new/
 # backend/downloads/agent-portable.zip — never edited by hand.
 agent/install/payload/
 agent/install/payload-manifest.json
+.neon

@@ -56,6 +56,19 @@ SHARED_EMAIL_SENDER = "shared_email_sender"
 #: capability to a legacy org: it would get the entitlement but no device group.
 REMOTE_CONTROL = "remote_control"
 
+#: Workforce Insights — per-user attendance, active/idle time and app/website productivity,
+#: branded "Tracker" in the portal.
+#:
+#: Deliberately absent from every plan frozenset below, so it is OFF for every org until an
+#: operator turns it on per organization via `entitlement_overrides` — the same per-org,
+#: audited switch remote control uses, and for a stronger reason here. This is employee
+#: monitoring: it must never arrive by being bundled into a tier a customer bought for
+#: something else. Enabling it is a deliberate commercial-and-compliance act for one named
+#: account (the customer attests to notice/DPIA), not a side effect of their plan. Granting
+#: it is one toggle on the org page; the route still gates on this key, so the entitlement —
+#: not the prompt, not a nav link — is what authorises the data to be collected and read.
+WORKFORCE_INSIGHTS = "workforce_insights"
+
 # ── Plans ──────────────────────────────────────────────────────────────────
 
 ESSENTIAL = "essential"
