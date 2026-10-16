@@ -84,6 +84,9 @@ async def attendance(
     if (day_to - day_from).days > _MAX_RANGE_DAYS:
         day_from = day_to - timedelta(days=_MAX_RANGE_DAYS)
 
+    # Usernames are stored lower-cased (see WorkforceAggregator._to_sample); match the filter
+    # the same way so a caller passing a different case still finds the rows.
+    username = username.lower() if username else None
     rows = await WorkforceService(session).attendance(
         actor=actor, day_from=day_from, day_to=day_to,
         device_id=device_id, username=username,
@@ -116,6 +119,7 @@ async def user_detail(
     if (day_to - day_from).days > _MAX_RANGE_DAYS:
         day_from = day_to - timedelta(days=_MAX_RANGE_DAYS)
 
+    username = username.lower()   # stored lower-cased; match the same way
     detail = await WorkforceService(session).user_detail(
         actor=actor, username=username, day_from=day_from, day_to=day_to,
     )
@@ -138,6 +142,7 @@ async def day_sessions(
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
 ) -> list[WorkSessionRead]:
+    username = username.lower()   # stored lower-cased; match the same way
     spans = await WorkforceService(session).day_sessions(
         actor=actor, device_id=device_id, username=username, day=day,
     )

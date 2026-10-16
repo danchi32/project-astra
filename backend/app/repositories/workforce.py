@@ -1,11 +1,17 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device import Device
-from app.models.workforce import ActivitySample, DailyAppUsage, DailyUserSummary, WorkSession
+from app.models.workforce import (
+    ACTIVITY_FOREGROUND,
+    ActivitySample,
+    DailyAppUsage,
+    DailyUserSummary,
+    WorkSession,
+)
 
 
 def day_bounds(day: date) -> tuple[datetime, datetime]:
@@ -25,9 +31,11 @@ class WorkforceRepository:
         self.session.add_all(samples)
         await self.session.flush()
 
-    async def get_samples_for_day(
+    async def presence_samples_for_day(
         self, device_id: uuid.UUID, day: date
     ) -> list[ActivitySample]:
+        """The day's session/presence events only (logon/logoff/lock/unlock/active/idle),
+        ordered. These are few — a handful of transitions — and drive the attendance spans."""
         start, end = day_bounds(day)
         result = await self.session.execute(
             select(ActivitySample)
@@ -35,10 +43,44 @@ class WorkforceRepository:
                 ActivitySample.device_id == device_id,
                 ActivitySample.occurred_at >= start,
                 ActivitySample.occurred_at < end,
+                ActivitySample.kind != ACTIVITY_FOREGROUND,
             )
             .order_by(ActivitySample.occurred_at.asc())
         )
         return list(result.scalars().all())
+
+    async def foreground_counts_for_day(
+        self, device_id: uuid.UUID, day: date
+    ) -> list[tuple[str, str | None, str | None, str | None, bool, int]]:
+        """Foreground samples rolled up in the database to one row per distinct
+        (username, app, domain, path, idle_suspect) with its count — productivity is counts,
+        so grouping in SQL avoids pulling a whole day of ~30s samples into Python on every push.
+        Returns (username, app, domain, path, idle_suspect, count)."""
+        start, end = day_bounds(day)
+        result = await self.session.execute(
+            select(
+                ActivitySample.username,
+                ActivitySample.app,
+                ActivitySample.domain,
+                ActivitySample.path,
+                ActivitySample.idle_suspect,
+                func.count(),
+            )
+            .where(
+                ActivitySample.device_id == device_id,
+                ActivitySample.occurred_at >= start,
+                ActivitySample.occurred_at < end,
+                ActivitySample.kind == ACTIVITY_FOREGROUND,
+            )
+            .group_by(
+                ActivitySample.username,
+                ActivitySample.app,
+                ActivitySample.domain,
+                ActivitySample.path,
+                ActivitySample.idle_suspect,
+            )
+        )
+        return [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in result.all()]
 
     async def was_present_at_day_start(
         self, device_id: uuid.UUID, username: str, day: date

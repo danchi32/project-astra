@@ -22,7 +22,6 @@ from app.models import Device, Organization, User
 from app.models.base import as_utc, utcnow
 from app.models.workforce import (
     ACTIVITY_AWAY,
-    ACTIVITY_FOREGROUND,
     ACTIVITY_PRESENT,
     SPAN_WORK,
     ActivitySample,
@@ -67,30 +66,34 @@ class _Productivity:
     apps: list[tuple[str, str, int]]
 
 
-def _productivity(samples: list[ActivitySample], *, sample_seconds: int) -> _Productivity | None:
+# One foreground group from the DB roll-up: (app, domain, path, idle_suspect, count).
+_FgGroup = tuple[str | None, str | None, str | None, bool, int]
+
+
+def _productivity(groups: list[_FgGroup], *, sample_seconds: int) -> _Productivity | None:
     """Attribute foreground samples to productivity buckets and per-app totals.
 
     Sampling, not timing: each foreground sample stands for `sample_seconds` of time in that
-    app (the agent's polling interval), so minutes = samples × seconds ÷ 60. Simple and
-    robust — no span maths, and a missed push just drops a sample rather than inflating a gap.
+    app (the agent's polling interval), so minutes = samples × seconds ÷ 60. Fed pre-grouped
+    counts (one row per distinct app/site) from SQL, so this never iterates raw samples.
     """
-    if not samples:
+    if not groups:
         return None
 
     bucket_counts: dict[str, int] = {PRODUCTIVE: 0, NEUTRAL: 0, UNPRODUCTIVE: 0}
     label_counts: dict[str, tuple[str, int]] = {}
     suspect = 0
-    for s in samples:
-        bucket, _label = classify(s.app, s.domain)
-        bucket_counts[bucket] += 1
-        if s.idle_suspect:
-            suspect += 1
+    for app, domain, path, idle_suspect, count in groups:
+        bucket, _label = classify(app, domain)
+        bucket_counts[bucket] += count
+        if idle_suspect:
+            suspect += count
         # The display label is the domain, plus the path when one was captured (path mode).
-        label = s.domain or s.app or "Other"
-        if s.domain and s.path:
-            label = f"{s.domain}{s.path}"
+        label = domain or app or "Other"
+        if domain and path:
+            label = f"{domain}{path}"
         prev_bucket, prev_n = label_counts.get(label, (bucket, 0))
-        label_counts[label] = (prev_bucket, prev_n + 1)
+        label_counts[label] = (prev_bucket, prev_n + count)
 
     def mins(n: int) -> int:
         return int(round(n * sample_seconds / 60))
@@ -220,6 +223,12 @@ class WorkforceAggregator:
 
     @staticmethod
     def _to_sample(device: Device, e: ActivityEvent) -> ActivitySample:
+        # Canonicalise the account key. Presence events come from the Service (the WTS token's
+        # DOMAIN\user) and foreground samples from the Tray (Environment DOMAIN\user); Windows
+        # account names are case-insensitive, so these can differ only in case. Lower-casing
+        # both on ingest keeps one person's attendance and productivity on the same row rather
+        # than splitting into two look-alike accounts.
+        username = e.username.strip().lower()
         # Host only — strip any path an agent put in the domain field by mistake.
         domain = (e.domain.split("/")[0].strip().lower() or None) if e.domain else None
         # Path, with the query string and fragment removed — belt to the agent's braces, since
@@ -235,7 +244,7 @@ class WorkforceAggregator:
         return ActivitySample(
             device_id=device.id,
             org_id=device.org_id,
-            username=e.username,
+            username=username,
             kind=e.kind,
             session_id=e.session_id,
             occurred_at=e.occurred_at,
@@ -247,17 +256,20 @@ class WorkforceAggregator:
 
     async def recompute_day(self, *, device: Device, day: date, now: datetime) -> None:
         sample_seconds = get_settings().workforce_foreground_sample_seconds
-        samples = await self.repo.get_samples_for_day(device.id, day)
 
-        # Split the day's raw samples: presence events drive attendance spans, foreground
-        # samples drive productivity. A user may have one, the other, or both.
+        # Presence events (few) drive attendance spans; foreground samples (many, ~30s apart)
+        # drive productivity and are rolled up to per-app counts in SQL rather than loaded row
+        # by row. A user may have one, the other, or both.
         presence_by_user: dict[str, list[tuple[str, datetime]]] = {}
-        fg_by_user: dict[str, list[ActivitySample]] = {}
-        for s in samples:
-            if s.kind == ACTIVITY_FOREGROUND:
-                fg_by_user.setdefault(s.username, []).append(s)
-            elif s.kind in ACTIVITY_PRESENT or s.kind in ACTIVITY_AWAY:
+        for s in await self.repo.presence_samples_for_day(device.id, day):
+            if s.kind in ACTIVITY_PRESENT or s.kind in ACTIVITY_AWAY:
                 presence_by_user.setdefault(s.username, []).append((s.kind, as_utc(s.occurred_at)))
+
+        fg_by_user: dict[str, list[_FgGroup]] = {}
+        for username, app, domain, path, suspect, count in await self.repo.foreground_counts_for_day(
+            device.id, day
+        ):
+            fg_by_user.setdefault(username, []).append((app, domain, path, suspect, count))
 
         all_spans: list[WorkSession] = []
         all_app_usage: list[DailyAppUsage] = []

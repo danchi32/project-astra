@@ -148,7 +148,9 @@ async def test_push_to_portal_attendance(client, admin_headers, admin_user, sess
     rows = resp.json()
     assert len(rows) == 1
     row = rows[0]
-    assert row["username"] == "ACME\\rahul"
+    # Username is canonicalised to lower case on ingest so the Service's and Tray's
+    # (case-insensitive) account names can't split one person into two rows.
+    assert row["username"] == "acme\\rahul"
     assert row["device_hostname"] == "TRK-PC-001"
     assert row["worked_minutes"] == 480          # 8h, lock excluded
     assert row["first_in"].startswith("2026-07-07T09:00")
@@ -166,7 +168,7 @@ async def test_the_spans_behind_a_day_are_readable(client, admin_headers, admin_
 
     resp = await client.get(
         "/api/v1/tracker/attendance/sessions",
-        params={"device_id": device_id, "username": "ACME\\rahul", "day": "2026-07-07"},
+        params={"device_id": device_id, "username": "acme\\rahul", "day": "2026-07-07"},
         headers=admin_headers,
     )
     assert resp.status_code == 200, resp.text

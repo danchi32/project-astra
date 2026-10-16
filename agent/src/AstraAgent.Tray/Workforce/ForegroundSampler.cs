@@ -62,12 +62,12 @@ public static class ForegroundSampler
             string? path = null;
             if (IsBrowser(process))
             {
-                var url = TryReadBrowserUrl(hwnd);
-                domain = DomainFromUrl(url);
-                // Only in "path" mode, and only when the org opted in; the query and fragment
-                // are never included (AbsolutePath drops them).
+                // One parse yields both host and query-stripped path (the query/fragment are
+                // never included — Uri.AbsolutePath drops them).
+                var (host, urlPath) = ParseSite(TryReadBrowserUrl(hwnd));
+                domain = host;
                 if (urlMode == "path")
-                    path = PathFromUrl(url);
+                    path = urlPath;
             }
 
             return new Sample(process, domain, path);
@@ -87,39 +87,36 @@ public static class ForegroundSampler
         return false;
     }
 
-    /// <summary>The registrable host of a URL, lower-cased, "www." stripped — and nothing
-    /// else. `Uri.Host` drops the path and query for us, which is the privacy guarantee.</summary>
-    public static string? DomainFromUrl(string? url)
+    /// <summary>Parse a browser URL once into (host, query-stripped path). `Uri.Host` and
+    /// `Uri.AbsolutePath` both exclude the query and fragment, which is the privacy guarantee —
+    /// a query can never leak through here. The host is lower-cased with "www." stripped; the
+    /// path is null for a bare site root. DomainFromUrl/PathFromUrl are thin views of this, so
+    /// there is one implementation and the two values are always parsed from the same URL.</summary>
+    public static (string? Domain, string? Path) ParseSite(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
-            return null;
+            return (null, null);
         var u = url.Trim();
         // The address bar often shows no scheme ("github.com/foo"); give Uri one to parse.
         if (!u.Contains("://"))
             u = "http://" + u;
         if (!Uri.TryCreate(u, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Host))
-            return null;
+            return (null, null);
+
         var host = uri.Host.ToLowerInvariant();
-        return host.StartsWith("www.") ? host[4..] : host;
+        if (host.StartsWith("www."))
+            host = host[4..];
+
+        var path = uri.AbsolutePath;
+        string? cleanPath = string.IsNullOrEmpty(path) || path == "/"
+            ? null
+            : (path.Length > 400 ? path[..400] : path);
+        return (host, cleanPath);
     }
 
-    /// <summary>The path of a URL with the query string and fragment removed — `Uri.AbsolutePath`
-    /// excludes both, so a query can never leak through here. Null when there is no meaningful
-    /// path (the bare site root).</summary>
-    public static string? PathFromUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return null;
-        var u = url.Trim();
-        if (!u.Contains("://"))
-            u = "http://" + u;
-        if (!Uri.TryCreate(u, UriKind.Absolute, out var uri))
-            return null;
-        var path = uri.AbsolutePath;
-        if (string.IsNullOrEmpty(path) || path == "/")
-            return null;
-        return path.Length > 400 ? path[..400] : path;
-    }
+    public static string? DomainFromUrl(string? url) => ParseSite(url).Domain;
+
+    public static string? PathFromUrl(string? url) => ParseSite(url).Path;
 
     // ── UI Automation ─────────────────────────────────────────────────────────
     // Reads the foreground browser's address bar via the managed UI Automation client.
@@ -147,8 +144,13 @@ public static class ForegroundSampler
             int bestLen = -1;
             foreach (AutomationElement doc in docs)
             {
-                var name = doc.Current.Name ?? "";
-                if (name.Length == 0 || name.Length <= bestLen || !title.Contains(name, StringComparison.Ordinal))
+                var info = doc.Current;
+                var name = info.Name ?? "";
+                // Skip background tabs: their documents are off-screen, so a tab that merely
+                // shares (or is a substring of) the window title can't be mistaken for the
+                // active one. The active tab's document is on-screen and its name is the title.
+                if (name.Length == 0 || name.Length <= bestLen || info.IsOffscreen
+                    || !title.Contains(name, StringComparison.Ordinal))
                     continue;
                 var value = ReadValue(doc);
                 if (!string.IsNullOrWhiteSpace(value) &&
