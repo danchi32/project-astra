@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Users, Radar, Boxes, MonitorSmartphone,
   BookOpen, Zap, BarChart3, Shield, ShieldCheck,
-  CreditCard, Building2, ScrollText, LifeBuoy, Bot, Clock } from "lucide-react";
+  CreditCard, Building2, ScrollText, LifeBuoy, Bot, Clock, Lock } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import { getViewAs } from "@/lib/viewAs";
 
@@ -90,6 +90,12 @@ export function Sidebar() {
           // Exact match for /platform (so its sub-pages don't also light it up);
           // prefix match elsewhere so detail pages keep their parent highlighted.
           const active = href === "/platform" ? pathname === "/platform" : pathname.startsWith(href);
+          // The Tracker is shown to everyone but locked until the org subscribes — the page
+          // itself prompts them. Only show the lock once entitlements are known, to avoid a
+          // flash of a lock on a stale /me cache.
+          const locked = href === "/tracker"
+            && me?.entitlements !== undefined
+            && !me.entitlements.includes("workforce_insights");
           return (
             <Link
               key={href}
@@ -102,6 +108,7 @@ export function Sidebar() {
             >
               <Icon size={16} />
               <span className="flex-1">{label}</span>
+              {locked && <Lock size={13} style={{ opacity: 0.6 }} />}
             </Link>
           );
         })}
