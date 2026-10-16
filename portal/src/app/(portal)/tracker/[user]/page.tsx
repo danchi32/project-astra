@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock } from "lucide-react";
+import { ArrowLeft, Clock, AlertTriangle } from "lucide-react";
 import { getUserDetail, type AppUsage } from "@/lib/api/tracker";
 import {
   UpgradeRequired,
@@ -165,6 +165,24 @@ export default function UserDetailPage() {
           </div>
         ))}
       </div>
+
+      {/* Idle-faking review flag — only when there is something to review, and framed as a
+          signal to check, never an accusation. */}
+      {(data?.suspected_idle_minutes ?? 0) > 0 && (
+        <div
+          className="rounded-xl px-4 py-3 flex items-start gap-2 text-sm"
+          style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.4)" }}
+        >
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" style={{ color: "#f59e0b" }} />
+          <span style={{ color: "var(--text-secondary)" }}>
+            <strong style={{ color: "var(--text-primary)" }}>
+              {formatMinutes(data!.suspected_idle_minutes!)}
+            </strong>{" "}
+            of input looked mechanically repetitive (possible mouse-jiggler) — worth a look, not
+            a conclusion. Based on mouse movement only.
+          </span>
+        </div>
+      )}
 
       {/* Productivity split */}
       <div className="rounded-2xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>

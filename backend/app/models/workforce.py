@@ -25,6 +25,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -100,6 +101,11 @@ class ActivitySample(TimestampMixin, Base):
     # domain mode. Never holds a query string or fragment — enforced at the agent and again
     # here on ingest.
     path: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # This foreground window's input looked mechanically faked (a mouse jiggler). Mouse-only,
+    # a flag for review — see JiggleHeuristic in the agent.
+    idle_suspect: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
 
 class WorkSession(TimestampMixin, Base):
@@ -172,6 +178,9 @@ class DailyUserSummary(TimestampMixin, Base):
     productive_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     neutral_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unproductive_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Minutes whose input looked like mouse-jiggler faking — a review signal, not a verdict.
+    # NULL until any foreground data is collected, like the other P2/P3 fields.
+    suspected_idle_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False

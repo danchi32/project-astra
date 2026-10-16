@@ -34,6 +34,8 @@ class DailyUserSummaryRead(BaseModel):
     productive_minutes: int | None = None
     neutral_minutes: int | None = None
     unproductive_minutes: int | None = None
+    # Minutes flagged as possible mouse-jiggler faking — a review signal, not a verdict.
+    suspected_idle_minutes: int | None = None
 
 
 class WorkSessionRead(BaseModel):
@@ -69,6 +71,7 @@ class UserDetailRead(BaseModel):
     productive_minutes: int | None = None
     neutral_minutes: int | None = None
     unproductive_minutes: int | None = None
+    suspected_idle_minutes: int | None = None
 
     days: list[DailyUserSummaryRead]
     apps: list[AppUsageRead]

@@ -20,6 +20,7 @@ export interface DailyUserSummary {
   productive_minutes: number | null;
   neutral_minutes: number | null;
   unproductive_minutes: number | null;
+  suspected_idle_minutes: number | null;
 }
 
 /** One derived work/break span — the raw material behind a day's worked total. */
@@ -66,6 +67,7 @@ export interface UserDetail {
   productive_minutes: number | null;
   neutral_minutes: number | null;
   unproductive_minutes: number | null;
+  suspected_idle_minutes: number | null;
   days: DailyUserSummary[];
   apps: AppUsage[];
 }

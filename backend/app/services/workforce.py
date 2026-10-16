@@ -62,6 +62,7 @@ class _Productivity:
     productive_minutes: int
     neutral_minutes: int
     unproductive_minutes: int
+    suspected_idle_minutes: int
     # (label, bucket, minutes) per app/site, biggest first.
     apps: list[tuple[str, str, int]]
 
@@ -78,9 +79,12 @@ def _productivity(samples: list[ActivitySample], *, sample_seconds: int) -> _Pro
 
     bucket_counts: dict[str, int] = {PRODUCTIVE: 0, NEUTRAL: 0, UNPRODUCTIVE: 0}
     label_counts: dict[str, tuple[str, int]] = {}
+    suspect = 0
     for s in samples:
         bucket, _label = classify(s.app, s.domain)
         bucket_counts[bucket] += 1
+        if s.idle_suspect:
+            suspect += 1
         # The display label is the domain, plus the path when one was captured (path mode).
         label = s.domain or s.app or "Other"
         if s.domain and s.path:
@@ -101,6 +105,7 @@ def _productivity(samples: list[ActivitySample], *, sample_seconds: int) -> _Pro
         productive_minutes=mins(bucket_counts[PRODUCTIVE]),
         neutral_minutes=mins(bucket_counts[NEUTRAL]),
         unproductive_minutes=mins(bucket_counts[UNPRODUCTIVE]),
+        suspected_idle_minutes=mins(suspect),
         apps=[a for a in apps if a[2] > 0],
     )
 
@@ -237,6 +242,7 @@ class WorkforceAggregator:
             app=e.app,
             domain=domain,
             path=path,
+            idle_suspect=e.idle_suspect,
         )
 
     async def recompute_day(self, *, device: Device, day: date, now: datetime) -> None:
@@ -305,6 +311,7 @@ class WorkforceAggregator:
         productive = prod.productive_minutes if prod else None
         neutral = prod.neutral_minutes if prod else None
         unproductive = prod.unproductive_minutes if prod else None
+        suspected_idle = prod.suspected_idle_minutes if prod else None
 
         if existing is None:
             self.session.add(DailyUserSummary(
@@ -312,6 +319,7 @@ class WorkforceAggregator:
                 first_in=first_in, last_out=last_out, worked_minutes=worked,
                 active_minutes=active, productive_minutes=productive,
                 neutral_minutes=neutral, unproductive_minutes=unproductive,
+                suspected_idle_minutes=suspected_idle,
             ))
         else:
             existing.first_in = first_in
@@ -321,6 +329,7 @@ class WorkforceAggregator:
             existing.productive_minutes = productive
             existing.neutral_minutes = neutral
             existing.unproductive_minutes = unproductive
+            existing.suspected_idle_minutes = suspected_idle
         await self.session.flush()
 
 
@@ -393,6 +402,7 @@ class WorkforceService:
             productive_minutes=total("productive_minutes"),
             neutral_minutes=total("neutral_minutes"),
             unproductive_minutes=total("unproductive_minutes"),
+            suspected_idle_minutes=total("suspected_idle_minutes"),
             days=days,
             apps=apps,
         )

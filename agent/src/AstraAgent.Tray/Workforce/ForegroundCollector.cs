@@ -31,6 +31,7 @@ public sealed class ForegroundCollector : IDisposable
 
     private readonly HttpClient _http;
     private readonly ITokenStore _store;
+    private readonly MouseActivityMonitor _mouse = new();
     private readonly List<ActivityDto> _buffer = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly string _username = $"{Environment.UserDomainName}\\{Environment.UserName}";
@@ -45,7 +46,11 @@ public sealed class ForegroundCollector : IDisposable
         _store = store;
     }
 
-    public void Start() => _loop = Task.Run(() => LoopAsync(_cts.Token));
+    public void Start()
+    {
+        _mouse.Start();
+        _loop = Task.Run(() => LoopAsync(_cts.Token));
+    }
 
     private async Task LoopAsync(CancellationToken ct)
     {
@@ -71,6 +76,10 @@ public sealed class ForegroundCollector : IDisposable
 
     private void TickOnce()
     {
+        // Drain the mouse window every tick (whether tracking is on or off) so it never grows
+        // unbounded, and classify this interval's input.
+        var (positions, clicks) = _mouse.TakeWindow();
+
         // Self-gating: only collect while the backend has tracking on for this org. Reading
         // the flag the Service wrote keeps the Tray from ever collecting covertly.
         if (!ActivityTrackingState.ReadFromRegistry())
@@ -83,8 +92,12 @@ public sealed class ForegroundCollector : IDisposable
         if (sample is null)
             return;
 
+        // Mouse-only idle-faking signal — a flag for review, never the keyboard.
+        var suspect = JiggleHeuristic.Classify(positions, clicks) == InputQuality.Suspect;
+
         _buffer.Add(new ActivityDto(
-            _username, "foreground", DateTimeOffset.UtcNow, sample.App, sample.Domain, sample.Path));
+            _username, "foreground", DateTimeOffset.UtcNow,
+            sample.App, sample.Domain, sample.Path, suspect));
         if (_buffer.Count > MaxBuffer)
             _buffer.RemoveRange(0, _buffer.Count - MaxBuffer);
     }
@@ -114,6 +127,7 @@ public sealed class ForegroundCollector : IDisposable
         _cts.Cancel();
         try { _loop?.Wait(TimeSpan.FromSeconds(2)); }
         catch { /* ignore shutdown races */ }
+        _mouse.Dispose();
         _cts.Dispose();
         _http.Dispose();
     }
@@ -124,7 +138,8 @@ public sealed class ForegroundCollector : IDisposable
         [property: JsonPropertyName("occurred_at")] DateTimeOffset OccurredAt,
         [property: JsonPropertyName("app")] string? App,
         [property: JsonPropertyName("domain")] string? Domain,
-        [property: JsonPropertyName("path")] string? Path);
+        [property: JsonPropertyName("path")] string? Path,
+        [property: JsonPropertyName("idle_suspect")] bool IdleSuspect);
 
     private sealed record ActivityPushDto(
         [property: JsonPropertyName("activity")] IReadOnlyList<ActivityDto> Activity);
