@@ -6,7 +6,13 @@ rest of the telemetry push it rides in. These are what the portal reads back.
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.services.workforce_categories import BUCKETS
+
+# A customer's override map is small by design — it reclassifies the handful of apps/sites that
+# matter to them, not a directory. Cap it so a stored config stays bounded and cheap to apply.
+_MAX_RULES = 300
 
 
 class DailyUserSummaryRead(BaseModel):
@@ -36,6 +42,47 @@ class DailyUserSummaryRead(BaseModel):
     unproductive_minutes: int | None = None
     # Minutes flagged as possible mouse-jiggler faking — a review signal, not a verdict.
     suspected_idle_minutes: int | None = None
+
+
+class CategoryOverrides(BaseModel):
+    """Per-org productivity reclassification: which apps/domains this customer counts as
+    productive / neutral / unproductive, overriding the built-in taxonomy. Keys are normalised
+    (lower-cased, trimmed; a leading ``www.`` is dropped from a domain) and values must be one
+    of the three buckets — anything else is rejected at the edge rather than stored and ignored."""
+
+    # host -> bucket, e.g. {"youtube.com": "productive"}
+    domain: dict[str, str] = Field(default_factory=dict)
+    # process/app keyword (substring, lower-cased) -> bucket, e.g. {"myinternaltool": "productive"}
+    app: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("domain", "app")
+    @classmethod
+    def _normalise(cls, raw: dict[str, str], info) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for key, bucket in raw.items():
+            k = str(key).strip().lower()
+            if info.field_name == "domain" and k.startswith("www."):
+                k = k[4:]
+            if not k:
+                continue  # an empty key is a no-op rule, not an error
+            if bucket not in BUCKETS:
+                raise ValueError(
+                    f"{info.field_name} rule '{k}' has invalid bucket '{bucket}'; "
+                    f"expected one of {', '.join(BUCKETS)}"
+                )
+            out[k] = bucket
+        if len(out) > _MAX_RULES:
+            raise ValueError(f"too many {info.field_name} rules (max {_MAX_RULES})")
+        return out
+
+
+class CategoryConfigRead(BaseModel):
+    """What the category-config screen needs: the three buckets, the built-in defaults (shown so
+    an admin can see what a rule would change), and the org's own overrides."""
+
+    buckets: list[str]
+    builtin: CategoryOverrides
+    overrides: CategoryOverrides
 
 
 class WorkSessionRead(BaseModel):

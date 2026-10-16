@@ -136,8 +136,59 @@ def category_for(app: str | None, domain: str | None) -> str:
     return "uncategorised"
 
 
-def classify(app: str | None, domain: str | None) -> tuple[str, str]:
-    """(bucket, category_label) for a foreground sample."""
+# A per-org override map: {"domain": {host: bucket}, "app": {keyword: bucket}}. It only ever
+# flips the bucket — the built-in human label is kept, so a surprising score is still traceable
+# to one rule ("your rule put youtube.com under Productive").
+Overrides = dict[str, dict[str, str]]
+
+
+def _override_bucket(app: str | None, domain: str | None, overrides: Overrides | None) -> str | None:
+    """The bucket an org override assigns to this sample, or None if no override matches.
+
+    Domain beats app, same as the built-in resolution: a browser's process name is just
+    "chrome", but the domain says what the person is doing. Stored JSON is treated defensively
+    — only values that are real buckets count."""
+    if not overrides:
+        return None
+    if domain:
+        d = _normalise_domain(domain)
+        best: str | None = None
+        best_bucket: str | None = None
+        for known, bucket in (overrides.get("domain") or {}).items():
+            k = _normalise_domain(str(known))
+            if (d == k or d.endswith("." + k)) and bucket in BUCKETS:
+                if best is None or len(k) > len(best):
+                    best, best_bucket = k, bucket
+        if best_bucket is not None:
+            return best_bucket
+    if app:
+        a = app.strip().lower()
+        for keyword, bucket in (overrides.get("app") or {}).items():
+            kw = str(keyword).strip().lower()
+            if kw and kw in a and bucket in BUCKETS:
+                return bucket
+    return None
+
+
+def classify(
+    app: str | None, domain: str | None, overrides: Overrides | None = None
+) -> tuple[str, str]:
+    """(bucket, category_label) for a foreground sample.
+
+    `overrides` is the org's per-org reclassification map; when one matches, it replaces the
+    bucket while keeping the built-in category label."""
     cat = category_for(app, domain)
     label, bucket = CATEGORIES[cat]
+    override = _override_bucket(app, domain, overrides)
+    if override is not None:
+        bucket = override
     return bucket, label
+
+
+def builtin_buckets() -> Overrides:
+    """The built-in taxonomy flattened to the same {"domain": {...}, "app": {...}} shape the
+    overrides use, so the admin UI can show each default next to the customer's override."""
+    return {
+        "domain": {d: CATEGORIES[cat][1] for d, cat in _DOMAIN_CATEGORY.items()},
+        "app": {kw: CATEGORIES[cat][1] for kw, cat in _APP_CATEGORY},
+    }

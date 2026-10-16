@@ -6,7 +6,10 @@ whole point of a monitoring feature.
 """
 from datetime import date, datetime, timezone
 
-from app.services.workforce import _summarize, build_work_spans
+import pytest
+
+from app.schemas.workforce import CategoryOverrides
+from app.services.workforce import _productivity, _summarize, build_work_spans
 
 UTC = timezone.utc
 DAY = date(2026, 7, 7)
@@ -201,3 +204,88 @@ async def test_attendance_is_staff_only(client, user_headers, admin_user, sessio
     await _enable_tracker(session_factory, admin_user.org_id)
     resp = await client.get("/api/v1/tracker/attendance", headers=user_headers)
     assert resp.status_code == 403
+
+
+# ── Productivity reclassification (category overrides) ─────────────────────────
+
+
+def test_an_override_flips_the_bucket_but_keeps_active_total():
+    # 4 foreground samples × 30s = 2 minutes in youtube.com (built-in: unproductive).
+    groups = [("chrome", "youtube.com", "/watch", False, False, 4)]
+    base = _productivity(groups, sample_seconds=30)
+    assert (base.unproductive_minutes, base.productive_minutes) == (2, 0)
+
+    flipped = _productivity(
+        groups, sample_seconds=30, overrides={"domain": {"youtube.com": "productive"}})
+    assert (flipped.productive_minutes, flipped.unproductive_minutes) == (2, 0)
+    # An override only moves time between buckets; it never changes how much was active.
+    assert flipped.active_minutes == base.active_minutes == 2
+
+
+def test_category_overrides_normalise_keys_and_reject_bad_buckets():
+    ov = CategoryOverrides(domain={"WWW.Reddit.com": "neutral"}, app={" Figma ": "productive"})
+    assert ov.domain == {"reddit.com": "neutral"}   # www. dropped, lower-cased
+    assert ov.app == {"figma": "productive"}         # trimmed, lower-cased
+    with pytest.raises(ValueError):
+        CategoryOverrides(domain={"x.com": "super"})  # not one of the three buckets
+
+
+async def test_categories_round_trip_and_admin_only(
+    client, admin_headers, user_headers, admin_user, session_factory
+):
+    await _enable_tracker(session_factory, admin_user.org_id)
+
+    # Defaults: no overrides yet, but the buckets and the built-in catalogue are present.
+    cfg = (await client.get("/api/v1/tracker/categories", headers=admin_headers)).json()
+    assert cfg["buckets"] == ["productive", "neutral", "unproductive"]
+    assert cfg["overrides"] == {"domain": {}, "app": {}}
+    assert cfg["builtin"]["domain"]  # the shipped taxonomy is exposed for the UI
+
+    # A non-admin staff member cannot rewrite the org's productivity rules.
+    assert (await client.put(
+        "/api/v1/tracker/categories", json={"domain": {"youtube.com": "productive"}},
+        headers=user_headers)).status_code == 403
+
+    # An invalid bucket is refused at the edge, not silently stored.
+    assert (await client.put(
+        "/api/v1/tracker/categories", json={"domain": {"x.com": "super"}},
+        headers=admin_headers)).status_code == 422
+
+    saved = await client.put(
+        "/api/v1/tracker/categories",
+        json={"domain": {"YouTube.com": "productive"}, "app": {"obs": "unproductive"}},
+        headers=admin_headers)
+    assert saved.status_code == 200
+    assert saved.json()["overrides"] == {
+        "domain": {"youtube.com": "productive"}, "app": {"obs": "unproductive"}}
+
+
+async def test_an_override_reclassifies_collected_activity(
+    client, admin_headers, admin_user, session_factory
+):
+    """The whole point: a saved rule changes how new activity is scored. Set youtube.com →
+    productive, push a block of youtube foreground, and the person's productive time reflects it
+    instead of the built-in unproductive default."""
+    await _enable_tracker(session_factory, admin_user.org_id)
+    assert (await client.put(
+        "/api/v1/tracker/categories", json={"domain": {"youtube.com": "productive"}},
+        headers=admin_headers)).status_code == 200
+
+    device_token = await _enroll_device(client, admin_headers)
+    youtube = [
+        {"username": "ACME\\rahul", "kind": "foreground", "domain": "youtube.com",
+         "path": "/watch", "occurred_at": f"2026-07-07T10:{m:02d}:00Z"}
+        for m in range(0, 20)  # 20 samples
+    ]
+    assert (await _push(
+        client, device_token, {**TELEMETRY_PAYLOAD, "activity": youtube})).status_code == 200
+
+    detail = (await client.get(
+        "/api/v1/tracker/user",
+        params={"username": "acme\\rahul", "from": "2026-07-07", "to": "2026-07-07"},
+        headers=admin_headers)).json()
+    assert detail["productive_minutes"] > 0
+    assert detail["unproductive_minutes"] == 0
+    # And the app breakdown carries the overridden bucket, not the default.
+    yt = next(a for a in detail["apps"] if a["label"].startswith("youtube.com"))
+    assert yt["bucket"] == "productive"

@@ -2,8 +2,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Clock, Download, Info, Search } from "lucide-react";
+import { Download, Info, Search } from "lucide-react";
 import { getAttendance, type DailyUserSummary } from "@/lib/api/tracker";
+import { TrackerTabs } from "./TrackerTabs";
 import {
   UpgradeRequired,
   isUpgradeRequired,
@@ -135,22 +136,10 @@ export default function TrackerPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <div
-          className="p-2 rounded-lg"
-          style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}
-        >
-          <Clock size={18} />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            Tracker — Attendance
-          </h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            First-in, last-out and worked hours per user, per day
-          </p>
-        </div>
-      </div>
+      <TrackerTabs active="users" />
+      <p className="text-sm -mt-2" style={{ color: "var(--text-secondary)" }}>
+        First-in, last-out and worked hours per user, per day
+      </p>
 
       {/* Transparency note — this is monitoring, and saying so is part of the product. */}
       <div

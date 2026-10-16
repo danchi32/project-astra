@@ -44,6 +44,7 @@ from app.services.workforce_categories import (
     PRIVATE_PLACEHOLDER,
     PRODUCTIVE,
     UNPRODUCTIVE,
+    Overrides,
     classify,
     is_sensitive,
 )
@@ -71,7 +72,9 @@ class _Productivity:
 _FgGroup = tuple[str | None, str | None, str | None, bool, bool, int]
 
 
-def _productivity(groups: list[_FgGroup], *, sample_seconds: int) -> _Productivity | None:
+def _productivity(
+    groups: list[_FgGroup], *, sample_seconds: int, overrides: Overrides | None = None
+) -> _Productivity | None:
     """Attribute foreground samples to active/idle time, productivity buckets and per-app totals.
 
     Sampling, not timing: each foreground sample stands for `sample_seconds` of time in that
@@ -93,7 +96,7 @@ def _productivity(groups: list[_FgGroup], *, sample_seconds: int) -> _Productivi
         if is_idle:
             idle += count
             continue
-        bucket, _label = classify(app, domain)
+        bucket, _label = classify(app, domain, overrides)
         bucket_counts[bucket] += count
         if idle_suspect:
             suspect += count
@@ -267,6 +270,10 @@ class WorkforceAggregator:
 
     async def recompute_day(self, *, device: Device, day: date, now: datetime) -> None:
         sample_seconds = get_settings().workforce_foreground_sample_seconds
+        # The org's productivity reclassification, if any — applied as this day is rebuilt, so
+        # a saved override takes effect from the next recompute of each reporting device.
+        org = await self.session.get(Organization, device.org_id)
+        overrides: Overrides | None = org.workforce_categories if org else None
 
         # Presence events (few) drive attendance spans; foreground samples (many, ~30s apart)
         # drive productivity and are rolled up to per-app counts in SQL rather than loaded row
@@ -294,7 +301,8 @@ class WorkforceAggregator:
                     kind=SPAN_WORK, started_at=sp.started_at, ended_at=sp.ended_at,
                 ))
 
-            prod = _productivity(fg_by_user.get(username, []), sample_seconds=sample_seconds)
+            prod = _productivity(
+                fg_by_user.get(username, []), sample_seconds=sample_seconds, overrides=overrides)
             await self._write_summary(
                 device=device, username=username, day=day,
                 attendance=_summarize(spans, day=day, now=now), prod=prod,

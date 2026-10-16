@@ -75,3 +75,29 @@ export interface UserDetail {
 
 export const getUserDetail = (params: { username: string; from?: string; to?: string }) =>
   apiClient.get<UserDetail>("/tracker/user", { params }).then((r) => r.data);
+
+/** A productivity bucket. The three the whole Tracker scores against. */
+export type Bucket = "productive" | "neutral" | "unproductive";
+
+/** Per-org reclassification: which apps/domains this org counts as what. Keys are a website
+ *  host (github.com) or an app keyword (substring of the process name); values are a bucket.
+ *  An override only flips the bucket — the built-in human label is kept. */
+export interface CategoryOverrides {
+  domain: Record<string, Bucket>;
+  app: Record<string, Bucket>;
+}
+
+/** What the category-config screen reads: the buckets, the built-in defaults (for reference),
+ *  and this org's overrides. */
+export interface CategoryConfig {
+  buckets: Bucket[];
+  builtin: CategoryOverrides;
+  overrides: CategoryOverrides;
+}
+
+export const getCategories = () =>
+  apiClient.get<CategoryConfig>("/tracker/categories").then((r) => r.data);
+
+/** Full replace — the body is the whole override set, so removing a rule is leaving it out. */
+export const putCategories = (overrides: CategoryOverrides) =>
+  apiClient.put<CategoryConfig>("/tracker/categories", overrides).then((r) => r.data);

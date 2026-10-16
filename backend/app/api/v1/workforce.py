@@ -17,12 +17,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles, requires
 from app.core.database import get_db
-from app.models import User, UserRole
+from app.models import Organization, User, UserRole
 from app.models.base import utcnow
-from app.schemas.workforce import DailyUserSummaryRead, UserDetailRead, WorkSessionRead
+from app.schemas.workforce import (
+    CategoryConfigRead,
+    CategoryOverrides,
+    DailyUserSummaryRead,
+    UserDetailRead,
+    WorkSessionRead,
+)
 from app.services.audit import AuditService
 from app.services.entitlements import WORKFORCE_INSIGHTS
+from app.services.exceptions import NotFoundError
 from app.services.workforce import WorkforceService
+from app.services.workforce_categories import BUCKETS, builtin_buckets
 
 router = APIRouter(
     prefix="/tracker",
@@ -31,6 +39,9 @@ router = APIRouter(
 )
 
 staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
+# Changing what counts as productive is a policy decision, so it is admin-only — a technician
+# can read the config (to understand a score) but not rewrite the org's productivity rules.
+admin_required = require_roles(UserRole.ADMIN)
 
 # Cap a single query's span so a wide range can't scan a year of rows by accident; the
 # portal pages by moving the date window, not by offset.
@@ -151,3 +162,63 @@ async def day_sessions(
         detail={"device_id": str(device_id), "day": str(day), "username": username},
     )
     return spans
+
+
+def _config(overrides: dict | None) -> CategoryConfigRead:
+    """Build the config view: the buckets, the built-in defaults, and the org's overrides.
+    `overrides` is the raw stored JSON (or None); CategoryOverrides re-validates it so a hand-
+    edited or legacy value can never surface an invalid bucket to the UI."""
+    stored = overrides or {}
+    return CategoryConfigRead(
+        buckets=list(BUCKETS),
+        builtin=CategoryOverrides.model_validate(builtin_buckets()),
+        overrides=CategoryOverrides.model_validate(
+            {"domain": stored.get("domain") or {}, "app": stored.get("app") or {}}
+        ),
+    )
+
+
+@router.get(
+    "/categories",
+    response_model=CategoryConfigRead,
+    summary="The productivity taxonomy: built-in defaults and this org's overrides",
+)
+async def get_categories(
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> CategoryConfigRead:
+    """Config, not employee data, so this is not a `workforce.view` row — but it is still
+    gated on the entitlement (router dependency) and staff-only."""
+    org = await session.get(Organization, actor.org_id)
+    return _config(org.workforce_categories if org else None)
+
+
+@router.put(
+    "/categories",
+    response_model=CategoryConfigRead,
+    summary="Replace this org's productivity reclassification rules (admin only)",
+)
+async def put_categories(
+    payload: CategoryOverrides,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> CategoryConfigRead:
+    """Full replace — the body is the whole override set, so removing a rule is just leaving it
+    out. Audited as a mutation (CLAUDE.md). The new rules apply from the next recompute of each
+    reporting device; days already rolled up keep their buckets until their device next reports
+    (or the nightly rebuild re-scores them)."""
+    org = await session.get(Organization, actor.org_id)
+    if org is None:
+        raise NotFoundError("Organization not found")
+    org.workforce_categories = payload.model_dump()
+    await AuditService(session).record(
+        org_id=actor.org_id,
+        actor_id=actor.id,
+        action="workforce.categories.update",
+        target_type="organization",
+        target_id=str(actor.org_id),
+        detail={"domain_rules": len(payload.domain), "app_rules": len(payload.app),
+                "domain": payload.domain, "app": payload.app},
+    )
+    await session.commit()
+    return _config(org.workforce_categories)

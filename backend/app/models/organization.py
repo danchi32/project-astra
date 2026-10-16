@@ -96,6 +96,16 @@ class Organization(TimestampMixin, Base):
         String(10), nullable=False, default="domain", server_default="domain"
     )
 
+    # Per-org productivity reclassification for the Tracker: which apps/domains this customer
+    # counts as productive / neutral / unproductive, overriding the built-in taxonomy
+    # (services/workforce_categories.py). Shape: {"domain": {"youtube.com": "productive"},
+    # "app": {"myinternaltool": "productive"}}. Null/empty for almost every org — the built-in
+    # default is the answer. An override only flips the bucket; the built-in human label stays,
+    # so a surprising score is still traceable to one rule. Applied from the next recompute
+    # onward (ingest re-rolls each reporting device's day), never by a synchronous fleet sweep —
+    # the aggregator is deliberately proportional to the device that just reported.
+    workforce_categories: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     # A sales-demo tenant (scripts/seed_presentation.py): invented fleet, invented people.
     # Kept out of every customer rollup — public homepage stats, MRR, growth — exactly like
     # the operator's own org, so a prospect is never shown fabricated devices as customers.
