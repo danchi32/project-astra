@@ -48,7 +48,7 @@ class WorkforceRepository:
         This is the cross-midnight seed: someone who logged on at 23:00 and is still signed
         in at 00:00 was present from the start of the new day, and the day's worked time has
         to begin at 00:00, not at their first event of the day (there may be none)."""
-        from app.models.workforce import ACTIVITY_PRESENT
+        from app.models.workforce import ACTIVITY_FOREGROUND, ACTIVITY_PRESENT
 
         start, _ = day_bounds(day)
         result = await self.session.execute(
@@ -57,6 +57,11 @@ class WorkforceRepository:
                 ActivitySample.device_id == device_id,
                 ActivitySample.username == username,
                 ActivitySample.occurred_at < start,
+                # Presence events only. Foreground (productivity) samples fire every ~30s, so
+                # without this the "last sample before midnight" is almost always a foreground
+                # row — never a presence kind — and the seed would wrongly read as "away",
+                # dropping a night-shift user's worked time after midnight.
+                ActivitySample.kind != ACTIVITY_FOREGROUND,
             )
             .order_by(ActivitySample.occurred_at.desc())
             .limit(1)

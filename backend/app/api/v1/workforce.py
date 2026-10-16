@@ -20,6 +20,7 @@ from app.core.database import get_db
 from app.models import User, UserRole
 from app.models.base import utcnow
 from app.schemas.workforce import DailyUserSummaryRead, UserDetailRead, WorkSessionRead
+from app.services.audit import AuditService
 from app.services.entitlements import WORKFORCE_INSIGHTS
 from app.services.workforce import WorkforceService
 
@@ -34,6 +35,30 @@ staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 # Cap a single query's span so a wide range can't scan a year of rows by accident; the
 # portal pages by moving the date window, not by offset.
 _MAX_RANGE_DAYS = 92
+
+
+async def _audit_view(
+    session: AsyncSession,
+    actor: User,
+    *,
+    target_type: str,
+    target_id: str | None,
+    detail: dict,
+) -> None:
+    """Record that this staff member looked at employee-monitoring data.
+
+    Non-negotiable per the plan (§6: "viewing the sensitive data is itself audited") — the
+    whole point of monitoring is that access to it is accountable. A GET writing an audit row
+    is fine: the read-only middleware (app/main.py) gates only write HTTP methods."""
+    await AuditService(session).record(
+        org_id=actor.org_id,
+        actor_id=actor.id,
+        action="workforce.view",
+        target_type=target_type,
+        target_id=target_id,
+        detail=detail,
+    )
+    await session.commit()
 
 
 @router.get(
@@ -59,10 +84,16 @@ async def attendance(
     if (day_to - day_from).days > _MAX_RANGE_DAYS:
         day_from = day_to - timedelta(days=_MAX_RANGE_DAYS)
 
-    return await WorkforceService(session).attendance(
+    rows = await WorkforceService(session).attendance(
         actor=actor, day_from=day_from, day_to=day_to,
         device_id=device_id, username=username,
     )
+    await _audit_view(
+        session, actor, target_type="workforce_attendance", target_id=username,
+        detail={"from": str(day_from), "to": str(day_to),
+                "device_id": str(device_id) if device_id else None, "username": username},
+    )
+    return rows
 
 
 @router.get(
@@ -85,9 +116,14 @@ async def user_detail(
     if (day_to - day_from).days > _MAX_RANGE_DAYS:
         day_from = day_to - timedelta(days=_MAX_RANGE_DAYS)
 
-    return await WorkforceService(session).user_detail(
+    detail = await WorkforceService(session).user_detail(
         actor=actor, username=username, day_from=day_from, day_to=day_to,
     )
+    await _audit_view(
+        session, actor, target_type="workforce_user", target_id=username,
+        detail={"from": str(day_from), "to": str(day_to), "username": username},
+    )
+    return detail
 
 
 @router.get(
@@ -102,6 +138,11 @@ async def day_sessions(
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
 ) -> list[WorkSessionRead]:
-    return await WorkforceService(session).day_sessions(
+    spans = await WorkforceService(session).day_sessions(
         actor=actor, device_id=device_id, username=username, day=day,
     )
+    await _audit_view(
+        session, actor, target_type="workforce_sessions", target_id=username,
+        detail={"device_id": str(device_id), "day": str(day), "username": username},
+    )
+    return spans
