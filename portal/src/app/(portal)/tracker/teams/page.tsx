@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Users } from "lucide-react";
 import { getTeamRollup } from "@/lib/api/tracker";
-import { TrackerTabs } from "../TrackerTabs";
+import { TrackerHeader } from "../TrackerHeader";
 import {
   UpgradeRequired,
   isUpgradeRequired,
@@ -51,10 +51,10 @@ export default function TrackerTeamsPage() {
 
   return (
     <div className="space-y-6">
-      <TrackerTabs active="teams" />
-      <p className="text-sm -mt-2" style={{ color: "var(--text-secondary)" }}>
-        Attendance and productivity by department, measured against each team&apos;s shift
-      </p>
+      <TrackerHeader
+        title="Departments"
+        subtitle="Attendance and productivity by department, measured against each one's shift"
+      />
 
       {/* Range */}
       <div className="flex flex-wrap items-end gap-3">

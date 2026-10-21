@@ -1,147 +1,104 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Info, Search } from "lucide-react";
-import { getAttendance, type DailyUserSummary } from "@/lib/api/tracker";
-import { TrackerTabs } from "./TrackerTabs";
+import { Info, ArrowRight } from "lucide-react";
+import {
+  getAttendance, getTeamRollup, getAccounts,
+  type DailyUserSummary,
+} from "@/lib/api/tracker";
+import { TrackerHeader } from "./TrackerHeader";
 import {
   UpgradeRequired,
   isUpgradeRequired,
   requiredFeature,
 } from "@/components/upgrade-required";
 
-/** YYYY-MM-DD for a Date, in the browser's own zone — the date inputs work in local days. */
 function isoDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate(),
   ).padStart(2, "0")}`;
 }
 
-/** Minutes → "7h 30m". Attendance worked time is always a measured number, so 0 is a real 0,
- *  shown as "0m" rather than a dash. */
-function formatWorked(min: number): string {
+function formatMinutes(min: number): string {
   if (min <= 0) return "0m";
   const h = Math.floor(min / 60);
   const m = min % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** The P2/P3 minute fields are null until their collectors ship — show "—", never a 0 that
- *  would read as "measured and nothing". */
-function formatOptionalMinutes(min: number | null): string {
-  return min == null ? "—" : formatWorked(min);
+/** Sum a nullable minute field across rows: null stays unknown, so we track whether ANY row had
+ *  a measured value and show "—" when none did, never a misleading 0. */
+function sumOptional(rows: DailyUserSummary[], key: keyof DailyUserSummary): number | null {
+  let total = 0;
+  let measured = false;
+  for (const r of rows) {
+    const v = r[key];
+    if (typeof v === "number") { total += v; measured = true; }
+  }
+  return measured ? total : null;
 }
 
-/** A UTC clock time, because the day a row is counted against is a UTC calendar day — showing
- *  the time in a different zone than the day boundary is how a late-evening login lands on
- *  the "wrong" day on screen. */
-function formatTimeUtc(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "UTC",
-  });
-}
+const BUCKET = {
+  productive: { label: "Productive", color: "#10b981" },
+  neutral: { label: "Neutral", color: "#64748b" },
+  unproductive: { label: "Unproductive", color: "#ef4444" },
+} as const;
 
-function formatDay(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  if (!y || !m || !d) return day;
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-}
-
-function toCsv(rows: DailyUserSummary[]): string {
-  const header = [
-    "Date (UTC)",
-    "User",
-    "Device",
-    "First in (UTC)",
-    "Last out (UTC)",
-    "Worked minutes",
-    "Worked",
-  ];
-  const esc = (v: string | number | null) => {
-    const s = v == null ? "" : String(v);
-    // Quote anything with a comma, quote or newline; double embedded quotes. A Windows
-    // account like DOMAIN\user is fine unquoted, but first/last-out can be empty and a
-    // future display name could carry a comma.
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const lines = rows.map((r) =>
-    [
-      r.day,
-      r.username,
-      r.device_hostname ?? r.device_id,
-      formatTimeUtc(r.first_in),
-      formatTimeUtc(r.last_out),
-      r.worked_minutes,
-      formatWorked(r.worked_minutes),
-    ]
-      .map(esc)
-      .join(","),
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl p-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <p className="text-2xl font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>{value}</p>
+      <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>{label}</p>
+    </div>
   );
-  return [header.join(","), ...lines].join("\r\n");
 }
 
-function download(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-export default function TrackerPage() {
+export default function TrackerDashboardPage() {
   const today = useMemo(() => new Date(), []);
-  const [from, setFrom] = useState(() => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - 6);
-    return isoDay(d);
-  });
-  const [to, setTo] = useState(() => isoDay(today));
-  const [q, setQ] = useState("");
+  const range = useMemo(() => {
+    const from = new Date(today);
+    from.setDate(from.getDate() - 6);
+    return { from: isoDay(from), to: isoDay(today) };
+  }, [today]);
 
-  const { data, error, isFetching } = useQuery({
-    queryKey: ["tracker-attendance", from, to],
-    queryFn: () => getAttendance({ from, to }),
-    // A plan refusal is a settled answer, not a blip — don't retry it.
+  const attendance = useQuery({
+    queryKey: ["tracker-attendance", range.from, range.to],
+    queryFn: () => getAttendance(range),
+    retry: (count, err) => !isUpgradeRequired(err) && count < 2,
+  });
+  const teams = useQuery({
+    queryKey: ["tracker-team-rollup", range.from, range.to],
+    queryFn: () => getTeamRollup(range),
+    retry: (count, err) => !isUpgradeRequired(err) && count < 2,
+  });
+  const accounts = useQuery({
+    queryKey: ["tracker-accounts"],
+    queryFn: getAccounts,
     retry: (count, err) => !isUpgradeRequired(err) && count < 2,
   });
 
-  const rows = useMemo(() => {
-    const all = data ?? [];
-    const needle = q.trim().toLowerCase();
-    if (!needle) return all;
-    return all.filter(
-      (r) =>
-        r.username.toLowerCase().includes(needle) ||
-        (r.device_hostname ?? "").toLowerCase().includes(needle),
-    );
-  }, [data, q]);
+  const err = attendance.error || teams.error || accounts.error;
+  if (isUpgradeRequired(err)) return <UpgradeRequired feature={requiredFeature(err)} />;
 
-  // The page stays reachable and explains itself rather than vanishing — hiding it would
-  // make ASTRA look like it has no time tracking at all.
-  if (isUpgradeRequired(error)) {
-    return <UpgradeRequired feature={requiredFeature(error)} />;
-  }
+  const rows = attendance.data ?? [];
+  const accts = accounts.data ?? [];
+  const teamRows = teams.data ?? [];
+
+  const people = new Set(rows.map((r) => r.username)).size;
+  const mapped = accts.filter((a) => a.user_id).length;
+  const worked = rows.reduce((s, r) => s + r.worked_minutes, 0);
+  const prod = sumOptional(rows, "productive_minutes");
+  const neu = sumOptional(rows, "neutral_minutes");
+  const unp = sumOptional(rows, "unproductive_minutes");
+  const splitTotal = (prod ?? 0) + (neu ?? 0) + (unp ?? 0);
+
+  const topTeams = [...teamRows].sort((a, b) => b.worked_minutes - a.worked_minutes).slice(0, 6);
 
   return (
     <div className="space-y-6">
-      <TrackerTabs active="users" />
-      <p className="text-sm -mt-2" style={{ color: "var(--text-secondary)" }}>
-        First-in, last-out and worked hours per user, per day
-      </p>
+      <TrackerHeader title="Tracker" subtitle="Workforce overview — last 7 days (UTC)" />
 
-      {/* Transparency note — this is monitoring, and saying so is part of the product. */}
       <div
         className="rounded-xl px-4 py-3 flex items-start gap-2 text-xs"
         style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
@@ -149,132 +106,64 @@ export default function TrackerPage() {
         <Info size={14} className="mt-0.5 shrink-0" style={{ color: "var(--accent)" }} />
         <span>
           Activity tracking is on for this organisation and shown transparently to the people
-          being tracked. &ldquo;Worked&rdquo; means signed in and unlocked; active vs idle time
-          arrives in a later phase. Times and day boundaries are in UTC.
+          being tracked. Figures below cover the last 7 days; open a section for detail.
         </span>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-          From
-          <input
-            type="date"
-            value={from}
-            max={to}
-            onChange={(e) => setFrom(e.target.value)}
-            className="px-3 py-2 rounded-lg text-sm outline-none"
-            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
-          To
-          <input
-            type="date"
-            value={to}
-            min={from}
-            max={isoDay(today)}
-            onChange={(e) => setTo(e.target.value)}
-            className="px-3 py-2 rounded-lg text-sm outline-none"
-            style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-          />
-        </label>
-        <div className="flex flex-col gap-1 text-xs flex-1 min-w-[200px]" style={{ color: "var(--text-secondary)" }}>
-          Search
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2"
-              style={{ color: "var(--text-secondary)" }}
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="user or device…"
-              className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-            />
-          </div>
-        </div>
-        <button
-          onClick={() => download(`attendance_${from}_to_${to}.csv`, toCsv(rows))}
-          disabled={rows.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
-          style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}
-          title={rows.length === 0 ? "Nothing to export" : "Export the rows below as CSV"}
-        >
-          <Download size={14} /> Export CSV
-        </button>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="People tracked (7d)" value={String(people)} />
+        <StatCard label="Accounts mapped to a person" value={`${mapped}/${accts.length}`} />
+        <StatCard label="Worked (7d)" value={formatMinutes(worked)} />
+        <StatCard label="Productive (7d)" value={prod == null ? "—" : formatMinutes(prod)} />
       </div>
 
-      {/* Table */}
-      <div
-        className="rounded-2xl overflow-hidden"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Date", "User", "Device", "First in", "Last out", "Worked", "Active", "Productive"].map((h) => (
-                  <th
-                    key={h}
-                    className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={`${r.device_id}-${r.username}-${r.day}`} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="px-5 py-3 whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
-                    {formatDay(r.day)}
-                  </td>
-                  <td className="px-5 py-3 font-medium">
-                    <Link
-                      href={`/tracker/${encodeURIComponent(r.username)}`}
-                      className="hover:underline"
-                      style={{ color: "var(--accent)" }}
-                    >
-                      {r.username}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3" style={{ color: "var(--text-secondary)" }}>
-                    {r.device_hostname ?? "—"}
-                  </td>
-                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
-                    {formatTimeUtc(r.first_in)}
-                  </td>
-                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
-                    {r.last_out ? formatTimeUtc(r.last_out) : <span title="Still signed in">in now</span>}
-                  </td>
-                  <td className="px-5 py-3 tabular-nums font-medium" style={{ color: "var(--text-primary)" }}>
-                    {formatWorked(r.worked_minutes)}
-                  </td>
-                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
-                    {formatOptionalMinutes(r.active_minutes)}
-                  </td>
-                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>
-                    {formatOptionalMinutes(r.productive_minutes)}
-                  </td>
-                </tr>
+      {/* Productivity split */}
+      <div className="rounded-2xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <h2 className="text-sm font-semibold mb-3" style={{ color: "var(--text-primary)" }}>Productivity split (7 days)</h2>
+        {splitTotal === 0 ? (
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No app/website activity measured yet.</p>
+        ) : (
+          <>
+            <div className="flex h-3 rounded-full overflow-hidden" style={{ background: "var(--bg)" }}>
+              <div style={{ width: `${((prod ?? 0) / splitTotal) * 100}%`, background: BUCKET.productive.color }} />
+              <div style={{ width: `${((neu ?? 0) / splitTotal) * 100}%`, background: BUCKET.neutral.color }} />
+              <div style={{ width: `${((unp ?? 0) / splitTotal) * 100}%`, background: BUCKET.unproductive.color }} />
+            </div>
+            <div className="flex flex-wrap gap-4 mt-3 text-xs">
+              {([["productive", prod], ["neutral", neu], ["unproductive", unp]] as const).map(([k, v]) => (
+                <span key={k} className="inline-flex items-center gap-1.5" style={{ color: "var(--text-secondary)" }}>
+                  <span className="w-2.5 h-2.5 rounded-sm" style={{ background: BUCKET[k].color }} />
+                  {BUCKET[k].label}:{" "}
+                  <span className="tabular-nums" style={{ color: "var(--text-primary)" }}>{formatMinutes(v ?? 0)}</span>
+                </span>
               ))}
-              {rows.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-5 py-10 text-center" style={{ color: "var(--text-secondary)" }}>
-                    {isFetching
-                      ? "Loading…"
-                      : q.trim()
-                        ? "No rows match your search."
-                        : "No attendance in this range yet. It appears once agents that report activity check in."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* By team */}
+      <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
+          <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>By department</h2>
+          <Link href="/tracker/teams" className="text-xs inline-flex items-center gap-1 hover:underline" style={{ color: "var(--accent)" }}>
+            All departments <ArrowRight size={12} />
+          </Link>
+        </div>
+        <div className="p-5 space-y-2">
+          {topTeams.length === 0 && (
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              No teams yet — set them up in Groups &amp; Teams and map people in Configuration.
+            </p>
+          )}
+          {topTeams.map((t) => (
+            <div key={t.team_id} className="flex items-center gap-3 text-sm">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: t.colour || "var(--accent)" }} />
+              <span className="flex-1 truncate" style={{ color: "var(--text-primary)" }}>{t.team_name}</span>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{t.shift_name ?? "no shift"}</span>
+              <span className="tabular-nums font-medium w-16 text-right" style={{ color: "var(--text-primary)" }}>{formatMinutes(t.worked_minutes)}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
