@@ -164,3 +164,23 @@ export const assignAccount = (username: string, userId: string | null) =>
   apiClient
     .put<TrackedAccount>("/tracker/accounts", { username, user_id: userId })
     .then((r) => r.data);
+
+/** One team's attendance + productivity over a range, summed across its members' accounts.
+ *  Productivity fields are null when no member had a measured value (shown as "—"). */
+export interface TeamRollup {
+  team_id: string;
+  team_name: string;
+  colour: string | null;
+  shift_name: string | null;
+  member_count: number;
+  tracked_members: number;
+  worked_minutes: number;
+  active_minutes: number | null;
+  idle_minutes: number | null;
+  productive_minutes: number | null;
+  neutral_minutes: number | null;
+  unproductive_minutes: number | null;
+}
+
+export const getTeamRollup = (params: { from?: string; to?: string } = {}) =>
+  apiClient.get<TeamRollup[]>("/tracker/teams/rollup", { params }).then((r) => r.data);

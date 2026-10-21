@@ -5,6 +5,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.device import Device
+from app.models.grouping import UserTeam, UserTeamMember
 from app.models.workforce import (
     ACTIVITY_FOREGROUND,
     ActivityAccount,
@@ -12,6 +13,7 @@ from app.models.workforce import (
     DailyAppUsage,
     DailyUserSummary,
     WorkSession,
+    WorkShift,
 )
 
 
@@ -299,6 +301,82 @@ class WorkforceRepository:
         else:
             existing.user_id = user_id
         await self.session.flush()
+
+    # ── Team rollups ──────────────────────────────────────────────────────────
+
+    async def teams_with_meta(
+        self, org_id: uuid.UUID
+    ) -> list[tuple[uuid.UUID, str, str | None, str | None, int]]:
+        """Each team with (id, name, colour, shift_name, member_count) — the frame the rollup
+        fills with attendance. Teams with no tracked data still appear, showing zeros."""
+        member_counts = dict((await self.session.execute(
+            select(UserTeamMember.team_id, func.count())
+            .join(UserTeam, UserTeam.id == UserTeamMember.team_id)
+            .where(UserTeam.org_id == org_id)
+            .group_by(UserTeamMember.team_id)
+        )).all())
+        rows = (await self.session.execute(
+            select(UserTeam.id, UserTeam.name, UserTeam.colour, WorkShift.name)
+            .outerjoin(WorkShift, WorkShift.id == UserTeam.shift_id)
+            .where(UserTeam.org_id == org_id)
+            .order_by(UserTeam.name)
+        )).all()
+        return [
+            (tid, name, colour, shift_name, int(member_counts.get(tid, 0)))
+            for tid, name, colour, shift_name in rows
+        ]
+
+    async def team_rollup(
+        self, org_id: uuid.UUID, *, day_from: date, day_to: date
+    ) -> dict[uuid.UUID, dict]:
+        """Attendance + productivity summed per team over the range, via the user_id each
+        daily summary now carries → team membership. A person in two teams counts in both.
+
+        For each nullable productivity field we return both the summed value and whether ANY
+        member had a measured value, so the read can show "—" (never measured) distinctly from
+        a measured 0 — the same honesty the per-user view keeps."""
+        s = DailyUserSummary
+
+        def pair(col):
+            return func.sum(func.coalesce(col, 0)), func.count(col)
+
+        stmt = (
+            select(
+                UserTeamMember.team_id,
+                func.count(func.distinct(s.user_id)),
+                func.sum(s.worked_minutes),
+                *pair(s.active_minutes),
+                *pair(s.idle_minutes),
+                *pair(s.productive_minutes),
+                *pair(s.neutral_minutes),
+                *pair(s.unproductive_minutes),
+            )
+            .join(UserTeamMember, UserTeamMember.user_id == s.user_id)
+            .where(
+                s.org_id == org_id, s.day >= day_from, s.day <= day_to,
+                s.user_id.isnot(None),
+            )
+            .group_by(UserTeamMember.team_id)
+        )
+        out: dict[uuid.UUID, dict] = {}
+        for r in (await self.session.execute(stmt)).all():
+            (team_id, tracked, worked,
+             act_s, act_n, idle_s, idle_n, prod_s, prod_n,
+             neu_s, neu_n, unp_s, unp_n) = r
+
+            def opt(total, n):
+                return int(total) if n else None
+
+            out[team_id] = {
+                "tracked_members": int(tracked),
+                "worked_minutes": int(worked or 0),
+                "active_minutes": opt(act_s, act_n),
+                "idle_minutes": opt(idle_s, idle_n),
+                "productive_minutes": opt(prod_s, prod_n),
+                "neutral_minutes": opt(neu_s, neu_n),
+                "unproductive_minutes": opt(unp_s, unp_n),
+            }
+        return out
 
     async def set_summary_user(
         self, org_id: uuid.UUID, username: str, user_id: uuid.UUID | None

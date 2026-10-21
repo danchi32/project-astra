@@ -416,3 +416,35 @@ async def test_account_mapping_resolves_the_person_on_attendance(
         "/api/v1/tracker/attendance",
         params={"from": "2026-07-07", "to": "2026-07-07"}, headers=admin_headers)).json()
     assert rows[0]["user_id"] is None
+
+
+async def test_team_rollup_sums_attendance_by_team(
+    client, admin_headers, admin_user, session_factory
+):
+    await _enable_tracker(session_factory, admin_user.org_id)
+    device_token = await _enroll_device(client, admin_headers)
+    await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": ACTIVITY})  # 480m worked
+
+    # Map the account to a person, put that person on a team.
+    user = (await client.post(
+        "/api/v1/users",
+        json={"email": "rahul.t@acme.com", "full_name": "Rahul T", "role": "user"},
+        headers=admin_headers)).json()
+    await client.put(
+        "/api/v1/tracker/accounts", json={"username": "ACME\\rahul", "user_id": user["id"]},
+        headers=admin_headers)
+    team = (await client.post(
+        "/api/v1/grouping/teams", json={"name": "Night Owls"}, headers=admin_headers)).json()
+    await client.put(
+        f"/api/v1/grouping/teams/{team['id']}/users",
+        json={"user_ids": [user["id"]]}, headers=admin_headers)
+
+    rollup = (await client.get(
+        "/api/v1/tracker/teams/rollup",
+        params={"from": "2026-07-07", "to": "2026-07-07"}, headers=admin_headers)).json()
+    row = next(t for t in rollup if t["team_id"] == team["id"])
+    assert row["member_count"] == 1
+    assert row["tracked_members"] == 1
+    assert row["worked_minutes"] == 480     # the lock is excluded, same as attendance
+    # No foreground in this push, so productivity is "not measured", not a zero.
+    assert row["productive_minutes"] is None

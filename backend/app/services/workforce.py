@@ -34,6 +34,7 @@ from app.schemas.telemetry import ActivityEvent
 from app.schemas.workforce import (
     AppUsageRead,
     DailyUserSummaryRead,
+    TeamRollupRead,
     UserDetailRead,
     WorkSessionRead,
 )
@@ -378,6 +379,29 @@ class WorkforceService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.repo = WorkforceRepository(session)
+
+    async def team_rollup(
+        self, *, actor: User, day_from: date, day_to: date
+    ) -> list[TeamRollupRead]:
+        """Attendance + productivity summed per team over the range. Every team appears, even
+        with no tracked activity (zeros), so the Teams view shows the whole org, not only the
+        teams that happen to have data."""
+        teams = await self.repo.teams_with_meta(actor.org_id)
+        agg = await self.repo.team_rollup(actor.org_id, day_from=day_from, day_to=day_to)
+        out: list[TeamRollupRead] = []
+        for team_id, name, colour, shift_name, member_count in teams:
+            a = agg.get(team_id, {})
+            out.append(TeamRollupRead(
+                team_id=team_id, team_name=name, colour=colour, shift_name=shift_name,
+                member_count=member_count, tracked_members=a.get("tracked_members", 0),
+                worked_minutes=a.get("worked_minutes", 0),
+                active_minutes=a.get("active_minutes"),
+                idle_minutes=a.get("idle_minutes"),
+                productive_minutes=a.get("productive_minutes"),
+                neutral_minutes=a.get("neutral_minutes"),
+                unproductive_minutes=a.get("unproductive_minutes"),
+            ))
+        return out
 
     async def attendance(
         self,

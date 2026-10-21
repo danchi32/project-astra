@@ -25,6 +25,7 @@ from app.schemas.workforce import (
     CategoryOverrides,
     DailyUserSummaryRead,
     ShiftAssignmentWrite,
+    TeamRollupRead,
     TeamShiftRead,
     TrackedAccountRead,
     UserDetailRead,
@@ -114,6 +115,34 @@ async def attendance(
         session, actor, target_type="workforce_attendance", target_id=username,
         detail={"from": str(day_from), "to": str(day_to),
                 "device_id": str(device_id) if device_id else None, "username": username},
+    )
+    return rows
+
+
+@router.get(
+    "/teams/rollup",
+    response_model=list[TeamRollupRead],
+    summary="Attendance + productivity summed per team over a date range",
+)
+async def teams_rollup(
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[TeamRollupRead]:
+    today = utcnow().date()
+    day_to = date_to or today
+    day_from = date_from or (day_to - timedelta(days=6))
+    if day_from > day_to:
+        day_from = day_to
+    if (day_to - day_from).days > _MAX_RANGE_DAYS:
+        day_from = day_to - timedelta(days=_MAX_RANGE_DAYS)
+
+    rows = await WorkforceService(session).team_rollup(
+        actor=actor, day_from=day_from, day_to=day_to)
+    await _audit_view(
+        session, actor, target_type="workforce_team_rollup", target_id=None,
+        detail={"from": str(day_from), "to": str(day_to)},
     )
     return rows
 

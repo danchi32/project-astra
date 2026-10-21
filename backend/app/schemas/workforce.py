@@ -223,3 +223,27 @@ class AccountAssignWrite(BaseModel):
 
     username: str = Field(min_length=1, max_length=150)
     user_id: uuid.UUID | None = None
+
+
+# ── Team rollups ──────────────────────────────────────────────────────────────
+
+
+class TeamRollupRead(BaseModel):
+    """One team's attendance + productivity over a range, summed across its members' accounts.
+
+    `member_count` is everyone on the team; `tracked_members` is how many of them actually have
+    tracked activity in the range. The productivity fields are null when no member had a measured
+    value (shown as "—"), never a misleading 0."""
+
+    team_id: uuid.UUID
+    team_name: str
+    colour: str | None = None
+    shift_name: str | None = None
+    member_count: int
+    tracked_members: int
+    worked_minutes: int
+    active_minutes: int | None = None
+    idle_minutes: int | None = None
+    productive_minutes: int | None = None
+    neutral_minutes: int | None = None
+    unproductive_minutes: int | None = None
