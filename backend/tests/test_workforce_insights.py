@@ -361,3 +361,58 @@ async def test_shift_crud_and_team_assignment(
     team_shifts = (await client.get("/api/v1/tracker/team-shifts", headers=admin_headers)).json()
     row = next(t for t in team_shifts if t["team_id"] == team_id)
     assert row["shift_id"] is None and row["shift_name"] is None
+
+
+# ── Account → directory-user mapping ──────────────────────────────────────────
+
+
+async def test_account_mapping_resolves_the_person_on_attendance(
+    client, admin_headers, user_headers, admin_user, session_factory
+):
+    await _enable_tracker(session_factory, admin_user.org_id)
+    device_token = await _enroll_device(client, admin_headers)
+    await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": ACTIVITY})
+
+    # The account shows up unmapped, with its context.
+    accounts = (await client.get("/api/v1/tracker/accounts", headers=admin_headers)).json()
+    acc = next(a for a in accounts if a["username"] == "acme\\rahul")
+    assert acc["user_id"] is None and acc["device_count"] == 1
+
+    # A login-less directory user to map it to.
+    user = (await client.post(
+        "/api/v1/users",
+        json={"email": "rahul.k@acme.com", "full_name": "Rahul K", "role": "user"},
+        headers=admin_headers)).json()
+
+    # Only an admin may map accounts, and the target user must exist.
+    assert (await client.put(
+        "/api/v1/tracker/accounts", json={"username": "ACME\\rahul", "user_id": user["id"]},
+        headers=user_headers)).status_code == 403
+    assert (await client.put(
+        "/api/v1/tracker/accounts",
+        json={"username": "acme\\rahul", "user_id": "00000000-0000-0000-0000-000000000000"},
+        headers=admin_headers)).status_code == 404
+
+    # Assign (the username is matched case-insensitively, as it is stored lower-cased).
+    assigned = await client.put(
+        "/api/v1/tracker/accounts", json={"username": "ACME\\rahul", "user_id": user["id"]},
+        headers=admin_headers)
+    assert assigned.status_code == 200, assigned.text
+    assert assigned.json()["user_id"] == user["id"]
+    assert assigned.json()["user_name"] == "Rahul K"
+
+    # The person is backfilled onto the account's existing attendance rows.
+    rows = (await client.get(
+        "/api/v1/tracker/attendance",
+        params={"from": "2026-07-07", "to": "2026-07-07"}, headers=admin_headers)).json()
+    assert rows[0]["user_id"] == user["id"]
+
+    # Clearing the mapping removes the person again.
+    cleared = await client.put(
+        "/api/v1/tracker/accounts", json={"username": "acme\\rahul", "user_id": None},
+        headers=admin_headers)
+    assert cleared.status_code == 200 and cleared.json()["user_id"] is None
+    rows = (await client.get(
+        "/api/v1/tracker/attendance",
+        params={"from": "2026-07-07", "to": "2026-07-07"}, headers=admin_headers)).json()
+    assert rows[0]["user_id"] is None

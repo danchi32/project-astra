@@ -20,16 +20,19 @@ from app.core.database import get_db
 from app.models import Organization, User, UserRole
 from app.models.base import utcnow
 from app.schemas.workforce import (
+    AccountAssignWrite,
     CategoryConfigRead,
     CategoryOverrides,
     DailyUserSummaryRead,
     ShiftAssignmentWrite,
     TeamShiftRead,
+    TrackedAccountRead,
     UserDetailRead,
     WorkSessionRead,
     WorkShiftRead,
     WorkShiftWrite,
 )
+from app.services.accounts import AccountService
 from app.services.audit import AuditService
 from app.services.entitlements import WORKFORCE_INSIGHTS
 from app.services.exceptions import ConflictError, NotFoundError
@@ -302,5 +305,30 @@ async def assign_team_shift(
 ) -> TeamShiftRead:
     try:
         return await ShiftService(session).assign_shift(actor=actor, team_id=team_id, body=body)
+    except NotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+
+
+# ── Account → directory-user mapping ──────────────────────────────────────────
+
+
+@router.get("/accounts", response_model=list[TrackedAccountRead],
+            summary="Tracked Windows accounts and who each maps to")
+async def list_accounts(
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[TrackedAccountRead]:
+    return await AccountService(session).list_accounts(org_id=actor.org_id)
+
+
+@router.put("/accounts", response_model=TrackedAccountRead,
+            summary="Map a tracked account to a directory user, or clear it (admin)")
+async def assign_account(
+    body: AccountAssignWrite,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> TrackedAccountRead:
+    try:
+        return await AccountService(session).assign(actor=actor, body=body)
     except NotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))

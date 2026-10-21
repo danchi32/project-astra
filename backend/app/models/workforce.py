@@ -222,6 +222,31 @@ class DailyAppUsage(TimestampMixin, Base):
     minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class ActivityAccount(TimestampMixin, Base):
+    """Maps a tracked Windows account (e.g. ACME\\rahul) to a directory user.
+
+    The account is the identity the agent reports — zero-config, exactly what Windows
+    enumerates. The user_id is WHO that account is: the hook for rolling attendance and
+    productivity up by person and team, and for employee self-view. Unmapped accounts
+    (user_id NULL) still track fully; the mapping only adds a name, a team and a manager on
+    top. SET NULL on user delete — losing the person must never delete their attendance.
+    """
+
+    __tablename__ = "activity_accounts"
+    __table_args__ = (
+        UniqueConstraint("org_id", "username", name="uq_activity_accounts_org_user"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    username: Mapped[str] = mapped_column(String(150), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+
 class WorkShift(TimestampMixin, Base):
     """A named department shift — when a team is expected to be working, in its own timezone.
 

@@ -274,6 +274,9 @@ class WorkforceAggregator:
         # a saved override takes effect from the next recompute of each reporting device.
         org = await self.session.get(Organization, device.org_id)
         overrides: Overrides | None = org.workforce_categories if org else None
+        # The account → directory-user mapping, so each day's summary carries who the account is
+        # (for team rollups and self-view). The mapping is the source of truth; summaries copy it.
+        account_map = await self.repo.account_map(device.org_id)
 
         # Presence events (few) drive attendance spans; foreground samples (many, ~30s apart)
         # drive productivity and are rolled up to per-app counts in SQL rather than loaded row
@@ -306,6 +309,7 @@ class WorkforceAggregator:
             await self._write_summary(
                 device=device, username=username, day=day,
                 attendance=_summarize(spans, day=day, now=now), prod=prod,
+                user_id=account_map.get(username),
             )
             if prod is not None:
                 all_app_usage.extend(
@@ -327,6 +331,7 @@ class WorkforceAggregator:
         day: date,
         attendance: tuple[datetime, datetime | None, int] | None,
         prod: _Productivity | None,
+        user_id: uuid.UUID | None = None,
     ) -> None:
         existing = await self.repo.get_summary(device.id, username, day)
         if attendance is None and prod is None:
@@ -351,7 +356,7 @@ class WorkforceAggregator:
                 first_in=first_in, last_out=last_out, worked_minutes=worked,
                 active_minutes=active, idle_minutes=idle, productive_minutes=productive,
                 neutral_minutes=neutral, unproductive_minutes=unproductive,
-                suspected_idle_minutes=suspected_idle,
+                suspected_idle_minutes=suspected_idle, user_id=user_id,
             ))
         else:
             existing.first_in = first_in
@@ -363,6 +368,7 @@ class WorkforceAggregator:
             existing.neutral_minutes = neutral
             existing.unproductive_minutes = unproductive
             existing.suspected_idle_minutes = suspected_idle
+            existing.user_id = user_id
         await self.session.flush()
 
 

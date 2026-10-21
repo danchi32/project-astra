@@ -146,3 +146,21 @@ export const assignTeamShift = (teamId: string, shiftId: string | null) =>
   apiClient
     .put<TeamShift>(`/tracker/teams/${teamId}/shift`, { shift_id: shiftId })
     .then((r) => r.data);
+
+/** A tracked Windows account and who it maps to. `user_id` null = not yet mapped to a person. */
+export interface TrackedAccount {
+  username: string;
+  user_id: string | null;
+  user_name: string | null;
+  user_email: string | null;
+  last_seen: string | null;
+  device_count: number;
+}
+
+export const getAccounts = () =>
+  apiClient.get<TrackedAccount[]>("/tracker/accounts").then((r) => r.data);
+
+export const assignAccount = (username: string, userId: string | null) =>
+  apiClient
+    .put<TrackedAccount>("/tracker/accounts", { username, user_id: userId })
+    .then((r) => r.data);

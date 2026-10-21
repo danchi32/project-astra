@@ -199,3 +199,27 @@ class ShiftAssignmentWrite(BaseModel):
     """Assign (or, with null, clear) the shift a team works."""
 
     shift_id: uuid.UUID | None = None
+
+
+# ── Account → directory-user mapping ──────────────────────────────────────────
+
+
+class TrackedAccountRead(BaseModel):
+    """One tracked Windows account with its mapping and some context, for the identity screen."""
+
+    username: str
+    user_id: uuid.UUID | None = None
+    # Filled when the account is mapped to a directory user.
+    user_name: str | None = None
+    user_email: str | None = None
+    # Null only for an account mapped before any attendance exists for it (unusual — the screen
+    # lists accounts seen in attendance). The portal shows "—" for a null.
+    last_seen: date | None = None
+    device_count: int
+
+
+class AccountAssignWrite(BaseModel):
+    """Map a tracked account to a directory user, or clear it with a null user_id."""
+
+    username: str = Field(min_length=1, max_length=150)
+    user_id: uuid.UUID | None = None
