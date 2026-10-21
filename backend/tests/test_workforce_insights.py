@@ -286,6 +286,8 @@ async def test_an_override_reclassifies_collected_activity(
         headers=admin_headers)).json()
     assert detail["productive_minutes"] > 0
     assert detail["unproductive_minutes"] == 0
-    # And the app breakdown carries the overridden bucket, not the default.
-    yt = next(a for a in detail["apps"] if a["label"].startswith("youtube.com"))
+    # And the app breakdown carries the overridden bucket, not the default. Match the host
+    # component exactly (label is "youtube.com/watch") rather than a prefix/substring test, so
+    # the assertion can't be satisfied by a look-alike like "youtube.com.evil.test".
+    yt = next(a for a in detail["apps"] if a["label"].split("/", 1)[0] == "youtube.com")
     assert yt["bucket"] == "productive"
