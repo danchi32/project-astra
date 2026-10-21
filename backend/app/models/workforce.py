@@ -25,6 +25,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Date,
     DateTime,
@@ -219,3 +220,36 @@ class DailyAppUsage(TimestampMixin, Base):
     # productive | neutral | unproductive (resolved from the category engine).
     bucket: Mapped[str] = mapped_column(String(20), nullable=False)
     minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class WorkShift(TimestampMixin, Base):
+    """A named department shift — when a team is expected to be working, in its own timezone.
+
+    Shifts are defined per org (APAC, UK, US, India General, …) and assigned to teams
+    (user_teams.shift_id). `start_minute`/`end_minute` are minutes-from-midnight read IN
+    `timezone`; end <= start means the shift runs past midnight (a night shift). `working_days`
+    lists the weekdays it runs (0 = Monday … 6 = Sunday).
+
+    This table DEFINES the expectation. Measuring attendance against it — late-in, early-out,
+    overtime — is a layer on top of the existing (UTC) attendance, added next; defining and
+    assigning shifts is useful on its own and ships first.
+    """
+
+    __tablename__ = "work_shifts"
+    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_work_shifts_org_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # IANA timezone name, e.g. "Asia/Kolkata", "Europe/London", "America/New_York". Validated
+    # at the edge against zoneinfo — the whole point of a shift is that its hours are local.
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Minutes from local midnight. 09:00 = 540, 17:30 = 1050. end <= start => crosses midnight.
+    start_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Weekdays the shift runs, 0 = Monday … 6 = Sunday. Stored as a small JSON list so a
+    # Sun–Thu week (common in parts of APAC/Middle East) is expressible, not just Mon–Fri.
+    working_days: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    colour: Mapped[str | None] = mapped_column(String(9), nullable=True)

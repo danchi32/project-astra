@@ -5,9 +5,11 @@ rest of the telemetry push it rides in. These are what the portal reads back.
 """
 import uuid
 from datetime import date, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas.grouping import COLOUR_PATTERN
 from app.services.workforce_categories import BUCKETS
 
 # A customer's override map is small by design — it reclassifies the handful of apps/sites that
@@ -123,3 +125,77 @@ class UserDetailRead(BaseModel):
 
     days: list[DailyUserSummaryRead]
     apps: list[AppUsageRead]
+
+
+# ── Department shifts ─────────────────────────────────────────────────────────
+
+_DEFAULT_WORKING_DAYS = [0, 1, 2, 3, 4]  # Mon–Fri
+
+
+class WorkShiftWrite(BaseModel):
+    """Create/update body for a department shift. Times are minutes from LOCAL midnight in
+    `timezone`; end <= start means the shift runs past midnight (a night shift)."""
+
+    name: str = Field(min_length=1, max_length=120)
+    timezone: str = Field(min_length=1, max_length=64)
+    start_minute: int = Field(ge=0, le=1439)
+    end_minute: int = Field(ge=0, le=1439)
+    working_days: list[int] = Field(default_factory=lambda: list(_DEFAULT_WORKING_DAYS))
+    colour: str | None = Field(default=None, pattern=COLOUR_PATTERN)
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_timezone(cls, v: str) -> str:
+        tz = v.strip()
+        try:
+            ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"Unknown timezone '{v}'") from exc
+        return tz
+
+    @field_validator("working_days")
+    @classmethod
+    def _valid_days(cls, v: list[int]) -> list[int]:
+        days = sorted(set(v))
+        if not days:
+            raise ValueError("A shift needs at least one working day.")
+        if any(d < 0 or d > 6 for d in days):
+            raise ValueError("working_days are 0 (Monday) … 6 (Sunday).")
+        return days
+
+    @model_validator(mode="after")
+    def _start_differs_from_end(self) -> "WorkShiftWrite":
+        if self.start_minute == self.end_minute:
+            raise ValueError("A shift's start and end time cannot be identical.")
+        return self
+
+
+class WorkShiftRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    timezone: str
+    start_minute: int
+    end_minute: int
+    working_days: list[int]
+    colour: str | None = None
+    # How many teams are assigned this shift — filled by the service, shown so an admin sees a
+    # shift is in use before deleting it.
+    team_count: int = 0
+
+
+class TeamShiftRead(BaseModel):
+    """One team with its current shift assignment — the Configuration > Shifts assignment list."""
+
+    team_id: uuid.UUID
+    team_name: str
+    member_count: int
+    shift_id: uuid.UUID | None = None
+    shift_name: str | None = None
+
+
+class ShiftAssignmentWrite(BaseModel):
+    """Assign (or, with null, clear) the shift a team works."""
+
+    shift_id: uuid.UUID | None = None

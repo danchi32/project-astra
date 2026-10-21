@@ -75,6 +75,7 @@ from app.models.workforce import (
     DailyAppUsage,
     DailyUserSummary,
     WorkSession,
+    WorkShift,
 )
 
 __all__ = [
@@ -163,4 +164,5 @@ __all__ = [
     "DailyAppUsage",
     "DailyUserSummary",
     "WorkSession",
+    "WorkShift",
 ]

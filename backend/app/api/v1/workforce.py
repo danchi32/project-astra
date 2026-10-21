@@ -12,7 +12,7 @@ is the reserved hook); they arrive with that enrichment, not here.
 import uuid
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles, requires
@@ -23,12 +23,17 @@ from app.schemas.workforce import (
     CategoryConfigRead,
     CategoryOverrides,
     DailyUserSummaryRead,
+    ShiftAssignmentWrite,
+    TeamShiftRead,
     UserDetailRead,
     WorkSessionRead,
+    WorkShiftRead,
+    WorkShiftWrite,
 )
 from app.services.audit import AuditService
 from app.services.entitlements import WORKFORCE_INSIGHTS
-from app.services.exceptions import NotFoundError
+from app.services.exceptions import ConflictError, NotFoundError
+from app.services.shifts import ShiftService
 from app.services.workforce import WorkforceService
 from app.services.workforce_categories import BUCKETS, builtin_buckets
 
@@ -222,3 +227,80 @@ async def put_categories(
     )
     await session.commit()
     return _config(org.workforce_categories)
+
+
+# ── Department shifts ─────────────────────────────────────────────────────────
+
+
+@router.get("/shifts", response_model=list[WorkShiftRead],
+            summary="The org's department shifts")
+async def list_shifts(
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[WorkShiftRead]:
+    return await ShiftService(session).list_shifts(org_id=actor.org_id)
+
+
+@router.post("/shifts", response_model=WorkShiftRead,
+             status_code=status.HTTP_201_CREATED, summary="Create a department shift (admin)")
+async def create_shift(
+    body: WorkShiftWrite,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> WorkShiftRead:
+    try:
+        return await ShiftService(session).create_shift(actor=actor, body=body)
+    except ConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+
+@router.put("/shifts/{shift_id}", response_model=WorkShiftRead,
+            summary="Update a department shift (admin)")
+async def update_shift(
+    shift_id: uuid.UUID,
+    body: WorkShiftWrite,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> WorkShiftRead:
+    try:
+        return await ShiftService(session).update_shift(actor=actor, shift_id=shift_id, body=body)
+    except ConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    except NotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+
+
+@router.delete("/shifts/{shift_id}", status_code=status.HTTP_204_NO_CONTENT,
+               summary="Delete a shift — assigned teams are un-assigned, not deleted (admin)")
+async def delete_shift(
+    shift_id: uuid.UUID,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await ShiftService(session).delete_shift(actor=actor, shift_id=shift_id)
+    except NotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+
+
+@router.get("/team-shifts", response_model=list[TeamShiftRead],
+            summary="Each team with its assigned shift")
+async def team_shifts(
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[TeamShiftRead]:
+    return await ShiftService(session).list_team_assignments(org_id=actor.org_id)
+
+
+@router.put("/teams/{team_id}/shift", response_model=TeamShiftRead,
+            summary="Assign (or clear) the shift a team works (admin)")
+async def assign_team_shift(
+    team_id: uuid.UUID,
+    body: ShiftAssignmentWrite,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> TeamShiftRead:
+    try:
+        return await ShiftService(session).assign_shift(actor=actor, team_id=team_id, body=body)
+    except NotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))

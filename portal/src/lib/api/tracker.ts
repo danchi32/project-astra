@@ -101,3 +101,48 @@ export const getCategories = () =>
 /** Full replace — the body is the whole override set, so removing a rule is leaving it out. */
 export const putCategories = (overrides: CategoryOverrides) =>
   apiClient.put<CategoryConfig>("/tracker/categories", overrides).then((r) => r.data);
+
+/** A named department shift. Times are minutes from LOCAL midnight in `timezone`; when
+ *  end_minute <= start_minute the shift runs past midnight (a night shift). working_days are
+ *  0 (Monday) … 6 (Sunday). */
+export interface WorkShift {
+  id: string;
+  name: string;
+  timezone: string;
+  start_minute: number;
+  end_minute: number;
+  working_days: number[];
+  colour: string | null;
+  team_count: number;
+}
+
+export type WorkShiftWrite = Omit<WorkShift, "id" | "team_count">;
+
+/** One team with its current shift assignment. */
+export interface TeamShift {
+  team_id: string;
+  team_name: string;
+  member_count: number;
+  shift_id: string | null;
+  shift_name: string | null;
+}
+
+export const getShifts = () =>
+  apiClient.get<WorkShift[]>("/tracker/shifts").then((r) => r.data);
+
+export const createShift = (body: WorkShiftWrite) =>
+  apiClient.post<WorkShift>("/tracker/shifts", body).then((r) => r.data);
+
+export const updateShift = (id: string, body: WorkShiftWrite) =>
+  apiClient.put<WorkShift>(`/tracker/shifts/${id}`, body).then((r) => r.data);
+
+export const deleteShift = (id: string) =>
+  apiClient.delete(`/tracker/shifts/${id}`).then((r) => r.data);
+
+export const getTeamShifts = () =>
+  apiClient.get<TeamShift[]>("/tracker/team-shifts").then((r) => r.data);
+
+export const assignTeamShift = (teamId: string, shiftId: string | null) =>
+  apiClient
+    .put<TeamShift>(`/tracker/teams/${teamId}/shift`, { shift_id: shiftId })
+    .then((r) => r.data);

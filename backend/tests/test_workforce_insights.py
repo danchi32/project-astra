@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from app.schemas.workforce import CategoryOverrides
+from app.schemas.workforce import CategoryOverrides, WorkShiftWrite
 from app.services.workforce import _productivity, _summarize, build_work_spans
 
 UTC = timezone.utc
@@ -291,3 +291,73 @@ async def test_an_override_reclassifies_collected_activity(
     # the assertion can't be satisfied by a look-alike like "youtube.com.evil.test".
     yt = next(a for a in detail["apps"] if a["label"].split("/", 1)[0] == "youtube.com")
     assert yt["bucket"] == "productive"
+
+
+# ── Department shifts ─────────────────────────────────────────────────────────
+
+
+def test_work_shift_validation():
+    # A good shift normalises working_days (sorted, de-duped) and keeps the timezone.
+    ok = WorkShiftWrite(
+        name="India General", timezone="Asia/Kolkata",
+        start_minute=540, end_minute=1050, working_days=[4, 0, 1, 2, 3, 0])
+    assert ok.working_days == [0, 1, 2, 3, 4]
+
+    with pytest.raises(ValueError):  # unknown timezone
+        WorkShiftWrite(name="x", timezone="Mars/Olympus", start_minute=540, end_minute=1050)
+    with pytest.raises(ValueError):  # weekday out of range
+        WorkShiftWrite(name="x", timezone="UTC", start_minute=540, end_minute=1050,
+                       working_days=[0, 7])
+    with pytest.raises(ValueError):  # start == end
+        WorkShiftWrite(name="x", timezone="UTC", start_minute=540, end_minute=540)
+    with pytest.raises(ValueError):  # minute out of range
+        WorkShiftWrite(name="x", timezone="UTC", start_minute=540, end_minute=1500)
+
+
+async def _create_team(client, admin_headers, name):
+    r = await client.post("/api/v1/grouping/teams", json={"name": name}, headers=admin_headers)
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+async def test_shift_crud_and_team_assignment(
+    client, admin_headers, user_headers, admin_user, session_factory
+):
+    await _enable_tracker(session_factory, admin_user.org_id)
+    shift_body = {
+        "name": "APAC", "timezone": "Asia/Kolkata",
+        "start_minute": 330, "end_minute": 990, "working_days": [0, 1, 2, 3, 4],
+    }
+
+    # A non-admin staff member cannot define shifts.
+    assert (await client.post(
+        "/api/v1/tracker/shifts", json=shift_body, headers=user_headers)).status_code == 403
+
+    created = await client.post("/api/v1/tracker/shifts", json=shift_body, headers=admin_headers)
+    assert created.status_code == 201, created.text
+    shift_id = created.json()["id"]
+    assert created.json()["team_count"] == 0
+
+    # Duplicate name is refused.
+    assert (await client.post(
+        "/api/v1/tracker/shifts", json=shift_body, headers=admin_headers)).status_code == 409
+
+    # Assign the shift to a team, then read it back on the team-shifts list.
+    team_id = await _create_team(client, admin_headers, "Support APAC")
+    assigned = await client.put(
+        f"/api/v1/tracker/teams/{team_id}/shift", json={"shift_id": shift_id}, headers=admin_headers)
+    assert assigned.status_code == 200, assigned.text
+    assert assigned.json()["shift_name"] == "APAC"
+
+    team_shifts = (await client.get("/api/v1/tracker/team-shifts", headers=admin_headers)).json()
+    assert any(t["team_id"] == team_id and t["shift_id"] == shift_id for t in team_shifts)
+    # The shift now reports one team assigned.
+    shifts = (await client.get("/api/v1/tracker/shifts", headers=admin_headers)).json()
+    assert next(s for s in shifts if s["id"] == shift_id)["team_count"] == 1
+
+    # Deleting the shift un-assigns the team rather than deleting it.
+    assert (await client.delete(
+        f"/api/v1/tracker/shifts/{shift_id}", headers=admin_headers)).status_code == 204
+    team_shifts = (await client.get("/api/v1/tracker/team-shifts", headers=admin_headers)).json()
+    row = next(t for t in team_shifts if t["team_id"] == team_id)
+    assert row["shift_id"] is None and row["shift_name"] is None
