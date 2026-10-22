@@ -10,7 +10,7 @@ early-out, overtime) is a separate layer added on top of the existing attendance
 """
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import User, UserTeam, UserTeamMember, WorkShift
@@ -148,8 +148,11 @@ class ShiftService:
     async def delete_shift(self, *, actor: User, shift_id: uuid.UUID) -> None:
         shift = await self._owned_shift(actor.org_id, shift_id)
         name = shift.name
-        # Teams keep existing; their shift_id is SET NULL by the FK, so deleting a shift
-        # un-assigns it rather than cascading into the teams.
+        # Un-assign the shift from any team explicitly, rather than leaning on the FK's ON DELETE
+        # SET NULL — SQLite (used in tests) does not enforce it, so doing it in code keeps the
+        # behaviour the same across databases. Teams themselves are kept.
+        await self.session.execute(
+            update(UserTeam).where(UserTeam.shift_id == shift_id).values(shift_id=None))
         await self.session.delete(shift)
         await self.audit.record(
             org_id=actor.org_id, actor_id=actor.id, action="work_shift.delete",
