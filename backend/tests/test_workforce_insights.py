@@ -363,59 +363,51 @@ async def test_shift_crud_and_team_assignment(
     assert row["shift_id"] is None and row["shift_name"] is None
 
 
-# ── Account → directory-user mapping ──────────────────────────────────────────
+# ── Account → person, derived from device assignment ──────────────────────────
 
 
-async def test_account_mapping_resolves_the_person_on_attendance(
-    client, admin_headers, user_headers, admin_user, session_factory
+async def _device_id(client, admin_headers):
+    return (await client.get("/api/v1/devices", headers=admin_headers)).json()[0]["id"]
+
+
+async def _assign_device(session_factory, org_id, device_id, user_id):
+    """The ordinary "give this laptop to X": an Asset linking the device to a person."""
+    import uuid as _uuid
+
+    from app.models.asset import Asset
+    async with session_factory() as session:
+        session.add(Asset(
+            org_id=org_id, name="Work laptop",
+            device_id=_uuid.UUID(str(device_id)), assigned_to_user_id=_uuid.UUID(str(user_id))))
+        await session.commit()
+
+
+async def test_device_assignment_resolves_the_person_on_attendance(
+    client, admin_headers, admin_user, session_factory
 ):
     await _enable_tracker(session_factory, admin_user.org_id)
     device_token = await _enroll_device(client, admin_headers)
-    await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": ACTIVITY})
+    device_id = await _device_id(client, admin_headers)
 
-    # The account shows up unmapped, with its context.
-    accounts = (await client.get("/api/v1/tracker/accounts", headers=admin_headers)).json()
-    acc = next(a for a in accounts if a["username"] == "acme\\rahul")
-    assert acc["user_id"] is None and acc["device_count"] == 1
-
-    # A login-less directory user to map it to.
+    # A person, and the device assigned to them — no Tracker-specific mapping step.
     user = (await client.post(
         "/api/v1/users",
         json={"email": "rahul.k@acme.com", "full_name": "Rahul K", "role": "user"},
         headers=admin_headers)).json()
+    await _assign_device(session_factory, admin_user.org_id, device_id, user["id"])
 
-    # Only an admin may map accounts, and the target user must exist.
-    assert (await client.put(
-        "/api/v1/tracker/accounts", json={"username": "ACME\\rahul", "user_id": user["id"]},
-        headers=user_headers)).status_code == 403
-    assert (await client.put(
-        "/api/v1/tracker/accounts",
-        json={"username": "acme\\rahul", "user_id": "00000000-0000-0000-0000-000000000000"},
-        headers=admin_headers)).status_code == 404
+    # Pushing attendance stamps that person onto the day straight from the assignment.
+    await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": ACTIVITY})
 
-    # Assign (the username is matched case-insensitively, as it is stored lower-cased).
-    assigned = await client.put(
-        "/api/v1/tracker/accounts", json={"username": "ACME\\rahul", "user_id": user["id"]},
-        headers=admin_headers)
-    assert assigned.status_code == 200, assigned.text
-    assert assigned.json()["user_id"] == user["id"]
-    assert assigned.json()["user_name"] == "Rahul K"
-
-    # The person is backfilled onto the account's existing attendance rows.
     rows = (await client.get(
         "/api/v1/tracker/attendance",
         params={"from": "2026-07-07", "to": "2026-07-07"}, headers=admin_headers)).json()
     assert rows[0]["user_id"] == user["id"]
 
-    # Clearing the mapping removes the person again.
-    cleared = await client.put(
-        "/api/v1/tracker/accounts", json={"username": "acme\\rahul", "user_id": None},
-        headers=admin_headers)
-    assert cleared.status_code == 200 and cleared.json()["user_id"] is None
-    rows = (await client.get(
-        "/api/v1/tracker/attendance",
-        params={"from": "2026-07-07", "to": "2026-07-07"}, headers=admin_headers)).json()
-    assert rows[0]["user_id"] is None
+    # The read-only accounts view reflects it (there is no assign endpoint any more).
+    accounts = (await client.get("/api/v1/tracker/accounts", headers=admin_headers)).json()
+    acc = next(a for a in accounts if a["username"] == "acme\\rahul")
+    assert acc["user_id"] == user["id"] and acc["user_name"] == "Rahul K"
 
 
 async def test_team_rollup_sums_attendance_by_team(
@@ -423,16 +415,15 @@ async def test_team_rollup_sums_attendance_by_team(
 ):
     await _enable_tracker(session_factory, admin_user.org_id)
     device_token = await _enroll_device(client, admin_headers)
-    await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": ACTIVITY})  # 480m worked
+    device_id = await _device_id(client, admin_headers)
 
-    # Map the account to a person, put that person on a team.
+    # Assign the device to a person (so attendance resolves to them), then put them on a team.
     user = (await client.post(
         "/api/v1/users",
         json={"email": "rahul.t@acme.com", "full_name": "Rahul T", "role": "user"},
         headers=admin_headers)).json()
-    await client.put(
-        "/api/v1/tracker/accounts", json={"username": "ACME\\rahul", "user_id": user["id"]},
-        headers=admin_headers)
+    await _assign_device(session_factory, admin_user.org_id, device_id, user["id"])
+    await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": ACTIVITY})  # 480m worked
     team = (await client.post(
         "/api/v1/grouping/teams", json={"name": "Night Owls"}, headers=admin_headers)).json()
     await client.put(
@@ -448,3 +439,53 @@ async def test_team_rollup_sums_attendance_by_team(
     assert row["worked_minutes"] == 480     # the lock is excluded, same as attendance
     # No foreground in this push, so productivity is "not measured", not a zero.
     assert row["productive_minutes"] is None
+
+
+# ── Attendance configuration ──────────────────────────────────────────────────
+
+
+async def test_attendance_config_and_holidays(
+    client, admin_headers, user_headers, admin_user, session_factory
+):
+    await _enable_tracker(session_factory, admin_user.org_id)
+
+    # Defaults when nothing is configured: Mon–Fri, 8h / 4h, no holidays.
+    cfg = (await client.get("/api/v1/tracker/attendance-config", headers=admin_headers)).json()
+    assert cfg["working_days"] == [0, 1, 2, 3, 4]
+    assert cfg["full_day_minutes"] == 480 and cfg["half_day_minutes"] == 240
+    assert cfg["holidays"] == []
+
+    # Writing settings is admin-only, and half-day cannot exceed full-day.
+    assert (await client.put(
+        "/api/v1/tracker/attendance-config",
+        json={"working_days": [0, 1, 2, 3, 4, 5], "full_day_minutes": 480, "half_day_minutes": 240},
+        headers=user_headers)).status_code == 403
+    assert (await client.put(
+        "/api/v1/tracker/attendance-config",
+        json={"working_days": [0], "full_day_minutes": 300, "half_day_minutes": 400},
+        headers=admin_headers)).status_code == 422
+
+    saved = await client.put(
+        "/api/v1/tracker/attendance-config",
+        json={"working_days": [0, 1, 2, 3, 4, 5], "full_day_minutes": 540, "half_day_minutes": 270},
+        headers=admin_headers)
+    assert saved.status_code == 200
+    assert saved.json()["working_days"] == [0, 1, 2, 3, 4, 5]
+    assert saved.json()["full_day_minutes"] == 540
+
+    # Holidays: add, reject a duplicate date, see it listed, then delete.
+    h = await client.post(
+        "/api/v1/tracker/holidays", json={"day": "2026-12-25", "name": "Christmas"},
+        headers=admin_headers)
+    assert h.status_code == 201, h.text
+    assert (await client.post(
+        "/api/v1/tracker/holidays", json={"day": "2026-12-25", "name": "Dup"},
+        headers=admin_headers)).status_code == 409
+
+    cfg = (await client.get("/api/v1/tracker/attendance-config", headers=admin_headers)).json()
+    assert [(x["day"], x["name"]) for x in cfg["holidays"]] == [("2026-12-25", "Christmas")]
+
+    assert (await client.delete(
+        f"/api/v1/tracker/holidays/{h.json()['id']}", headers=admin_headers)).status_code == 204
+    cfg = (await client.get("/api/v1/tracker/attendance-config", headers=admin_headers)).json()
+    assert cfg["holidays"] == []

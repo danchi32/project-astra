@@ -1,14 +1,14 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.asset import Asset
 from app.models.device import Device
 from app.models.grouping import UserTeam, UserTeamMember
 from app.models.workforce import (
     ACTIVITY_FOREGROUND,
-    ActivityAccount,
     ActivitySample,
     DailyAppUsage,
     DailyUserSummary,
@@ -253,54 +253,38 @@ class WorkforceRepository:
         )
         return {row[0]: row[1] for row in result.all()}
 
-    # ── Account → user mapping ────────────────────────────────────────────────
+    # ── Account → user, derived from device assignment ────────────────────────
 
-    async def account_map(self, org_id: uuid.UUID) -> dict[str, uuid.UUID | None]:
-        """The org's {username: user_id} mapping — the source of truth the daily summaries
-        copy from. Loaded once per recompute so new rows carry the right person."""
-        rows = (await self.session.execute(
-            select(ActivityAccount.username, ActivityAccount.user_id)
-            .where(ActivityAccount.org_id == org_id)
-        )).all()
-        return {r[0]: r[1] for r in rows}
+    async def assigned_user_for_device(self, device_id: uuid.UUID) -> uuid.UUID | None:
+        """Who this device is assigned to — the person whose asset record links to it. The
+        Tracker reads this as the owner of the accounts seen on the device, so assigning a
+        device to someone (in Assets) is all it takes to attribute their attendance; there is
+        no separate account→person mapping to maintain."""
+        return (await self.session.execute(
+            select(Asset.assigned_to_user_id)
+            .where(Asset.device_id == device_id, Asset.assigned_to_user_id.isnot(None))
+            .limit(1)
+        )).scalar_one_or_none()
 
     async def account_rows(
         self, org_id: uuid.UUID
     ) -> list[tuple[str, uuid.UUID | None, date, int]]:
-        """Every tracked account seen for the org, with its current mapping and some context:
-        (username, mapped user_id, last-seen day, distinct device count). Driven off the
-        durable daily_user_summary, so an account shows up as long as its attendance exists."""
+        """Every tracked account seen for the org, with the person it resolves to and some
+        context: (username, user_id, last-seen day, distinct device count). The user_id is the
+        one stamped onto the daily summaries from device assignment, so this reflects the Assets
+        register with no mapping of its own."""
         rows = (await self.session.execute(
             select(
                 DailyUserSummary.username,
-                ActivityAccount.user_id,
+                DailyUserSummary.user_id,
                 func.max(DailyUserSummary.day),
                 func.count(func.distinct(DailyUserSummary.device_id)),
             )
-            .outerjoin(
-                ActivityAccount,
-                (ActivityAccount.org_id == DailyUserSummary.org_id)
-                & (ActivityAccount.username == DailyUserSummary.username),
-            )
             .where(DailyUserSummary.org_id == org_id)
-            .group_by(DailyUserSummary.username, ActivityAccount.user_id)
+            .group_by(DailyUserSummary.username, DailyUserSummary.user_id)
             .order_by(DailyUserSummary.username)
         )).all()
         return [(r[0], r[1], r[2], int(r[3])) for r in rows]
-
-    async def upsert_account(
-        self, org_id: uuid.UUID, username: str, user_id: uuid.UUID | None
-    ) -> None:
-        existing = (await self.session.execute(
-            select(ActivityAccount).where(
-                ActivityAccount.org_id == org_id, ActivityAccount.username == username
-            )
-        )).scalar_one_or_none()
-        if existing is None:
-            self.session.add(ActivityAccount(org_id=org_id, username=username, user_id=user_id))
-        else:
-            existing.user_id = user_id
-        await self.session.flush()
 
     # ── Team rollups ──────────────────────────────────────────────────────────
 
@@ -377,15 +361,3 @@ class WorkforceRepository:
                 "unproductive_minutes": opt(unp_s, unp_n),
             }
         return out
-
-    async def set_summary_user(
-        self, org_id: uuid.UUID, username: str, user_id: uuid.UUID | None
-    ) -> int:
-        """Backfill the person onto the account's already-computed days, so assigning a mapping
-        updates history that won't be recomputed soon. Future recomputes set it from the map."""
-        result = await self.session.execute(
-            update(DailyUserSummary)
-            .where(DailyUserSummary.org_id == org_id, DailyUserSummary.username == username)
-            .values(user_id=user_id)
-        )
-        return result.rowcount or 0

@@ -218,11 +218,58 @@ class TrackedAccountRead(BaseModel):
     device_count: int
 
 
-class AccountAssignWrite(BaseModel):
-    """Map a tracked account to a directory user, or clear it with a null user_id."""
+# ── Attendance configuration ──────────────────────────────────────────────────
 
-    username: str = Field(min_length=1, max_length=150)
-    user_id: uuid.UUID | None = None
+DEFAULT_FULL_DAY_MINUTES = 480   # 8h
+DEFAULT_HALF_DAY_MINUTES = 240   # 4h
+
+
+class AttendanceSettingsWrite(BaseModel):
+    """The org's attendance rules: which weekdays are working days and the worked-minute
+    thresholds for a full / half day. Holidays are managed separately (dated rows)."""
+
+    working_days: list[int] = Field(default_factory=lambda: list(_DEFAULT_WORKING_DAYS))
+    full_day_minutes: int = Field(default=DEFAULT_FULL_DAY_MINUTES, ge=1, le=1440)
+    half_day_minutes: int = Field(default=DEFAULT_HALF_DAY_MINUTES, ge=1, le=1440)
+
+    @field_validator("working_days")
+    @classmethod
+    def _valid_days(cls, v: list[int]) -> list[int]:
+        days = sorted(set(v))
+        if not days:
+            raise ValueError("At least one working day is required.")
+        if any(d < 0 or d > 6 for d in days):
+            raise ValueError("working_days are 0 (Monday) … 6 (Sunday).")
+        return days
+
+    @model_validator(mode="after")
+    def _half_below_full(self) -> "AttendanceSettingsWrite":
+        if self.half_day_minutes > self.full_day_minutes:
+            raise ValueError("Half-day minutes cannot exceed full-day minutes.")
+        return self
+
+
+class HolidayWrite(BaseModel):
+    day: date
+    name: str = Field(min_length=1, max_length=120)
+
+
+class HolidayRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    day: date
+    name: str
+
+
+class AttendanceConfigRead(BaseModel):
+    """Everything the attendance screen needs to score days: the working-day rules and the
+    holiday list. The register uses these instead of assuming Mon–Fri with no holidays."""
+
+    working_days: list[int]
+    full_day_minutes: int
+    half_day_minutes: int
+    holidays: list[HolidayRead]
 
 
 # ── Team rollups ──────────────────────────────────────────────────────────────

@@ -275,9 +275,10 @@ class WorkforceAggregator:
         # a saved override takes effect from the next recompute of each reporting device.
         org = await self.session.get(Organization, device.org_id)
         overrides: Overrides | None = org.workforce_categories if org else None
-        # The account → directory-user mapping, so each day's summary carries who the account is
-        # (for team rollups and self-view). The mapping is the source of truth; summaries copy it.
-        account_map = await self.repo.account_map(device.org_id)
+        # Who this device is assigned to (Assets). Every account seen on the device resolves to
+        # that person, so each day's summary carries who it is — for team rollups and self-view —
+        # with no separate account→person mapping to keep.
+        assigned_user = await self.repo.assigned_user_for_device(device.id)
 
         # Presence events (few) drive attendance spans; foreground samples (many, ~30s apart)
         # drive productivity and are rolled up to per-app counts in SQL rather than loaded row
@@ -310,7 +311,7 @@ class WorkforceAggregator:
             await self._write_summary(
                 device=device, username=username, day=day,
                 attendance=_summarize(spans, day=day, now=now), prod=prod,
-                user_id=account_map.get(username),
+                user_id=assigned_user,
             )
             if prod is not None:
                 all_app_usage.extend(

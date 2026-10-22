@@ -20,10 +20,13 @@ from app.core.database import get_db
 from app.models import Organization, User, UserRole
 from app.models.base import utcnow
 from app.schemas.workforce import (
-    AccountAssignWrite,
+    AttendanceConfigRead,
+    AttendanceSettingsWrite,
     CategoryConfigRead,
     CategoryOverrides,
     DailyUserSummaryRead,
+    HolidayRead,
+    HolidayWrite,
     ShiftAssignmentWrite,
     TeamRollupRead,
     TeamShiftRead,
@@ -34,6 +37,7 @@ from app.schemas.workforce import (
     WorkShiftWrite,
 )
 from app.services.accounts import AccountService
+from app.services.attendance_config import AttendanceConfigService
 from app.services.audit import AuditService
 from app.services.entitlements import WORKFORCE_INSIGHTS
 from app.services.exceptions import ConflictError, NotFoundError
@@ -342,7 +346,7 @@ async def assign_team_shift(
 
 
 @router.get("/accounts", response_model=list[TrackedAccountRead],
-            summary="Tracked Windows accounts and who each maps to")
+            summary="Tracked Windows accounts and the person each resolves to (from Assets)")
 async def list_accounts(
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
@@ -350,14 +354,49 @@ async def list_accounts(
     return await AccountService(session).list_accounts(org_id=actor.org_id)
 
 
-@router.put("/accounts", response_model=TrackedAccountRead,
-            summary="Map a tracked account to a directory user, or clear it (admin)")
-async def assign_account(
-    body: AccountAssignWrite,
+# ── Attendance configuration (working days, thresholds, holidays) ─────────────
+
+
+@router.get("/attendance-config", response_model=AttendanceConfigRead,
+            summary="The org's attendance rules and holidays")
+async def get_attendance_config(
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> AttendanceConfigRead:
+    return await AttendanceConfigService(session).get_config(org_id=actor.org_id)
+
+
+@router.put("/attendance-config", response_model=AttendanceConfigRead,
+            summary="Set the working days and full/half-day thresholds (admin)")
+async def put_attendance_config(
+    body: AttendanceSettingsWrite,
     actor: User = Depends(admin_required),
     session: AsyncSession = Depends(get_db),
-) -> TrackedAccountRead:
+) -> AttendanceConfigRead:
+    return await AttendanceConfigService(session).set_settings(actor=actor, body=body)
+
+
+@router.post("/holidays", response_model=HolidayRead,
+             status_code=status.HTTP_201_CREATED, summary="Add a holiday (admin)")
+async def add_holiday(
+    body: HolidayWrite,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> HolidayRead:
     try:
-        return await AccountService(session).assign(actor=actor, body=body)
+        return await AttendanceConfigService(session).add_holiday(actor=actor, body=body)
+    except ConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+
+@router.delete("/holidays/{holiday_id}", status_code=status.HTTP_204_NO_CONTENT,
+               summary="Remove a holiday (admin)")
+async def delete_holiday(
+    holiday_id: uuid.UUID,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await AttendanceConfigService(session).delete_holiday(actor=actor, holiday_id=holiday_id)
     except NotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))

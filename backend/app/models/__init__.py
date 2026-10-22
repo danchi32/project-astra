@@ -71,10 +71,10 @@ from app.models.workforce import (
     ACTIVITY_UNLOCK,
     SPAN_BREAK,
     SPAN_WORK,
-    ActivityAccount,
     ActivitySample,
     DailyAppUsage,
     DailyUserSummary,
+    WorkHoliday,
     WorkSession,
     WorkShift,
 )
@@ -163,8 +163,8 @@ __all__ = [
     "SPAN_WORK",
     "ActivitySample",
     "DailyAppUsage",
-    "ActivityAccount",
     "DailyUserSummary",
+    "WorkHoliday",
     "WorkSession",
     "WorkShift",
 ]

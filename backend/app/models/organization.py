@@ -106,6 +106,12 @@ class Organization(TimestampMixin, Base):
     # the aggregator is deliberately proportional to the device that just reported.
     workforce_categories: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
+    # Attendance-tool settings for the Tracker register: which weekdays are working days and the
+    # worked-minute thresholds for a full / half day. Shape: {"working_days": [0,1,2,3,4],
+    # "full_day_minutes": 480, "half_day_minutes": 240}. Null = the defaults (Mon–Fri, 8h / 4h).
+    # Holidays are dated rows in work_holidays, not here, since they are a list that grows.
+    workforce_attendance: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
     # A sales-demo tenant (scripts/seed_presentation.py): invented fleet, invented people.
     # Kept out of every customer rollup — public homepage stats, MRR, growth — exactly like
     # the operator's own org, so a prospect is never shown fabricated devices as customers.

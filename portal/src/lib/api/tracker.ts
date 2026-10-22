@@ -160,11 +160,6 @@ export interface TrackedAccount {
 export const getAccounts = () =>
   apiClient.get<TrackedAccount[]>("/tracker/accounts").then((r) => r.data);
 
-export const assignAccount = (username: string, userId: string | null) =>
-  apiClient
-    .put<TrackedAccount>("/tracker/accounts", { username, user_id: userId })
-    .then((r) => r.data);
-
 /** One team's attendance + productivity over a range, summed across its members' accounts.
  *  Productivity fields are null when no member had a measured value (shown as "—"). */
 export interface TeamRollup {
@@ -184,3 +179,33 @@ export interface TeamRollup {
 
 export const getTeamRollup = (params: { from?: string; to?: string } = {}) =>
   apiClient.get<TeamRollup[]>("/tracker/teams/rollup", { params }).then((r) => r.data);
+
+/** A named non-working day. */
+export interface Holiday {
+  id: string;
+  day: string; // YYYY-MM-DD
+  name: string;
+}
+
+/** The org's attendance rules + holidays — what the register scores days against. working_days
+ *  are 0 (Monday) … 6 (Sunday); thresholds are worked minutes for a full / half day. */
+export interface AttendanceConfig {
+  working_days: number[];
+  full_day_minutes: number;
+  half_day_minutes: number;
+  holidays: Holiday[];
+}
+
+export type AttendanceSettings = Omit<AttendanceConfig, "holidays">;
+
+export const getAttendanceConfig = () =>
+  apiClient.get<AttendanceConfig>("/tracker/attendance-config").then((r) => r.data);
+
+export const putAttendanceSettings = (settings: AttendanceSettings) =>
+  apiClient.put<AttendanceConfig>("/tracker/attendance-config", settings).then((r) => r.data);
+
+export const addHoliday = (day: string, name: string) =>
+  apiClient.post<Holiday>("/tracker/holidays", { day, name }).then((r) => r.data);
+
+export const deleteHoliday = (id: string) =>
+  apiClient.delete(`/tracker/holidays/${id}`).then((r) => r.data);
