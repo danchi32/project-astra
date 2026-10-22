@@ -13,7 +13,7 @@ productive (P3) columns are left NULL here, not zeroed, so they read as "not mea
 """
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,7 @@ from app.models.workforce import (
 from app.repositories.workforce import WorkforceRepository, day_bounds
 from app.schemas.telemetry import ActivityEvent
 from app.schemas.workforce import (
+    ActivitySegmentRead,
     AppUsageRead,
     DailyUserSummaryRead,
     TeamRollupRead,
@@ -487,3 +488,42 @@ class WorkforceService:
             raise NotFoundError("Device not found")
         rows = await self.repo.get_work_sessions(actor.org_id, device_id, username, day)
         return [WorkSessionRead.model_validate(r) for r in rows]
+
+    async def user_timeline(
+        self, *, actor: User, username: str, day: date
+    ) -> list[ActivitySegmentRead]:
+        """One account's foreground activity for a day, as time segments — when each app/site
+        was in use. Consecutive samples of the same app/site merge; a gap wider than ~2 sample
+        intervals breaks the segment (the person stepped away, or nothing was in the foreground).
+        Sensitive sites already arrive as the placeholder, so nothing private appears here."""
+        sample_seconds = get_settings().workforce_foreground_sample_seconds
+        org = await self.session.get(Organization, actor.org_id)
+        overrides: Overrides | None = org.workforce_categories if org else None
+        step = timedelta(seconds=sample_seconds)
+        gap = timedelta(seconds=sample_seconds * 2)
+
+        samples = await self.repo.foreground_samples_for_user_day(actor.org_id, username, day)
+        segs: list[dict] = []
+        for occurred_at, app, domain, path, idle in samples:
+            ts = as_utc(occurred_at)
+            key = (app, domain, path, idle)
+            last = segs[-1] if segs else None
+            if last and (last["app"], last["domain"], last["path"], last["idle"]) == key \
+                    and ts - last["last"] <= gap:
+                last["last"] = ts
+                last["count"] += 1
+            else:
+                segs.append({"app": app, "domain": domain, "path": path, "idle": idle,
+                             "start": ts, "last": ts, "count": 1})
+
+        out: list[ActivitySegmentRead] = []
+        for s in segs:
+            domain, path, app = s["domain"], s["path"], s["app"]
+            label = f"{domain}{path}" if (domain and path) else (domain or app or "Other")
+            bucket, _ = classify(app, domain, overrides)
+            out.append(ActivitySegmentRead(
+                started_at=s["start"], ended_at=s["last"] + step,
+                minutes=int(round(s["count"] * sample_seconds / 60)),
+                label=label, bucket=bucket, idle=s["idle"],
+            ))
+        return out

@@ -441,6 +441,46 @@ async def test_team_rollup_sums_attendance_by_team(
     assert row["productive_minutes"] is None
 
 
+# ── Activity timeline ─────────────────────────────────────────────────────────
+
+
+async def test_user_timeline_segments_foreground_activity(
+    client, admin_headers, admin_user, session_factory
+):
+    await _enable_tracker(session_factory, admin_user.org_id)
+    device_token = await _enroll_device(client, admin_headers)
+
+    def fg(app, domain, path, *times):
+        out = []
+        for t in times:
+            e = {"username": "ACME\\rahul", "kind": "foreground", "occurred_at": f"2026-07-07T{t}Z"}
+            if app:
+                e["app"] = app
+            if domain:
+                e["domain"] = domain
+            if path:
+                e["path"] = path
+            out.append(e)
+        return out
+
+    activity = (
+        fg("Code.exe", None, None, "09:00:00", "09:00:30", "09:01:00")  # 3 samples → one segment
+        + fg(None, "github.com", "/x", "09:01:30", "09:02:00")          # switch to a site
+        + fg("Code.exe", None, None, "09:10:00")                        # gap → a new segment
+    )
+    assert (await _push(
+        client, device_token, {**TELEMETRY_PAYLOAD, "activity": activity})).status_code == 200
+
+    tl = (await client.get(
+        "/api/v1/tracker/user/timeline",
+        params={"username": "acme\\rahul", "day": "2026-07-07"}, headers=admin_headers)).json()
+    # Consecutive same-app samples merge; a site switch and a time gap each start a new segment.
+    assert [s["label"] for s in tl] == ["Code.exe", "github.com/x", "Code.exe"]
+    assert tl[0]["started_at"].startswith("2026-07-07T09:00")
+    assert tl[0]["ended_at"].startswith("2026-07-07T09:01:30")  # last sample + one interval
+    assert tl[2]["started_at"].startswith("2026-07-07T09:10")   # the gap broke the Code run
+
+
 # ── Attendance configuration ──────────────────────────────────────────────────
 
 

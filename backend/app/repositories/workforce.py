@@ -87,6 +87,33 @@ class WorkforceRepository:
         )
         return [(r[0], r[1], r[2], r[3], r[4], r[5], r[6]) for r in result.all()]
 
+    async def foreground_samples_for_user_day(
+        self, org_id: uuid.UUID, username: str, day: date
+    ) -> list[tuple[datetime, str | None, str | None, str | None, bool]]:
+        """One account's foreground samples for a day, time-ordered, for the activity timeline.
+        Returns (occurred_at, app, domain, path, idle). Sensitive sites are already stored as
+        the placeholder (dropped at ingest), so nothing private surfaces here. Scoped to one
+        account + one day, so this reads a bounded slice rather than the whole table."""
+        start, end = day_bounds(day)
+        result = await self.session.execute(
+            select(
+                ActivitySample.occurred_at,
+                ActivitySample.app,
+                ActivitySample.domain,
+                ActivitySample.path,
+                ActivitySample.idle,
+            )
+            .where(
+                ActivitySample.org_id == org_id,
+                ActivitySample.username == username,
+                ActivitySample.kind == ACTIVITY_FOREGROUND,
+                ActivitySample.occurred_at >= start,
+                ActivitySample.occurred_at < end,
+            )
+            .order_by(ActivitySample.occurred_at.asc())
+        )
+        return [(r[0], r[1], r[2], r[3], r[4]) for r in result.all()]
+
     async def was_present_at_day_start(
         self, device_id: uuid.UUID, username: str, day: date
     ) -> bool:

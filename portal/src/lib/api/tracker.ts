@@ -76,6 +76,21 @@ export interface UserDetail {
 export const getUserDetail = (params: { username: string; from?: string; to?: string }) =>
   apiClient.get<UserDetail>("/tracker/user", { params }).then((r) => r.data);
 
+/** One stretch of a day spent in a single app/website — the timeline behind the totals. */
+export interface ActivitySegment {
+  started_at: string;
+  ended_at: string;
+  minutes: number;
+  label: string;
+  bucket: "productive" | "neutral" | "unproductive";
+  idle: boolean;
+}
+
+export const getUserTimeline = (username: string, day: string) =>
+  apiClient
+    .get<ActivitySegment[]>("/tracker/user/timeline", { params: { username, day } })
+    .then((r) => r.data);
+
 /** A productivity bucket. The three the whole Tracker scores against. */
 export type Bucket = "productive" | "neutral" | "unproductive";
 

@@ -106,6 +106,18 @@ class AppUsageRead(BaseModel):
     minutes: int
 
 
+class ActivitySegmentRead(BaseModel):
+    """One stretch of the day the person was in a single app/website — the timeline behind the
+    aggregated totals. Consecutive same-app/site samples are merged into a segment with a start
+    and end time, so the detail view can show "09:00–09:45 VS Code" rather than 90 raw samples."""
+    started_at: datetime
+    ended_at: datetime
+    minutes: int
+    label: str
+    bucket: str          # productive | neutral | unproductive
+    idle: bool
+
+
 class UserDetailRead(BaseModel):
     """Everything the per-user drill-down shows: the per-day attendance rows for the range,
     the productivity totals, and the app/website breakdown."""

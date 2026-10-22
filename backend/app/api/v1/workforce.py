@@ -20,6 +20,7 @@ from app.core.database import get_db
 from app.models import Organization, User, UserRole
 from app.models.base import utcnow
 from app.schemas.workforce import (
+    ActivitySegmentRead,
     AttendanceConfigRead,
     AttendanceSettingsWrite,
     CategoryConfigRead,
@@ -180,6 +181,28 @@ async def user_detail(
         detail={"from": str(day_from), "to": str(day_to), "username": username},
     )
     return detail
+
+
+@router.get(
+    "/user/timeline",
+    response_model=list[ActivitySegmentRead],
+    summary="One account's app/website timeline for a single day (when each was used)",
+)
+async def user_timeline(
+    username: str = Query(...),
+    day: date = Query(...),
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[ActivitySegmentRead]:
+    username = username.lower()   # stored lower-cased; match the same way
+    segments = await WorkforceService(session).user_timeline(
+        actor=actor, username=username, day=day,
+    )
+    await _audit_view(
+        session, actor, target_type="workforce_timeline", target_id=username,
+        detail={"day": str(day), "username": username},
+    )
+    return segments
 
 
 @router.get(

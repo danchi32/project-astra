@@ -3,8 +3,11 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock, AlertTriangle } from "lucide-react";
-import { getUserDetail, type AppUsage } from "@/lib/api/tracker";
+import { ArrowLeft, Clock, AlertTriangle, Moon } from "lucide-react";
+import {
+  getUserDetail, getUserTimeline,
+  type AppUsage, type ActivitySegment,
+} from "@/lib/api/tracker";
 import {
   UpgradeRequired,
   isUpgradeRequired,
@@ -90,6 +93,62 @@ function AppRow({ app, max }: { app: AppUsage; max: number }) {
       <span className="w-16 text-right text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>
         {formatMinutes(app.minutes)}
       </span>
+    </div>
+  );
+}
+
+/** The timestamped activity timeline for one day: when each app/website was in use, merged into
+ *  segments. Its own day picker, independent of the range above. */
+function ActivityTimeline({ username, initialDay }: { username: string; initialDay: string }) {
+  const [day, setDay] = useState(initialDay);
+  const { data, isFetching } = useQuery({
+    queryKey: ["tracker-timeline", username, day],
+    queryFn: () => getUserTimeline(username, day),
+    retry: (count, err) => !isUpgradeRequired(err) && count < 2,
+  });
+  const segments: ActivitySegment[] = data ?? [];
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <div className="px-5 py-3 border-b flex items-center justify-between gap-3" style={{ borderColor: "var(--border)" }}>
+        <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Activity timeline</h2>
+        <input type="date" value={day} max={isoDay(new Date())} onChange={(e) => setDay(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm outline-none"
+          style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+      </div>
+      <div className="p-5">
+        {segments.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            {isFetching ? "Loading…" : "No app/website activity captured for this day."}
+          </p>
+        ) : (
+          <ol>
+            {segments.map((s, i) => {
+              const color = BUCKET[s.bucket]?.color ?? BUCKET.neutral.color;
+              return (
+                <li key={`${s.started_at}-${i}`} className="flex items-start gap-3 py-2"
+                  style={{ borderTop: i ? "1px solid var(--border)" : "none" }}>
+                  <span className="w-28 shrink-0 text-xs tabular-nums pt-0.5" style={{ color: "var(--text-secondary)" }}>
+                    {formatTimeUtc(s.started_at)}–{formatTimeUtc(s.ended_at)}
+                  </span>
+                  <span className="w-1 self-stretch rounded-full shrink-0" style={{ background: s.idle ? "var(--border)" : color }} />
+                  <span className="flex-1 text-sm break-all" style={{ color: "var(--text-primary)" }}>
+                    {s.label}
+                    {s.idle && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-xs" style={{ color: "var(--text-secondary)" }}>
+                        <Moon size={11} /> idle
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-xs tabular-nums" style={{ color: "var(--text-secondary)" }}>{formatMinutes(s.minutes)}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
+          Times in UTC. Sensitive sites appear as &ldquo;(private site)&rdquo;; websites show the path only when path capture is on.
+        </p>
+      </div>
     </div>
   );
 }
@@ -246,6 +305,8 @@ export default function UserDetailPage() {
           </div>
         </div>
       </div>
+
+      <ActivityTimeline username={username} initialDay={to} />
     </div>
   );
 }
