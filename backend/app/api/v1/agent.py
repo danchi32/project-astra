@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, status
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid
@@ -28,6 +30,8 @@ from app.services.conversations import ConversationService
 from app.services.devices import DeviceService
 from app.services.remediation.service import RemediationService
 from app.services.workforce import WorkforceAggregator
+
+logger = logging.getLogger("astra.agent")
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -77,6 +81,7 @@ async def heartbeat(
 )
 async def push_activity(
     body: ActivityPush,
+    background: BackgroundTasks,
     device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> TelemetryPushResponse:
@@ -86,7 +91,24 @@ async def push_activity(
     if body.activity and await WorkforceAggregator.enabled_for(session, device.org_id):
         await WorkforceAggregator(session).ingest_events(device=device, events=body.activity)
         await session.commit()
+        # After the beat is stored and acknowledged, let the AI categorise any app/site the
+        # built-in taxonomy and the global learned store don't yet cover. Off the response path,
+        # best-effort, and a no-op when there is nothing new or no AI key is configured.
+        background.add_task(_classify_new_activity_bg, device.org_id)
     return TelemetryPushResponse()
+
+
+async def _classify_new_activity_bg(org_id: uuid.UUID) -> None:
+    """Run the workforce AI classifier in its own session, swallowing any error — a failed
+    categorisation must never surface to the agent or leave the request half-committed."""
+    from app.core.database import SessionLocal
+    from app.services.workforce_ai import classify_new_activity
+
+    try:
+        async with SessionLocal() as session:
+            await classify_new_activity(session, org_id)
+    except Exception:  # noqa: BLE001 — best-effort; the next beat retries.
+        logger.exception("workforce AI classification failed for org %s", org_id)
 
 
 async def _activity_settings(session: AsyncSession, org_id: uuid.UUID) -> tuple[bool, str]:

@@ -48,6 +48,7 @@ from app.services.workforce_categories import (
     PRIVATE_PLACEHOLDER,
     PRODUCTIVE,
     UNPRODUCTIVE,
+    Learned,
     Overrides,
     classify,
     is_sensitive,
@@ -77,7 +78,8 @@ _FgGroup = tuple[str | None, str | None, str | None, bool, bool, int]
 
 
 def _productivity(
-    groups: list[_FgGroup], *, sample_seconds: int, overrides: Overrides | None = None
+    groups: list[_FgGroup], *, sample_seconds: int,
+    overrides: Overrides | None = None, learned: "Learned | None" = None,
 ) -> _Productivity | None:
     """Attribute foreground samples to active/idle time, productivity buckets and per-app totals.
 
@@ -100,7 +102,7 @@ def _productivity(
         if is_idle:
             idle += count
             continue
-        bucket, _label = classify(app, domain, overrides)
+        bucket, _label = classify(app, domain, overrides, learned)
         bucket_counts[bucket] += count
         if idle_suspect:
             suspect += count
@@ -324,6 +326,8 @@ class WorkforceAggregator:
         # a saved override takes effect from the next recompute of each reporting device.
         org = await self.session.get(Organization, device.org_id)
         overrides: Overrides | None = org.workforce_categories if org else None
+        # The GLOBAL AI-learned categories for apps/sites the built-in taxonomy didn't know.
+        learned: Learned = await self.repo.learned_map()
         # Who this device is assigned to (Assets). Every account seen on the device resolves to
         # that person, so each day's summary carries who it is — for team rollups and self-view —
         # with no separate account→person mapping to keep.
@@ -356,7 +360,8 @@ class WorkforceAggregator:
                 ))
 
             prod = _productivity(
-                fg_by_user.get(username, []), sample_seconds=sample_seconds, overrides=overrides)
+                fg_by_user.get(username, []), sample_seconds=sample_seconds,
+                overrides=overrides, learned=learned)
             await self._write_summary(
                 device=device, username=username, day=day,
                 attendance=_summarize(spans, day=day, now=now), prod=prod,

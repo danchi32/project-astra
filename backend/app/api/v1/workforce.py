@@ -28,6 +28,7 @@ from app.schemas.workforce import (
     DailyUserSummaryRead,
     HolidayRead,
     HolidayWrite,
+    LearnedCategoryRead,
     ShiftAssignmentWrite,
     TeamRollupRead,
     TeamShiftRead,
@@ -43,8 +44,9 @@ from app.services.audit import AuditService
 from app.services.entitlements import WORKFORCE_INSIGHTS
 from app.services.exceptions import ConflictError, NotFoundError
 from app.services.shifts import ShiftService
+from app.repositories.workforce import WorkforceRepository
 from app.services.workforce import WorkforceService
-from app.services.workforce_categories import BUCKETS, builtin_buckets
+from app.services.workforce_categories import BUCKETS, CATEGORIES, builtin_buckets
 
 router = APIRouter(
     prefix="/tracker",
@@ -228,17 +230,28 @@ async def day_sessions(
     return spans
 
 
-def _config(overrides: dict | None) -> CategoryConfigRead:
-    """Build the config view: the buckets, the built-in defaults, and the org's overrides.
-    `overrides` is the raw stored JSON (or None); CategoryOverrides re-validates it so a hand-
-    edited or legacy value can never surface an invalid bucket to the UI."""
+async def _config(session: AsyncSession, overrides: dict | None) -> CategoryConfigRead:
+    """Build the config view: the buckets, the built-in defaults, the org's overrides, and the
+    global AI-learned categories (each resolved to its label and bucket). `overrides` is the raw
+    stored JSON; CategoryOverrides re-validates it so a legacy value can't surface a bad bucket."""
     stored = overrides or {}
+    learned_rows = await WorkforceRepository(session).list_learned()
+    learned = [
+        LearnedCategoryRead(
+            kind=r.kind, key=r.key, category=r.category,
+            label=CATEGORIES[r.category][0] if r.category in CATEGORIES else r.category,
+            bucket=CATEGORIES[r.category][1] if r.category in CATEGORIES else "neutral",
+            source=r.source,
+        )
+        for r in learned_rows
+    ]
     return CategoryConfigRead(
         buckets=list(BUCKETS),
         builtin=CategoryOverrides.model_validate(builtin_buckets()),
         overrides=CategoryOverrides.model_validate(
             {"domain": stored.get("domain") or {}, "app": stored.get("app") or {}}
         ),
+        learned=learned,
     )
 
 
@@ -254,7 +267,7 @@ async def get_categories(
     """Config, not employee data, so this is not a `workforce.view` row — but it is still
     gated on the entitlement (router dependency) and staff-only."""
     org = await session.get(Organization, actor.org_id)
-    return _config(org.workforce_categories if org else None)
+    return await _config(session, org.workforce_categories if org else None)
 
 
 @router.put(
@@ -285,7 +298,7 @@ async def put_categories(
                 "domain": payload.domain, "app": payload.app},
     )
     await session.commit()
-    return _config(org.workforce_categories)
+    return await _config(session, org.workforce_categories)
 
 
 # ── Department shifts ─────────────────────────────────────────────────────────

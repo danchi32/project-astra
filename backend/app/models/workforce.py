@@ -222,6 +222,34 @@ class DailyAppUsage(TimestampMixin, Base):
     minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class LearnedCategory(TimestampMixin, Base):
+    """An app/website the built-in taxonomy didn't know, categorised once by the AI and kept
+    GLOBALLY so every organisation reuses it without another AI call.
+
+    When a new foreground app or domain first appears and no built-in rule covers it — in any
+    org — the AI assigns it a category (a built-in category key) and it lands here. The same
+    app/site, its subdomains (via suffix match), and the same app/site seen later in a different
+    org all resolve from this row; the AI is asked once, ever, per app/site. One row per
+    (kind, key); never a duplicate, and never written into the built-in defaults. A per-org
+    disagreement is expressed as that org's bucket override, which outranks this.
+    """
+
+    __tablename__ = "learned_categories"
+    __table_args__ = (
+        UniqueConstraint("kind", "key", name="uq_learned_categories_kind_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)   # "domain" | "app"
+    key: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    # "ai" for the model's own classification; "admin" if a platform operator curates one.
+    source: Mapped[str] = mapped_column(String(10), nullable=False, default="ai")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class WorkHoliday(TimestampMixin, Base):
     """A named non-working day for the org (public holiday, company holiday, shutdown day).
 

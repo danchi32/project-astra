@@ -8,6 +8,7 @@ import {
   putCategories,
   type Bucket,
   type CategoryOverrides,
+  type LearnedCategory,
 } from "@/lib/api/tracker";
 import {
   UpgradeRequired,
@@ -150,6 +151,55 @@ function RuleEditor({
 
 /** Read-only reference: the built-in default bucket for every known app/site, so an admin can
  *  see what they'd be overriding. Collapsed by default — it's long. */
+/** The apps/sites the AI auto-categorised (global). Each row shows its category and the bucket
+ *  that applies for this org; an admin can override the bucket, which is saved with the rules
+ *  above (an override always outranks the AI's guess). */
+function LearnedList({
+  entries, domainRules, appRules, buckets, editable, onOverride,
+}: {
+  entries: LearnedCategory[];
+  domainRules: Rule[];
+  appRules: Rule[];
+  buckets: Bucket[];
+  editable: boolean;
+  onOverride: (kind: "domain" | "app", key: string, bucket: Bucket) => void;
+}) {
+  const effective = (e: LearnedCategory): Bucket => {
+    const rules = e.kind === "domain" ? domainRules : appRules;
+    const r = rules.find((x) => x.key.trim().toLowerCase() === e.key.toLowerCase());
+    return r ? r.bucket : e.bucket;
+  };
+  return (
+    <details open className="rounded-2xl" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <summary className="px-5 py-3 cursor-pointer text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+        Auto-categorised by AI ({entries.length})
+      </summary>
+      <div className="px-5 pb-5">
+        <p className="text-xs mb-3" style={{ color: "var(--text-secondary)" }}>
+          New apps and websites the built-in list didn&apos;t know, categorised automatically and
+          shared across organisations. Change the bucket to override it for your org.
+        </p>
+        <div className="space-y-2 max-h-80 overflow-y-auto">
+          {entries.map((e) => {
+            const eff = effective(e);
+            return (
+              <div key={`${e.kind}-${e.key}`} className="flex items-center gap-3 text-sm">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: BUCKET_META[eff].color }} />
+                <span className="flex-1 truncate" style={{ color: "var(--text-primary)" }} title={e.key}>
+                  {e.key} <span className="text-xs" style={{ color: "var(--text-secondary)" }}>· {e.label}</span>
+                </span>
+                <BucketSelect
+                  value={eff} disabled={!editable} buckets={buckets}
+                  onChange={(b) => onOverride(e.kind, e.key, b)} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function BuiltinReference({ builtin }: { builtin: CategoryOverrides }) {
   const rows = useMemo(
     () => [
@@ -279,6 +329,22 @@ export function CategoryConfig() {
           onChange={setAppRules}
         />
       </div>
+
+      {data && data.learned.length > 0 && (
+        <LearnedList
+          entries={data.learned}
+          domainRules={domainRules}
+          appRules={appRules}
+          buckets={buckets}
+          editable={!!isAdmin}
+          onOverride={(kind, key, bucket) => {
+            const rules = kind === "domain" ? domainRules : appRules;
+            const setRules = kind === "domain" ? setDomainRules : setAppRules;
+            const k = key.trim().toLowerCase();
+            setRules([...rules.filter((r) => r.key.trim().toLowerCase() !== k), { key: k, bucket }]);
+          }}
+        />
+      )}
 
       {data && <BuiltinReference builtin={data.builtin} />}
     </section>
