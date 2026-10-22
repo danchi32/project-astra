@@ -4,7 +4,7 @@ Two layers: the pure span builder (no DB, so the time logic is pinned directly),
 real path agent push → aggregation → portal read, including the entitlement gate that is the
 whole point of a monitoring feature.
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -479,11 +479,15 @@ async def test_user_timeline_segments_foreground_activity(
 ):
     await _enable_tracker(session_factory, admin_user.org_id)
     device_token = await _enroll_device(client, admin_headers)
+    # A recent day: raw foreground samples are retention-pruned on ingest, so a long-ago date
+    # would be dropped before the timeline could read it. Attendance tests can use a fixed past
+    # date because they read the durable summaries, not the raw samples.
+    ds = (date.today() - timedelta(days=1)).isoformat()
 
     def fg(app, domain, path, *times):
         out = []
         for t in times:
-            e = {"username": "ACME\\rahul", "kind": "foreground", "occurred_at": f"2026-07-07T{t}Z"}
+            e = {"username": "ACME\\rahul", "kind": "foreground", "occurred_at": f"{ds}T{t}Z"}
             if app:
                 e["app"] = app
             if domain:
@@ -503,12 +507,12 @@ async def test_user_timeline_segments_foreground_activity(
 
     tl = (await client.get(
         "/api/v1/tracker/user/timeline",
-        params={"username": "acme\\rahul", "day": "2026-07-07"}, headers=admin_headers)).json()
+        params={"username": "acme\\rahul", "day": ds}, headers=admin_headers)).json()
     # Consecutive same-app samples merge; a site switch and a time gap each start a new segment.
     assert [s["label"] for s in tl] == ["Code.exe", "github.com/x", "Code.exe"]
-    assert tl[0]["started_at"].startswith("2026-07-07T09:00")
-    assert tl[0]["ended_at"].startswith("2026-07-07T09:01:30")  # last sample + one interval
-    assert tl[2]["started_at"].startswith("2026-07-07T09:10")   # the gap broke the Code run
+    assert tl[0]["started_at"].startswith(f"{ds}T09:00")
+    assert tl[0]["ended_at"].startswith(f"{ds}T09:01:30")  # last sample + one interval
+    assert tl[2]["started_at"].startswith(f"{ds}T09:10")   # the gap broke the Code run
 
 
 # ── Attendance configuration ──────────────────────────────────────────────────
