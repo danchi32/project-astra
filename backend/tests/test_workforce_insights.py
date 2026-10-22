@@ -314,6 +314,36 @@ def test_work_shift_validation():
         WorkShiftWrite(name="x", timezone="UTC", start_minute=540, end_minute=1500)
 
 
+def test_shift_day_metrics_credit_off_shift_work_as_overtime():
+    from app.models.workforce import WorkShift
+    from app.services.workforce import shift_day_metrics
+
+    shift = WorkShift(name="Day", timezone="UTC", start_minute=540, end_minute=1020,  # 09:00–17:00
+                      working_days=[0, 1, 2, 3, 4])
+    day = date(2026, 7, 7)
+    now = datetime(2026, 7, 8, tzinfo=UTC)
+
+    def dt(h, m=0):
+        return datetime(2026, 7, 7, h, m, tzinfo=UTC)
+
+    # On time, fully inside the shift.
+    m = shift_day_metrics([(dt(9), dt(12))], shift, day, now)
+    assert (m.in_shift_minutes, m.overtime_minutes, m.late_minutes) == (180, 0, 0)
+
+    # Started 30 minutes after shift start.
+    m = shift_day_metrics([(dt(9, 30), dt(12))], shift, day, now)
+    assert m.in_shift_minutes == 150 and m.late_minutes == 30
+
+    # Worked ONLY outside the shift (the US-shift person putting in daytime hours): all overtime,
+    # and NOT flagged late — working at another time is credited, never penalised.
+    m = shift_day_metrics([(dt(2), dt(4))], shift, day, now)
+    assert (m.in_shift_minutes, m.overtime_minutes, m.late_minutes) == (0, 120, None)
+
+    # A span straddling the shift start: the hour before is overtime, the hour after is in-shift.
+    m = shift_day_metrics([(dt(8), dt(10))], shift, day, now)
+    assert m.in_shift_minutes == 60 and m.overtime_minutes == 60 and m.late_minutes == 0
+
+
 async def _create_team(client, admin_headers, name):
     r = await client.post("/api/v1/grouping/teams", json={"name": name}, headers=admin_headers)
     assert r.status_code == 201, r.text

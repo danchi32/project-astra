@@ -13,7 +13,8 @@ productive (P3) columns are left NULL here, not zeroed, so they read as "not mea
 """
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,7 @@ from app.models.workforce import (
     DailyAppUsage,
     DailyUserSummary,
     WorkSession,
+    WorkShift,
 )
 from app.repositories.workforce import WorkforceRepository, day_bounds
 from app.schemas.telemetry import ActivityEvent
@@ -126,6 +128,52 @@ def _productivity(
         suspected_idle_minutes=mins(suspect),
         apps=[a for a in apps if a[2] > 0],
     )
+
+
+@dataclass
+class _ShiftDay:
+    in_shift_minutes: int
+    overtime_minutes: int
+    late_minutes: int | None   # None when the person worked only OUTSIDE their shift
+
+
+def shift_window_utc(shift: WorkShift, day: date) -> tuple[datetime, datetime]:
+    """The shift's [start, end) for a given local date, as UTC instants. end <= start means the
+    shift runs past local midnight, so the window extends into the next day."""
+    tz = ZoneInfo(shift.timezone)
+    start_local = datetime(
+        day.year, day.month, day.day, shift.start_minute // 60, shift.start_minute % 60, tzinfo=tz)
+    length = (shift.end_minute - shift.start_minute) % 1440 or 1440
+    end_local = start_local + timedelta(minutes=length)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def shift_day_metrics(
+    spans: list[tuple[datetime, datetime | None]], shift: WorkShift, day: date, now: datetime
+) -> _ShiftDay:
+    """Split a day's work spans against the shift window. Worked time inside the window is
+    in-shift; the rest is overtime (extra / off-shift work, never penalised). `late` is minutes
+    after the shift start before the first in-shift activity — and None when there was no
+    in-shift work at all, so someone who put in extra hours at a DIFFERENT time is not flagged
+    late, just credited with overtime."""
+    win_start, win_end = shift_window_utc(shift, day)
+    in_shift = 0
+    overtime = 0
+    first_in_shift: datetime | None = None
+    for raw_start, raw_end in spans:
+        s_start = as_utc(raw_start)
+        s_end = as_utc(raw_end) if raw_end is not None else now
+        total = max(0, int((s_end - s_start).total_seconds() // 60))
+        ov_start, ov_end = max(s_start, win_start), min(s_end, win_end)
+        overlap = max(0, int((ov_end - ov_start).total_seconds() // 60)) if ov_end > ov_start else 0
+        in_shift += overlap
+        overtime += total - overlap
+        if overlap > 0 and (first_in_shift is None or ov_start < first_in_shift):
+            first_in_shift = ov_start
+    late = None
+    if first_in_shift is not None:
+        late = max(0, int((first_in_shift - win_start).total_seconds() // 60))
+    return _ShiftDay(in_shift_minutes=in_shift, overtime_minutes=overtime, late_minutes=late)
 
 
 def build_work_spans(
@@ -433,10 +481,25 @@ class WorkforceService:
             actor.org_id, day_from=day_from, day_to=day_to, username=username)
         hostnames = await self.repo.hostnames_for({r.device_id for r in rows})
 
+        # The person's shift (via their team), so each day can be scored against it. Resolved
+        # from the user the days already carry — which comes from the device's Assets assignment.
+        now = utcnow()
+        user_id = next((r.user_id for r in rows if r.user_id is not None), None)
+        shift = await self.repo.shift_for_user(user_id) if user_id else None
+
         days: list[DailyUserSummaryRead] = []
         for r in rows:
             read = DailyUserSummaryRead.model_validate(r)
             read.device_hostname = hostnames.get(r.device_id)
+            if shift is not None:
+                spans = await self.repo.get_work_sessions(
+                    actor.org_id, r.device_id, r.username, r.day)
+                m = shift_day_metrics(
+                    [(s.started_at, s.ended_at) for s in spans], shift, r.day, now)
+                read.shift_name = shift.name
+                read.in_shift_minutes = m.in_shift_minutes
+                read.overtime_minutes = m.overtime_minutes
+                read.late_minutes = m.late_minutes
             days.append(read)
 
         def total(attr: str) -> int | None:
@@ -469,6 +532,9 @@ class WorkforceService:
             neutral_minutes=total("neutral_minutes"),
             unproductive_minutes=total("unproductive_minutes"),
             suspected_idle_minutes=total("suspected_idle_minutes"),
+            shift_name=shift.name if shift else None,
+            in_shift_minutes=sum(d.in_shift_minutes or 0 for d in days) if shift else None,
+            overtime_minutes=sum(d.overtime_minutes or 0 for d in days) if shift else None,
             days=days,
             apps=apps,
         )

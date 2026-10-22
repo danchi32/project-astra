@@ -21,6 +21,12 @@ export interface DailyUserSummary {
   neutral_minutes: number | null;
   unproductive_minutes: number | null;
   suspected_idle_minutes: number | null;
+  // Shift-aware (null unless the person's team has a shift). Overtime is work OUTSIDE the shift
+  // window (extra/off-shift, never penalised); late is null when they worked only off-shift.
+  shift_name: string | null;
+  in_shift_minutes: number | null;
+  overtime_minutes: number | null;
+  late_minutes: number | null;
 }
 
 /** One derived work/break span — the raw material behind a day's worked total. */
@@ -69,6 +75,9 @@ export interface UserDetail {
   neutral_minutes: number | null;
   unproductive_minutes: number | null;
   suspected_idle_minutes: number | null;
+  shift_name: string | null;
+  in_shift_minutes: number | null;
+  overtime_minutes: number | null;
   days: DailyUserSummary[];
   apps: AppUsage[];
 }

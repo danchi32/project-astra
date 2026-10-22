@@ -337,6 +337,18 @@ class WorkforceRepository:
             for tid, name, colour, shift_name in rows
         ]
 
+    async def shift_for_user(self, user_id: uuid.UUID) -> WorkShift | None:
+        """The shift this person works, via their team. If they are on more than one team with a
+        shift, the first by team name wins — a deterministic pick, not a guess per request."""
+        return (await self.session.execute(
+            select(WorkShift)
+            .join(UserTeam, UserTeam.shift_id == WorkShift.id)
+            .join(UserTeamMember, UserTeamMember.team_id == UserTeam.id)
+            .where(UserTeamMember.user_id == user_id)
+            .order_by(UserTeam.name)
+            .limit(1)
+        )).scalar_one_or_none()
+
     async def team_rollup(
         self, org_id: uuid.UUID, *, day_from: date, day_to: date
     ) -> dict[uuid.UUID, dict]:

@@ -226,6 +226,28 @@ export default function UserDetailPage() {
         ))}
       </div>
 
+      {/* Shift summary — only when the person's team has an assigned shift. Off-shift work is
+          shown as overtime, never as absence or lateness. */}
+      {data?.shift_name && (
+        <div className="rounded-2xl p-4 flex flex-wrap items-center gap-x-6 gap-y-2"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <span className="inline-flex items-center gap-2 text-sm">
+            <Clock size={15} style={{ color: "var(--accent)" }} />
+            <span style={{ color: "var(--text-secondary)" }}>Shift</span>
+            <span className="font-medium" style={{ color: "var(--text-primary)" }}>{data.shift_name}</span>
+          </span>
+          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            In-shift <span className="font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{formatOptional(data.in_shift_minutes)}</span>
+          </span>
+          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            Overtime / off-shift <span className="font-medium tabular-nums" style={{ color: "#f59e0b" }}>{formatOptional(data.overtime_minutes)}</span>
+          </span>
+          <span className="text-xs flex-1 min-w-[220px]" style={{ color: "var(--text-secondary)" }}>
+            Work outside the shift counts as overtime, not absence — so extra hours at another time are credited, never penalised.
+          </span>
+        </div>
+      )}
+
       {/* Idle-faking review flag — only when there is something to review, and framed as a
           signal to check, never an accusation. */}
       {(data?.suspected_idle_minutes ?? 0) > 0 && (
@@ -280,7 +302,8 @@ export default function UserDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["Date", "First in", "Last out", "Worked", "Productive"].map((h) => (
+                  {["Date", "First in", "Last out", "Worked", "Productive",
+                    ...(data?.shift_name ? ["Late", "In-shift", "Overtime"] : [])].map((h) => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
                   ))}
                 </tr>
@@ -293,10 +316,19 @@ export default function UserDetailPage() {
                     <td className="px-4 py-2.5 tabular-nums" style={{ color: "var(--text-secondary)" }}>{d.last_out ? formatTimeUtc(d.last_out) : "in now"}</td>
                     <td className="px-4 py-2.5 tabular-nums font-medium" style={{ color: "var(--text-primary)" }}>{formatMinutes(d.worked_minutes)}</td>
                     <td className="px-4 py-2.5 tabular-nums" style={{ color: "var(--text-secondary)" }}>{formatOptional(d.productive_minutes)}</td>
+                    {data?.shift_name && (
+                      <>
+                        <td className="px-4 py-2.5 tabular-nums" style={{ color: d.late_minutes ? "#f59e0b" : "var(--text-secondary)" }}>
+                          {d.late_minutes == null ? "—" : d.late_minutes === 0 ? "On time" : `${formatMinutes(d.late_minutes)} late`}
+                        </td>
+                        <td className="px-4 py-2.5 tabular-nums" style={{ color: "var(--text-secondary)" }}>{formatOptional(d.in_shift_minutes)}</td>
+                        <td className="px-4 py-2.5 tabular-nums" style={{ color: (d.overtime_minutes ?? 0) > 0 ? "#f59e0b" : "var(--text-secondary)" }}>{formatOptional(d.overtime_minutes)}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
                 {!data?.days?.length && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
+                  <tr><td colSpan={data?.shift_name ? 8 : 5} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>
                     {isFetching ? "Loading…" : "No attendance in this range."}
                   </td></tr>
                 )}

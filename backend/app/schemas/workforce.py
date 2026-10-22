@@ -45,6 +45,15 @@ class DailyUserSummaryRead(BaseModel):
     # Minutes flagged as possible mouse-jiggler faking — a review signal, not a verdict.
     suspected_idle_minutes: int | None = None
 
+    # Shift-aware (filled only when the person's team has an assigned shift). in_shift is worked
+    # time inside the shift window; overtime is worked time OUTSIDE it (extra/off-shift work,
+    # never penalised); late is minutes after shift start before the first in-shift activity
+    # (None when they worked only off-shift, so working at another time is not flagged late).
+    shift_name: str | None = None
+    in_shift_minutes: int | None = None
+    overtime_minutes: int | None = None
+    late_minutes: int | None = None
+
 
 class CategoryOverrides(BaseModel):
     """Per-org productivity reclassification: which apps/domains this customer counts as
@@ -134,6 +143,12 @@ class UserDetailRead(BaseModel):
     neutral_minutes: int | None = None
     unproductive_minutes: int | None = None
     suspected_idle_minutes: int | None = None
+
+    # The person's assigned shift over the range, and the in-shift / overtime split (None when
+    # no team shift is assigned).
+    shift_name: str | None = None
+    in_shift_minutes: int | None = None
+    overtime_minutes: int | None = None
 
     days: list[DailyUserSummaryRead]
     apps: list[AppUsageRead]
