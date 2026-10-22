@@ -45,6 +45,10 @@ export function UpgradeRequired({ feature }: { feature: string | null }) {
   const name = feature ? FEATURE_LABELS[feature] ?? null : null;
   const plan = feature ? FEATURE_PLAN[feature] : null;
 
+  // Add-ons are not part of a plan tier — they are subscribed to per organization, so the
+  // copy and the call to action are different ("subscribe", not "upgrade your plan").
+  const isAddon = feature === "workforce_insights";
+
   return (
     <div className="rounded-xl p-8 text-center max-w-lg mx-auto"
       style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
@@ -52,21 +56,44 @@ export function UpgradeRequired({ feature }: { feature: string | null }) {
         style={{ background: "rgba(154,47,187,0.10)", color: "var(--accent)" }}>
         <Lock size={22} />
       </div>
-      <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
-        {name ? `${name} is part of ${plan ?? "a higher plan"}` : "This is part of a higher plan"}
-      </h2>
-      <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
-        Your organization&apos;s current plan doesn&apos;t include it. Nothing is missing from
-        your data — the feature is switched on the moment the plan changes.
-      </p>
-      <Link href="/billing"
-        className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-lg text-sm font-medium text-white"
-        style={{ background: "var(--accent)" }}>
-        See plans <ArrowRight size={15} />
-      </Link>
-      <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
-        Talk to your ASTRA contact if you think this is wrong.
-      </p>
+      {isAddon ? (
+        <>
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            Workforce Insights (Tracker) is an add-on
+          </h2>
+          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+            Track attendance, app &amp; website productivity and idle time for your team.
+            Subscribe to enable it for your organization — it switches on the moment it&apos;s
+            activated, and your existing data is untouched.
+          </p>
+          <Link href="/billing"
+            className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-lg text-sm font-medium text-white"
+            style={{ background: "var(--accent)" }}>
+            Subscribe to Tracker <ArrowRight size={15} />
+          </Link>
+          <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
+            Talk to your ASTRA contact to turn it on.
+          </p>
+        </>
+      ) : (
+        <>
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            {name ? `${name} is part of ${plan ?? "a higher plan"}` : "This is part of a higher plan"}
+          </h2>
+          <p className="text-sm mt-2" style={{ color: "var(--text-secondary)" }}>
+            Your organization&apos;s current plan doesn&apos;t include it. Nothing is missing from
+            your data — the feature is switched on the moment the plan changes.
+          </p>
+          <Link href="/billing"
+            className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-lg text-sm font-medium text-white"
+            style={{ background: "var(--accent)" }}>
+            See plans <ArrowRight size={15} />
+          </Link>
+          <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
+            Talk to your ASTRA contact if you think this is wrong.
+          </p>
+        </>
+      )}
     </div>
   );
 }

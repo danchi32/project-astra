@@ -55,6 +55,21 @@ class Settings(BaseSettings):
     # telemetry.
     telemetry_keep_min_snapshots: int = 60
 
+    # ── Workforce Insights ("Tracker") ─────────────────────────────────────────
+    # Raw activity samples (logon/lock/idle events the agent pushes) are kept this long,
+    # then pruned per device on ingest — same discipline as telemetry snapshots. Derived
+    # work_sessions and daily_user_summary rows are the durable history and are NOT pruned.
+    # Short by design: this is employee-monitoring data, so the raw trail is held no longer
+    # than aggregation needs it (see docs/WORKFORCE_INSIGHTS_PLAN.md §6). 0 disables pruning.
+    workforce_activity_retention_days: int = 90
+    # No keyboard/mouse input for at least this many minutes counts the session as a break
+    # rather than worked time. 0 disables idle-splitting (every signed-in minute is worked).
+    workforce_idle_threshold_minutes: int = 5
+    # How many seconds each foreground sample stands for when attributing app/website time —
+    # the agent's foreground polling interval. Each sample contributes this much time to its
+    # app's bucket, so productivity minutes = samples × this ÷ 60. Must match the agent.
+    workforce_foreground_sample_seconds: int = 30
+
     # ── Agent rate limiting ────────────────────────────────────────────────────
     # A healthy agent makes ~6 requests/min (heartbeat + telemetry + two remediation
     # pollers), so 120/min is ~20x headroom — it should only ever catch a stuck retry

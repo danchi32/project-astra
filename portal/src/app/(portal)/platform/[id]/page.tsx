@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone } from "lucide-react";
+import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone, Clock } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken,
@@ -79,6 +79,19 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   async function toggleAiPro() {
     if (!org) return;
     const next = await updateOrganization(id, { ai_pro: !org.ai_pro });
+    queryClient.setQueryData(["platform-org", id], next);
+    queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
+  }
+
+  // Workforce Insights ("Tracker") is a per-org add-on, off by default and in no plan tier, so
+  // it is toggled purely through the entitlement override — merged, never replacing the whole
+  // map, so other overrides survive. Enabling is the operator's deliberate act after the
+  // customer attests notice/DPIA (this is employee monitoring).
+  async function toggleWorkforce() {
+    if (!org) return;
+    const on = org.entitlements.includes("workforce_insights");
+    const overrides = { ...(org.entitlement_overrides ?? {}), workforce_insights: !on };
+    const next = await updateOrganization(id, { entitlement_overrides: overrides });
     queryClient.setQueryData(["platform-org", id], next);
     queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
   }
@@ -281,6 +294,44 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
                   {rcError}
                 </p>
               )}
+            </div>
+          );
+        })()}
+        {/* Workforce Insights ("Tracker") — a per-org add-on, off by default and in no plan
+            tier. A deliberate operator switch because it is employee monitoring: the customer
+            attests notice/DPIA first. Once on, the customer's own portal unlocks the Tracker. */}
+        {org && (() => {
+          const trackerOn = org.entitlements.includes("workforce_insights");
+          return (
+            <div className="rounded-xl p-5 flex items-start justify-between gap-4" style={card}>
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg shrink-0" style={{ background: trackerOn ? "rgba(154,47,187,0.12)" : "rgba(100,116,139,0.12)", color: trackerOn ? "var(--accent)" : "var(--text-secondary)" }}>
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Workforce Insights (Tracker)</h2>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      style={trackerOn
+                        ? { color: "var(--accent)", background: "rgba(154,47,187,0.12)" }
+                        : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
+                      {trackerOn ? "Enabled" : "Off"}
+                    </span>
+                  </div>
+                  <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-secondary)" }}>
+                    {trackerOn
+                      ? "This org can track attendance, app/website productivity and idle-faking for their employees. Make sure they have given notice and completed a DPIA — this is employee monitoring."
+                      : "Off by default. Enable only after the customer attests they have given their employees notice and completed a DPIA. It then unlocks in their portal."}
+                  </p>
+                </div>
+              </div>
+              <button onClick={toggleWorkforce}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+                style={trackerOn
+                  ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
+                  : { background: "var(--accent)", color: "#fff" }}>
+                <Clock size={15} /> {trackerOn ? "Disable" : "Enable"}
+              </button>
             </div>
           );
         })()}

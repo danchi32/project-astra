@@ -1,6 +1,7 @@
 using AstraAgent.Service.Api;
 using AstraAgent.Service.Enrollment;
 using AstraAgent.Service.Remediation;
+using AstraAgent.Service.Workforce;
 using Microsoft.Extensions.Options;
 
 namespace AstraAgent.Service.Workers;
@@ -33,6 +34,7 @@ public sealed class HeartbeatWorker(
     IAstraApiClient api,
     IDeviceIdentityProvider identity,
     ISystemTaskRunner taskRunner,
+    ActivityTrackingState trackingState,
     IOptions<AgentOptions> options,
     ILogger<HeartbeatWorker> logger) : BackgroundService
 {
@@ -196,6 +198,12 @@ public sealed class HeartbeatWorker(
 
         if (result.Status != HeartbeatStatus.Ok)
             return false;
+
+        // Record whether this org may collect Tracker activity — gates the telemetry worker's
+        // collection and drives the Tray's "Activity tracking: ON" indicator. Set only on a
+        // confirmed-Ok beat, so a failed/unreadable beat leaves the last known answer in place
+        // rather than flipping tracking off (and the Tray's indicator) on a transient blip.
+        trackingState.Set(result.ActivityTracking, result.ActivityUrlMode);
 
         if (result.Tasks.Count > 0 && Interlocked.CompareExchange(ref _executing, 1, 0) == 0)
         {

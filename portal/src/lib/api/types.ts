@@ -176,6 +176,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   advanced_rbac: "Advanced RBAC & SSO",
   shared_email_sender: "Send email via ASTRA",
   remote_control: "Remote control",
+  workforce_insights: "Workforce Insights (Tracker)",
 };
 
 export interface OrganizationAdmin {

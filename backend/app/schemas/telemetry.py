@@ -103,6 +103,40 @@ class SessionEntry(_SanitizedInput):
     idle_seconds: int | None = Field(default=None, ge=0)
 
 
+class ActivityEvent(_SanitizedInput):
+    """One Workforce Insights ("Tracker") presence transition the agent observed.
+
+    Rides the same 60 s telemetry push as everything else, so tracking adds no new request
+    per device. The agent buffers these in its offline queue, so `occurred_at` is when the
+    transition happened on the machine and may predate this push by a long offline spell.
+
+    `kind` is a closed set: the agent has already reduced Windows' session/notification
+    signals to these six, and anything else arriving here is an agent and a backend that
+    disagree about what a presence event is — better rejected than stored as a state nothing
+    can aggregate.
+    """
+    username: str = Field(max_length=150)
+    kind: Literal["logon", "logoff", "lock", "unlock", "active", "idle", "foreground"]
+    session_id: int | None = Field(default=None, ge=0)
+    occurred_at: datetime
+    # Only for kind="foreground" (P3): the active app's process/display name and, for a
+    # browser, the website DOMAIN — never a path or query string. The agent strips those
+    # before sending (plan §6); the backend also ignores anything after the host.
+    app: str | None = Field(default=None, max_length=260)
+    domain: str | None = Field(default=None, max_length=255)
+    # The query-stripped path, only when the org is in "path" URL mode. The agent strips the
+    # query/fragment before sending; the backend strips again and drops it for sensitive
+    # domains. Never a query string.
+    path: str | None = Field(default=None, max_length=400)
+    # Real idle for this sample window: no keyboard/mouse input past the threshold
+    # (GetLastInputInfo), i.e. a break rather than at-keyboard time.
+    idle: bool = False
+    # Mouse-only idle-faking signal for this sample window: the cursor moved mechanically
+    # (confined, no clicks) like a jiggler. A flag for review, never a verdict, and derived
+    # from the mouse alone — never the keyboard (no keystroke logging).
+    idle_suspect: bool = False
+
+
 class HardwareInfo(_SanitizedInput):
     manufacturer: str | None = Field(default=None, max_length=150)
     model: str | None = Field(default=None, max_length=150)
@@ -139,9 +173,27 @@ class TelemetryPush(_SanitizedInput):
     # would make every device look deserted the moment an old agent checked in.
     sessions: list[SessionEntry] | None = None
 
+    # Workforce Insights ("Tracker") presence events. None = this agent build does not report
+    # activity; [] = it does, but nothing happened since the last push. Either way nothing is
+    # stored. Even when present, events are persisted ONLY if the org holds the
+    # workforce_insights entitlement — the ingest path checks, so a stray payload from an
+    # untracked org is dropped rather than quietly collected.
+    activity: list[ActivityEvent] | None = None
+
 
 class TelemetryPushResponse(BaseModel):
     status: str = "accepted"
+
+
+class ActivityPush(_SanitizedInput):
+    """Workforce Insights activity events pushed on their own, by the user-session Tray.
+
+    Foreground app/website samples can only be read from inside the user's session, which the
+    LocalSystem Service cannot reach — so the Tray collects them and posts them here, on the
+    device credential, separately from the Service's telemetry beat. Same events, same ingest,
+    same entitlement gate; just a different sender."""
+
+    activity: list[ActivityEvent] = []
 
 
 # ── Backend → Portal (read) ────────────────────────────────────────────────

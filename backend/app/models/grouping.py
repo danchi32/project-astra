@@ -73,6 +73,14 @@ class UserTeam(TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     colour: Mapped[str | None] = mapped_column(String(9), nullable=True)
 
+    # The Workforce Insights shift this team (department) works, if any. The team is "who is
+    # on shift" (see the module note above), so the assignment lives here. SET NULL on shift
+    # delete: removing a shift un-assigns the teams, it never deletes them. NULL = no shift
+    # assigned, which is every team until an admin sets one.
+    shift_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("work_shifts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
 
 class UserTeamMember(TimestampMixin, Base):
     """A user's membership of a team.

@@ -27,6 +27,7 @@ from app.api.v1 import (
     support,
     telemetry,
     users,
+    workforce,
 )
 
 api_router = APIRouter()
@@ -56,3 +57,4 @@ api_router.include_router(settings.router)
 api_router.include_router(downloads.router)
 api_router.include_router(platform.router)
 api_router.include_router(billing.router)
+api_router.include_router(workforce.router)

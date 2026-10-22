@@ -21,6 +21,7 @@ from app.schemas.telemetry import DashboardSummary, TelemetryPush
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
 from app.services.exceptions import NotFoundError
+from app.services.workforce import WorkforceAggregator
 
 
 def _fingerprint(items: Sequence[Any], fields: tuple[str, ...]) -> str:
@@ -216,6 +217,17 @@ class TelemetryService:
                     ],
                 )
                 device.sessions_hash = digest
+
+        # Workforce Insights ("Tracker") activity. Stored and aggregated only when the org
+        # holds the entitlement — a lookup miss is treated as OFF, so monitoring data is
+        # never collected by accident. Unlike the inventory above this is append-only
+        # (events), not a replace, so there is no fingerprint to skip on.
+        if data.activity and await WorkforceAggregator.enabled_for(
+            self.session, device.org_id
+        ):
+            await WorkforceAggregator(self.session).ingest_events(
+                device=device, events=data.activity
+            )
 
         await self.session.commit()
 
