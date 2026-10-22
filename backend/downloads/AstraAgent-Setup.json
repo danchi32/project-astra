@@ -1,7 +1,7 @@
 {
-  "agent_version": "0.10.1",
+  "agent_version": "0.11.0",
   "server_url": "https://api.astra.technomateai.com",
-  "portable_zip_sha256": "56b169ecfc5c3df05992c9fdc4f4219a7cb4fbab01e6efe2a0da9f1c4751b829",
+  "portable_zip_sha256": "30b16c22c2d950eac9e060e6117497bd40ac447c4df7e5afa5ded770862efe41",
   "file_counts": {
     "dist-fd": 43,
     "dist-tray": 43
