@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Threading;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Threading.Tasks;
 using AstraAgent.Service;
 using AstraAgent.Service.Security;
@@ -52,7 +53,12 @@ public sealed class TrayUpdater : IDisposable
 
     private async Task RunAsync(CancellationToken ct)
     {
-        try { await Task.Delay(TimeSpan.FromMinutes(2), ct); }
+        // Spread the first check across the fleet (see UpdateSchedule): on a shared machine the
+        // service and several trays would otherwise all poll, and download, on the same tick.
+        var interval = TimeSpan.FromMinutes(60);
+        var firstDelay = UpdateSchedule.FirstCheckDelay(
+            TimeSpan.FromMinutes(2), (int)interval.TotalSeconds, Random.Shared);
+        try { await Task.Delay(firstDelay, ct); }
         catch (OperationCanceledException) { return; }
 
         while (!ct.IsCancellationRequested)
@@ -65,7 +71,7 @@ public sealed class TrayUpdater : IDisposable
             catch (OperationCanceledException) { return; }
             catch { /* transient — retry next cycle */ }
 
-            try { await Task.Delay(TimeSpan.FromMinutes(60), ct); }
+            try { await Task.Delay(UpdateSchedule.JitteredInterval(interval, Random.Shared), ct); }
             catch (OperationCanceledException) { return; }
         }
     }
@@ -150,6 +156,18 @@ public sealed class TrayUpdater : IDisposable
     }
 
     private async Task<bool> DownloadAsync(string url, string destPath, CancellationToken ct)
+    {
+        // Same BITS-first, fall-back-to-HTTP policy as the service updater (see BitsDownloader):
+        // a background transfer that yields to foreground traffic, so a machine full of trays
+        // updating together stays polite on the wire. Honour the tray's configured proxy.
+        if (await BitsDownloader.TryDownloadAsync(
+                url, destPath, _proxyUrl, NullLogger.Instance, ct))
+            return true;
+
+        return await DirectDownloadAsync(url, destPath, ct);
+    }
+
+    private async Task<bool> DirectDownloadAsync(string url, string destPath, CancellationToken ct)
     {
         try
         {

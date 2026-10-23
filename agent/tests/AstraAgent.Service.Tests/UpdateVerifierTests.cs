@@ -287,6 +287,77 @@ public class UpdatePolicySharingTests
     }
 }
 
+public class UpdateScheduleTests
+{
+    // A fixed seed makes the "random" delays deterministic, so these bounds are stable in CI.
+    private static Random Seeded() => new(12345);
+
+    [Fact]
+    public void FirstCheckDelay_StaysWithinBaseAndSpread()
+    {
+        var rnd = Seeded();
+        var baseDelay = TimeSpan.FromMinutes(2);
+        var spread = (int)TimeSpan.FromMinutes(60).TotalSeconds;
+
+        for (var i = 0; i < 1000; i++)
+        {
+            var delay = UpdateSchedule.FirstCheckDelay(baseDelay, spread, rnd);
+            // Never earlier than the base (enrollment must settle) and never beyond base+spread.
+            Assert.True(delay >= baseDelay, $"{delay} < base");
+            Assert.True(delay <= baseDelay + TimeSpan.FromSeconds(spread), $"{delay} > base+spread");
+        }
+    }
+
+    [Fact]
+    public void FirstCheckDelay_ActuallySpreadsAcrossTheFleet()
+    {
+        // Distinct agents (distinct seeds) must not all land on the same first-check instant —
+        // the whole reason this exists. Expect a healthy spread, not one clustered value.
+        var baseDelay = TimeSpan.FromMinutes(2);
+        var spread = (int)TimeSpan.FromMinutes(60).TotalSeconds;
+
+        var seen = new HashSet<long>();
+        for (var agent = 0; agent < 200; agent++)
+            seen.Add((long)UpdateSchedule
+                .FirstCheckDelay(baseDelay, spread, new Random(agent)).TotalSeconds);
+
+        Assert.True(seen.Count > 100, $"first checks barely spread out: {seen.Count} distinct values");
+    }
+
+    [Fact]
+    public void JitteredInterval_IsNeverShorterThanTheInterval_AndAddsAtMost20Percent()
+    {
+        var rnd = Seeded();
+        var interval = TimeSpan.FromMinutes(60);
+        var maxExtra = TimeSpan.FromSeconds(interval.TotalSeconds * 0.2);
+
+        for (var i = 0; i < 1000; i++)
+        {
+            var jittered = UpdateSchedule.JitteredInterval(interval, rnd);
+            // Must never poll FASTER than configured (that would defeat the whole point), and the
+            // jitter is bounded so the interval can't drift arbitrarily far.
+            Assert.True(jittered >= interval, $"{jittered} < interval");
+            Assert.True(jittered <= interval + maxExtra, $"{jittered} > interval+20%");
+        }
+    }
+
+    [Fact]
+    public void Delays_StaySaneForTheClampedFloorInterval()
+    {
+        // The service clamps the interval to a 5-minute floor; the helpers must not throw or go
+        // negative at that small size (rnd.Next requires a positive bound — hence the Math.Max).
+        var rnd = Seeded();
+        var interval = TimeSpan.FromMinutes(5);
+
+        var first = UpdateSchedule.FirstCheckDelay(
+            TimeSpan.FromMinutes(2), (int)interval.TotalSeconds, rnd);
+        Assert.True(first >= TimeSpan.FromMinutes(2));
+
+        var jittered = UpdateSchedule.JitteredInterval(interval, rnd);
+        Assert.True(jittered >= interval);
+    }
+}
+
 public class AgentVersionTests
 {
     /// <summary>The version is no longer typed out by hand — it is read off the assembly, which
