@@ -285,9 +285,26 @@ class WorkforceRepository:
         return out
 
     async def list_learned(self) -> list[LearnedCategory]:
+        """Resolved learned categories for the config view. Excludes the "pending" back-off
+        markers (apps/sites the AI was asked about but couldn't confidently categorise) — those
+        are a retry-suppression bookkeeping row, not something to show an admin."""
         return list((await self.session.execute(
-            select(LearnedCategory).order_by(LearnedCategory.kind, LearnedCategory.key)
+            select(LearnedCategory)
+            .where(LearnedCategory.source != "pending")
+            .order_by(LearnedCategory.kind, LearnedCategory.key)
         )).scalars().all())
+
+    async def pending_keys(self, *, newer_than: datetime) -> set[tuple[str, str]]:
+        """(kind, key) of items the classifier recently tried and could NOT resolve — a negative
+        cache so a genuinely un-categorisable app/site is not re-sent to the model on every pass.
+        Only markers refreshed since `newer_than` count; older ones expire and may be retried."""
+        rows = (await self.session.execute(
+            select(LearnedCategory.kind, LearnedCategory.key).where(
+                LearnedCategory.source == "pending",
+                LearnedCategory.updated_at >= newer_than,
+            )
+        )).all()
+        return {(kind, key) for kind, key in rows}
 
     async def recent_foreground_keys(
         self, org_id: uuid.UUID, *, since: datetime, limit: int

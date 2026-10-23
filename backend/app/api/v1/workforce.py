@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles, requires
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models import Organization, User, UserRole
 from app.models.base import utcnow
@@ -46,7 +47,13 @@ from app.services.exceptions import ConflictError, NotFoundError
 from app.services.shifts import ShiftService
 from app.repositories.workforce import WorkforceRepository
 from app.services.workforce import WorkforceService
-from app.services.workforce_categories import BUCKETS, CATEGORIES, builtin_buckets
+from app.services.workforce_categories import (
+    BUCKETS,
+    CATEGORIES,
+    PRIVATE_PLACEHOLDER,
+    builtin_buckets,
+    registrable_domain,
+)
 
 router = APIRouter(
     prefix="/tracker",
@@ -230,12 +237,27 @@ async def day_sessions(
     return spans
 
 
-async def _config(session: AsyncSession, overrides: dict | None) -> CategoryConfigRead:
+async def _config(
+    session: AsyncSession, org_id: uuid.UUID, overrides: dict | None
+) -> CategoryConfigRead:
     """Build the config view: the buckets, the built-in defaults, the org's overrides, and the
-    global AI-learned categories (each resolved to its label and bucket). `overrides` is the raw
-    stored JSON; CategoryOverrides re-validates it so a legacy value can't surface a bad bucket."""
+    AI-learned categories for apps/sites THIS org has actually seen. `overrides` is the raw stored
+    JSON; CategoryOverrides re-validates it so a legacy value can't surface a bad bucket.
+
+    The learned store is global (every org's scoring reuses it), but the list is scoped to this
+    org's own activity before display: an org only ever sees categories for the apps/sites its own
+    fleet uses, never another tenant's internal tool and domain names."""
     stored = overrides or {}
-    learned_rows = await WorkforceRepository(session).list_learned()
+    repo = WorkforceRepository(session)
+    # The (kind, key) this org's own foreground activity covers — learned domain keys are stored
+    # registrable, so reduce the org's domains the same way before matching.
+    since = utcnow() - timedelta(days=get_settings().workforce_activity_retention_days)
+    seen: set[tuple[str, str]] = set()
+    for app, domain in await repo.recent_foreground_keys(org_id, since=since, limit=2000):
+        if domain and domain != PRIVATE_PLACEHOLDER:
+            seen.add(("domain", registrable_domain(domain)))
+        elif app:
+            seen.add(("app", app.strip().lower()))
     learned = [
         LearnedCategoryRead(
             kind=r.kind, key=r.key, category=r.category,
@@ -243,7 +265,8 @@ async def _config(session: AsyncSession, overrides: dict | None) -> CategoryConf
             bucket=CATEGORIES[r.category][1] if r.category in CATEGORIES else "neutral",
             source=r.source,
         )
-        for r in learned_rows
+        for r in await repo.list_learned()
+        if (r.kind, r.key) in seen
     ]
     return CategoryConfigRead(
         buckets=list(BUCKETS),
@@ -267,7 +290,7 @@ async def get_categories(
     """Config, not employee data, so this is not a `workforce.view` row — but it is still
     gated on the entitlement (router dependency) and staff-only."""
     org = await session.get(Organization, actor.org_id)
-    return await _config(session, org.workforce_categories if org else None)
+    return await _config(session, actor.org_id, org.workforce_categories if org else None)
 
 
 @router.put(
@@ -298,7 +321,7 @@ async def put_categories(
                 "domain": payload.domain, "app": payload.app},
     )
     await session.commit()
-    return await _config(session, org.workforce_categories)
+    return await _config(session, actor.org_id, org.workforce_categories)
 
 
 # ── Department shifts ─────────────────────────────────────────────────────────

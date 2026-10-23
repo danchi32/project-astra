@@ -551,15 +551,149 @@ async def test_ai_categorises_unknown_apps_globally(
         anthropic_api_key="test-key", workforce_activity_retention_days=90))
 
     async with session_factory() as s:
-        learned_count = await workforce_ai.classify_new_activity(s, admin_user.org_id)
+        learned_count = await workforce_ai.classify_new_activity(
+            s, admin_user.org_id, force=True)
     assert learned_count == 2
 
-    # The config view exposes the global learned categories, resolved to their buckets.
+    # The config view exposes the learned categories for apps/sites this org has seen, resolved
+    # to their buckets.
     cfg = (await client.get("/api/v1/tracker/categories", headers=admin_headers)).json()
     by_key = {entry["key"]: entry for entry in cfg["learned"]}
     assert by_key["newinternaltool.io"]["bucket"] == "productive"   # project → productive
     assert by_key["customcrm.exe"]["bucket"] == "productive"        # crm_erp → productive
     assert all(entry["source"] == "ai" for entry in cfg["learned"])
+
+
+async def test_ai_learned_list_scoped_to_this_org(
+    client, admin_headers, admin_user, session_factory
+):
+    """The learned store is global, but one org must never see another tenant's app/site names:
+    the config list is scoped to what this org's own fleet has actually used."""
+    from app.repositories.workforce import WorkforceRepository
+
+    await _enable_tracker(session_factory, admin_user.org_id)
+    device_token = await _enroll_device(client, admin_headers)
+
+    # This org only ever sees its own internal tool.
+    ds = date.today().isoformat()
+    assert (await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": [
+        {"username": "ACME\\rahul", "kind": "foreground", "domain": "mytool.example",
+         "occurred_at": f"{ds}T09:00:00Z"}]})).status_code == 200
+
+    # Seed the GLOBAL store with this org's item and another tenant's internal domain.
+    async with session_factory() as s:
+        repo = WorkforceRepository(s)
+        await repo.upsert_learned("domain", "mytool.example", "project", "ai")
+        await repo.upsert_learned("domain", "other-tenant-crm.internal", "crm_erp", "ai")
+        await s.commit()
+
+    cfg = (await client.get("/api/v1/tracker/categories", headers=admin_headers)).json()
+    keys = {e["key"] for e in cfg["learned"]}
+    assert "mytool.example" in keys                      # this org has seen it
+    assert "other-tenant-crm.internal" not in keys       # another tenant's — never shown here
+
+
+async def test_ai_negative_caches_unclassifiable_items(
+    client, admin_headers, admin_user, session_factory, monkeypatch
+):
+    """An item the model can't place is marked 'pending' and not re-sent on the next pass, so one
+    stubborn app/site can't be re-billed to the model on every beat."""
+    import types
+
+    from sqlalchemy import select
+
+    from app.models.workforce import LearnedCategory
+    from app.services import workforce_ai
+    from app.services.ai.provider import LLMResponse
+
+    await _enable_tracker(session_factory, admin_user.org_id)
+    device_token = await _enroll_device(client, admin_headers)
+
+    ds = date.today().isoformat()
+    assert (await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": [
+        {"username": "ACME\\rahul", "kind": "foreground", "app": "MysteryApp.exe",
+         "occurred_at": f"{ds}T09:00:00Z"}]})).status_code == 200
+
+    calls = {"n": 0}
+
+    class _Provider:
+        def __init__(self, text):
+            self._text = text
+
+        async def generate(self, **_kwargs):
+            calls["n"] += 1
+            return LLMResponse(text=self._text)
+
+    monkeypatch.setattr(workforce_ai, "get_settings", lambda: types.SimpleNamespace(
+        anthropic_api_key="test-key", workforce_activity_retention_days=90))
+
+    # First pass: the model returns no usable mapping. Nothing learned, but a back-off marker is
+    # written.
+    monkeypatch.setattr(workforce_ai, "get_provider", lambda: _Provider("{}"))
+    async with session_factory() as s:
+        assert await workforce_ai.classify_new_activity(s, admin_user.org_id, force=True) == 0
+    assert calls["n"] == 1
+
+    async with session_factory() as s:
+        pending = (await s.execute(
+            select(LearnedCategory).where(LearnedCategory.source == "pending"))).scalars().all()
+    assert [(p.kind, p.key) for p in pending] == [("app", "mysteryapp.exe")]
+
+    # The marker is bookkeeping — it must not surface in the admin config list.
+    cfg = (await client.get("/api/v1/tracker/categories", headers=admin_headers)).json()
+    assert cfg["learned"] == []
+
+    # Second pass: even though the model would now classify it, the item is suppressed — the model
+    # is not asked again.
+    monkeypatch.setattr(workforce_ai, "get_provider",
+                        lambda: _Provider('{"mysteryapp.exe": "crm_erp"}'))
+    async with session_factory() as s:
+        assert await workforce_ai.classify_new_activity(s, admin_user.org_id, force=True) == 0
+    assert calls["n"] == 1  # unchanged — the second pass skipped the model entirely
+
+
+async def test_ai_debounces_repeated_passes(
+    client, admin_headers, admin_user, session_factory, monkeypatch
+):
+    """The pass runs after every beat, so it debounces per org: a second pass within the interval
+    does nothing — no scan, no model call — even when a new unknown has appeared."""
+    import types
+
+    from app.services import workforce_ai
+    from app.services.ai.provider import LLMResponse
+
+    await _enable_tracker(session_factory, admin_user.org_id)
+    device_token = await _enroll_device(client, admin_headers)
+
+    ds = date.today().isoformat()
+    assert (await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": [
+        {"username": "ACME\\rahul", "kind": "foreground", "app": "FirstApp.exe",
+         "occurred_at": f"{ds}T09:00:00Z"}]})).status_code == 200
+
+    calls = {"n": 0}
+
+    class _Provider:
+        async def generate(self, **_kwargs):
+            calls["n"] += 1
+            return LLMResponse(text='{"firstapp.exe": "crm_erp"}')
+
+    monkeypatch.setattr(workforce_ai, "get_provider", lambda: _Provider())
+    monkeypatch.setattr(workforce_ai, "get_settings", lambda: types.SimpleNamespace(
+        anthropic_api_key="test-key", workforce_activity_retention_days=90))
+    workforce_ai._last_run.pop(admin_user.org_id, None)
+
+    # First pass (not forced) runs and learns.
+    async with session_factory() as s:
+        assert await workforce_ai.classify_new_activity(s, admin_user.org_id) == 1
+    assert calls["n"] == 1
+
+    # A new unknown appears, but a second pass right away is debounced — the model is not called.
+    assert (await _push(client, device_token, {**TELEMETRY_PAYLOAD, "activity": [
+        {"username": "ACME\\rahul", "kind": "foreground", "app": "SecondApp.exe",
+         "occurred_at": f"{ds}T09:05:00Z"}]})).status_code == 200
+    async with session_factory() as s:
+        assert await workforce_ai.classify_new_activity(s, admin_user.org_id) == 0
+    assert calls["n"] == 1  # debounced — SecondApp was not sent
 
 
 # ── Attendance configuration ──────────────────────────────────────────────────
