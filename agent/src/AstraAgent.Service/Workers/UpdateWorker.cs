@@ -36,8 +36,12 @@ public sealed class UpdateWorker(
 
         var interval = TimeSpan.FromMinutes(Math.Max(5, options.Value.UpdateCheckIntervalMinutes));
 
-        // Give enrollment a moment to settle before the first check.
-        try { await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken); }
+        // Let enrollment settle, then fan the first check out across a window the width of one
+        // interval. A site imaged or rebooted together would otherwise poll — and then all start
+        // downloading — on the same tick; spreading the first check breaks that herd.
+        var firstDelay = UpdateSchedule.FirstCheckDelay(
+            TimeSpan.FromMinutes(2), (int)interval.TotalSeconds, Random.Shared);
+        try { await Task.Delay(firstDelay, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
         while (!stoppingToken.IsCancellationRequested)
@@ -56,7 +60,8 @@ public sealed class UpdateWorker(
                 logger.LogError(ex, "Update check failed");
             }
 
-            try { await Task.Delay(interval, stoppingToken); }
+            // Jitter each interval too, so agents that happened to align once don't stay aligned.
+            try { await Task.Delay(UpdateSchedule.JitteredInterval(interval, Random.Shared), stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
     }

@@ -93,6 +93,17 @@ public sealed class UpdateInstaller(ILogger<UpdateInstaller> logger)
 
     private async Task<bool> DownloadAsync(string url, string destPath, CancellationToken ct)
     {
+        // Prefer a polite BITS background transfer so a fleet updating at once can't saturate a
+        // site's uplink. When BITS is unavailable (disabled, missing, or it errored out) this
+        // returns false and we fall back to the direct download below — an update must still happen.
+        if (await BitsDownloader.TryDownloadAsync(url, destPath, proxyUrl: null, logger, ct))
+            return true;
+
+        return await DirectDownloadAsync(url, destPath, ct);
+    }
+
+    private async Task<bool> DirectDownloadAsync(string url, string destPath, CancellationToken ct)
+    {
         try
         {
             using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
