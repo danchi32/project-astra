@@ -515,6 +515,53 @@ async def test_user_timeline_segments_foreground_activity(
     assert tl[2]["started_at"].startswith(f"{ds}T09:10")   # the gap broke the Code run
 
 
+# ── AI-learned categories ─────────────────────────────────────────────────────
+
+
+async def test_ai_categorises_unknown_apps_globally(
+    client, admin_headers, admin_user, session_factory, monkeypatch
+):
+    import types
+
+    from app.services import workforce_ai
+    from app.services.ai.provider import LLMResponse
+
+    await _enable_tracker(session_factory, admin_user.org_id)
+    device_token = await _enroll_device(client, admin_headers)
+
+    # Foreground for a domain and an app the built-in taxonomy does not know, on a recent day so
+    # the raw samples are inside the retention window the classifier scans.
+    ds = date.today().isoformat()
+    unknown = [
+        {"username": "ACME\\rahul", "kind": "foreground", "domain": "newinternaltool.io",
+         "path": "/board", "occurred_at": f"{ds}T09:00:00Z"},
+        {"username": "ACME\\rahul", "kind": "foreground", "app": "CustomCRM.exe",
+         "occurred_at": f"{ds}T09:30:00Z"},
+    ]
+    assert (await _push(
+        client, device_token, {**TELEMETRY_PAYLOAD, "activity": unknown})).status_code == 200
+
+    # Stand in for Claude: return a category for each item, and pretend a key is configured.
+    class _FakeProvider:
+        async def generate(self, **_kwargs):
+            return LLMResponse(text='{"newinternaltool.io": "project", "customcrm.exe": "crm_erp"}')
+
+    monkeypatch.setattr(workforce_ai, "get_provider", lambda: _FakeProvider())
+    monkeypatch.setattr(workforce_ai, "get_settings", lambda: types.SimpleNamespace(
+        anthropic_api_key="test-key", workforce_activity_retention_days=90))
+
+    async with session_factory() as s:
+        learned_count = await workforce_ai.classify_new_activity(s, admin_user.org_id)
+    assert learned_count == 2
+
+    # The config view exposes the global learned categories, resolved to their buckets.
+    cfg = (await client.get("/api/v1/tracker/categories", headers=admin_headers)).json()
+    by_key = {entry["key"]: entry for entry in cfg["learned"]}
+    assert by_key["newinternaltool.io"]["bucket"] == "productive"   # project → productive
+    assert by_key["customcrm.exe"]["bucket"] == "productive"        # crm_erp → productive
+    assert all(entry["source"] == "ai" for entry in cfg["learned"])
+
+
 # ── Attendance configuration ──────────────────────────────────────────────────
 
 

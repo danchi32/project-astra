@@ -111,12 +111,23 @@ export interface CategoryOverrides {
   app: Record<string, Bucket>;
 }
 
+/** One app/site the AI auto-categorised (global), with its resolved bucket. */
+export interface LearnedCategory {
+  kind: "domain" | "app";
+  key: string;
+  category: string;
+  label: string;
+  bucket: Bucket;
+  source: "ai" | "admin";
+}
+
 /** What the category-config screen reads: the buckets, the built-in defaults (for reference),
- *  and this org's overrides. */
+ *  this org's overrides, and the apps/sites the AI has auto-categorised. */
 export interface CategoryConfig {
   buckets: Bucket[];
   builtin: CategoryOverrides;
   overrides: CategoryOverrides;
+  learned: LearnedCategory[];
 }
 
 export const getCategories = () =>

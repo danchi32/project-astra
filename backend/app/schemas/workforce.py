@@ -87,13 +87,26 @@ class CategoryOverrides(BaseModel):
         return out
 
 
+class LearnedCategoryRead(BaseModel):
+    """One app/site the AI categorised (globally). Shown so an admin can see what was auto-learned
+    and override it for their org if they disagree."""
+    kind: str            # domain | app
+    key: str
+    category: str
+    label: str           # the category's human label
+    bucket: str          # productive | neutral | unproductive
+    source: str          # ai | admin
+
+
 class CategoryConfigRead(BaseModel):
     """What the category-config screen needs: the three buckets, the built-in defaults (shown so
-    an admin can see what a rule would change), and the org's own overrides."""
+    an admin can see what a rule would change), the org's own overrides, and the apps/sites the
+    AI has auto-categorised (global, each with its resolving bucket)."""
 
     buckets: list[str]
     builtin: CategoryOverrides
     overrides: CategoryOverrides
+    learned: list[LearnedCategoryRead]
 
 
 class WorkSessionRead(BaseModel):

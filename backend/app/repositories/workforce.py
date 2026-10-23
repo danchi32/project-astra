@@ -12,6 +12,7 @@ from app.models.workforce import (
     ActivitySample,
     DailyAppUsage,
     DailyUserSummary,
+    LearnedCategory,
     WorkSession,
     WorkShift,
 )
@@ -269,6 +270,55 @@ class WorkforceRepository:
             .order_by(WorkSession.started_at.asc())
         )
         return list(result.scalars().all())
+
+    # ── AI-learned categories ─────────────────────────────────────────────────
+
+    async def learned_map(self) -> dict[str, dict[str, str]]:
+        """The GLOBAL learned {kind: {key: category}} map, loaded per recompute so new activity
+        is scored with whatever the AI has classified so far — across every org."""
+        rows = (await self.session.execute(
+            select(LearnedCategory.kind, LearnedCategory.key, LearnedCategory.category)
+        )).all()
+        out: dict[str, dict[str, str]] = {"domain": {}, "app": {}}
+        for kind, key, category in rows:
+            out.setdefault(kind, {})[key] = category
+        return out
+
+    async def list_learned(self) -> list[LearnedCategory]:
+        return list((await self.session.execute(
+            select(LearnedCategory).order_by(LearnedCategory.kind, LearnedCategory.key)
+        )).scalars().all())
+
+    async def recent_foreground_keys(
+        self, org_id: uuid.UUID, *, since: datetime, limit: int
+    ) -> list[tuple[str | None, str | None]]:
+        """Distinct (app, domain) from the org's recent foreground samples — the pool the
+        classifier scans for apps/sites the built-in taxonomy and learned map don't yet cover."""
+        rows = (await self.session.execute(
+            select(ActivitySample.app, ActivitySample.domain)
+            .where(
+                ActivitySample.org_id == org_id,
+                ActivitySample.kind == ACTIVITY_FOREGROUND,
+                ActivitySample.occurred_at >= since,
+            )
+            .distinct()
+            .limit(limit)
+        )).all()
+        return [(r[0], r[1]) for r in rows]
+
+    async def upsert_learned(self, kind: str, key: str, category: str, source: str) -> None:
+        existing = (await self.session.execute(
+            select(LearnedCategory).where(
+                LearnedCategory.kind == kind, LearnedCategory.key == key,
+            )
+        )).scalar_one_or_none()
+        if existing is None:
+            self.session.add(LearnedCategory(
+                kind=kind, key=key, category=category, source=source))
+        else:
+            existing.category = category
+            existing.source = source
+        await self.session.flush()
 
     async def hostnames_for(
         self, device_ids: set[uuid.UUID]

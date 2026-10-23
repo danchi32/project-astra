@@ -171,14 +171,71 @@ def _override_bucket(app: str | None, domain: str | None, overrides: Overrides |
     return None
 
 
+# A per-org learned map: {"domain": {key: category}, "app": {key: category}}. Unlike overrides
+# (which name a bucket), these name a built-in CATEGORY the AI assigned to something the built-in
+# taxonomy didn't know; the category then resolves to a bucket like any other.
+Learned = dict[str, dict[str, str]]
+
+
+def _learned_category(app: str | None, domain: str | None, learned: Learned | None) -> str | None:
+    """The category an org's learned map assigns to this sample, or None. Domain beats app, and
+    a domain matches by longest suffix so a subdomain inherits its parent's learned category."""
+    if not learned:
+        return None
+    if domain:
+        d = _normalise_domain(domain)
+        best: str | None = None
+        best_cat: str | None = None
+        for known, cat in (learned.get("domain") or {}).items():
+            k = _normalise_domain(str(known))
+            if (d == k or d.endswith("." + k)) and cat in CATEGORIES:
+                if best is None or len(k) > len(best):
+                    best, best_cat = k, cat
+        if best_cat is not None:
+            return best_cat
+    if app:
+        a = app.strip().lower()
+        for keyword, cat in (learned.get("app") or {}).items():
+            kw = str(keyword).strip().lower()
+            if kw and kw in a and cat in CATEGORIES:
+                return cat
+    return None
+
+
+def registrable_domain(domain: str) -> str:
+    """Reduce a host to the registrable domain (last two labels) so a learned category is keyed
+    once and every subdomain shares it — music.youtube.com and www.youtube.com → youtube.com. A
+    simple heuristic (it does not special-case multi-part TLDs like co.uk); suffix matching on
+    resolution keeps it forgiving."""
+    d = _normalise_domain(domain)
+    parts = d.split(".")
+    return ".".join(parts[-2:]) if len(parts) > 2 else d
+
+
+def category_options() -> list[dict[str, str]]:
+    """The categories the AI may choose from — every built-in category except the catch-all,
+    with its human label and bucket, for the classifier prompt and the admin UI."""
+    return [
+        {"key": key, "label": label, "bucket": bucket}
+        for key, (label, bucket) in CATEGORIES.items()
+        if key != "uncategorised"
+    ]
+
+
 def classify(
-    app: str | None, domain: str | None, overrides: Overrides | None = None
+    app: str | None, domain: str | None,
+    overrides: Overrides | None = None, learned: Learned | None = None,
 ) -> tuple[str, str]:
     """(bucket, category_label) for a foreground sample.
 
-    `overrides` is the org's per-org reclassification map; when one matches, it replaces the
-    bucket while keeping the built-in category label."""
+    Resolution: an admin override replaces the bucket (highest); otherwise the built-in category
+    is used; for something the built-in taxonomy doesn't know, the org's AI-learned category is
+    used; failing all that, Neutral."""
     cat = category_for(app, domain)
+    if cat == "uncategorised":
+        learned_cat = _learned_category(app, domain, learned)
+        if learned_cat is not None:
+            cat = learned_cat
     label, bucket = CATEGORIES[cat]
     override = _override_bucket(app, domain, overrides)
     if override is not None:
