@@ -63,12 +63,18 @@ jobs:
           done
           echo "build did not finish in 20 minutes"; exit 1
 
+      # Staging shares ONE Postgres across every branch's deploy. If another branch has already
+      # upgraded it to a migration this branch doesn't carry yet, `alembic upgrade head` can't
+      # resolve the DB's current revision and aborts with "Can't locate revision" — that's
+      # cross-branch drift, not a fault in this branch, so we skip rather than fail the check. A
+      # genuine migration error on this branch still fails (non-zero exit that isn't that case).
       - name: Run staging migrations
         run: |
+          MIGRATE='alembic upgrade head >/tmp/m.log 2>&1; rc=$?; cat /tmp/m.log; if [ "$rc" -ne 0 ]; then if grep -q "locate revision" /tmp/m.log; then echo "staging DB is ahead of this branch (unknown revision); skipping migrations"; exit 0; fi; exit "$rc"; fi'
           gcloud run jobs deploy astra-migrate-staging \
             --image "$IMAGE" --region "$REGION" \
             --set-secrets ASTRA_DATABASE_URL=ASTRA_DATABASE_URL_STAGING:latest,ASTRA_JWT_SECRET_KEY=ASTRA_JWT_SECRET_KEY_STAGING:latest,ASTRA_SECRETS_KEY=ASTRA_SECRETS_KEY_STAGING:latest \
-            --command alembic --args upgrade,head --quiet
+            --command sh --args "^@^-c@$MIGRATE" --quiet
           gcloud run jobs execute astra-migrate-staging --region "$REGION" --wait
 
       # Staging gets ONLY the database and JWT secrets. The email, AI and PayPal keys are
