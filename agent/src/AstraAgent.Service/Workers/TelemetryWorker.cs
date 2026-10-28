@@ -26,17 +26,21 @@ public sealed class TelemetryWorker(
     ILogger<TelemetryWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan InventoryInterval = TimeSpan.FromHours(1);
+    // Same ceiling as the heartbeat. A device the backend refuses (its org's subscription has
+    // ended) must not keep pushing every minute, which is a database lookup per push.
+    private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(15);
     private DateTime _lastInventoryAt = DateTime.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var interval = TimeSpan.FromSeconds(options.Value.HeartbeatIntervalSeconds);
+        var failures = 0;
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await CollectAndPushAsync(stoppingToken);
+                failures = await CollectAndPushAsync(stoppingToken) ? 0 : failures + 1;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -44,18 +48,22 @@ public sealed class TelemetryWorker(
             }
             catch (Exception ex)
             {
+                failures++;
                 logger.LogError(ex, "Telemetry cycle failed");
             }
 
-            try { await Task.Delay(interval, stoppingToken); }
+            // A failed push doubles the wait, up to MaxBackoff. The heartbeat already does this.
+            try { await Task.Delay(BackoffCalculator.NextDelay(failures, interval, MaxBackoff), stoppingToken); }
             catch (OperationCanceledException) { break; }
         }
     }
 
-    private async Task CollectAndPushAsync(CancellationToken ct)
+    /// <returns>True when there was nothing to send or the push was accepted; false when the
+    /// backend refused or was unreachable, so the caller backs off.</returns>
+    private async Task<bool> CollectAndPushAsync(CancellationToken ct)
     {
         var token = await enrollment.GetDeviceTokenAsync(ct);
-        if (token is null) return;
+        if (token is null) return true;
 
         var now = DateTimeOffset.UtcNow;
         var collectInventory = now.UtcDateTime - _lastInventoryAt >= InventoryInterval;
@@ -104,12 +112,14 @@ public sealed class TelemetryWorker(
                 x.Station, x.ClientName, x.LogonAt, x.IdleSeconds)).ToList(),
             Activity: activityList);
 
-        if (await api.PushTelemetryAsync(token, payload, ct) && collectInventory)
+        var pushed = await api.PushTelemetryAsync(token, payload, ct);
+        if (pushed && collectInventory)
             _lastInventoryAt = now.UtcDateTime;
 
         logger.LogInformation(
             "Telemetry pushed — CPU {Cpu:F1}% RAM {Ram}/{Total}MB Disks:{Disks} Sessions:{Sessions}",
             cpuPct, mem.UsedMb, mem.TotalMb, diskList.Count, sessionList.Count);
+        return pushed;
     }
 
     private static TelemetryHardware ToHardware(HardwareInfo h) =>
