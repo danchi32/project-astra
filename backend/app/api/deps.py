@@ -9,9 +9,10 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.rate_limit import FixedWindowLimiter, RateLimitExceeded, apply_limit
 from app.core.security import decode_access_token, hash_opaque_token
-from app.models import Device, User, UserRole
+from app.models import Device, Organization, User, UserRole
 from app.repositories.devices import DeviceRepository
 from app.repositories.users import UserRepository
+from app.services.subscription import org_is_writable
 
 def client_ip(request: Request) -> str:
     """The caller's address, as far as it can be known behind a proxy.
@@ -69,11 +70,9 @@ async def get_current_user(
     return user
 
 
-async def get_current_device(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    session: AsyncSession = Depends(get_db),
+async def _authenticate_device(
+    credentials: HTTPAuthorizationCredentials | None, session: AsyncSession
 ) -> Device:
-    """Authenticates the Windows agent by its opaque device token (agent routes only)."""
     if credentials is None:
         raise _credentials_error
     device = await DeviceRepository(session).get_by_token_hash(
@@ -84,6 +83,33 @@ async def get_current_device(
     return device
 
 
+async def get_current_device_any_status(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_db),
+) -> Device:
+    """Device authentication with NO subscription check. Only for the tray chat, which answers an
+    inactive org with a canned reply (no model call) so the user learns why it's unavailable."""
+    return await _authenticate_device(credentials, session)
+
+
+async def get_current_device(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_db),
+) -> Device:
+    """Authenticates the Windows agent by its opaque device token (agent routes only), and refuses
+    every route once the device's org is not writable (trial ended, past due, suspended, canceled).
+    403, not 401, on purpose: a 401 makes the agent try to re-enrol, which would mint fresh device
+    rows for an org that can't use them."""
+    device = await _authenticate_device(credentials, session)
+    org = await session.get(Organization, device.org_id)
+    if org is not None and not org_is_writable(org):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization subscription is not active.",
+        )
+    return device
+
+
 # One limiter for the whole process, sized from settings at import time.
 _agent_limiter = FixedWindowLimiter(
     limit=get_settings().agent_rate_limit_requests,
@@ -91,13 +117,7 @@ _agent_limiter = FixedWindowLimiter(
 )
 
 
-async def get_rate_limited_device(device: Device = Depends(get_current_device)) -> Device:
-    """`get_current_device` plus a per-device rate limit — for the endpoints agents poll.
-
-    Keyed by device id (not IP) so one stuck agent can't affect the rest of an office
-    behind the same NAT. Log-only unless ASTRA_AGENT_RATE_LIMIT_ENFORCE is set; see
-    app/core/rate_limit.py for why the counter is per-process.
-    """
+def _apply_device_rate_limit(device: Device) -> Device:
     settings = get_settings()
     if settings.agent_rate_limit_enabled:
         try:
@@ -114,6 +134,23 @@ async def get_rate_limited_device(device: Device = Depends(get_current_device)) 
                 headers={"Retry-After": str(exc.retry_after)},
             )
     return device
+
+
+async def get_rate_limited_device(device: Device = Depends(get_current_device)) -> Device:
+    """`get_current_device` plus a per-device rate limit — for the endpoints agents poll.
+
+    Keyed by device id (not IP) so one stuck agent can't affect the rest of an office
+    behind the same NAT. Log-only unless ASTRA_AGENT_RATE_LIMIT_ENFORCE is set; see
+    app/core/rate_limit.py for why the counter is per-process.
+    """
+    return _apply_device_rate_limit(device)
+
+
+async def get_rate_limited_device_any_status(
+    device: Device = Depends(get_current_device_any_status),
+) -> Device:
+    """`get_rate_limited_device` without the subscription gate — for the tray chat only."""
+    return _apply_device_rate_limit(device)
 
 
 async def require_platform_admin(user: User = Depends(get_current_user)) -> User:

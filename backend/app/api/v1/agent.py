@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid
 
-from app.api.deps import get_rate_limited_device
+from app.api.deps import get_rate_limited_device, get_rate_limited_device_any_status
 from app.core.database import get_db
 from app.models import Device
 from app.schemas.conversations import (
@@ -150,7 +150,9 @@ async def get_update(
 )
 async def chat(
     body: AgentChatRequest,
-    device: Device = Depends(get_rate_limited_device),
+    # Not subscription-gated: an inactive org gets the canned "unavailable" reply (no model call)
+    # rather than a bare 403 the tray can't explain.
+    device: Device = Depends(get_rate_limited_device_any_status),
     session: AsyncSession = Depends(get_db),
 ) -> AgentChatResponse:
     conversation, assistant, source = await ConversationService(session).device_chat(
