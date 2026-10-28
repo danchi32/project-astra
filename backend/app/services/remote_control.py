@@ -132,6 +132,8 @@ class RemoteControlService:
                 "finished setting up. Once the device reports it in, this will work."
             )
 
+        # A prompt that lapsed while the listener was idling must not block a fresh request.
+        await self.expire_stale()
         existing = await self.repo.open_for_device(device_id)
         if existing is not None:
             raise SessionAlreadyOpenError(
@@ -302,7 +304,9 @@ class RemoteControlService:
                 continue
 
             remote_session.status = new_status
-            remote_session.ended_at = now
+            # The deadline, not `now`: the listener sweeps rarely while nothing is open and
+            # reads retire stale rows lazily, so `now` can be well after the moment it lapsed.
+            remote_session.ended_at = deadline
             await self.audit.record(
                 org_id=remote_session.org_id,
                 actor_id=None,
@@ -317,9 +321,27 @@ class RemoteControlService:
             await self.session.commit()
         return moved
 
+    async def any_awaiting_expiry(self) -> bool:
+        """Whether any session could still lapse (PENDING or APPROVED) — i.e. whether the
+        listener needs to keep sweeping often, or can idle and let the database sleep."""
+        result = await self.session.execute(
+            select(RemoteSession.id)
+            .where(
+                RemoteSession.status.in_(
+                    [RemoteSessionStatus.PENDING, RemoteSessionStatus.APPROVED]
+                )
+            )
+            .limit(1)
+        )
+        return result.first() is not None
+
     # -- Reading --------------------------------------------------------------
+    # Reads retire stale sessions first. The listener's sweep is only frequent while something
+    # is open, so a prompt nobody answered can outlive its deadline until the next idle sweep;
+    # whoever looks next must still see NO_RESPONSE, not a countdown stuck at zero.
 
     async def get(self, *, actor: User, session_id: uuid.UUID) -> RemoteSession:
+        await self.expire_stale()
         remote_session = await self.repo.get(session_id)
         if remote_session is None or remote_session.org_id != actor.org_id:
             raise NotFoundError("Remote session not found")
@@ -334,6 +356,7 @@ class RemoteControlService:
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[RemoteSession], int]:
+        await self.expire_stale()
         return await self.repo.list_page(
             actor.org_id, device_id=device_id, status=status, offset=offset, limit=limit
         )

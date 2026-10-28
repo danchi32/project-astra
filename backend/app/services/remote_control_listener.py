@@ -19,6 +19,7 @@ no traffic; it holds a socket.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 
 from sqlalchemy import select
@@ -42,9 +43,15 @@ logger = logging.getLogger(__name__)
 #: that a restart of the relay costs seconds of blindness, long enough not to hammer it.
 RECONNECT_DELAY = 5.0
 
-#: How often to retire prompts nobody answered. This is what makes NO_RESPONSE real, so
-#: it runs here rather than being left to whoever remembers to call it.
+#: How often to retire prompts nobody answered, while any session could still lapse. This is
+#: what makes NO_RESPONSE real, so it runs here rather than being left to whoever remembers.
 SWEEP_INTERVAL = 15.0
+
+#: How long to wait between sweeps while NOTHING is open. A 15s sweep around the clock was a
+#: query every 15s against a database that otherwise scales to zero, so it never slept. With
+#: nothing open there is nothing to retire; a relay event wakes the sweep at once, and reads in
+#: RemoteControlService retire a lapsed prompt themselves, so this is only a backstop.
+IDLE_SWEEP_INTERVAL = 6 * 60 * 60.0
 
 
 class RemoteControlListener:
@@ -55,6 +62,8 @@ class RemoteControlListener:
     ) -> None:
         self.session_factory = session_factory
         self.client = client or MeshCentralClient()
+        # Set by a relay event so an idling sweep runs now rather than hours from now.
+        self._wake = asyncio.Event()
 
     # -- Mapping an event onto a session --------------------------------------
 
@@ -70,6 +79,7 @@ class RemoteControlListener:
             MSG_DESKTOP_STARTED, MSG_DESKTOP_ENDED, MSG_DESKTOP_REFUSED
         ):
             return False
+        self._wake.set()
         if not event.node_id:
             return False
 
@@ -124,18 +134,27 @@ class RemoteControlListener:
     # -- The loops ------------------------------------------------------------
 
     async def sweep_forever(self) -> None:
-        """Retire prompts nobody answered, for as long as this process lives."""
+        """Retire prompts nobody answered, for as long as this process lives. Sweeps every
+        SWEEP_INTERVAL while a session could still lapse, otherwise idles until a relay event
+        or IDLE_SWEEP_INTERVAL, so an unused fleet doesn't keep the database awake."""
         while True:
+            # Cleared BEFORE the sweep, so an event that lands mid-sweep still cuts the wait.
+            self._wake.clear()
+            busy = True
             try:
                 async with self.session_factory() as session:
-                    moved = await RemoteControlService(session).expire_stale()
+                    service = RemoteControlService(session)
+                    moved = await service.expire_stale()
+                    busy = await service.any_awaiting_expiry()
                 if moved:
                     logger.info("retired %s unanswered remote session(s)", moved)
             except Exception:
                 # A failed sweep must not stop the next one: every tick it misses is a
                 # request left showing "waiting" to somebody watching the portal.
                 logger.exception("remote session sweep failed")
-            await asyncio.sleep(SWEEP_INTERVAL)
+            interval = SWEEP_INTERVAL if busy else IDLE_SWEEP_INTERVAL
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(self._wake.wait(), timeout=interval)
 
     async def listen_forever(self) -> None:
         """Hold the relay connection, reconnecting when it drops."""

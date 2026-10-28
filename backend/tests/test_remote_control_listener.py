@@ -4,6 +4,7 @@ No relay is mocked at the protocol level here — `RelayEvent` is the seam, and 
 one in is exactly what the socket does. What these tests pin down is the mapping, which
 is where the judgement lives.
 """
+import asyncio
 import base64
 import json
 import uuid
@@ -26,7 +27,12 @@ from app.services.meshcentral import (
     RelayEvent,
 )
 from app.services.remote_control import CONSENT_TIMEOUT, RemoteControlService
-from app.services.remote_control_listener import RemoteControlListener
+from app.services import remote_control_listener as listener_module
+from app.services.remote_control_listener import (
+    IDLE_SWEEP_INTERVAL,
+    SWEEP_INTERVAL,
+    RemoteControlListener,
+)
 
 NODE = "node//abc123"
 REASON = "Teams won't launch and the restart didn't fix it"
@@ -299,3 +305,68 @@ def test_no_link_is_issued_without_a_key():
         url="https://relay.example.com", user="u", token="t", cookie_key=None)
     with pytest.raises(MeshCentralNotConfigured):
         client.viewer_url(node_id=NODE_ID, user_id="user//tech")
+
+
+# ── Letting the database sleep ────────────────────────────────────────────────
+
+
+async def _next_sweep_wait(listener, monkeypatch) -> float:
+    """Run one sweep and return how long it would then wait, without actually waiting."""
+    seen: list[float] = []
+
+    async def record(awaitable, timeout):
+        seen.append(timeout)
+        awaitable.close()
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(listener_module.asyncio, "wait_for", record)
+    with pytest.raises(asyncio.CancelledError):
+        await listener.sweep_forever()
+    monkeypatch.undo()
+    return seen[0]
+
+
+async def test_the_sweep_idles_while_nothing_can_lapse_and_hurries_while_something_can(
+    session_factory, org, admin_user, monkeypatch
+):
+    """A 15s sweep around the clock kept the database awake for good. With nothing open it must
+    wait the long idle interval; with a prompt in flight it goes back to every 15s."""
+    listener = RemoteControlListener(session_factory, MeshCentralClient())
+    assert await _next_sweep_wait(listener, monkeypatch) == IDLE_SWEEP_INTERVAL
+
+    await _grant(session_factory, org)
+    device_id = await _device(session_factory, org, "l-idle")
+    await _pending(session_factory, org, admin_user, device_id)
+    assert await _next_sweep_wait(listener, monkeypatch) == SWEEP_INTERVAL
+
+
+async def test_a_relay_event_wakes_an_idle_sweep(session_factory):
+    listener = RemoteControlListener(session_factory, MeshCentralClient())
+    assert not listener._wake.is_set()
+    await listener.handle(_event(MSG_DESKTOP_ENDED, node_id="node//nobody"))
+    assert listener._wake.is_set()
+
+
+async def test_a_lapsed_prompt_is_retired_on_read_at_its_deadline_and_frees_the_device(
+    session_factory, org, admin_user
+):
+    """While the listener idles, whoever looks next still sees NO_RESPONSE, stamped with when it
+    actually lapsed, and the device can be asked again."""
+    await _grant(session_factory, org)
+    device_id = await _device(session_factory, org, "l-lazy")
+    session_id = await _pending(session_factory, org, admin_user, device_id)
+
+    requested_at = utcnow() - timedelta(hours=3)
+    async with session_factory() as s:
+        row = await s.get(RemoteSession, session_id)
+        row.requested_at = requested_at
+        await s.commit()
+
+    async with session_factory() as s:
+        actor = await s.get(User, admin_user.id)
+        row = await RemoteControlService(s).get(actor=actor, session_id=session_id)
+        assert row.status is RemoteSessionStatus.NO_RESPONSE
+        from app.models.base import as_utc
+        assert as_utc(row.ended_at) == as_utc(requested_at) + CONSENT_TIMEOUT
+
+    assert await _pending(session_factory, org, admin_user, device_id) != session_id
