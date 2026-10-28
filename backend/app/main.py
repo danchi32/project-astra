@@ -94,11 +94,12 @@ async def security_txt() -> PlainTextResponse:
 
 @app.middleware("http")
 async def enforce_org_writable(request: Request, call_next):
-    """Block mutating requests when (a) the caller is a platform admin in read-only
-    "view as organization" mode, or (b) the caller's organization is read-only
-    (trial ended, past due, suspended, canceled). Reads always pass; the operator,
-    auth, and agent paths are exempt from (b). The org id comes from the JWT `org`."""
-    if request.method not in _WRITE_METHODS or not request.url.path.startswith("/api/v1/"):
+    """(a) Block mutating requests in a platform admin's read-only "view as organization" mode.
+    (b) When the caller's organization is read-only (trial ended, past due, suspended, canceled),
+    block EVERY request except the ungated prefixes (auth to sign in, billing to upgrade, help,
+    and the agent paths, which have their own device-level gate). The org id comes from the JWT
+    `org`. Note: (b) also blocks reads, so an expired org sees only sign-in and the upgrade page."""
+    if not request.url.path.startswith("/api/v1/"):
         return await call_next(request)
 
     auth = request.headers.get("authorization", "")
@@ -111,7 +112,7 @@ async def enforce_org_writable(request: Request, call_next):
         return await call_next(request)
 
     # (a) "View as" tokens are strictly read-only, on every path.
-    if payload.get("view_as"):
+    if payload.get("view_as") and request.method in _WRITE_METHODS:
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": "Read-only: you are viewing this organization as a platform admin."},

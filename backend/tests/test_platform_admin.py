@@ -77,11 +77,12 @@ async def test_trial_expiry_makes_org_read_only(client, session_factory):
         org.trial_ends_at = utcnow() - timedelta(days=1)
         await s.commit()
 
-    # Writes now blocked (402), reads still fine.
+    # Writes blocked (402), and so are reads: an expired org sees only sign-in and the upgrade page.
     blocked = await client.post("/api/v1/users", headers=headers,
                                 json={"email": "u2@e.com", "full_name": "U2", "password": _PW, "role": "user"})
     assert blocked.status_code == 402
-    assert (await client.get("/api/v1/users", headers=headers)).status_code == 200
+    assert (await client.get("/api/v1/users", headers=headers)).status_code == 402
+    assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
 
 
 async def test_operator_can_extend_trial_to_reenable_writes(client, session_factory):

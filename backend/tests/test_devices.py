@@ -170,12 +170,28 @@ async def test_heartbeat_marks_device_online(client, admin_headers):
     assert body["last_seen_at"] is not None
 
 
-async def test_heartbeat_from_a_read_only_org_writes_nothing_and_returns_no_tasks(
+async def test_read_only_org_is_locked_to_sign_in_and_billing(
     client, admin_headers, admin_user, session_factory
 ):
-    """An expired-trial agent still gets a 200 so it keeps running, but the beat must not write
-    the device row, claim remediation tasks, or switch tracking on. Otherwise every expired org
-    keeps the database busy with a write each minute."""
+    """An expired org sees only sign-in and the upgrade page: every other portal request gets 402,
+    while /auth/me (sign-in) still answers."""
+    from app.models import Organization
+    from app.models.organization import SubscriptionStatus
+
+    async with session_factory() as s:
+        org = await s.get(Organization, admin_user.org_id)
+        org.subscription_status = SubscriptionStatus.CANCELED
+        await s.commit()
+
+    assert (await client.get("/api/v1/devices", headers=admin_headers)).status_code == 402
+    assert (await client.get("/api/v1/auth/me", headers=admin_headers)).status_code == 200
+
+
+async def test_heartbeat_from_a_read_only_org_is_refused_and_writes_nothing(
+    client, admin_headers, admin_user, session_factory
+):
+    """An expired org's agent gets a 403 (not 401, which would trigger re-enrolment) and the device
+    row is untouched, so an expired org costs no writes and no remediation tasks are claimed."""
     from app.models import Organization
     from app.models.organization import SubscriptionStatus
 
@@ -192,15 +208,15 @@ async def test_heartbeat_from_a_read_only_org_writes_nothing_and_returns_no_task
         json={"agent_version": "0.2.0", "logged_in_user": "ACME\\jdoe", "include_tasks": True},
         headers={"Authorization": f"Bearer {enrolled['device_token']}"},
     )
-    assert beat.status_code == 200
-    body = beat.json()
-    assert body["status"] == "ok"
-    assert body["tasks"] == []
-    assert body["activity_tracking"] is False
+    assert beat.status_code == 403
 
     after = await client.get(f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)
-    assert after.json()["agent_version"] != "0.2.0"
-    assert after.json()["logged_in_user"] != "ACME\\jdoe"
+    assert after.status_code == 402  # the portal read is locked too...
+    async with session_factory() as s:
+        from app.models import Device
+        device = await s.get(Device, uuid.UUID(enrolled["device_id"]))
+        assert device.agent_version != "0.2.0"  # ...and the beat wrote nothing
+        assert device.logged_in_user != "ACME\\jdoe"
 
 
 async def test_heartbeat_refreshes_os_version(client, admin_headers):
