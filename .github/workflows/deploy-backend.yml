@@ -213,6 +213,22 @@ jobs:
             --command python --args scripts/seed_builtin_assistant.py --quiet
           gcloud run jobs execute astra-seed-assistant --region "$REGION" --wait
 
+      # The remote-control listener (scripts/remote_control_listener.py) is its own Cloud Run
+      # service built from this same backend image. Nothing used to redeploy it, so it ran a
+      # hand-built image while the API moved on: a fix to RemoteControlService reached the API
+      # and never the listener. `services update --image` swaps only the image; its command,
+      # secrets, --no-cpu-throttling and min/max-instances=1 are kept as they are. After the
+      # health gate, like the seed, so it can never block the API going live. Skipped where the
+      # listener isn't deployed.
+      - name: Roll the remote-control listener onto this image
+        run: |
+          if gcloud run services describe astra-remote-listener --region "$REGION" >/dev/null 2>&1; then
+            gcloud run services update astra-remote-listener \
+              --image "$IMAGE" --region "$REGION" --quiet
+          else
+            echo "astra-remote-listener not deployed here; nothing to update."
+          fi
+
       - name: Custom domain check (informational)
         continue-on-error: true
         run: |

@@ -1,5 +1,4 @@
 import uuid
-from time import monotonic
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -13,7 +12,11 @@ from app.core.security import decode_access_token, hash_opaque_token
 from app.models import Device, Organization, User, UserRole
 from app.repositories.devices import DeviceRepository
 from app.repositories.users import UserRepository
-from app.services.subscription import org_is_writable
+from app.services.subscription import (
+    device_refused_recently,
+    org_is_writable,
+    remember_device_refused,
+)
 
 def client_ip(request: Request) -> str:
     """The caller's address, as far as it can be known behind a proxy.
@@ -98,40 +101,6 @@ _subscription_inactive_error = HTTPException(
     detail="Organization subscription is not active.",
 )
 
-# Device tokens (by SHA-256 hash, never the token itself) recently refused because their org is
-# not writable, mapped to when that refusal expires. An expired org's agents keep calling every
-# minute; without this each call is a device lookup plus an org lookup, which keeps the database
-# compute awake around the clock for orgs that can't use the product. A hit refuses before the
-# session ever opens a connection.
-#
-# ponytail: per-process memory. Ceiling: each Cloud Run instance still does one lookup per refused
-# token per TTL, and an org that upgrades waits up to the TTL before its agents are let back in.
-# Upgrade path: a shared Redis set, invalidated on subscription change, if instances multiply.
-_REFUSED_TTL_SECONDS = 300
-_REFUSED_MAX_ENTRIES = 50_000
-_refused_tokens: dict[str, float] = {}
-
-
-def _refused_recently(token_hash: str) -> bool:
-    until = _refused_tokens.get(token_hash)
-    if until is None:
-        return False
-    if until > monotonic():
-        return True
-    _refused_tokens.pop(token_hash, None)
-    return False
-
-
-def _remember_refused(token_hash: str) -> None:
-    now = monotonic()
-    if len(_refused_tokens) >= _REFUSED_MAX_ENTRIES:
-        for stale in [h for h, until in _refused_tokens.items() if until <= now]:
-            del _refused_tokens[stale]
-        if len(_refused_tokens) >= _REFUSED_MAX_ENTRIES:
-            _refused_tokens.clear()  # bounded memory beats a perfect cache
-    _refused_tokens[token_hash] = now + _REFUSED_TTL_SECONDS
-
-
 async def get_current_device(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     session: AsyncSession = Depends(get_db),
@@ -139,15 +108,15 @@ async def get_current_device(
     """Authenticates the Windows agent by its opaque device token (agent routes only), and refuses
     every route once the device's org is not writable (trial ended, past due, suspended, canceled).
     403, not 401, on purpose: a 401 makes the agent try to re-enrol, which would mint fresh device
-    rows for an org that can't use them. A refusal is remembered for a few minutes so the repeat
-    calls cost no database work."""
+    rows for an org that can't use them. A refusal is remembered (see services/subscription.py)
+    so the repeat calls cost no database work."""
     token_hash = hash_opaque_token(credentials.credentials) if credentials else None
-    if token_hash and _refused_recently(token_hash):
+    if token_hash and device_refused_recently(token_hash):
         raise _subscription_inactive_error
     device = await _authenticate_device(credentials, session)
     org = await session.get(Organization, device.org_id)
     if org is not None and not org_is_writable(org):
-        _remember_refused(token_hash)
+        remember_device_refused(token_hash, org.id)
         raise _subscription_inactive_error
     return device
 
