@@ -219,6 +219,53 @@ async def test_heartbeat_from_a_read_only_org_is_refused_and_writes_nothing(
         assert device.logged_in_user != "ACME\\jdoe"
 
 
+async def test_refused_device_is_remembered_so_repeat_calls_skip_the_database(
+    client, admin_headers, admin_user, session_factory, monkeypatch
+):
+    """An expired org's agent calls every minute. After the first refusal, repeat calls within the
+    TTL must not look the device up again; once the TTL passes and the org is active, it's let in."""
+    from app.api import deps
+    from app.models import Organization
+    from app.models.organization import SubscriptionStatus
+    from app.repositories.devices import DeviceRepository
+
+    token = await create_enrollment_token(client, admin_headers)
+    enrolled = await enroll_device(client, token["token"])
+    beat_headers = {"Authorization": f"Bearer {enrolled['device_token']}"}
+    beat_body = {"agent_version": "0.2.0", "logged_in_user": "ACME\\jdoe"}
+
+    lookups = {"n": 0}
+    original = DeviceRepository.get_by_token_hash
+
+    async def counting(self, token_hash):
+        lookups["n"] += 1
+        return await original(self, token_hash)
+
+    monkeypatch.setattr(DeviceRepository, "get_by_token_hash", counting)
+
+    async with session_factory() as s:
+        org = await s.get(Organization, admin_user.org_id)
+        org.subscription_status = SubscriptionStatus.CANCELED
+        await s.commit()
+
+    first = await client.post("/api/v1/agent/heartbeat", json=beat_body, headers=beat_headers)
+    second = await client.post("/api/v1/agent/heartbeat", json=beat_body, headers=beat_headers)
+    assert (first.status_code, second.status_code) == (403, 403)
+    assert lookups["n"] == 1  # the second refusal came from memory, not the database
+
+    # The org upgrades; once the refusal has expired the agent is let back in.
+    async with session_factory() as s:
+        org = await s.get(Organization, admin_user.org_id)
+        org.subscription_status = SubscriptionStatus.ACTIVE
+        await s.commit()
+    later = deps.monotonic() + deps._REFUSED_TTL_SECONDS + 1
+    monkeypatch.setattr(deps, "monotonic", lambda: later)
+
+    third = await client.post("/api/v1/agent/heartbeat", json=beat_body, headers=beat_headers)
+    assert third.status_code == 200
+    assert lookups["n"] == 2
+
+
 async def test_heartbeat_refreshes_os_version(client, admin_headers):
     """A device that feature-updates — or whose agent learns to name the OS correctly —
     must not keep showing whatever it reported on enrolment day."""
