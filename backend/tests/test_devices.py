@@ -170,6 +170,39 @@ async def test_heartbeat_marks_device_online(client, admin_headers):
     assert body["last_seen_at"] is not None
 
 
+async def test_heartbeat_from_a_read_only_org_writes_nothing_and_returns_no_tasks(
+    client, admin_headers, admin_user, session_factory
+):
+    """An expired-trial agent still gets a 200 so it keeps running, but the beat must not write
+    the device row, claim remediation tasks, or switch tracking on. Otherwise every expired org
+    keeps the database busy with a write each minute."""
+    from app.models import Organization
+    from app.models.organization import SubscriptionStatus
+
+    token = await create_enrollment_token(client, admin_headers)
+    enrolled = await enroll_device(client, token["token"])
+
+    async with session_factory() as s:
+        org = await s.get(Organization, admin_user.org_id)
+        org.subscription_status = SubscriptionStatus.CANCELED
+        await s.commit()
+
+    beat = await client.post(
+        "/api/v1/agent/heartbeat",
+        json={"agent_version": "0.2.0", "logged_in_user": "ACME\\jdoe", "include_tasks": True},
+        headers={"Authorization": f"Bearer {enrolled['device_token']}"},
+    )
+    assert beat.status_code == 200
+    body = beat.json()
+    assert body["status"] == "ok"
+    assert body["tasks"] == []
+    assert body["activity_tracking"] is False
+
+    after = await client.get(f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)
+    assert after.json()["agent_version"] != "0.2.0"
+    assert after.json()["logged_in_user"] != "ACME\\jdoe"
+
+
 async def test_heartbeat_refreshes_os_version(client, admin_headers):
     """A device that feature-updates — or whose agent learns to name the OS correctly —
     must not keep showing whatever it reported on enrolment day."""

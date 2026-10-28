@@ -7,7 +7,7 @@ import uuid
 
 from app.api.deps import get_rate_limited_device
 from app.core.database import get_db
-from app.models import Device
+from app.models import Device, Organization
 from app.schemas.conversations import (
     AgentChatRequest,
     AgentChatResponse,
@@ -29,6 +29,7 @@ from app.services.agent_update import AgentUpdateService
 from app.services.conversations import ConversationService
 from app.services.devices import DeviceService
 from app.services.remediation.service import RemediationService
+from app.services.subscription import org_is_writable
 from app.services.workforce import WorkforceAggregator
 
 logger = logging.getLogger("astra.agent")
@@ -48,6 +49,14 @@ async def heartbeat(
     device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> HeartbeatResponse:
+    # A read-only org (trial ended, past due, suspended, canceled) gets a bare "ok": no device
+    # write, no remediation tasks, no activity collection. Left ungated, every expired-trial
+    # agent kept the database awake with a write each minute. The 200 keeps the agent running,
+    # so it resumes the moment the org is writable again.
+    org = await session.get(Organization, device.org_id)
+    if org is not None and not org_is_writable(org):
+        return HeartbeatResponse(activity_tracking=False, activity_url_mode="domain")
+
     await DeviceService(session).heartbeat(device=device, data=body)
 
     # Whether this org may collect Workforce Insights ("Tracker") activity, and how much of a
