@@ -21,7 +21,7 @@ import { Logo } from "./Logo";
  * would otherwise keep showing the stale copy to anyone who had already loaded
  * the site. Bump V whenever either logo file changes to break that cache.
  */
-const V = "2";
+const V = "4"; // 4: SAVIO blue/cyan, tagline redrawn bolder and larger
 const LIGHT_SRC = `/logo.png?v=${V}`;
 const DARK_SRC = `/logo-dark.png?v=${V}`;
 

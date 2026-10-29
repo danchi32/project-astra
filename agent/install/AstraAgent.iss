@@ -33,7 +33,7 @@
 ; backend/app/services/agent_installer.py — does the work, so the exe and the zip
 ; can never drift apart in behaviour.
 
-#define AppName        "ASTRA Agent"
+#define AppName        "SAVIO Agent"
 ; The REGISTERED company name, not a brand short form. This string appears in the
 ; wizard, in Add/Remove Programs and in the UAC elevation prompt, and it is what the
 ; Authenticode certificate subject will read once code signing is live — the two
@@ -170,7 +170,7 @@ procedure InitializeWizard();
 begin
   KeyPage := CreateInputQueryPage(wpWelcome,
     'Enrollment key',
-    'Connect this PC to your ASTRA organization.',
+    'Connect this PC to your SAVIO organization.',
     'Paste the enrollment key from the portal (Get installer). Normally the key ' +
     'travels in the installer''s filename and this page is skipped — you are ' +
     'seeing it because the file was renamed after download.');
@@ -194,7 +194,7 @@ begin
     Entered := Trim(KeyPage.Values[0]);
     if Entered = '' then
     begin
-      MsgBox('Please paste the enrollment key from the ASTRA portal.', mbError, MB_OK);
+      MsgBox('Please paste the enrollment key from the SAVIO portal.', mbError, MB_OK);
       Result := False;
     end
     else if not IsPlausibleKey(Entered) then
@@ -259,7 +259,7 @@ begin
       runtime, antivirus holding a file, an unreachable backend); repeating them
       here would only go stale, so point at its transcript instead. }
     SuppressibleMsgBox(
-      'The ASTRA agent did not finish installing (code ' + IntToStr(Rc) + ').' + #13#10#13#10 +
+      'The SAVIO agent did not finish installing (code ' + IntToStr(Rc) + ').' + #13#10#13#10 +
       'What went wrong is written to:' + #13#10 + LogPath,
       mbCriticalError, MB_OK, IDOK);
 end;

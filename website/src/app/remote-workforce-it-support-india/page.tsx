@@ -10,7 +10,7 @@ import { bookDemo, site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Remote Workforce IT Support Software India",
   description:
-    "ASTRA helps remote and hybrid Indian startups monitor distributed Windows endpoints, investigate issues and run approved fixes without building a large IT support team.",
+    "SAVIO helps remote and hybrid Indian startups monitor distributed Windows endpoints, investigate issues and run approved fixes without building a large IT support team.",
   keywords: [
     "remote workforce IT support India",
     "IT support for remote employees",
@@ -62,32 +62,32 @@ const boundaries = [
   "Sensitive actions remain approval-required or administrator-only",
   "Every attempted action keeps an attributable audit record",
   "Verification records resolved, failed and inconclusive outcomes",
-  "ASTRA supports people responsible for IT; it does not remove accountability",
+  "SAVIO supports people responsible for IT; it does not remove accountability",
 ];
 
 const faqs = [
   {
-    question: "Is ASTRA suitable for a startup without a dedicated IT team?",
+    question: "Is SAVIO suitable for a startup without a dedicated IT team?",
     answer:
-      "It can be a fit when a named founder, operations lead or technical owner is accountable for device policy and approvals. ASTRA can standardize evidence gathering and permitted repeat work, but the organization still needs a responsible decision-maker.",
+      "It can be a fit when a named founder, operations lead or technical owner is accountable for device policy and approvals. SAVIO can standardize evidence gathering and permitted repeat work, but the organization still needs a responsible decision-maker.",
   },
   {
-    question: "Can ASTRA support employees working from different Indian cities?",
+    question: "Can SAVIO support employees working from different Indian cities?",
     answer:
-      "Yes. ASTRA is cloud-delivered software for supported, internet-connected Windows endpoints. A pilot should confirm connectivity, deployment and policy requirements for the actual remote device group.",
+      "Yes. SAVIO is cloud-delivered software for supported, internet-connected Windows endpoints. A pilot should confirm connectivity, deployment and policy requirements for the actual remote device group.",
   },
   {
-    question: "Does ASTRA work with employee-owned devices?",
+    question: "Does SAVIO work with employee-owned devices?",
     answer:
       "BYOD should be evaluated separately. Enrollment requires clear organizational authorization, employee notice and an agreed boundary between company support data and personal use. A company-managed pilot group is the safer starting point.",
   },
   {
-    question: "Will ASTRA automatically run every fix?",
+    question: "Will SAVIO automatically run every fix?",
     answer:
       "No. Actions are separated into automatic, approval-required and administrator-only tiers. The model cannot lower a sensitive action into a less restrictive tier.",
   },
   {
-    question: "How should a remote startup evaluate ASTRA?",
+    question: "How should a remote startup evaluate SAVIO?",
     answer:
       "Start with up to 10 representative company-managed Windows devices, three to five recurring issues, named approvers and written success criteria. The guided pilot is free for 14 days and has no automatic paid conversion.",
   },
@@ -98,7 +98,7 @@ const schema = {
   "@graph": [
     {
       "@type": "SoftwareApplication",
-      name: "ASTRA",
+      name: "SAVIO",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Windows 10, Windows 11",
       url: "https://technomateai.com/remote-workforce-it-support-india/",
@@ -140,7 +140,7 @@ export default function RemoteWorkforceItSupportIndiaPage() {
                 Support distributed Windows teams without building a large IT desk
               </h1>
               <p className="mt-6 max-w-3xl text-lg leading-relaxed text-secondary-token">
-                ASTRA helps startup operations and lean IT teams see endpoint health, collect evidence and run approved Windows fixes across remote locations while people retain control of sensitive decisions.
+                SAVIO helps startup operations and lean IT teams see endpoint health, collect evidence and run approved Windows fixes across remote locations while people retain control of sensitive decisions.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button href={bookDemo.href} external={bookDemo.external}>Plan a free 10-device pilot <ArrowRight className="h-4 w-4" /></Button>
@@ -197,7 +197,7 @@ export default function RemoteWorkforceItSupportIndiaPage() {
               <Badge><ShieldCheck className="h-3.5 w-3.5 text-brand-500" /> Control stays with your team</Badge>
               <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">Standardize routine support without creating unattended access</h2>
               <p className="mt-4 leading-relaxed text-secondary-token">
-                ASTRA follows an evidence-first workflow and code-enforced remediation tiers. Start with company-managed devices and a small action catalogue before considering broader deployment.
+                SAVIO follows an evidence-first workflow and code-enforced remediation tiers. Start with company-managed devices and a small action catalogue before considering broader deployment.
               </p>
               <p className="mt-3 text-sm leading-relaxed text-secondary-token">
                 New to the category? Read what an{" "}
@@ -269,9 +269,9 @@ export default function RemoteWorkforceItSupportIndiaPage() {
 
       <Section className="pb-28">
         <Container>
-          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center text-white">
+          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-cyan-500 px-8 py-14 text-center text-white">
             <Globe2 className="mx-auto h-10 w-10" />
-            <h2 className="mt-4 text-3xl font-bold">Test ASTRA with a distributed device group</h2>
+            <h2 className="mt-4 text-3xl font-bold">Test SAVIO with a distributed device group</h2>
             <p className="mx-auto mt-4 max-w-xl text-white/85">Bring your Windows device count, team locations and most common remote support issue to a 30-minute pilot-planning session.</p>
             <a href={bookDemo.href} target={bookDemo.external ? "_blank" : undefined} rel={bookDemo.external ? "noopener" : undefined} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-700">
               Plan the free pilot <ArrowRight className="h-4 w-4" />

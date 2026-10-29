@@ -1,19 +1,19 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Installs the ASTRA Windows agent as a service on this machine.
+    Installs the SAVIO Windows agent as a service on this machine.
 
 .DESCRIPTION
     Registers AstraAgent.Service.exe as an auto-start Windows service, writes its
     configuration (server URL + one-time enrollment token) and starts it. On first
-    run the agent enrolls itself and appears in the ASTRA portal.
+    run the agent enrolls itself and appears in the SAVIO portal.
 
     Get the binaries one of three ways:
       -Source <folder|zip>   install a published build (see Build-AstraAgent.ps1)
       -BuildFromSource       publish from a repo checkout (needs the .NET 8 SDK)
       (default)              use a "dist" folder next to this script, if present
 
-    The ASTRA portal (Devices -> Install agent) can generate a copy of this script
+    The SAVIO portal (Devices -> Install agent) can generate a copy of this script
     with -ServerUrl and -EnrollmentToken already filled in.
 
 .EXAMPLE
@@ -34,7 +34,7 @@ $ErrorActionPreference = "Stop"
 $ServiceName = "AstraAgent"
 $Exe = "AstraAgent.Service.exe"
 
-Write-Host "ASTRA agent -> $ServerUrl" -ForegroundColor Cyan
+Write-Host "SAVIO agent -> $ServerUrl" -ForegroundColor Cyan
 
 # 1. Clean, idempotent reinstall.
 if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
@@ -89,8 +89,8 @@ $config | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path $InstallDir "ap
 # 4. Register and start the service.
 Write-Host "Registering the $ServiceName service..."
 sc.exe create $ServiceName binPath= "`"$exePath`"" start= auto | Out-Null
-sc.exe description $ServiceName "ASTRA endpoint agent - telemetry and secure self-healing." | Out-Null
+sc.exe description $ServiceName "SAVIO endpoint agent - telemetry and secure self-healing." | Out-Null
 sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
 Start-Service -Name $ServiceName
 
-Write-Host "ASTRA agent installed and started. It will enroll and appear in your portal shortly." -ForegroundColor Green
+Write-Host "SAVIO agent installed and started. It will enroll and appear in your portal shortly." -ForegroundColor Green

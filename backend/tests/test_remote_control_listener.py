@@ -1,4 +1,4 @@
-"""The listener: relay events become ASTRA's record of what happened.
+"""The listener: relay events become SAVIO's record of what happened.
 
 No relay is mocked at the protocol level here — `RelayEvent` is the seam, and feeding
 one in is exactly what the socket does. What these tests pin down is the mapping, which
@@ -80,15 +80,15 @@ def test_the_relay_must_time_out_later_than_astra_does():
     """MeshCentral reports a decline and a timeout with the same id.
 
     So "the user pressed Deny" is only distinguishable from "the user never answered" if
-    ASTRA's own window closes first — then a refusal arriving afterwards lands on a
+    SAVIO's own window closes first — then a refusal arriving afterwards lands on a
     session already recorded as NO_RESPONSE and is dropped.
 
     Reverse the two and every unanswered prompt becomes a refusal: the exact bug the
     spike surfaced, silently reintroduced by editing a config file. Hence this test,
-    which fails the moment somebody shortens the relay's window or lengthens ASTRA's.
+    which fails the moment somebody shortens the relay's window or lengthens SAVIO's.
     """
     assert REQUIRED_RELAY_CONSENT_TIMEOUT > CONSENT_TIMEOUT.total_seconds() * 2, (
-        "The relay's consentTimeout must sit well clear of ASTRA's, so that in practice "
+        "The relay's consentTimeout must sit well clear of SAVIO's, so that in practice "
         "it never fires and a refusal event can only mean a person pressed Deny."
     )
 
@@ -134,7 +134,7 @@ async def test_a_refusal_arriving_after_the_sweep_does_not_rewrite_no_response(
 ):
     """The invariant above, exercised end to end.
 
-    ASTRA retires the prompt first. The relay's own refusal turns up later — and must
+    SAVIO retires the prompt first. The relay's own refusal turns up later — and must
     find nothing to change, or the technician is told their customer said no.
     """
     await _grant(session_factory, org)
@@ -176,7 +176,7 @@ async def test_an_ended_desktop_closes_the_session(session_factory, org, admin_u
 
 
 async def test_events_for_an_unknown_device_are_dropped(session_factory, org, admin_user):
-    """Somebody else's relay traffic, or a device ASTRA has never mapped. Not an error."""
+    """Somebody else's relay traffic, or a device SAVIO has never mapped. Not an error."""
     await _grant(session_factory, org)
     device_id = await _device(session_factory, org, "l-5")
     session_id = await _pending(session_factory, org, admin_user, device_id)

@@ -22,7 +22,7 @@ async def tech_headers(client, session_factory, org) -> dict[str, str]:
 async def builtin(session_factory) -> Assistant:
     """A platform-owned assistant — org_id NULL, as the seed script creates."""
     async with session_factory() as session:
-        row = Assistant(org_id=None, name="ASTRA System Administrator")
+        row = Assistant(org_id=None, name="SAVIO System Administrator")
         session.add(row)
         await session.flush()
         version = AssistantVersion(

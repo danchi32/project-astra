@@ -1,6 +1,6 @@
 """Payment-rail abstraction.
 
-ASTRA sells to Indian *and* international customers, which need different rails:
+SAVIO sells to Indian *and* international customers, which need different rails:
   * Razorpay — India (UPI / cards / netbanking / e-mandate, INR).
   * Paddle   — international (Merchant of Record: cards worldwide, global VAT).
 

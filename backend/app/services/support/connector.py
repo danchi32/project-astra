@@ -1,7 +1,7 @@
-"""The seam between ASTRA and whatever helpdesk the customer already runs.
+"""The seam between SAVIO and whatever helpdesk the customer already runs.
 
 The pitch this whole feature answers is "why would we pay for two ticketing systems" — so
-ASTRA does not become one. It hands a well-evidenced ticket to the system the customer
+SAVIO does not become one. It hands a well-evidenced ticket to the system the customer
 already trusts and stops there. That makes the port small: create a ticket, report where it
 landed.
 
@@ -24,7 +24,7 @@ class TicketError(RuntimeError):
 
 @dataclass
 class TicketRequest:
-    """What every helpdesk needs, in ASTRA's vocabulary rather than any vendor's."""
+    """What every helpdesk needs, in SAVIO's vocabulary rather than any vendor's."""
 
     requester_email: str
     subject: str

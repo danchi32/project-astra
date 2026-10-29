@@ -581,7 +581,7 @@ async def test_a_hand_written_article_is_never_labelled_as_learned(client, admin
 
 async def test_staff_can_delete_a_learned_article(client, admin_headers, admin_user,
                                                   session_factory):
-    """The escape hatch. If ASTRA learns something wrong, a technician must be able to
+    """The escape hatch. If SAVIO learns something wrong, a technician must be able to
     simply remove it — without that, automatic learning is a one-way door."""
     await _confirm(session_factory, admin_user.org_id, symptom="outlook nonsense")
     body = (await client.get("/api/v1/knowledge", headers=admin_headers)).json()

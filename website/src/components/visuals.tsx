@@ -149,7 +149,7 @@ export function DashboardMockup() {
             label: "Remediation actions",
             value: fleetFigure(statsState, (s) => s.remediation_actions),
             sub: "in the registry",
-            accent: "text-violet-500",
+            accent: "text-cyan-500",
           },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-token bg-surface-2 p-3">
@@ -169,7 +169,7 @@ export function DashboardMockup() {
           </div>
           {[
             { l: "CPU", v: 42, c: "bg-brand-500" },
-            { l: "Memory", v: 61, c: "bg-violet-500" },
+            { l: "Memory", v: 61, c: "bg-cyan-500" },
             { l: "Disk", v: 74, c: "bg-amber-500" },
           ].map((r) => (
             <div key={r.l} className="mb-2.5 last:mb-0">
@@ -184,7 +184,7 @@ export function DashboardMockup() {
 
         <div className="rounded-xl border border-token bg-surface-2 p-3.5">
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
-            <Sparkles className="h-4 w-4 text-brand-500" /> ASTRA activity
+            <Sparkles className="h-4 w-4 text-brand-500" /> SAVIO activity
           </div>
           <div className="relative h-[104px] overflow-hidden">
             <motion.div
@@ -325,8 +325,8 @@ export function InventoryPanel() {
  * ========================================================================= */
 export function TelemetryGauges() {
   const metrics = [
-    { icon: Cpu, label: "CPU", value: 42, color: "#b246d4" },
-    { icon: MemoryStick, label: "Memory", value: 61, color: "#8b5cf6" },
+    { icon: Cpu, label: "CPU", value: 42, color: "#3b82f6" },
+    { icon: MemoryStick, label: "Memory", value: 61, color: "#06b6d4" },
     { icon: HardDrive, label: "Disk", value: 74, color: "#f59e0b" },
   ];
   return (
@@ -397,11 +397,11 @@ export function AiConsole() {
   const styles: Record<string, string> = {
     user: "bg-surface-2 text-primary-token self-end",
     tool: "bg-brand-500/10 text-brand-600 dark:text-brand-300 font-mono text-[11px]",
-    astra: "bg-violet-500/10 text-violet-600 dark:text-violet-300",
+    astra: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
   };
 
   return (
-    <Chrome title="ASTRA Assistant">
+    <Chrome title="SAVIO Assistant">
       <div className="mini-scroll flex h-[220px] flex-col gap-2 overflow-hidden">
         {lines.slice(0, n).map((l, i) => (
           <motion.div
@@ -413,8 +413,8 @@ export function AiConsole() {
             }`}
           >
             {l.who === "astra" && (
-              <span className="mb-0.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-violet-500">
-                <Sparkles className="h-3 w-3" /> ASTRA
+              <span className="mb-0.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-cyan-500">
+                <Sparkles className="h-3 w-3" /> SAVIO
               </span>
             )}
             {l.text}
@@ -453,7 +453,7 @@ export function ApprovalTiers() {
       name: "Approval required",
       color: "amber",
       icon: ShieldCheck,
-      desc: "A human approves before ASTRA acts.",
+      desc: "A human approves before SAVIO acts.",
       // Every item on this card is an action ID in the shipped registry
       // (backend/app/services/remediation/actions.py). "Driver update" was here and is
       // not one: driver_update was removed because the agent never implemented it.
@@ -548,8 +548,8 @@ export function PatchPushPanel() {
     },
     installing: {
       label: "Installing",
-      text: "text-violet-500",
-      bar: "bg-violet-500",
+      text: "text-cyan-500",
+      bar: "bg-cyan-500",
       icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
     },
     installed: {
@@ -596,7 +596,7 @@ export function PatchPushPanel() {
                 cy="32"
                 r={R}
                 fill="none"
-                stroke="#9a2fbb"
+                stroke="#2563eb"
                 strokeWidth="7"
                 strokeLinecap="round"
                 strokeDasharray={C}

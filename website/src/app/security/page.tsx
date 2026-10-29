@@ -16,7 +16,7 @@ import { bookDemo, site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Security & Trust",
   description:
-    "How ASTRA protects Windows endpoint operations with code-enforced approvals, allowlisted actions, least privilege, encrypted credentials and auditable activity.",
+    "How SAVIO protects Windows endpoint operations with code-enforced approvals, allowlisted actions, least privilege, encrypted credentials and auditable activity.",
   alternates: { canonical: "/security/" },
 };
 
@@ -44,7 +44,7 @@ const controls = [
   {
     icon: Network,
     title: "Outbound-only agent connectivity",
-    body: "The Windows agent initiates outbound HTTPS connections on port 443. Customers do not need to expose inbound device ports for ASTRA.",
+    body: "The Windows agent initiates outbound HTTPS connections on port 443. Customers do not need to expose inbound device ports for SAVIO.",
   },
   {
     icon: LockKeyhole,
@@ -75,7 +75,7 @@ export default function SecurityPage() {
               Automation with boundaries your IT team controls
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-relaxed text-secondary-token">
-              ASTRA gathers evidence before acting, limits execution to known remediations,
+              SAVIO gathers evidence before acting, limits execution to known remediations,
               and keeps sensitive decisions with authorized people. These controls are
               implemented in the platform and Windows agent, not left to prompt instructions.
             </p>
@@ -115,7 +115,7 @@ export default function SecurityPage() {
               <p className="text-sm font-semibold uppercase tracking-wider text-brand-500">Data handling</p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight">Clear operational safeguards</h2>
               <p className="mt-4 leading-relaxed text-secondary-token">
-                ASTRA is designed to minimize exposed interfaces and keep customer data separated by organization. Exact retention and deployment requirements can be reviewed during a pilot.
+                SAVIO is designed to minimize exposed interfaces and keep customer data separated by organization. Exact retention and deployment requirements can be reviewed during a pilot.
               </p>
             </div>
             <ul className="space-y-3">

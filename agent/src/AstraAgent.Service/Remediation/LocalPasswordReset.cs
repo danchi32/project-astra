@@ -70,7 +70,7 @@ public static class LocalPasswordReset
         var (sid, _) = found.Value;
         var rid = sid.Contains('-') ? sid[(sid.LastIndexOf('-') + 1)..] : string.Empty;
         if (ProtectedRids.Contains(rid))
-            return (false, $"'{name}' is a built-in Windows account and cannot be reset by ASTRA.");
+            return (false, $"'{name}' is a built-in Windows account and cannot be reset by SAVIO.");
 
         var password = GeneratePassword();
         var info = new USER_INFO_1003 { Password = password };

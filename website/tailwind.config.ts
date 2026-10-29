@@ -15,18 +15,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Brand palette — Technomate purple (from the logo mark).
+        // Brand palette — SAVIO blue, the same ramp as the portal (portal/tailwind.config.ts).
+        // The Technomate logo keeps its own colours; it is an image, not this palette.
         brand: {
-          50: "#fbf3fe",
-          100: "#f5e2fc",
-          200: "#ecc6f9",
-          300: "#dd9cf2",
-          400: "#c86ce7",
-          500: "#b246d4",
-          600: "#9a2fbb",
-          700: "#7f2599",
-          800: "#69217b",
-          900: "#561d64",
+          50: "#eff6ff",
+          100: "#dbeafe",
+          200: "#bfdbfe",
+          300: "#93c5fd",
+          400: "#60a5fa",
+          500: "#3b82f6",
+          600: "#2563eb",
+          700: "#1d4ed8",
+          800: "#1e40af",
+          900: "#1e3a8a",
         },
         // Deep navy from the wordmark — used for text / dark surfaces.
         ink: {

@@ -62,7 +62,7 @@ def _is_version_question(text: str) -> bool:
 # Shown in the tray when the org can't use chat (suspended, past due, canceled, or
 # an expired trial). No LLM call and no remediation — chat simply doesn't function.
 _SUBSCRIPTION_INACTIVE_REPLY = (
-    "ASTRA support chat is unavailable because your organization's subscription is "
+    "SAVIO support chat is unavailable because your organization's subscription is "
     "inactive. Please contact your IT administrator to restore access."
 )
 
@@ -250,7 +250,7 @@ class ConversationService:
                 latest = json.loads(served[0]).get("version")
         except Exception:
             latest = None
-        msg = f"I'm the ASTRA agent on {device.hostname}, running version {current}."
+        msg = f"I'm the SAVIO agent on {device.hostname}, running version {current}."
         if latest and current != "unknown":
             if latest == current:
                 msg += " That's the latest release — you're up to date."

@@ -33,7 +33,7 @@ public sealed class ChatForm : Form
     {
         _client = client;
 
-        Text = "ASTRA Assistant";
+        Text = "SAVIO Assistant";
         // FixedSingle gives a real title bar with a minimize button (a tool window has none).
         FormBorderStyle = FormBorderStyle.FixedSingle;
         StartPosition = FormStartPosition.Manual;
@@ -94,7 +94,7 @@ public sealed class ChatForm : Form
         _messages.Controls.Clear();
         _serverMsgCount = 0;
         AddBubble(
-            "Hi! I'm ASTRA, your IT assistant. Tell me what's going wrong with your computer "
+            "Hi! I'm SAVIO, your IT assistant. Tell me what's going wrong with your computer "
             + "and I'll take a look.",
             fromUser: false);
     }

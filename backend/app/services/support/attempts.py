@@ -1,4 +1,4 @@
-"""Turning what ASTRA tried in a conversation into the dossier a technician reads.
+"""Turning what SAVIO tried in a conversation into the dossier a technician reads.
 
 Two paths now escalate: a fix that failed on the machine, and a user who says the fix made
 no difference. They describe the same situation and must describe it the same way, so the
@@ -22,7 +22,7 @@ from app.services.support.dossier import Attempt, Dossier
 async def attempts_in(
     session: AsyncSession, conversation_id: uuid.UUID
 ) -> list[RemediationTask]:
-    """Every fix ASTRA started in this conversation, oldest first."""
+    """Every fix SAVIO started in this conversation, oldest first."""
     return list((await session.execute(
         select(RemediationTask)
         .where(RemediationTask.conversation_id == conversation_id)

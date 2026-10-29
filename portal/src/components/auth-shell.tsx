@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { SavioLogo } from "@/components/savio-mark";
 
 /**
  * The frame every signed-out page sits in.
@@ -94,7 +95,7 @@ export function AuthShell({
   subtitle,
   eyebrow,
   headline = "An AI system administrator for your Windows fleet.",
-  blurb = "ASTRA watches every device, works out what is actually wrong, and fixes it — with a human in the loop wherever that matters.",
+  blurb = "SAVIO watches every device, works out what is actually wrong, and fixes it — with a human in the loop wherever that matters.",
   points = PILLARS,
   footer = LOOP,
 }: {
@@ -127,15 +128,18 @@ export function AuthShell({
         <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 w-[28rem] h-[28rem] rounded-full blur-3xl"
           style={{ background: "color-mix(in srgb, var(--accent) 18%, transparent)" }} />
         <div aria-hidden className="pointer-events-none absolute -bottom-40 -right-16 w-[26rem] h-[26rem] rounded-full blur-3xl"
-          style={{ background: "color-mix(in srgb, var(--accent) 12%, transparent)" }} />
+          style={{ background: "color-mix(in srgb, var(--glow) 14%, transparent)" }} />
+        {/* A faint dot grid — the "telemetry" texture the logo is built from — so the panel
+            never reads as an empty slab between the headline and the steps. */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.35]"
+          style={{
+            backgroundImage: "radial-gradient(color-mix(in srgb, var(--accent) 35%, transparent) 1px, transparent 1px)",
+            backgroundSize: "22px 22px",
+            maskImage: "linear-gradient(to bottom, black, transparent 85%)",
+          }} />
 
         <div className="relative">
-          <div className="inline-flex items-center gap-2 text-2xl font-bold" style={{ color: "var(--accent)" }}>
-            <span className="text-3xl">⬡</span> ASTRA
-          </div>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-            AI Operations Platform
-          </p>
+          <SavioLogo size={44} tagline="AI agent for IT operations" />
         </div>
 
         <div className="relative max-w-lg">
@@ -206,9 +210,7 @@ export function AuthShell({
           {/* The wordmark repeats here only where the left panel is gone, so large screens
               don't show it twice. */}
           <div className="lg:hidden mb-8 text-center">
-            <div className="inline-flex items-center gap-2 text-2xl font-bold" style={{ color: "var(--accent)" }}>
-              <span className="text-3xl">⬡</span> ASTRA
-            </div>
+            <SavioLogo size={40} />
             <p className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>{subtitle}</p>
           </div>
           {children}

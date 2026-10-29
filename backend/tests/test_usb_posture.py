@@ -1,7 +1,7 @@
 """The USB state a device reports, and how the fleet count reads it.
 
 The one property that has to hold is that the flag reflects what the agent reported and not
-what ASTRA asked for — and, at the seam, that an agent too old to report it does not blank
+what SAVIO asked for — and, at the seam, that an agent too old to report it does not blank
 out or fabricate a state. False is a real value here (allowed), so the usual truthiness
 guard would be a bug; that is what these tests pin.
 """

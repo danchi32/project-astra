@@ -410,5 +410,5 @@ class DeviceService:
         if active >= org.license_count:
             raise ValidationError(
                 f"No available licenses ({active} of {org.license_count} in use). "
-                "Ask your administrator to add licenses in ASTRA → Billing."
+                "Ask your administrator to add licenses in SAVIO → Billing."
             )

@@ -123,7 +123,7 @@ if ($leadStored || $mailSent) {
 }
 
 /**
- * POST the lead to the ASTRA Marketing Service, signed so the endpoint can tell our
+ * POST the lead to the SAVIO Marketing Service, signed so the endpoint can tell our
  * website from anyone who found the URL.
  *
  * Inert until `intake_url` and `intake_secret` are added to mail-config.php, so deploying

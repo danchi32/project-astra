@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Data Processing Agreement",
   description:
-    "How Technomate IT-Solution Private Limited processes personal data on behalf of ASTRA customers: instructions, security, sub-processors, breaches, transfers and deletion.",
+    "How Technomate IT-Solution Private Limited processes personal data on behalf of SAVIO customers: instructions, security, sub-processors, breaches, transfers and deletion.",
   alternates: { canonical: "/dpa/" },
 };
 
@@ -20,7 +20,7 @@ export default function DpaPage() {
         <>
           This agreement forms part of the <a href="/terms/">Terms of Service</a> between{" "}
           {legal.displayName} (&ldquo;Technomate&rdquo;, the <strong>Processor</strong>)
-          and the organisation using ASTRA (the &ldquo;Customer&rdquo;, the{" "}
+          and the organisation using SAVIO (the &ldquo;Customer&rdquo;, the{" "}
           <strong>Data Fiduciary</strong> or controller). It applies whenever Technomate
           processes personal data on the Customer&rsquo;s behalf. Customers who need a
           countersigned copy can request one from{" "}
@@ -39,7 +39,7 @@ export default function DpaPage() {
         <tbody>
           <tr>
             <td>Subject matter</td>
-            <td>Provision of the ASTRA IT operations service under the Terms of Service</td>
+            <td>Provision of the SAVIO IT operations service under the Terms of Service</td>
           </tr>
           <tr>
             <td>Duration</td>
@@ -57,7 +57,7 @@ export default function DpaPage() {
             <td>Data principals</td>
             <td>
               The Customer&rsquo;s employees, contractors and other people who use enrolled
-              devices or the ASTRA portal
+              devices or the SAVIO portal
             </td>
           </tr>
           <tr>
@@ -83,7 +83,7 @@ export default function DpaPage() {
       <p>
         Technomate processes personal data only on the Customer&rsquo;s documented
         instructions. The Terms of Service, this agreement, and the Customer&rsquo;s
-        configuration of ASTRA (including enabled approval tiers and remote support) are
+        configuration of SAVIO (including enabled approval tiers and remote support) are
         those instructions. If Technomate believes an instruction breaks the law, it will
         say so and may decline to follow it. Technomate will not use the Customer&rsquo;s
         personal data for its own purposes, sell it, or use it to train AI models.

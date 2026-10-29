@@ -57,7 +57,7 @@ def _effective_from(row: EmailSettings | None, org_name: str) -> str:
     ):
         return f"{row.from_name or org_name} <{row.from_address}>"
     shared = _s().email_from or "(no platform sender configured)"
-    return f"{(row.from_name if row else None) or org_name} (via ASTRA) <{shared}>"
+    return f"{(row.from_name if row else None) or org_name} (via SAVIO) <{shared}>"
 
 
 async def _email_read_for(
@@ -151,7 +151,7 @@ async def get_email_settings(
 @router.put(
     "/email/sender",
     response_model=EmailSettingsRead,
-    summary="Choose how mail is sent: ASTRA's shared address, or your own domain (admin)",
+    summary="Choose how mail is sent: SAVIO's shared address, or your own domain (admin)",
 )
 async def choose_email_sender(
     body: EmailSenderChoice,

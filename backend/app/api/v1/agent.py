@@ -146,7 +146,7 @@ async def get_update(
 @router.post(
     "/chat",
     response_model=AgentChatResponse,
-    summary="Chat with ASTRA from the device tray (device-authenticated)",
+    summary="Chat with SAVIO from the device tray (device-authenticated)",
 )
 async def chat(
     body: AgentChatRequest,
@@ -227,7 +227,7 @@ async def remote_support_plan(
 ) -> RemoteSupportPlan:
     """What the device should do about remote support, decided here rather than there.
 
-    Nothing about remote support ships in the ASTRA installer. A device asks this, and
+    Nothing about remote support ships in the SAVIO installer. A device asks this, and
     only installs the relay agent if the answer says so — which means a customer who has
     not bought remote control never receives a remote-access executable at all, rather
     than receiving one that sits unused on every machine they own.

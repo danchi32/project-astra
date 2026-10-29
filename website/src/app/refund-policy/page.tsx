@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Refund & Cancellation Policy",
   description:
-    "Trial terms, billing cycles, cancellation and refund eligibility for ASTRA subscriptions.",
+    "Trial terms, billing cycles, cancellation and refund eligibility for SAVIO subscriptions.",
   alternates: { canonical: "/refund-policy/" },
 };
 
@@ -17,7 +17,7 @@ export default function RefundPolicyPage() {
       reviewed
       intro={
         <>
-          How trials, billing, cancellation and refunds work for ASTRA subscriptions from{" "}
+          How trials, billing, cancellation and refunds work for SAVIO subscriptions from{" "}
           {site.legal.displayName}. This policy forms part of the{" "}
           <a href="/terms/">Terms of Service</a>.
         </>
@@ -40,7 +40,7 @@ export default function RefundPolicyPage() {
       <h2>2. How billing works</h2>
       <ul>
         <li>
-          ASTRA is licensed <strong>per device, per month</strong>. You purchase a number
+          SAVIO is licensed <strong>per device, per month</strong>. You purchase a number
           of licences and are billed on that number, whether or not every licence is in
           use.
         </li>
@@ -64,7 +64,7 @@ export default function RefundPolicyPage() {
 
       <h2>4. Cancellation</h2>
       <ul>
-        <li>You may cancel at any time from the Billing page in the ASTRA portal.</li>
+        <li>You may cancel at any time from the Billing page in the SAVIO portal.</li>
         <li>
           Cancellation stops future renewals. Your subscription continues to the end of
           the period you have already paid for.
@@ -81,7 +81,7 @@ export default function RefundPolicyPage() {
 
       <h2>5. Refunds</h2>
       <p>
-        The 14-day free trial is how we let you evaluate ASTRA before paying, so paid
+        The 14-day free trial is how we let you evaluate SAVIO before paying, so paid
         subscriptions are <strong>not refundable</strong> once a billing period has
         started. That applies to monthly and annual plans, to partial periods, and to
         licences you bought but did not use. You can cancel at any time to stop the next

@@ -1,6 +1,6 @@
 """Compliance / security posture evaluation.
 
-Read-only over data ASTRA already collects (Windows updates, disk telemetry, services,
+Read-only over data SAVIO already collects (Windows updates, disk telemetry, services,
 event logs, installed apps, heartbeat) plus the org's banned-software list. Nothing here
 changes device state — it scores devices against a fixed set of checks so the portal can
 show a fleet posture and, where a safe remediation exists, offer a one-click fix.

@@ -140,7 +140,7 @@ export default function DevicesPage() {
   return (
     <div className={pageShell}>
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <Monitor size={18} />
         </div>
         <div>
@@ -165,7 +165,7 @@ export default function DevicesPage() {
           </div>
           <select value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}
             className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
-            style={{ background: status !== "all" ? "rgba(154,47,187,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: status !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+            style={{ background: status !== "all" ? "rgba(37,99,235,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: status !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
             <option value="all">All statuses</option>
             <option value="online">Online</option>
             <option value="offline">Offline</option>

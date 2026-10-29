@@ -21,7 +21,7 @@ export function ContactForm() {
     email: "",
     company: "",
     phone: "",
-    interest: "ASTRA AI",
+    interest: "SAVIO AI",
     message: "",
     website: "", // honeypot — must stay empty
   });
@@ -176,7 +176,7 @@ export function ContactForm() {
           className={inputCls}
         >
           {list<string>("contact.form.interests", [
-            "ASTRA AI",
+            "SAVIO AI",
             "Managed IT Services",
             "Laptops & Hardware",
             "Partnership",

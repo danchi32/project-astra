@@ -26,7 +26,7 @@ KEY = None  # set per-test; Fernet keys must be generated, not hardcoded
 def _request(**kw) -> TicketRequest:
     return TicketRequest(
         requester_email=kw.pop("requester_email", "priya@acme.com"),
-        subject=kw.pop("subject", "[ASTRA] laptop slow — PC-1"),
+        subject=kw.pop("subject", "[SAVIO] laptop slow — PC-1"),
         description_html=kw.pop("description_html", "<p>dossier</p>"),
         **kw,
     )
@@ -73,7 +73,7 @@ async def test_it_posts_the_documented_shape(monkeypatch):
     assert body["email"] == "priya@acme.com"
     assert body["status"] == 2, "tickets are created Open"
     assert body["priority"] == 1
-    assert "astra" in body["tags"], "their reporting must be able to find ASTRA's tickets"
+    assert "astra" in body["tags"], "their reporting must be able to find SAVIO's tickets"
 
 
 async def test_optional_routing_is_omitted_rather_than_guessed(monkeypatch):
@@ -116,7 +116,7 @@ async def test_priority_maps_to_freshservice_ids(monkeypatch, given, expected):
 
 
 async def test_an_unknown_priority_falls_back_to_the_orgs_default(monkeypatch):
-    """ASTRA does not invent urgency. An unrecognised value lands on what the org chose,
+    """SAVIO does not invent urgency. An unrecognised value lands on what the org chose,
     not on something more alarming."""
     seen = {}
     conn = _connector(monkeypatch,

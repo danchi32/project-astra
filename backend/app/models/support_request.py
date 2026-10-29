@@ -9,7 +9,7 @@ from app.models.base import GUID, Base, TimestampMixin
 
 
 class SupportRequestStatus(str, enum.Enum):
-    OPEN = "open"                        # nobody at ASTRA has picked it up
+    OPEN = "open"                        # nobody at SAVIO has picked it up
     IN_PROGRESS = "in_progress"          # being worked on
     WAITING_CUSTOMER = "waiting_customer"  # we replied; the ball is with them
     RESOLVED = "resolved"                # fixed, and they have been told
@@ -24,7 +24,7 @@ class SupportRequestPriority(str, enum.Enum):
 
 
 class SupportRequest(TimestampMixin, Base):
-    """A customer asking ASTRA itself for help.
+    """A customer asking SAVIO itself for help.
 
     Not to be confused with `SupportEscalation`, which is the opposite direction: that one
     hands an end user's problem to the CUSTOMER's own helpdesk. This one is an organization

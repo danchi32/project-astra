@@ -43,20 +43,20 @@ export type Comparison = {
 };
 
 const disclaimer =
-  "Comparison based on publicly available information as of 2026. Competitor features and pricing change often — please verify on their official website. ASTRA is not affiliated with the compared vendors.";
+  "Comparison based on publicly available information as of 2026. Competitor features and pricing change often — please verify on their official website. SAVIO is not affiliated with the compared vendors.";
 
 export const compareDisclaimer = disclaimer;
 
 export const comparisons: Comparison[] = [
   {
-    slug: "astra-vs-microsoft-intune",
+    slug: "savio-vs-microsoft-intune",
     competitor: "Microsoft Intune",
-    title: "ASTRA vs Microsoft Intune — AI IT Operations vs UEM (2026)",
+    title: "SAVIO vs Microsoft Intune — AI IT Operations vs UEM (2026)",
     description:
-      "Compare ASTRA and Microsoft Intune for Windows operations: evidence-first remediation and approval tiers vs mature cross-platform device management.",
-    h1: "ASTRA vs Microsoft Intune",
+      "Compare SAVIO and Microsoft Intune for Windows operations: evidence-first remediation and approval tiers vs mature cross-platform device management.",
+    h1: "SAVIO vs Microsoft Intune",
     intro:
-      "Microsoft Intune is a mature, cross-platform unified endpoint management service in the Microsoft ecosystem. ASTRA is a Windows-focused AI System Administrator built around evidence-first diagnosis, governed remediation and verification. The right choice depends on whether your priority is broad policy management or an AI operations loop.",
+      "Microsoft Intune is a mature, cross-platform unified endpoint management service in the Microsoft ecosystem. SAVIO is a Windows-focused AI System Administrator built around evidence-first diagnosis, governed remediation and verification. The right choice depends on whether your priority is broad policy management or an AI operations loop.",
     competitorSummary:
       "Microsoft Intune manages and protects Windows, macOS, iOS and Android endpoints from a cloud console. It provides device and app management, compliance policy, remote actions and endpoint analytics, and is included with several Microsoft 365 and Enterprise Mobility + Security subscriptions.",
     rows: [
@@ -71,7 +71,7 @@ export const comparisons: Comparison[] = [
       { feature: "Best fit", astra: "Windows teams prioritizing controlled AI diagnosis and verified fixes", them: "Organizations standardized on Microsoft and needing broad UEM", edge: "even" },
     ],
     whyAstra: [
-      "Evidence before action — ASTRA combines the request, enterprise knowledge and live endpoint telemetry before selecting a remediation.",
+      "Evidence before action — SAVIO combines the request, enterprise knowledge and live endpoint telemetry before selecting a remediation.",
       "Explicit action governance — automatic, approval-required and admin-only tiers are enforced in backend code rather than left to an AI prompt.",
       "Post-action verification — the workflow checks and records the result instead of treating command delivery as resolution.",
       "Focused evaluation — Windows-first teams can test the reasoning-to-verification loop on a limited device group.",
@@ -82,10 +82,10 @@ export const comparisons: Comparison[] = [
       "Intune is already included in your licensing and your team is invested in Microsoft administration workflows.",
     ],
     faqs: [
-      { q: "Is ASTRA a replacement for Microsoft Intune?", a: "Not in every environment. Intune is broader UEM for device, app and compliance management across several operating systems. ASTRA is focused on Windows evidence, diagnosis and controlled remediation. A pilot should assess whether ASTRA complements or replaces specific current workflows." },
-      { q: "Which product supports more operating systems?", a: "Microsoft Intune supports Windows, macOS, iOS and Android management. The ASTRA endpoint agent currently supports 64-bit Windows 10 and Windows 11." },
-      { q: "How do their pricing models differ?", a: "ASTRA uses per-device plans. Microsoft lists Intune Plan 1 per user and also includes it in several Microsoft 365 and Enterprise Mobility + Security subscriptions. Verify current regional pricing and your existing license entitlements before comparing cost." },
-      { q: "What is ASTRA's main difference?", a: "ASTRA is built around an evidence-to-verification loop: gather live context, diagnose, apply a code-enforced approval tier, execute an allowlisted action and verify the result." },
+      { q: "Is SAVIO a replacement for Microsoft Intune?", a: "Not in every environment. Intune is broader UEM for device, app and compliance management across several operating systems. SAVIO is focused on Windows evidence, diagnosis and controlled remediation. A pilot should assess whether SAVIO complements or replaces specific current workflows." },
+      { q: "Which product supports more operating systems?", a: "Microsoft Intune supports Windows, macOS, iOS and Android management. The SAVIO endpoint agent currently supports 64-bit Windows 10 and Windows 11." },
+      { q: "How do their pricing models differ?", a: "SAVIO uses per-device plans. Microsoft lists Intune Plan 1 per user and also includes it in several Microsoft 365 and Enterprise Mobility + Security subscriptions. Verify current regional pricing and your existing license entitlements before comparing cost." },
+      { q: "What is SAVIO's main difference?", a: "SAVIO is built around an evidence-to-verification loop: gather live context, diagnose, apply a code-enforced approval tier, execute an allowlisted action and verify the result." },
     ],
     sourceReviewed: "30 August 2026",
     sources: [
@@ -95,14 +95,14 @@ export const comparisons: Comparison[] = [
     ],
   },
   {
-    slug: "astra-vs-manageengine-endpoint-central",
+    slug: "savio-vs-manageengine-endpoint-central",
     competitor: "ManageEngine Endpoint Central",
-    title: "ASTRA vs ManageEngine Endpoint Central (2026)",
+    title: "SAVIO vs ManageEngine Endpoint Central (2026)",
     description:
-      "Compare ASTRA and ManageEngine Endpoint Central: governed AI remediation for Windows vs broad endpoint management, patching and security.",
-    h1: "ASTRA vs ManageEngine Endpoint Central",
+      "Compare SAVIO and ManageEngine Endpoint Central: governed AI remediation for Windows vs broad endpoint management, patching and security.",
+    h1: "SAVIO vs ManageEngine Endpoint Central",
     intro:
-      "ManageEngine Endpoint Central is a broad endpoint management and security platform with deep patching, configuration and multi-OS capabilities. ASTRA is a Windows-focused AI System Administrator designed to reason from live evidence, enforce action boundaries and verify remediation.",
+      "ManageEngine Endpoint Central is a broad endpoint management and security platform with deep patching, configuration and multi-OS capabilities. SAVIO is a Windows-focused AI System Administrator designed to reason from live evidence, enforce action boundaries and verify remediation.",
     competitorSummary:
       "ManageEngine Endpoint Central provides endpoint management and security across desktop and mobile platforms. Its official materials cover patching, software deployment, asset management, remote troubleshooting, configurations, reporting, mobile device management and multiple deployment editions.",
     rows: [
@@ -118,9 +118,9 @@ export const comparisons: Comparison[] = [
       { feature: "Best fit", astra: "Lean Windows teams seeking controlled AI operations", them: "Teams needing broad, mature endpoint administration depth", edge: "even" },
     ],
     whyAstra: [
-      "AI operations is the product core — ASTRA reasons over live evidence and approved knowledge before choosing a permitted fix.",
+      "AI operations is the product core — SAVIO reasons over live evidence and approved knowledge before choosing a permitted fix.",
       "Authorization boundaries are explicit — the model cannot lower an approval-required or admin-only action into an automatic tier.",
-      "Verification closes the loop — ASTRA records whether the attempted remediation produced the expected endpoint state.",
+      "Verification closes the loop — SAVIO records whether the attempted remediation produced the expected endpoint state.",
       "A focused Windows workflow can reduce evaluation complexity for lean teams that do not need a broad multi-platform administration suite.",
     ],
     whenThem: [
@@ -129,10 +129,10 @@ export const comparisons: Comparison[] = [
       "You prefer a comprehensive endpoint administration suite and technician-led automation over a focused AI reasoning loop.",
     ],
     faqs: [
-      { q: "Is ASTRA a full replacement for Endpoint Central?", a: "Not for every use case. Endpoint Central offers broader endpoint administration, multi-OS management, patching and deployment capabilities. ASTRA is best evaluated for its Windows evidence-to-verification workflow and controlled AI remediation." },
-      { q: "Which platform is broader?", a: "ManageEngine Endpoint Central is broader across operating systems and endpoint management functions. ASTRA is intentionally focused on Windows IT operations and governed remediation." },
-      { q: "How should we compare pricing?", a: "ASTRA publishes per-device SaaS plans. Endpoint Central offers multiple editions, deployment models and endpoint bands. Use your device, server, technician and add-on requirements with the current official calculators rather than comparing a single headline price." },
-      { q: "Can ASTRA be evaluated alongside Endpoint Central?", a: "Yes. A limited-device pilot can test ASTRA's diagnosis, approval and verification workflow while coexistence requirements are reviewed against your current Endpoint Central configuration." },
+      { q: "Is SAVIO a full replacement for Endpoint Central?", a: "Not for every use case. Endpoint Central offers broader endpoint administration, multi-OS management, patching and deployment capabilities. SAVIO is best evaluated for its Windows evidence-to-verification workflow and controlled AI remediation." },
+      { q: "Which platform is broader?", a: "ManageEngine Endpoint Central is broader across operating systems and endpoint management functions. SAVIO is intentionally focused on Windows IT operations and governed remediation." },
+      { q: "How should we compare pricing?", a: "SAVIO publishes per-device SaaS plans. Endpoint Central offers multiple editions, deployment models and endpoint bands. Use your device, server, technician and add-on requirements with the current official calculators rather than comparing a single headline price." },
+      { q: "Can SAVIO be evaluated alongside Endpoint Central?", a: "Yes. A limited-device pilot can test SAVIO's diagnosis, approval and verification workflow while coexistence requirements are reviewed against your current Endpoint Central configuration." },
     ],
     sourceReviewed: "30 August 2026",
     sources: [
@@ -142,14 +142,14 @@ export const comparisons: Comparison[] = [
     ],
   },
   {
-    slug: "astra-vs-ninjaone",
+    slug: "savio-vs-ninjaone",
     competitor: "NinjaOne",
-    title: "ASTRA vs NinjaOne — AI Self-Healing vs Traditional RMM (2026)",
+    title: "SAVIO vs NinjaOne — AI Self-Healing vs Traditional RMM (2026)",
     description:
-      "ASTRA vs NinjaOne compared: AI-driven autonomous self-healing with human-in-the-loop tiers vs a mature per-device RMM. See where each fits.",
-    h1: "ASTRA vs NinjaOne",
+      "SAVIO vs NinjaOne compared: AI-driven autonomous self-healing with human-in-the-loop tiers vs a mature per-device RMM. See where each fits.",
+    h1: "SAVIO vs NinjaOne",
     intro:
-      "NinjaOne is a mature, per-device RMM for monitoring and managing endpoints at scale. ASTRA is an AI System Administrator that diagnoses and self-heals issues autonomously — with human approval where it matters. Here's an honest, side-by-side look.",
+      "NinjaOne is a mature, per-device RMM for monitoring and managing endpoints at scale. SAVIO is an AI System Administrator that diagnoses and self-heals issues autonomously — with human approval where it matters. Here's an honest, side-by-side look.",
     competitorSummary:
       "NinjaOne (formerly NinjaRMM) is a well-established remote monitoring and management platform used by MSPs and internal IT teams. It's known for strong patch management, remote control, endpoint monitoring and a polished UI across Windows, macOS and Linux, priced per device.",
     rows: [
@@ -166,9 +166,9 @@ export const comparisons: Comparison[] = [
       { feature: "Full audit trail on automated actions", astra: "Every action logged & attributable", them: "Activity & change logging", edge: "even" },
     ],
     whyAstra: [
-      "Evidence before action — ASTRA collects live telemetry and searches your knowledge base before it ever proposes a fix, so automation is never blind.",
+      "Evidence before action — SAVIO collects live telemetry and searches your knowledge base before it ever proposes a fix, so automation is never blind.",
       "Human-in-the-loop by design — every remediation is classed automatic, approval-required, or admin-only, and the tier is enforced in code, not just the prompt.",
-      "AI reasoning, not just scripts — ASTRA figures out the root cause and the right fix, runs it, then verifies the result and learns.",
+      "AI reasoning, not just scripts — SAVIO figures out the root cause and the right fix, runs it, then verifies the result and learns.",
       "Simple per-device pricing where each tier is all-inclusive — no add-on creep for backup or EDR.",
       "Secure offboarding built in — when someone leaves, lock down their account and force them out of their session in one click, so data can't walk out the door.",
     ],
@@ -178,21 +178,21 @@ export const comparisons: Comparison[] = [
       "Your team prefers to author its own scripts and policies rather than lean on autonomous AI remediation.",
     ],
     faqs: [
-      { q: "Is ASTRA an RMM like NinjaOne?", a: "ASTRA overlaps with RMM on monitoring and remediation, but it leads with autonomous AI reasoning and built-in safety tiers rather than being a manual management console. Think of it as an AI System Administrator that acts, not just a dashboard that alerts." },
-      { q: "Can ASTRA replace NinjaOne?", a: "For Windows-first teams that want AI-driven self-healing with approval guardrails, ASTRA can stand on its own. If you rely on deep multi-OS patching or a large existing NinjaOne integration stack, many teams run ASTRA alongside their RMM first." },
-      { q: "How is ASTRA's pricing different?", a: "Both are priced per device, but each ASTRA tier is all-inclusive — AI self-healing, offboarding and compliance are part of the plan rather than paid add-ons like backup and EDR. ASTRA starts at $4.49/device/month." },
+      { q: "Is SAVIO an RMM like NinjaOne?", a: "SAVIO overlaps with RMM on monitoring and remediation, but it leads with autonomous AI reasoning and built-in safety tiers rather than being a manual management console. Think of it as an AI System Administrator that acts, not just a dashboard that alerts." },
+      { q: "Can SAVIO replace NinjaOne?", a: "For Windows-first teams that want AI-driven self-healing with approval guardrails, SAVIO can stand on its own. If you rely on deep multi-OS patching or a large existing NinjaOne integration stack, many teams run SAVIO alongside their RMM first." },
+      { q: "How is SAVIO's pricing different?", a: "Both are priced per device, but each SAVIO tier is all-inclusive — AI self-healing, offboarding and compliance are part of the plan rather than paid add-ons like backup and EDR. SAVIO starts at $4.49/device/month." },
       { q: "Is autonomous remediation safe?", a: "Yes. Every action is tiered (automatic, approval-required, or admin-only), gathers evidence first, and is fully logged with an audit trail — so nothing risky runs without the right level of human approval." },
     ],
   },
   {
-    slug: "astra-vs-atera",
+    slug: "savio-vs-atera",
     competitor: "Atera",
-    title: "ASTRA vs Atera — AI System Administrator vs All-in-One RMM+PSA (2026)",
+    title: "SAVIO vs Atera — AI System Administrator vs All-in-One RMM+PSA (2026)",
     description:
-      "ASTRA vs Atera compared: AI-native self-healing with safety tiers vs an all-in-one per-technician RMM+PSA with an AI Copilot add-on. Where each fits.",
-    h1: "ASTRA vs Atera",
+      "SAVIO vs Atera compared: AI-native self-healing with safety tiers vs an all-in-one per-technician RMM+PSA with an AI Copilot add-on. Where each fits.",
+    h1: "SAVIO vs Atera",
     intro:
-      "Atera is an all-in-one RMM+PSA priced per technician, with an AI Copilot add-on. ASTRA is an AI System Administrator where autonomous, evidence-based self-healing is the core — not a bolt-on. Here's an honest, side-by-side look.",
+      "Atera is an all-in-one RMM+PSA priced per technician, with an AI Copilot add-on. SAVIO is an AI System Administrator where autonomous, evidence-based self-healing is the core — not a bolt-on. Here's an honest, side-by-side look.",
     competitorSummary:
       "Atera is a popular all-in-one platform that combines RMM with PSA (ticketing, billing and contracts), aimed at MSPs and IT departments. It's priced per technician rather than per device, and offers an AI Copilot and autonomous 'Robin' agent as paid add-ons.",
     rows: [
@@ -208,9 +208,9 @@ export const comparisons: Comparison[] = [
       { feature: "Full audit trail on automated actions", astra: "Every action logged & attributable", them: "Ticket & activity history", edge: "even" },
     ],
     whyAstra: [
-      "AI is the core, not an add-on — autonomous, evidence-based self-healing is built into ASTRA rather than sold as a separate Copilot seat.",
+      "AI is the core, not an add-on — autonomous, evidence-based self-healing is built into SAVIO rather than sold as a separate Copilot seat.",
       "Human-in-the-loop by design — remediations are tiered automatic / approval-required / admin-only, enforced in code.",
-      "Evidence before action — ASTRA reasons over live telemetry and your knowledge base before it acts, then verifies the outcome.",
+      "Evidence before action — SAVIO reasons over live telemetry and your knowledge base before it acts, then verifies the outcome.",
       "Simple per-device pricing — no separate AI add-on line item to reach autonomous remediation.",
       "Secure offboarding built in — when someone leaves, lock down their account and force them out of their session in one click, so data can't walk out the door.",
     ],
@@ -220,9 +220,9 @@ export const comparisons: Comparison[] = [
       "You want a single all-in-one suite today and are comfortable with AI as an assistant to technicians rather than an autonomous operator.",
     ],
     faqs: [
-      { q: "How is ASTRA different from Atera's AI Copilot?", a: "Atera's Copilot assists a technician while they work, as a paid add-on. In ASTRA, AI-driven remediation is the core of the product: it can diagnose and resolve issues autonomously within safety tiers, with a human approving anything above the automatic tier." },
-      { q: "Does ASTRA include a PSA?", a: "No — ASTRA is focused on AI-driven IT operations and self-healing, and integrates with your existing tools. If you need built-in ticketing, billing and contracts, Atera's all-in-one PSA may suit you better." },
-      { q: "How does pricing compare?", a: "ASTRA is priced per device (from $4.49/device/month), with autonomous remediation included from the Professional tier. Atera is priced per technician, with AI Copilot billed as a separate add-on on top of the seat price." },
+      { q: "How is SAVIO different from Atera's AI Copilot?", a: "Atera's Copilot assists a technician while they work, as a paid add-on. In SAVIO, AI-driven remediation is the core of the product: it can diagnose and resolve issues autonomously within safety tiers, with a human approving anything above the automatic tier." },
+      { q: "Does SAVIO include a PSA?", a: "No — SAVIO is focused on AI-driven IT operations and self-healing, and integrates with your existing tools. If you need built-in ticketing, billing and contracts, Atera's all-in-one PSA may suit you better." },
+      { q: "How does pricing compare?", a: "SAVIO is priced per device (from $4.49/device/month), with autonomous remediation included from the Professional tier. Atera is priced per technician, with AI Copilot billed as a separate add-on on top of the seat price." },
       { q: "Is autonomous remediation safe?", a: "Yes. Every action is tiered (automatic, approval-required, or admin-only), gathers evidence first, and is fully audited — so risky changes never run without the right human approval." },
     ],
   },

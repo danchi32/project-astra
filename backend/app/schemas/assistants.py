@@ -20,7 +20,7 @@ class AssistantUpdate(BaseModel):
 
 class AssistantVersionCreate(BaseModel):
     """Every field optional: an omitted field means "use the server default", which is how
-    a version that reproduces today's ASTRA behaviour is expressed."""
+    a version that reproduces today's SAVIO behaviour is expressed."""
 
     system_prompt: str | None = Field(default=None, max_length=20000)
     model: str | None = Field(default=None, max_length=60)

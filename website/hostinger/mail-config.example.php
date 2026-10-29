@@ -15,7 +15,7 @@ return [
     'from' => 'sales@technomateai.com',
     'to'   => 'sales@technomateai.com',
 
-    // --- ASTRA Marketing Service (lead record) ---
+    // --- SAVIO Marketing Service (lead record) ---
     // Leave both empty to disable lead recording entirely; contact.php then behaves
     // exactly as it did before, mailing the enquiry and nothing else.
     //

@@ -10,7 +10,7 @@ from app.models.base import GUID, Base, TimestampMixin, utcnow
 
 
 class EmailSendMethod(str, enum.Enum):
-    """How ASTRA sends mail on the org's behalf.
+    """How SAVIO sends mail on the org's behalf.
 
     SHARED and DNS are a real choice, not a ladder. Verifying a domain means getting DNS
     records added, which in a lot of companies means a ticket to somebody else and a wait
@@ -20,7 +20,7 @@ class EmailSendMethod(str, enum.Enum):
     The OAuth methods are reserved so the sender-resolution layer can grow into them
     without a schema change.
     """
-    SHARED = "shared"              # ASTRA's own verified address, sent on the org's behalf
+    SHARED = "shared"              # SAVIO's own verified address, sent on the org's behalf
     DNS = "dns"                    # verified sending domain via Resend (SPF/DKIM)
     OAUTH_GOOGLE = "oauth_google"  # reserved — Gmail API
     OAUTH_MICROSOFT = "oauth_microsoft"  # reserved — Microsoft Graph

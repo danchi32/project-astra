@@ -12,7 +12,7 @@ is publishing an older version again.
 
 Every behaviour column is NULLABLE, and NULL means "use the server default". That is what
 makes this table safe to add to a running system: a row full of NULLs behaves exactly as
-ASTRA does today, so the engine can start reading rows without any behaviour changing.
+SAVIO does today, so the engine can start reading rows without any behaviour changing.
 """
 import enum
 import uuid

@@ -89,7 +89,7 @@ export default function RegisterPage() {
       subtitle={step === "details" ? "Start your 14-day free trial" : "Confirm your email"}
       eyebrow="14-day free trial"
       headline="Start free. No credit card."
-      blurb="Create your organization, install the agent on one device, and ASTRA starts reporting on it. Nothing to pay until you decide it's worth it."
+      blurb="Create your organization, install the agent on one device, and SAVIO starts reporting on it. Nothing to pay until you decide it's worth it."
       points={TRIAL_POINTS}
       footer={SIGNUP_STEPS}
     >

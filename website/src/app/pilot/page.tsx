@@ -8,19 +8,19 @@ import { Badge, Button, Container, Section } from "@/components/ui";
 import { bookDemo, site } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Free 14-Day ASTRA Windows Endpoint Pilot",
+  title: "Free 14-Day SAVIO Windows Endpoint Pilot",
   description:
-    "Evaluate ASTRA on up to 10 Windows devices with guided setup, controlled remediation, verification and a final rollout review—free for 14 days.",
+    "Evaluate SAVIO on up to 10 Windows devices with guided setup, controlled remediation, verification and a final rollout review—free for 14 days.",
   keywords: [
     "free IT automation pilot",
     "Windows endpoint pilot",
-    "ASTRA free trial",
+    "SAVIO free trial",
     "endpoint automation proof of concept",
     "AI IT support pilot India",
   ],
   alternates: { canonical: "/pilot/" },
   openGraph: {
-    title: "Free 14-Day ASTRA Controlled Endpoint Pilot",
+    title: "Free 14-Day SAVIO Controlled Endpoint Pilot",
     description:
       "Test evidence-first Windows automation on up to 10 devices with clear approvals, verified outcomes and no credit card.",
     url: "/pilot/",
@@ -44,7 +44,7 @@ const stages = [
 
 const included = [
   "Pilot-planning session for devices, issues and action boundaries",
-  "ASTRA access for up to 10 supported Windows endpoints",
+  "SAVIO access for up to 10 supported Windows endpoints",
   "Guidance for Windows agent deployment and removal",
   "Live endpoint health, telemetry and inventory visibility",
   "Evidence-first diagnosis using endpoint context and approved knowledge",
@@ -66,7 +66,7 @@ const success = [
 
 const faqs = [
   {
-    question: "Is the guided ASTRA pilot really free?",
+    question: "Is the guided SAVIO pilot really free?",
     answer:
       "Yes. The 14-day guided pilot for up to 10 supported Windows devices is free and does not require a credit card. A paid rollout begins only after separate approval.",
   },
@@ -78,17 +78,17 @@ const faqs = [
   {
     question: "Which devices can join the pilot?",
     answer:
-      "The ASTRA endpoint agent currently supports 64-bit Windows 10 and Windows 11 devices. The pilot group should represent normal users without beginning on business-critical or unusually sensitive machines.",
+      "The SAVIO endpoint agent currently supports 64-bit Windows 10 and Windows 11 devices. The pilot group should represent normal users without beginning on business-critical or unusually sensitive machines.",
   },
   {
-    question: "Does ASTRA run every fix automatically?",
+    question: "Does SAVIO run every fix automatically?",
     answer:
       "No. Each action is classified as automatic, approval-required or administrator-only. Eligible automatic actions can be acknowledged and executed immediately when an endpoint is online, but sensitive actions remain with authorized people.",
   },
   {
     question: "What happens at the end of the pilot?",
     answer:
-      "The final review documents verified outcomes, exceptions and next steps. You can expand, continue with changes, run ASTRA alongside existing tools or stop and remove the agent. No paid rollout starts automatically.",
+      "The final review documents verified outcomes, exceptions and next steps. You can expand, continue with changes, run SAVIO alongside existing tools or stop and remove the agent. No paid rollout starts automatically.",
   },
 ];
 
@@ -97,7 +97,7 @@ const schema = {
   "@graph": [
     {
       "@type": "Service",
-      name: "ASTRA Controlled Endpoint Pilot",
+      name: "SAVIO Controlled Endpoint Pilot",
       url: "https://technomateai.com/pilot/",
       provider: { "@id": "https://technomateai.com/#organization" },
       areaServed: { "@type": "Country", name: "India" },
@@ -130,7 +130,7 @@ export default function PilotPage() {
           <div className="mx-auto max-w-4xl text-center">
             <Badge><ShieldCheck className="h-3.5 w-3.5 text-brand-500" /> Controlled endpoint pilot</Badge>
             <h1 className="mt-5 text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Prove ASTRA on 10 Windows devices before a wider rollout
+              Prove SAVIO on 10 Windows devices before a wider rollout
             </h1>
             <p className="mx-auto mt-6 max-w-3xl text-lg leading-relaxed text-secondary-token">
               Run a free, guided 14-day pilot with agreed issue types, clear approval boundaries and verification after every attempted fix. Keep the evidence and make a rollout decision without an automatic paid commitment.
@@ -179,7 +179,7 @@ export default function PilotPage() {
               <h2 className="mt-3 text-3xl font-bold tracking-tight">Software, guidance and review—not an unattended trial</h2>
               <p className="mt-4 text-secondary-token">The pilot is structured to help your IT owner evaluate real operating fit while keeping the device group and action catalogue controlled.</p>
               <Link href="/security/" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">
-                Review ASTRA security controls <ArrowRight className="h-4 w-4" />
+                Review SAVIO security controls <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
             <ul className="grid gap-3">
@@ -243,7 +243,7 @@ export default function PilotPage() {
 
       <Section className="pb-28">
         <Container>
-          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center text-white">
+          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-cyan-500 px-8 py-14 text-center text-white">
             <Gauge className="mx-auto h-10 w-10" />
             <h2 className="mt-4 text-3xl font-bold">Bring one recurring Windows issue</h2>
             <p className="mx-auto mt-4 max-w-xl text-white/85">We will map the evidence, permitted action, approver and verification step for your free 10-device pilot.</p>

@@ -305,7 +305,7 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           return (
             <div className="rounded-xl p-5 flex items-start justify-between gap-4" style={card}>
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg shrink-0" style={{ background: trackerOn ? "rgba(154,47,187,0.12)" : "rgba(100,116,139,0.12)", color: trackerOn ? "var(--accent)" : "var(--text-secondary)" }}>
+                <div className="p-2 rounded-lg shrink-0" style={{ background: trackerOn ? "rgba(37,99,235,0.12)" : "rgba(100,116,139,0.12)", color: trackerOn ? "var(--accent)" : "var(--text-secondary)" }}>
                   <Clock size={18} />
                 </div>
                 <div>
@@ -313,7 +313,7 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
                     <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Workforce Insights (Tracker)</h2>
                     <span className="text-xs font-medium px-2 py-0.5 rounded-full"
                       style={trackerOn
-                        ? { color: "var(--accent)", background: "rgba(154,47,187,0.12)" }
+                        ? { color: "var(--accent)", background: "rgba(37,99,235,0.12)" }
                         : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
                       {trackerOn ? "Enabled" : "Off"}
                     </span>

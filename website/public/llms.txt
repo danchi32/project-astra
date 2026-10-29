@@ -1,12 +1,12 @@
-# Technomate IT-Solution and ASTRA
+# Technomate IT-Solution and SAVIO
 
-Technomate IT-Solution Private Limited builds ASTRA, AI System Administrator software for business Windows fleets. ASTRA gathers endpoint evidence, searches enterprise knowledge, diagnoses routine IT issues, applies only permitted remediations, and verifies the result. Sensitive actions remain behind code-enforced approval tiers.
+Technomate IT-Solution Private Limited builds SAVIO, AI System Administrator software for business Windows fleets. SAVIO gathers endpoint evidence, searches enterprise knowledge, diagnoses routine IT issues, applies only permitted remediations, and verifies the result. Sensitive actions remain behind code-enforced approval tiers.
 
 Primary audience: organizations with roughly 25–500 Windows endpoints, lean IT teams, and office or remote employees.
 
 ## Key pages
 
-- Product: https://technomateai.com/astra/
+- Product: https://technomateai.com/savio/
 - Definition guide: https://technomateai.com/blog/what-is-an-ai-system-administrator/
 - Security and controls: https://technomateai.com/security/
 - Pricing: https://technomateai.com/pricing/
@@ -24,4 +24,4 @@ Primary audience: organizations with roughly 25–500 Windows endpoints, lean IT
 - Uses allowlisted commands and records mutations and agent commands.
 - Offers a 14-day full-product trial without a credit card.
 
-ASTRA supports IT administrators; it does not claim to replace accountable human IT leadership.
+SAVIO supports IT administrators; it does not claim to replace accountable human IT leadership.

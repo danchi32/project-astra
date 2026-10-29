@@ -85,10 +85,10 @@ Not automatically. The right architecture depends on current device management, 
 
 ### How should a company evaluate one?
 
-Start with a small group of representative Windows devices. Measure diagnosis quality, approval behavior, remediation success, audit completeness and user impact. Review [ASTRA security controls](/security/) and use a [limited-device pilot](/pilot/) before wider rollout.
+Start with a small group of representative Windows devices. Measure diagnosis quality, approval behavior, remediation success, audit completeness and user impact. Review [SAVIO security controls](/security/) and use a [limited-device pilot](/pilot/) before wider rollout.
 
 ## Is it right for your team?
 
 If your IT team spends most of its week on repetitive, resolvable issues — and you want automation you can actually trust — an AI System Administrator is worth a look.
 
-[ASTRA](/astra/) is AI System Administrator software for Windows fleets that gathers evidence, heals issues within approval tiers and records the result. [Book a demo](/contact/) to see the governed workflow on a real device.
+[SAVIO](/savio/) is AI System Administrator software for Windows fleets that gathers evidence, heals issues within approval tiers and records the result. [Book a demo](/contact/) to see the governed workflow on a real device.

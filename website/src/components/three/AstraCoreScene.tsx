@@ -13,13 +13,13 @@ import * as THREE from "three";
 
 /* Device nodes orbiting the core. Each rides its own tilted, rotating ring. */
 const NODES = [
-  { radius: 2.4, speed: 0.22, tilt: 0.35, size: 0.16, color: "#c86ce7" },
-  { radius: 3.1, speed: -0.16, tilt: -0.5, size: 0.13, color: "#b246d4" },
-  { radius: 2.8, speed: 0.19, tilt: 0.9, size: 0.15, color: "#e04ad0" },
-  { radius: 3.5, speed: -0.13, tilt: -0.25, size: 0.12, color: "#d8b4fe" },
-  { radius: 2.1, speed: 0.26, tilt: 1.2, size: 0.14, color: "#d946ef" },
-  { radius: 3.9, speed: -0.1, tilt: 0.6, size: 0.11, color: "#a855f7" },
-  { radius: 2.6, speed: 0.17, tilt: -0.9, size: 0.13, color: "#9a2fbb" },
+  { radius: 2.4, speed: 0.22, tilt: 0.35, size: 0.16, color: "#60a5fa" },
+  { radius: 3.1, speed: -0.16, tilt: -0.5, size: 0.13, color: "#3b82f6" },
+  { radius: 2.8, speed: 0.19, tilt: 0.9, size: 0.15, color: "#22d3ee" },
+  { radius: 3.5, speed: -0.13, tilt: -0.25, size: 0.12, color: "#bae6fd" },
+  { radius: 2.1, speed: 0.26, tilt: 1.2, size: 0.14, color: "#06b6d4" },
+  { radius: 3.9, speed: -0.1, tilt: 0.6, size: 0.11, color: "#38bdf8" },
+  { radius: 2.6, speed: 0.17, tilt: -0.9, size: 0.13, color: "#2563eb" },
 ];
 
 function OrbitNode({
@@ -87,8 +87,8 @@ function Core() {
         <mesh>
           <icosahedronGeometry args={[1.15, 4]} />
           <MeshDistortMaterial
-            color="#9a2fbb"
-            emissive="#7f2599"
+            color="#2563eb"
+            emissive="#1e3a8a"
             emissiveIntensity={0.6}
             roughness={0.15}
             metalness={0.6}
@@ -99,7 +99,7 @@ function Core() {
         {/* Wireframe halo */}
         <Icosahedron ref={shell} args={[1.45, 1]}>
           <meshBasicMaterial
-            color="#c86ce7"
+            color="#67e8f9"
             wireframe
             transparent
             opacity={0.18}
@@ -134,7 +134,7 @@ function Scene() {
         size={2}
         speed={0.3}
         opacity={0.5}
-        color="#dd9cf2"
+        color="#93c5fd"
       />
     </group>
   );
@@ -171,9 +171,9 @@ export default function AstraCoreScene() {
       }}
     >
       <ambientLight intensity={0.6} />
-      <pointLight position={[5, 5, 5]} intensity={40} color="#b246d4" />
-      <pointLight position={[-5, -3, 2]} intensity={30} color="#e04ad0" />
-      <pointLight position={[0, 0, 3]} intensity={12} color="#c86ce7" />
+      <pointLight position={[5, 5, 5]} intensity={40} color="#3b82f6" />
+      <pointLight position={[-5, -3, 2]} intensity={30} color="#22d3ee" />
+      <pointLight position={[0, 0, 3]} intensity={12} color="#67e8f9" />
       <Scene />
     </Canvas>
   );

@@ -1,7 +1,7 @@
 """Billing identity and invoice history.
 
 Deliberately separate from BillingService, which talks to the payment rails. This module
-never calls a provider — it reads and writes what ASTRA knows about who is being billed and
+never calls a provider — it reads and writes what SAVIO knows about who is being billed and
 what has been billed. Keeping them apart means a provider outage can't stop someone editing
 their VAT number, and a change to invoice history can't accidentally touch a subscription.
 """

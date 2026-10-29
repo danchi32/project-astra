@@ -1,4 +1,4 @@
-"""Encryption for credentials an organization entrusts to ASTRA.
+"""Encryption for credentials an organization entrusts to SAVIO.
 
 A customer's Freshservice API key can read every ticket, contact and asset in their
 helpdesk. Storing it as a column value means one database dump exposes every customer's

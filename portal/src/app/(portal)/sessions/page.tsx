@@ -244,14 +244,14 @@ export default function SessionsPage() {
                 <button key={t.key} onClick={() => setTab(t.key)}
                   className="px-2 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 shrink-0"
                   style={{
-                    background: on ? "rgba(154,47,187,0.12)" : "var(--surface)",
+                    background: on ? "rgba(37,99,235,0.12)" : "var(--surface)",
                     border: "1px solid var(--border)",
                     color: on ? "var(--accent)" : "var(--text-secondary)",
                   }}>
                   {t.label}
                   {n !== null && (
                     <span className="text-xs px-1.5 rounded-full"
-                      style={{ background: on ? "rgba(154,47,187,0.15)" : "var(--bg)" }}>{n}</span>
+                      style={{ background: on ? "rgba(37,99,235,0.15)" : "var(--bg)" }}>{n}</span>
                   )}
                 </button>
               );
@@ -261,7 +261,7 @@ export default function SessionsPage() {
           <select value={groupId} onChange={(e) => setGroupId(e.target.value)}
             className="px-2 py-1.5 rounded-lg text-sm font-medium outline-none max-w-[170px] shrink-0"
             style={{
-              background: groupId ? "rgba(154,47,187,0.1)" : "var(--surface)",
+              background: groupId ? "rgba(37,99,235,0.1)" : "var(--surface)",
               border: "1px solid var(--border)",
               color: groupId ? "var(--accent)" : "var(--text-primary)",
             }}>

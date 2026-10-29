@@ -108,7 +108,7 @@ class MeshCentralNotConfigured(MeshCentralError):
 
 @dataclass(frozen=True)
 class RelayEvent:
-    """One line from the relay's event stream, reduced to what ASTRA acts on."""
+    """One line from the relay's event stream, reduced to what SAVIO acts on."""
 
     msgid: int | None
     node_id: str | None
@@ -140,7 +140,7 @@ class MeshCentralClient:
     """A connection to the relay's control channel.
 
     Deliberately thin. The relay is the authority on what is happening to a device;
-    ASTRA's job is to authorise it, record it, and show it — not to reimplement it.
+    SAVIO's job is to authorise it, record it, and show it — not to reimplement it.
     """
 
     def __init__(
@@ -216,8 +216,8 @@ class MeshCentralClient:
         the server's certificate hash already inside it — so the device downloads one file
         and needs no configuration alongside it.
 
-        Nothing is bundled into the ASTRA installer, and that is the point. The relay is
-        what compiles and code-signs this binary; a copy vendored into ASTRA's installer
+        Nothing is bundled into the SAVIO installer, and that is the point. The relay is
+        what compiles and code-signs this binary; a copy vendored into SAVIO's installer
         would go stale against the relay's certificate, would have to be byte-identical
         across organisations that need different group ids, and would put a remote-access
         executable on the disk of every customer including those who never bought remote
@@ -247,7 +247,7 @@ class MeshCentralClient:
         """Mint the relay's own login cookie, without going through its login page.
 
         This is the piece that keeps MeshCentral invisible. The technician clicks a
-        button in the ASTRA portal and lands on a device's desktop; they never see, and
+        button in the SAVIO portal and lands on a device's desktop; they never see, and
         never need an account on, the relay.
 
         The format is the relay's, reproduced exactly — AES-256-GCM over the JSON, with
@@ -277,7 +277,7 @@ class MeshCentralClient:
         """A link that opens one device's desktop and nothing else.
 
         `viewmode=11` is the relay's desktop tab and `hide=31` strips its chrome — the
-        toolbar, the device list, the other tabs — so what lands in the ASTRA portal's
+        toolbar, the device list, the other tabs — so what lands in the SAVIO portal's
         iframe is a screen, not somebody else's product.
 
         `gotonode` takes the BARE node id, with any "node//" prefix stripped — MeshCentral's
@@ -336,7 +336,7 @@ class MeshCentralClient:
         account can reach this org's group and no other. Done over the control channel in a
         single connection.
 
-        The account password is random and never used — the browser logs in by a cookie ASTRA
+        The account password is random and never used — the browser logs in by a cookie SAVIO
         signs, never by password — so the account exists only to hold the group grant. Adding
         an account that already exists is treated as success, so a retry after a half-finished
         run completes rather than failing.
@@ -350,7 +350,7 @@ class MeshCentralClient:
         async with self.connect() as ws:
             mesh = await self._await_result(ws, {
                 "action": "createmesh", "meshname": mesh_name, "meshtype": 2,
-                "desc": "ASTRA remote support", "responseid": "astra"}, "createmesh")
+                "desc": "SAVIO remote support", "responseid": "astra"}, "createmesh")
             mesh_id = mesh.get("meshid")
             if not mesh_id:
                 raise MeshCentralError(
@@ -397,7 +397,7 @@ class MeshCentralClient:
     async def set_user_realname(self, *, user_id: str, realname: str) -> None:
         """Set a relay account's display name — the `{0}` the endpoint's consent prompt shows.
 
-        ASTRA calls this just before a session so the person being asked sees WHO wants in and
+        SAVIO calls this just before a session so the person being asked sees WHO wants in and
         WHY, on their own screen, in the relay's own dialog (see infra/relay/apply_consent_branding.py).
         The relay updates the in-memory user and the next desktop connect reads the new name;
         the relay caps realname at 256 characters, so this does too.

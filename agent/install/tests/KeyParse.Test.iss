@@ -14,7 +14,7 @@
 
 [Setup]
 AppId={{2C7A9E51-4F63-4D0B-8E22-6A5B1F3C7D94}
-AppName=ASTRA key-parse test
+AppName=SAVIO key-parse test
 AppVersion=0.0.0
 DefaultDirName={tmp}\astra-keyparse-test
 OutputDir=.

@@ -4,7 +4,7 @@ A ticket filed against the wrong person is worse than no ticket. Their SLA clock
 someone who never asked, the CSAT survey goes to a stranger, and the employee who actually
 has the problem never hears back about it — while believing help is on the way.
 
-So this resolves an email or it returns None, and None means ASTRA does not offer to raise
+So this resolves an email or it returns None, and None means SAVIO does not offer to raise
 a ticket at all. It never invents an address from a username and a domain: a guessed
 address either bounces or, worse, creates a plausible-looking contact in the customer's
 helpdesk that nobody owns.

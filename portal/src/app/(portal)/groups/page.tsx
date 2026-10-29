@@ -90,7 +90,7 @@ const BULK_ACTIONS: BulkAction[] = [
   { id: "uninstall_application", label: "Uninstall an application", tier: "admin", scope: "devices",
     destructive: true,
     field: { key: "app_name", label: "Application name", placeholder: "uTorrent" },
-    blurb: "Removes the named application from every device in the group. Cannot be undone from ASTRA." },
+    blurb: "Removes the named application from every device in the group. Cannot be undone from SAVIO." },
   { id: "logoff_session", label: "Sign everyone out", tier: "admin", scope: "sessions",
     destructive: true,
     blurb: "Signs out every session in the group. UNSAVED WORK IS LOST — Windows does not prompt." },
@@ -185,7 +185,7 @@ export default function GroupsPage() {
   return (
     <div className={pageShell}>
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <Boxes size={18} />
         </div>
         <div>
@@ -213,7 +213,7 @@ export default function GroupsPage() {
                 <button key={key} onClick={() => setKind(key)}
                   className="px-3 py-2 rounded-lg text-sm font-medium inline-flex items-center gap-1.5"
                   style={{
-                    background: on ? "rgba(154,47,187,0.12)" : "var(--surface)",
+                    background: on ? "rgba(37,99,235,0.12)" : "var(--surface)",
                     border: "1px solid var(--border)",
                     color: on ? "var(--accent)" : "var(--text-secondary)",
                   }}>
@@ -494,7 +494,7 @@ function BulkActionDialog({
                           onClick={() => { setPicked(a); setValue(""); setTyped(""); }}
                           className="w-full text-left px-3 py-2 flex flex-col gap-0.5"
                           style={{
-                            background: on ? "rgba(154,47,187,0.1)" : "transparent",
+                            background: on ? "rgba(37,99,235,0.1)" : "transparent",
                             borderBottom: "1px solid var(--border)",
                           }}>
                           <span className="text-sm font-medium flex items-center gap-1.5"
@@ -538,7 +538,7 @@ function BulkActionDialog({
                 <p className="text-xs rounded-lg px-2 py-1.5 mb-2"
                   style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444" }}>
                   This reaches {group.device_count} device{group.device_count === 1 ? "" : "s"} and
-                  cannot be undone from ASTRA.
+                  cannot be undone from SAVIO.
                 </p>
                 <label className="text-xs" style={{ color: "var(--text-secondary)" }}>
                   Type <span className="font-mono font-semibold">{group.name}</span> to confirm

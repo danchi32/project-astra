@@ -9,18 +9,18 @@ from app.models.base import GUID, Base, TimestampMixin
 
 
 class EscalationState(str, enum.Enum):
-    OFFERED = "offered"    # ASTRA asked; nobody has answered yet
+    OFFERED = "offered"    # SAVIO asked; nobody has answered yet
     RAISED = "raised"      # a ticket exists in the customer's helpdesk
     DECLINED = "declined"  # the user said no
     FAILED = "failed"      # we tried to raise it and the helpdesk refused or was down
 
 
 class SupportEscalation(TimestampMixin, Base):
-    """One problem ASTRA could not fix, handed to a human.
+    """One problem SAVIO could not fix, handed to a human.
 
     Three jobs in one row, which is why it exists as a table rather than a log line:
 
-      1. **Consent.** A row in `offered` is the record that ASTRA asked. Raising a ticket
+      1. **Consent.** A row in `offered` is the record that SAVIO asked. Raising a ticket
          checks for it, so "ask before raising" is enforced in code rather than hoped for
          in a prompt — the same rule the remediation tiers already follow.
       2. **Deduplication.** A user who reports the same thing three times because nothing
@@ -30,7 +30,7 @@ class SupportEscalation(TimestampMixin, Base):
       3. **The record.** Which ticket was raised, where, and when — so the assistant can
          answer "you already have ticket #123" instead of opening another.
 
-    ASTRA is not the system of record for the ticket. The customer's helpdesk owns its
+    SAVIO is not the system of record for the ticket. The customer's helpdesk owns its
     lifecycle; this row only remembers that we handed it over.
     """
 

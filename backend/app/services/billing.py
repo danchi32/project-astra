@@ -134,7 +134,7 @@ class BillingService:
         provider = get_provider(provider_name)
         if provider is None or not provider.can_checkout:
             raise ValidationError(
-                "That payment method isn't available. Contact ASTRA support."
+                "That payment method isn't available. Contact SAVIO support."
             )
         used = await self.used_seats(org.id)
         quantity = max(1, quantity, used)  # never sell fewer licenses than are in use

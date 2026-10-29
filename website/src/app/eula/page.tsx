@@ -3,9 +3,9 @@ import { LegalPage } from "@/components/LegalPage";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "ASTRA Agent — End User Licence Agreement",
+  title: "SAVIO Agent — End User Licence Agreement",
   description:
-    "Licence terms for the ASTRA Windows agent installed on managed devices.",
+    "Licence terms for the SAVIO Windows agent installed on managed devices.",
   alternates: { canonical: "/eula/" },
 };
 
@@ -13,12 +13,12 @@ export default function EulaPage() {
   const { legal } = site;
   return (
     <LegalPage
-      title="ASTRA Agent — End User Licence Agreement"
+      title="SAVIO Agent — End User Licence Agreement"
       effective="2026-09-26"
       reviewed
       intro={
         <>
-          These terms govern the ASTRA Windows agent &mdash; the software installed on
+          These terms govern the SAVIO Windows agent &mdash; the software installed on
           managed devices. They are separate from the{" "}
           <a href="/terms/">Terms of Service</a>, which govern the hosted platform,
           because this is software that runs on <em>your</em> computers.
@@ -28,7 +28,7 @@ export default function EulaPage() {
       <h2>1. Licence</h2>
       <p>
         {legal.displayName} grants you a non-exclusive, non-transferable, revocable
-        licence to install and run the ASTRA agent on devices you own or control, for the
+        licence to install and run the SAVIO agent on devices you own or control, for the
         number of licences covered by your active subscription and for its duration.
       </p>
 
@@ -48,7 +48,7 @@ export default function EulaPage() {
       <ul>
         <li>
           reports device inventory, performance telemetry, installed software, services,
-          Windows Update status and event log entries to the ASTRA platform;
+          Windows Update status and event log entries to the SAVIO platform;
         </li>
         <li>
           <strong>executes remediation actions on the device</strong>, drawn from a fixed
@@ -87,7 +87,7 @@ export default function EulaPage() {
           disabled;
         </li>
         <li>is logged in the organisation&rsquo;s audit trail;</li>
-        <li>can be started only by a person, never by ASTRA&rsquo;s AI.</li>
+        <li>can be started only by a person, never by SAVIO&rsquo;s AI.</li>
       </ul>
       <p>
         The remote-support service is removed automatically when the feature is switched
@@ -107,7 +107,7 @@ export default function EulaPage() {
         The agent checks for updates periodically and applies them automatically. Updates
         are signed, and the agent verifies the signature against a public key built into
         the installed software before applying anything. An update that does not verify is
-        refused. The private signing key is never held by the ASTRA backend, so a
+        refused. The private signing key is never held by the SAVIO backend, so a
         compromise of our servers cannot push software to your devices.
       </p>
 

@@ -3,19 +3,21 @@
 @tailwind utilities;
 
 :root {
-  --bg: #faf7fd;
+  --bg: #f4f8ff;
   --surface: #ffffff;
-  --border: #ecdcf5;
+  --border: #dbe6f7;
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --accent: #9a2fbb;
+  --accent: #2563eb;
+  /* The agent's cyan: signal, eyes, "AI is working". Decoration only, never text on white. */
+  --glow: #06b6d4;
 
-  /* Chart series. Two slots only, and deliberately purple/orange rather than two
-     neighbouring hues: the pair was validated for deuteranopia separation against both
-     surfaces, and adjacent purples fail that badly while looking fine to most people. */
-  --chart-series-1: #b246d4;
+  /* Chart series. Two slots only, and deliberately blue/orange rather than two
+     neighbouring hues: blue/orange is the classic pair that survives deuteranopia against
+     both surfaces, where adjacent blues fail badly while looking fine to most people. */
+  --chart-series-1: #2563eb;
   --chart-series-2: #c2620a;
-  --chart-grid: #ecdcf5;
+  --chart-grid: #dbe6f7;
 
   /* Status. Reserved for state — never borrowed as a third series colour. These are the
      text-weight steps; the tinted backgrounds they sit on are mixed from them at use. */
@@ -25,18 +27,22 @@
 }
 
 .dark {
-  --bg: #0b0715;
-  --surface: #16112a;
-  --border: #322350;
-  --text-primary: #f5f1fb;
-  --text-secondary: #b6abcb;
-  --accent: #c86ce7;
+  --bg: #070d1a;
+  --surface: #0f1a2e;
+  --border: #1e2d4a;
+  --text-primary: #eef4ff;
+  --text-secondary: #9fb0cc;
+  /* #3b82f6 rather than a lighter step: it is also the fill behind white button text, and
+     #60a5fa drops that to ~2.5:1. This keeps white text at ~3.7:1 and links on the dark
+     surfaces above 4.5:1. */
+  --accent: #3b82f6;
+  --glow: #22d3ee;
 
   /* Re-stepped for the dark surface rather than reused — the light steps sit outside the
-     dark lightness band and lose contrast against #16112a. */
-  --chart-series-1: #b96be0;
+     dark lightness band and lose contrast against #0f1a2e. */
+  --chart-series-1: #60a5fa;
   --chart-series-2: #cf7d1f;
-  --chart-grid: #322350;
+  --chart-grid: #1e2d4a;
 
   --health-good: #4ade80;
   --health-warn: #fbbf24;
@@ -45,6 +51,13 @@
 
 body {
   background-color: var(--bg);
+  /* Two faint washes off the brand colours so an empty page reads as the product, not a
+     blank sheet. Mixed from the tokens, so both themes get the same effect at their own
+     strength; fixed so it never scrolls into the middle of a table. */
+  background-image:
+    radial-gradient(60rem 40rem at 100% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%),
+    radial-gradient(50rem 36rem at -10% 110%, color-mix(in srgb, var(--glow) 7%, transparent), transparent 70%);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: "Inter", system-ui, sans-serif;
 }

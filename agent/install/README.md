@@ -1,4 +1,4 @@
-# Deploying the ASTRA Windows agent
+# Deploying the SAVIO Windows agent
 
 The portal hands an admin a ready-to-run installer with their organization's
 enrollment key already in it. Two shapes, same agent, same install logic:

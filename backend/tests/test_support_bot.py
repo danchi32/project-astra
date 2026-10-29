@@ -111,7 +111,7 @@ async def test_another_organizations_runbook_is_never_used(
 async def test_an_undocumented_question_offers_a_human_instead_of_guessing(
     client, user_headers
 ):
-    """Nothing in ASTRA's manual is about expense claims, and saying so is the answer."""
+    """Nothing in SAVIO's manual is about expense claims, and saying so is the answer."""
     response = await client.post(
         PORTAL, json={"message": "how do I claim expenses"}, headers=user_headers
     )
@@ -213,7 +213,7 @@ async def test_it_will_not_be_used_as_a_free_general_chatbot(client):
 
     assert body["grounded"] is False
     assert body["sources"] == []
-    assert "ASTRA" in body["answer"]
+    assert "SAVIO" in body["answer"]
 
 
 async def test_one_address_cannot_ask_without_limit(client):

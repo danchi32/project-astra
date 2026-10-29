@@ -128,7 +128,7 @@ def _validate_timezone(value: Any) -> str:
         raise RemediationError("A time zone is required.")
     if name not in SAFE_TIMEZONES:
         raise RemediationError(
-            f"'{name}' is not a Windows time zone ASTRA can set. Use an identifier such as "
+            f"'{name}' is not a Windows time zone SAVIO can set. Use an identifier such as "
             "'India Standard Time' or 'Eastern Standard Time'."
         )
     return name
@@ -584,7 +584,7 @@ class RemediationService:
         for protected in UNINSTALL_NEVER:
             if protected in lowered:
                 raise RemediationError(
-                    f"'{name}' is protected and can never be uninstalled by ASTRA."
+                    f"'{name}' is protected and can never be uninstalled by SAVIO."
                 )
 
         if source is not RemediationSource.ASSISTANT:
@@ -596,7 +596,7 @@ class RemediationService:
         if not any(p and p in lowered for p in patterns):
             raise RemediationError(
                 f"'{name}' is not on this organization's restricted-software list. "
-                "ASTRA only proposes removing software the organization has restricted — "
+                "SAVIO only proposes removing software the organization has restricted — "
                 "add it there first, or have an admin remove it from the device's Software tab."
             )
         return name

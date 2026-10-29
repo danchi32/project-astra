@@ -366,7 +366,7 @@ async def test_a_failed_escalation_can_be_retried_later(session_factory, admin_u
 
 def test_the_dossier_carries_the_users_words_and_what_was_tried():
     """The reason this beats an ordinary ticket. A technician should not have to redo the
-    investigation ASTRA already did."""
+    investigation SAVIO already did."""
     d = Dossier(
         problem="mera laptop bahut slow hai",
         hostname="DESKTOP-HRIUG3P", os_version="Windows 11 Enterprise 25H2",
@@ -414,7 +414,7 @@ def test_no_applicable_fix_is_stated_rather_than_left_blank():
 def test_the_subject_leads_with_the_users_own_words():
     """It is what they will say on the phone when they chase it."""
     subject = Dossier(problem="outlook khul nahi raha", hostname="PC-1").subject()
-    assert subject.startswith("[ASTRA] outlook khul nahi raha")
+    assert subject.startswith("[SAVIO] outlook khul nahi raha")
     assert "PC-1" in subject
 
 
@@ -427,7 +427,7 @@ def test_user_text_cannot_inject_html_into_the_ticket():
 
 
 def test_a_ticket_is_tagged_so_the_customer_can_report_on_it():
-    """Their reporting has to be able to answer "how many did ASTRA raise" — that number
+    """Their reporting has to be able to answer "how many did SAVIO raise" — that number
     is the renewal conversation."""
     assert "astra" in TicketRequest(
         requester_email="a@b.com", subject="s", description_html="d"
@@ -501,7 +501,7 @@ async def test_consent_is_the_reply_to_the_offer_not_a_later_stray_yes(
 
 
 async def test_raising_a_ticket_is_audited(session_factory, admin_user):
-    """ASTRA creates a record in someone else's system, on a named employee's behalf,
+    """SAVIO creates a record in someone else's system, on a named employee's behalf,
     carrying their device telemetry — and the caller is the model's tool loop. The
     escalation row is the business record; this is the trail an investigator reads."""
     async with session_factory() as session:

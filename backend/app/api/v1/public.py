@@ -38,7 +38,7 @@ _settings = get_settings()
 #: voice of the in-product IT assistant, which is the wrong voice for a stranger on the
 #: marketing site who has never seen the product.
 _OFF_TOPIC_REPLY = (
-    "I can only help with questions about ASTRA and Technomate IT-Solution — what the "
+    "I can only help with questions about SAVIO and Technomate IT-Solution — what the "
     "product does, pricing, rollout, security, or getting in touch with the team. "
     "Ask me one of those and I'll do my best."
 )
@@ -54,14 +54,14 @@ _assistant_limiter = FixedWindowLimiter(
 @router.post(
     "/assistant",
     response_model=AssistantReply,
-    summary="Ask the website assistant about ASTRA (no account required)",
+    summary="Ask the website assistant about SAVIO (no account required)",
 )
 async def ask_public_assistant(
     body: AssistantAsk,
     request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> AssistantReply:
-    """Answer a visitor's question from the public FAQ and ASTRA's published help articles.
+    """Answer a visitor's question from the public FAQ and SAVIO's published help articles.
 
     Never touches customer data, never takes an action, and stores nothing about whoever
     asked.

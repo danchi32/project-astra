@@ -24,6 +24,9 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { DashboardMockup, AiConsole, SelfHealingFlow } from "@/components/visuals";
 import { TiltCard, Counter, Magnetic, Marquee } from "@/components/enhance";
 import { Hero3D } from "@/components/three/Hero3D";
+import { AgentActivity } from "@/components/AgentActivity";
+import { TelemetryField } from "@/components/TelemetryField";
+import { SavioMark } from "@/components/SavioMark";
 import { useContent, Rich } from "@/lib/content";
 import { bookDemo, site } from "@/lib/site";
 import { statCards, usePlatformStats } from "@/lib/platformStats";
@@ -39,7 +42,7 @@ const pillarDefaults = [
     desc: "Business-grade laptops, desktops, workstations and networking gear — sourced, configured and delivered ready to work.",
   },
   {
-    title: "ASTRA — AI System Admin",
+    title: "SAVIO — AI System Admin",
     desc: "Our AI IT agent that watches every device, diagnoses issues, and self-heals them — with human approval where it matters.",
   },
 ];
@@ -79,7 +82,7 @@ export function HomeContent() {
   ]);
   const consoleBullets = list<string>("home.console.bullets", [
     "Live device health & telemetry",
-    "ASTRA activity stream in real time",
+    "SAVIO activity stream in real time",
     "Drill into any endpoint instantly",
   ]);
   const teaserBullets = list<string>("home.teaser.bullets", [
@@ -112,7 +115,7 @@ export function HomeContent() {
                   <Rich
                     text={c(
                       "home.hero.title",
-                      "IT that runs itself,\npowered by [[ASTRA AI]]",
+                      "IT that runs itself,\npowered by [[SAVIO AI]]",
                     )}
                   />
                 </h1>
@@ -122,7 +125,7 @@ export function HomeContent() {
                   <Rich
                     text={c(
                       "home.hero.subtitle",
-                      "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **ASTRA**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
+                      "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **SAVIO**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
                     )}
                   />
                 </p>
@@ -135,8 +138,8 @@ export function HomeContent() {
                       <CalendarCheck className="h-4 w-4" />
                     </Button>
                   </Magnetic>
-                  <Button href="/astra" variant="secondary">
-                    {c("home.hero.cta2", "See how ASTRA works")}
+                  <Button href="/savio" variant="secondary">
+                    {c("home.hero.cta2", "See how SAVIO works")}
                   </Button>
                 </div>
               </Reveal>
@@ -155,9 +158,12 @@ export function HomeContent() {
               </Reveal>
             </div>
 
-            {/* 3D ASTRA core */}
+            {/* 3D SAVIO core, with the agent's live activity floating around it */}
             <Reveal delay={0.15} className="flex justify-center">
-              <Hero3D />
+              <div className="relative w-full max-w-[520px]">
+                <Hero3D />
+                <AgentActivity />
+              </div>
             </Reveal>
           </div>
 
@@ -226,10 +232,11 @@ export function HomeContent() {
         </Section>
       )}
 
-      <Section className="pb-8">
+      <Section className="relative isolate overflow-hidden pb-8">
+        <TelemetryField />
         <Container>
           <Reveal>
-            <SectionHeading eyebrow={c("home.outcomesHead.eyebrow", "Why teams choose ASTRA")} title={c("home.outcomesHead.title", "Less firefighting. More control.")} subtitle={c("home.outcomesHead.subtitle", "Turn endpoint signals into safe, verified action — without adding another dashboard your team has to watch all day.")} />
+            <SectionHeading eyebrow={c("home.outcomesHead.eyebrow", "Why teams choose SAVIO")} title={c("home.outcomesHead.title", "Less firefighting. More control.")} subtitle={c("home.outcomesHead.subtitle", "Turn endpoint signals into safe, verified action — without adding another dashboard your team has to watch all day.")} />
           </Reveal>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {outcomes.map((outcome, i) => {
@@ -249,7 +256,8 @@ export function HomeContent() {
       </Section>
 
       {/* -------------------------------------------------------- PILLARS */}
-      <Section className="pt-6">
+      <Section className="relative isolate overflow-hidden pt-6">
+        <TelemetryField flip />
         <Container>
           <Reveal>
             <SectionHeading
@@ -302,7 +310,7 @@ export function HomeContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "home.console.subtitle",
-                    "Every device, every metric, every action ASTRA takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
+                    "Every device, every metric, every action SAVIO takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
                   )}
                 </p>
                 <ul className="mt-6 space-y-3">
@@ -322,8 +330,9 @@ export function HomeContent() {
         </Container>
       </Section>
 
-      {/* ---------------------------------------------------- ASTRA TEASER */}
-      <Section>
+      {/* ---------------------------------------------------- SAVIO TEASER */}
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField />
         <Container>
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <Reveal>
@@ -331,9 +340,9 @@ export function HomeContent() {
             </Reveal>
             <div>
               <Reveal>
-                <Badge>
-                  <Sparkles className="h-3.5 w-3.5 text-brand-500" />{" "}
-                  {c("home.teaser.badge", "Meet ASTRA")}
+                <Badge className="py-1.5 pl-1.5">
+                  <SavioMark size={22} />
+                  {c("home.teaser.badge", "Meet SAVIO")}
                 </Badge>
               </Reveal>
               <Reveal delay={0.05}>
@@ -350,7 +359,7 @@ export function HomeContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "home.teaser.subtitle",
-                    "ASTRA follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
+                    "SAVIO follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
                   )}
                 </p>
               </Reveal>
@@ -367,8 +376,8 @@ export function HomeContent() {
               <Reveal delay={0.2}>
                 <div className="mt-8">
                   <Magnetic>
-                    <Button href="/astra">
-                      {c("home.teaser.cta", "See everything ASTRA does")}{" "}
+                    <Button href="/savio">
+                      {c("home.teaser.cta", "See everything SAVIO does")}{" "}
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Magnetic>
@@ -380,11 +389,12 @@ export function HomeContent() {
       </Section>
 
       {/* --------------------------------------------------- SELF-HEALING */}
-      <Section className="bg-surface">
+      <Section className="relative isolate overflow-hidden bg-surface">
+        <TelemetryField flip />
         <Container>
           <Reveal>
             <SectionHeading
-              eyebrow={c("home.healingHead.eyebrow", "How ASTRA heals")}
+              eyebrow={c("home.healingHead.eyebrow", "How SAVIO heals")}
               title={c("home.healingHead.title", "Evidence before action — every single time")}
               subtitle={c(
                 "home.healingHead.subtitle",
@@ -404,16 +414,22 @@ export function HomeContent() {
       <Section className="pb-28">
         <Container>
           <Reveal>
-            <div className="grain relative overflow-hidden rounded-3xl border border-token bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center sm:px-16">
+            <div className="grain relative isolate overflow-hidden rounded-3xl border border-token bg-gradient-to-br from-brand-600 via-blue-600 to-cyan-500 px-8 py-14 text-center sm:px-16">
               <div className="absolute inset-0 grid-bg opacity-20" />
+              <TelemetryField className="opacity-70" />
               <div className="relative">
+                <div className="mb-5 flex justify-center">
+                  <span className="rounded-2xl bg-white/15 p-1.5 ring-1 ring-white/30">
+                    <SavioMark size={52} />
+                  </span>
+                </div>
                 <h2 className="text-3xl font-bold text-white sm:text-4xl">
                   {c("home.cta.title", "Ready to put your IT on autopilot?")}
                 </h2>
                 <p className="mx-auto mt-4 max-w-xl text-white/85">
                   {c(
                     "home.cta.subtitle",
-                    "Talk to our team about managed IT, hardware, and deploying ASTRA across your organization.",
+                    "Talk to our team about managed IT, hardware, and deploying SAVIO across your organization.",
                   )}
                 </p>
                 <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -431,7 +447,7 @@ export function HomeContent() {
                     href={site.appUrl}
                     className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
                   >
-                    {c("home.cta.btn2", "Launch ASTRA")}
+                    {c("home.cta.btn2", "Launch SAVIO")}
                   </a>
                 </div>
               </div>

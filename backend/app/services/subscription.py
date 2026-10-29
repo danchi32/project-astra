@@ -82,5 +82,5 @@ def read_only_reason(org: Organization) -> str:
     if org.subscription_status is SubscriptionStatus.PAST_DUE:
         return "Your last payment failed, so the account is read-only. Update your billing to continue."
     if org.subscription_status is SubscriptionStatus.SUSPENDED:
-        return "This organization has been suspended. Contact ASTRA support."
+        return "This organization has been suspended. Contact SAVIO support."
     return "Your subscription has ended. Renew to continue making changes."

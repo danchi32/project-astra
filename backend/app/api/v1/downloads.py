@@ -17,7 +17,7 @@ from app.services.exceptions import NotFoundError
 router = APIRouter(prefix="/downloads", tags=["downloads"])
 
 
-@router.get("/uninstaller", summary="Download the ASTRA agent uninstaller (zip)")
+@router.get("/uninstaller", summary="Download the SAVIO agent uninstaller (zip)")
 async def download_uninstaller() -> FileResponse:
     # Org-agnostic: no secrets or per-org data, so it's a plain static download.
     if not UNINSTALLER_ZIP.is_file():

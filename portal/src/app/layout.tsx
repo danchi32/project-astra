@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "ASTRA — Enterprise AI Operations",
+  title: "SAVIO — Enterprise AI Operations",
   description: "AI-powered IT operations platform",
 };
 

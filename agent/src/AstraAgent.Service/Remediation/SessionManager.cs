@@ -86,7 +86,7 @@ public static class SessionManager
                 $"Could not show the message on session {sessionId} (error "
                 + $"{Marshal.GetLastWin32Error()}).");
         return (true, $"Message shown on session {sessionId}. It is one-way — there is no reply "
-                    + "for ASTRA to collect.");
+                    + "for SAVIO to collect.");
     }
 
     /// <summary>The part of the check that does not need a live machine: is this a session id

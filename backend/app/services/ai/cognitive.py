@@ -1,4 +1,4 @@
-"""The ASTRA cognitive engine: an agentic tool-use loop over read-only evidence tools."""
+"""The SAVIO cognitive engine: an agentic tool-use loop over read-only evidence tools."""
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -19,7 +19,7 @@ from app.services.ai.tools import TOOL_SCHEMAS, dispatch_tool
 
 logger = logging.getLogger("astra.cognitive")
 
-SYSTEM_PROMPT = """You are ASTRA, an enterprise AI System Administrator.
+SYSTEM_PROMPT = """You are SAVIO, an enterprise AI System Administrator.
 
 Your job is to help the user diagnose problems and GET THINGS DONE on managed Windows devices — you take actions, you don't just hand out instructions.
 
@@ -59,7 +59,7 @@ class CognitiveEngine:
     ) -> None:
         """`version` is the published assistant configuration to run as.
 
-        None means "run as ASTRA has always run": the constants below and every tool the
+        None means "run as SAVIO has always run": the constants below and every tool the
         engine advertises. That is what lets this parameter be added to a live system —
         the absent case is the current case, not a new one.
         """

@@ -31,7 +31,7 @@ function errDetail(err: unknown): string | undefined {
 
 const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
   admin: { color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
-  technician: { color: "#b246d4", bg: "rgba(59,130,246,0.1)" },
+  technician: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
   user: { color: "#64748b", bg: "rgba(100,116,139,0.1)" },
 };
 
@@ -115,7 +115,7 @@ function ProfileTab() {
 
   return (
     <div className="space-y-4 max-w-2xl">
-      <Panel title="Your profile" description="Update how your name appears across ASTRA.">
+      <Panel title="Your profile" description="Update how your name appears across SAVIO.">
         <form onSubmit={saveName} className="space-y-4">
           <Field label="Full name">
             <input value={name} onChange={(e) => setName(e.target.value)} required
@@ -188,7 +188,7 @@ function PreferencesTab() {
 
   return (
     <div className="max-w-2xl">
-      <Panel title="Appearance" description="Choose how ASTRA looks on this device.">
+      <Panel title="Appearance" description="Choose how SAVIO looks on this device.">
         <div className="grid grid-cols-3 gap-3">
           {THEMES.map(({ value, label, icon: Icon }) => {
             const active = theme === value;
@@ -197,7 +197,7 @@ function PreferencesTab() {
                 className="flex flex-col items-center gap-2 py-4 rounded-xl transition-colors"
                 style={{
                   border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-                  background: active ? "rgba(154,47,187,0.06)" : "var(--bg)",
+                  background: active ? "rgba(37,99,235,0.06)" : "var(--bg)",
                   color: active ? "var(--accent)" : "var(--text-secondary)",
                 }}>
                 <Icon size={20} />
@@ -721,7 +721,7 @@ function EmailTab() {
             selected={method === "shared"}
             onSelect={() => chooseSender("shared")}
             disabled={busy !== null || !sharedAvailable}
-            title="Send through ASTRA"
+            title="Send through SAVIO"
             body="Works immediately — nothing to set up. Mail arrives from our address, shown as coming from you."
             note={sharedAvailable ? "No DNS changes" : "Not included in your plan"}
           />
@@ -760,13 +760,13 @@ function EmailTab() {
         </Field>
 
         {/* Not a nag. Without a reply-to on the shared sender, an employee's reply reaches
-            ASTRA, where nobody reads a customer's staff mail — so their question is lost
+            SAVIO, where nobody reads a customer's staff mail — so their question is lost
             with no bounce and no trace. */}
         {sharedRevoked && (
           <p className="text-xs rounded-lg p-3"
             style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>
-            Your plan no longer includes sending through ASTRA. Your email is still going
-            out for now — set up your own sending domain below, or ask your ASTRA operator
+            Your plan no longer includes sending through SAVIO. Your email is still going
+            out for now — set up your own sending domain below, or ask your SAVIO operator
             to re-enable it.
           </p>
         )}
@@ -774,7 +774,7 @@ function EmailTab() {
         {method === "shared" && sharedAvailable && !settings?.reply_to && (
           <p className="text-xs rounded-lg p-3"
             style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>
-            Set a reply-to address. Mail goes out from ASTRA&apos;s address, so without one a
+            Set a reply-to address. Mail goes out from SAVIO&apos;s address, so without one a
             reply comes to us — and nobody here can answer your employee&apos;s question.
           </p>
         )}
@@ -795,7 +795,7 @@ function EmailTab() {
         description="Asset acknowledgements and other notifications will be sent from your own address once your domain is verified.">
         {!settings?.provider_ready && (
           <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid #f59e0b", color: "var(--text-primary)" }}>
-            The email provider isn’t configured on this deployment yet, so verification won’t complete. Contact your ASTRA operator.
+            The email provider isn’t configured on this deployment yet, so verification won’t complete. Contact your SAVIO operator.
           </div>
         )}
         <form onSubmit={save} className="space-y-4">
@@ -987,7 +987,7 @@ function HelpdeskTab() {
       const result = await verifyHelpdeskSettings();
       await queryClient.invalidateQueries({ queryKey: ["helpdesk-settings"] });
       setMsg(result.ok
-        ? { ok: true, text: "Connected. ASTRA can raise tickets in this helpdesk." }
+        ? { ok: true, text: "Connected. SAVIO can raise tickets in this helpdesk." }
         : { ok: false, text: result.detail ?? "Could not connect." });
     } catch (err) {
       setMsg({ ok: false, text: errDetail(err) ?? "Could not connect." });
@@ -1006,7 +1006,7 @@ function HelpdeskTab() {
     <div className="space-y-4">
       <Panel
         title="Freshservice"
-        description="When ASTRA can't fix something itself, it asks the user and — with their agreement — raises a ticket in your own helpdesk, with everything it already tried attached."
+        description="When SAVIO can't fix something itself, it asks the user and — with their agreement — raises a ticket in your own helpdesk, with everything it already tried attached."
       >
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -1018,7 +1018,7 @@ function HelpdeskTab() {
                 ? data.last_verified_at
                   ? `Last checked ${new Date(data.last_verified_at).toLocaleString()}`
                   : "Not checked yet — run a connection test."
-                : "Until this is connected, ASTRA won't offer to raise tickets."}
+                : "Until this is connected, SAVIO won't offer to raise tickets."}
             </p>
           </div>
           <Toggle on={data.enabled} disabled={busy !== null}
@@ -1070,13 +1070,13 @@ function HelpdeskTab() {
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Priority for ASTRA's tickets">
+          <Field label="Priority for SAVIO's tickets">
             <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}
               className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle}>
               {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
             <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-              ASTRA files at this level rather than judging urgency itself.
+              SAVIO files at this level rather than judging urgency itself.
             </p>
           </Field>
 
@@ -1142,7 +1142,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <SettingsIcon size={18} />
         </div>
         <div>

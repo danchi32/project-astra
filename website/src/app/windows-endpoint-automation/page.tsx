@@ -19,7 +19,7 @@ import { bookDemo, site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Windows Endpoint Automation & Self-Healing",
   description:
-    "Automate Windows endpoint monitoring, evidence collection and approved remediation with ASTRA. Keep human control, verification and audit history.",
+    "Automate Windows endpoint monitoring, evidence collection and approved remediation with SAVIO. Keep human control, verification and audit history.",
   keywords: [
     "Windows endpoint automation",
     "endpoint remediation automation",
@@ -97,12 +97,12 @@ const faqs = [
   {
     question: "What is Windows endpoint automation?",
     answer:
-      "Windows endpoint automation uses monitoring, policy and predefined actions to reduce repetitive device-management work. ASTRA adds an evidence-first reasoning loop, approval tiers and post-action verification.",
+      "Windows endpoint automation uses monitoring, policy and predefined actions to reduce repetitive device-management work. SAVIO adds an evidence-first reasoning loop, approval tiers and post-action verification.",
   },
   {
-    question: "Can ASTRA execute arbitrary PowerShell commands?",
+    question: "Can SAVIO execute arbitrary PowerShell commands?",
     answer:
-      "No. ASTRA sends known remediation identifiers and parameters. The backend validates policy, and the Windows agent enforces its own allowlist before execution.",
+      "No. SAVIO sends known remediation identifiers and parameters. The backend validates policy, and the Windows agent enforces its own allowlist before execution.",
   },
   {
     question: "How are high-risk actions controlled?",
@@ -112,7 +112,7 @@ const faqs = [
   {
     question: "Does the agent require inbound firewall ports?",
     answer:
-      "No. The Windows agent initiates outbound HTTPS traffic on port 443, so organizations do not need to expose inbound endpoint ports for ASTRA.",
+      "No. The Windows agent initiates outbound HTTPS traffic on port 443, so organizations do not need to expose inbound endpoint ports for SAVIO.",
   },
   {
     question: "How can an IT team evaluate endpoint automation safely?",
@@ -149,7 +149,7 @@ export default function WindowsEndpointAutomationPage() {
               Turn Windows endpoint signals into controlled, verified action
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-relaxed text-secondary-token">
-              ASTRA gathers live evidence, reasons against your knowledge and policy,
+              SAVIO gathers live evidence, reasons against your knowledge and policy,
               and automates only the remediation your organization permits. Sensitive
               actions stay with authorized people, and every result is recorded.
             </p>
@@ -265,7 +265,7 @@ export default function WindowsEndpointAutomationPage() {
 
       <Section className="pb-28">
         <Container>
-          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center text-white">
+          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-cyan-500 px-8 py-14 text-center text-white">
             <h2 className="text-3xl font-bold">Map your first endpoint automation workflow</h2>
             <p className="mx-auto mt-4 max-w-xl text-white/85">Bring one recurring Windows issue to a 30-minute session. We will map the evidence, approval tier, allowed action and verification step.</p>
             <a href={bookDemo.href} target={bookDemo.external ? "_blank" : undefined} rel={bookDemo.external ? "noopener" : undefined} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-700">

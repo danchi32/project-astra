@@ -120,7 +120,7 @@ export function InvoiceTable({
               </td>
               <td className="px-3 lg:px-4 py-3 text-right">
                 {/* Present only when the payment rail is the seller of record and issues the
-                    document itself. Where it's absent ASTRA is the seller and the document
+                    document itself. Where it's absent SAVIO is the seller and the document
                     is generated — which isn't built yet, so nothing is offered rather than a
                     button that 404s. */}
                 {i.provider_invoice_url ? (

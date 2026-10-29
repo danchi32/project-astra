@@ -69,13 +69,13 @@ export default function KnowledgePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
             <BookOpen size={18} />
           </div>
           <div>
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Knowledge Base</h1>
             <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-              Runbooks and how-to guides ASTRA searches to answer questions
+              Runbooks and how-to guides SAVIO searches to answer questions
             </p>
           </div>
         </div>
@@ -88,9 +88,9 @@ export default function KnowledgePage() {
 
       {/* AI note */}
       <div className="flex items-start gap-2 rounded-lg p-3 text-sm"
-        style={{ background: "rgba(154,47,187,0.06)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+        style={{ background: "rgba(37,99,235,0.06)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
         <Sparkles size={16} style={{ color: "var(--accent)", marginTop: 1 }} />
-        <span>When a user asks a how-to question, ASTRA searches these articles and grounds its answer in the most relevant one — so your team&apos;s knowledge is reused automatically.</span>
+        <span>When a user asks a how-to question, SAVIO searches these articles and grounds its answer in the most relevant one — so your team&apos;s knowledge is reused automatically.</span>
       </div>
 
       {adding && (
@@ -119,7 +119,7 @@ export default function KnowledgePage() {
           <div className="rounded-xl p-8 text-center" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
             <BookOpen size={36} style={{ color: "var(--accent)", opacity: 0.4, margin: "0 auto" }} />
             <p className="mt-3 text-sm" style={{ color: "var(--text-secondary)" }}>
-              No articles yet. Add your first runbook so ASTRA can start using it.
+              No articles yet. Add your first runbook so SAVIO can start using it.
             </p>
           </div>
         )}

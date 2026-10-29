@@ -1,7 +1,7 @@
 ﻿#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Completely removes the ASTRA Windows agent (Service + Tray) from this machine.
+    Completely removes the SAVIO Windows agent (Service + Tray) from this machine.
 
 .DESCRIPTION
     Reverses everything either installer creates, and - unlike a naive
@@ -23,7 +23,7 @@
     Leave the device credential under ProgramData\Astra in place.
 
 .PARAMETER BackendHosts
-    Hostnames to strip from the hosts file. Defaults to every backend ASTRA has
+    Hostnames to strip from the hosts file. Defaults to every backend SAVIO has
     shipped, because a machine in the field may carry a pin from any past
     installer - leaving a stale pin behind would blackhole a future reinstall.
     Pass @() to leave the hosts file alone.
@@ -45,7 +45,7 @@ $ErrorActionPreference = "Continue"   # best-effort: never abort the cleanup hal
 $ServiceName = "AstraAgent"
 $script:Problems = @()
 
-Write-Host "==== Uninstalling ASTRA agent ====" -ForegroundColor Cyan
+Write-Host "==== Uninstalling SAVIO agent ====" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------------------
 # 1. Stop the service for real (not just "ask nicely and hope").
@@ -183,11 +183,11 @@ if ($BackendHosts -and $BackendHosts.Count -gt 0) {
                 if ($kept.Count -eq $lines.Count) { break }   # nothing of ours in there
                 Set-Content -LiteralPath $hostsFile -Value $kept -Encoding ASCII -Force -ErrorAction Stop
                 ipconfig /flushdns | Out-Null
-                Write-Host "Removed ASTRA hosts entries."
+                Write-Host "Removed SAVIO hosts entries."
                 break
             } catch {
                 if ($attempt -eq 3) {
-                    $script:Problems += "Could not clean the hosts file - it is locked (usually antivirus). Remove any ASTRA line from $hostsFile by hand, or a stale pin may blackhole a reinstall."
+                    $script:Problems += "Could not clean the hosts file - it is locked (usually antivirus). Remove any SAVIO line from $hostsFile by hand, or a stale pin may blackhole a reinstall."
                 }
                 Start-Sleep -Seconds 2
             }
@@ -200,7 +200,7 @@ if ($BackendHosts -and $BackendHosts.Count -gt 0) {
 # ---------------------------------------------------------------------------
 Write-Host ""
 if ($script:Problems.Count -eq 0) {
-    Write-Host "ASTRA agent fully uninstalled. This machine is clean for a reinstall." -ForegroundColor Green
+    Write-Host "SAVIO agent fully uninstalled. This machine is clean for a reinstall." -ForegroundColor Green
     Write-Host "The device will show OFFLINE in the portal; remove it there to delete its record." -ForegroundColor DarkGray
 } else {
     Write-Host "Uninstall finished WITH PROBLEMS - a reinstall may fail:" -ForegroundColor Red

@@ -1,4 +1,4 @@
-"""The one process that turns relay events into ASTRA's record of what happened.
+"""The one process that turns relay events into SAVIO's record of what happened.
 
 Why a process of its own, and not a few lines inside the API:
 
@@ -71,7 +71,7 @@ class RemoteControlListener:
         """Apply one relay event. Returns whether it changed anything.
 
         An event that matches no open session is dropped, deliberately and quietly. The
-        common case is a refusal arriving after ASTRA's own sweep already recorded
+        common case is a refusal arriving after SAVIO's own sweep already recorded
         NO_RESPONSE — which is the whole point of the sweep running first, and not
         something to log as a problem.
         """

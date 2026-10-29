@@ -31,7 +31,7 @@ function parseCsvUsers(text: string): ImportRow[] {
 
 const ROLE_STYLE: Record<UserRole, { color: string; bg: string }> = {
   admin: { color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
-  technician: { color: "#b246d4", bg: "rgba(59,130,246,0.1)" },
+  technician: { color: "#3b82f6", bg: "rgba(59,130,246,0.1)" },
   user: { color: "#64748b", bg: "rgba(100,116,139,0.1)" },
 };
 
@@ -129,7 +129,7 @@ export default function UsersPage() {
     <div className={pageShell}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
             <UsersIcon size={18} />
           </div>
           <div>

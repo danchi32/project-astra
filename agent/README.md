@@ -1,4 +1,4 @@
-# ASTRA Windows Agent
+# SAVIO Windows Agent
 
 C# .NET 8 Windows Service. See root [CLAUDE.md](../CLAUDE.md) for the security model.
 

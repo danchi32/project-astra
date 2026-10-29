@@ -11,6 +11,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import { getViewAs } from "@/lib/viewAs";
+import { SavioLogo } from "@/components/savio-mark";
 
 // A sidebar entry is either a plain LINK (common, top-level) or a GROUP that expands to its own
 // sub-items — the same shape the Tracker uses, now applied across the app. Groups collect the
@@ -86,7 +87,7 @@ const PLATFORM_NAV: NavLink[] = [
 ];
 
 const linkStyle = (active: boolean) => ({
-  background: active ? "rgba(154,47,187,0.1)" : "transparent",
+  background: active ? "rgba(37,99,235,0.1)" : "transparent",
   color: active ? "var(--accent)" : "var(--text-secondary)",
 });
 
@@ -202,8 +203,8 @@ export function Sidebar() {
       style={{ background: "var(--surface)", borderRight: "1px solid var(--border)" }}
     >
       {/* Logo */}
-      <div className="px-5 pb-6 shrink-0 flex items-center gap-2 text-lg font-bold" style={{ color: "var(--accent)" }}>
-        <span className="text-2xl">⬡</span> ASTRA
+      <div className="px-4 pb-6 shrink-0">
+        <SavioLogo size={34} tagline="AI IT agent" />
       </div>
 
       {/* Nav */}

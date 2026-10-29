@@ -1,7 +1,7 @@
 """Answering "shall I raise a ticket?" when there is no LLM in the conversation.
 
 The escalation service was reachable from exactly one place: the model's tool. The real
-model runs only for ai_pro organizations, and none of them are — so in production ASTRA
+model runs only for ai_pro organizations, and none of them are — so in production SAVIO
 asked the question after a failed fix, the user said yes, and nothing happened. The offer
 stayed open forever and the user waited for a ticket that was never filed.
 
@@ -65,7 +65,7 @@ async def _configure_helpdesk(session, org_id):
 
 
 async def _conversation_with_offer(session, actor) -> uuid.UUID:
-    """A conversation where ASTRA has already offered — the state a failed fix leaves."""
+    """A conversation where SAVIO has already offered — the state a failed fix leaves."""
     convo = Conversation(org_id=actor.org_id, user_id=actor.id, title="chat")
     session.add(convo)
     await session.flush()
@@ -158,7 +158,7 @@ async def test_a_yes_with_no_offer_open_is_just_a_message(
     """Nothing was asked, so "yes" agrees to nothing — and must not file anything.
 
     Also pins the guard on the dead-end branch: an unhandled pleasantry is not a complaint,
-    and ASTRA must not offer to open a ticket about one.
+    and SAVIO must not offer to open a ticket about one.
     """
     async with session_factory() as session:
         await _configure_helpdesk(session, admin_user.org_id)
@@ -180,7 +180,7 @@ async def test_a_yes_with_no_offer_open_is_just_a_message(
 
 
 async def _conversation_with_a_failed_attempt(session, actor, device):
-    """A chat where ASTRA restarted something and the user is about to say it didn't help."""
+    """A chat where SAVIO restarted something and the user is about to say it didn't help."""
     convo = Conversation(org_id=actor.org_id, user_id=actor.id, title="chat")
     session.add(convo)
     await session.flush()
@@ -272,7 +272,7 @@ async def test_still_broken_wording_does_not_skip_the_built_in_tier(
     """Nothing has been tried yet, so "still not working" is just how they phrased it.
 
     The tier step is about a fix that failed, not about a form of words — otherwise the
-    first message of a chat would jump straight past the fix ASTRA can apply for free.
+    first message of a chat would jump straight past the fix SAVIO can apply for free.
     Outlook, because the built-in rules do own Outlook.
     """
     async with session_factory() as session:
@@ -297,7 +297,7 @@ async def test_an_unfixable_problem_is_offered_a_ticket_straight_away(
 ):
     """No built-in rule covers a snapped-off key and there is no model to think about it.
 
-    This is the reply the live test found in production: ASTRA answered a broken keyboard
+    This is the reply the live test found in production: SAVIO answered a broken keyboard
     with "tell me what's going wrong and I'll take care of it".
     """
     async with session_factory() as session:

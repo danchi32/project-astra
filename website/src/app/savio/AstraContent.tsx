@@ -39,7 +39,10 @@ import {
   Button,
 } from "@/components/ui";
 import { TiltCard, Magnetic } from "@/components/enhance";
-import { Hero3D } from "@/components/three/Hero3D";
+import { LiveFixDemo } from "@/components/LiveFixDemo";
+import { CapabilityVisual, WorkflowLoop } from "@/components/CapabilityVisuals";
+import { TelemetryField } from "@/components/TelemetryField";
+import { SavioLogo } from "@/components/SavioMark";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import {
   DashboardMockup,
@@ -53,11 +56,30 @@ import {
 import { useContent, Rich } from "@/lib/content";
 import { site, bookDemo } from "@/lib/site";
 
-const featureIcons = [
-  Boxes, Activity, BrainCircuit, Wrench, DownloadCloud,
-  UserX, MessageSquare, ShieldCheck, FileBarChart, Bell, ScrollText,
-  ClipboardCheck, Ban, Network, Ticket, GraduationCap, MailCheck, ScreenShare,
+// Picked by title, not position: the live feature list comes from content.json, whose order
+// differs from featureDefaults, and matching by index gave cards each other's icons.
+// Same rules as the scenes in components/CapabilityVisuals.tsx.
+const featureIconRules: [RegExp, typeof Boxes][] = [
+  [/assignment|acknowledg/i, MailCheck],
+  [/inventory/i, Boxes],
+  [/telemetry/i, Activity],
+  [/cognitive|reasoning/i, BrainCircuit],
+  [/self-heal|self heal/i, Wrench],
+  [/patch|update/i, DownloadCloud],
+  [/offboard/i, UserX],
+  [/conversation|chat/i, MessageSquare],
+  [/approval|tier/i, ShieldCheck],
+  [/report/i, FileBarChart],
+  [/notif|alert/i, Bell],
+  [/audit/i, ScrollText],
+  [/complian|posture/i, ClipboardCheck],
+  [/restricted|software/i, Ban],
+  [/correlat|mass/i, Network],
+  [/helpdesk|ticket/i, Ticket],
+  [/learning|knowledge/i, GraduationCap],
+  [/remote|consent/i, ScreenShare],
 ];
+const featureIcon = (title: string) => featureIconRules.find(([re]) => re.test(title))?.[1] ?? Sparkles;
 const featureDefaults = [
   { title: "Asset Inventory", desc: "A live, auto-discovered registry of every device, spec, app and license across your fleet." },
   { title: "Live Telemetry", desc: "CPU, RAM, disk, event logs, apps, services and Windows updates streamed in real time." },
@@ -65,17 +87,17 @@ const featureDefaults = [
   { title: "Self-Healing", desc: "Allowlisted, tiered remediations that fix issues automatically — or with approval." },
   { title: "Patch Management", desc: "Push Windows Updates to any device — or the whole fleet — from the admin panel and watch rollout live." },
   { title: "Secure Offboarding", desc: "When someone leaves, lock down their account and force them out of their session in one click — before data can walk out." },
-  { title: "Conversational AI", desc: "Users describe problems in plain language; ASTRA investigates and resolves." },
+  { title: "Conversational AI", desc: "Users describe problems in plain language; SAVIO investigates and resolves." },
   { title: "Approval Tiers", desc: "Automatic, approval-required and admin-only — enforced in code, not just prompts." },
   { title: "Reporting", desc: "Fleet health, resolution and compliance reports ready for stakeholders." },
   { title: "Notifications", desc: "Proactive alerts the moment something needs a human decision." },
   { title: "Full Audit Trail", desc: "Every mutation and agent command is logged, attributable and reviewable." },
   { title: "Compliance & Security Posture", desc: "A live compliance dashboard scores your fleet's security posture and flags the devices that fall short." },
   { title: "Restricted Software Detection", desc: "Spot unapproved or risky applications across every device, so shadow IT surfaces before it becomes an incident." },
-  { title: "Fleet Correlation & Mass Remediation", desc: "ASTRA links the same fault across many devices, then fixes the whole affected group in one click instead of one by one." },
-  { title: "Helpdesk Integration", desc: "Connect Freshservice and let ASTRA raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees." },
-  { title: "Self-Learning Knowledge Base", desc: "Every confirmed fix teaches the knowledge base. ASTRA publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type." },
-  { title: "Asset Assignment & Acknowledgement", desc: "Hand a laptop to an employee and ASTRA emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record." },
+  { title: "Fleet Correlation & Mass Remediation", desc: "SAVIO links the same fault across many devices, then fixes the whole affected group in one click instead of one by one." },
+  { title: "Helpdesk Integration", desc: "Connect Freshservice and let SAVIO raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees." },
+  { title: "Self-Learning Knowledge Base", desc: "Every confirmed fix teaches the knowledge base. SAVIO publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type." },
+  { title: "Asset Assignment & Acknowledgement", desc: "Hand a laptop to an employee and SAVIO emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record." },
   { title: "Remote Support with Consent", desc: "Take control of a user's screen from the portal in one click. They see who is asking and why, and nothing connects until they click Allow. Live only, never recorded, fully audited." },
 ];
 
@@ -139,16 +161,21 @@ export function AstraContent() {
       <section className="aurora grain relative -mt-16 overflow-hidden pt-28 pb-16 sm:pt-36">
         <AnimatedBackground dense />
         <Container>
-          <div className="grid items-center gap-10 lg:grid-cols-2">
+          {/* Two columns from md, not lg: the demo is the point of this hero, so it sits
+              beside the headline on laptops and tablets too instead of dropping below it. */}
+          <div className="grid items-center gap-8 md:grid-cols-2 lg:gap-10">
             <div>
               <Reveal>
-                <Badge>
-                  <Sparkles className="h-3.5 w-3.5 text-brand-500" />{" "}
-                  {c("astra.badge", "Meet ASTRA")}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-4">
+                  <SavioLogo size={56} tagline="AI agent for IT operations" />
+                  <Badge>
+                    <Sparkles className="h-3.5 w-3.5 text-brand-500" />{" "}
+                    {c("astra.badge", "Meet SAVIO")}
+                  </Badge>
+                </div>
               </Reveal>
               <Reveal delay={0.05}>
-                <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl">
+                <h1 className="mt-5 text-4xl font-extrabold leading-[1.08] tracking-tight md:text-5xl xl:text-6xl">
                   <Rich text={c("astra.title", "Your [[AI System Administrator]]")} />
                 </h1>
               </Reveal>
@@ -156,7 +183,7 @@ export function AstraContent() {
                 <p className="mt-6 max-w-xl text-lg leading-relaxed text-secondary-token">
                   {c(
                     "astra.subtitle",
-                    "ASTRA watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
+                    "SAVIO watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
                   )}
                 </p>
               </Reveal>
@@ -164,7 +191,7 @@ export function AstraContent() {
                 <div className="mt-8 flex flex-wrap gap-3">
                   <Magnetic>
                     <Button href={site.appUrl} external>
-                      {c("astra.cta1", "Launch ASTRA")}{" "}
+                      {c("astra.cta1", "Launch SAVIO")}{" "}
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Magnetic>
@@ -175,8 +202,11 @@ export function AstraContent() {
               </Reveal>
             </div>
 
-            <Reveal delay={0.15} className="flex justify-center">
-              <Hero3D />
+            {/* The product's promise, played out: type a problem, watch SAVIO fix it.
+                The home page keeps the 3D core; this page shows the work itself. */}
+            <Reveal delay={0.15} className="relative flex justify-center">
+              <div aria-hidden className="pointer-events-none absolute -inset-6 rounded-[2.5rem] bg-gradient-to-br from-brand-500/30 via-cyan-400/20 to-transparent blur-3xl" />
+              <LiveFixDemo />
             </Reveal>
           </div>
 
@@ -188,7 +218,8 @@ export function AstraContent() {
         </Container>
       </section>
 
-      <Section>
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField />
         <Container>
           <Reveal>
             <div className="mx-auto max-w-4xl rounded-2xl border border-token bg-surface p-7 sm:p-9">
@@ -198,12 +229,12 @@ export function AstraContent() {
               <p className="mt-4 leading-relaxed text-secondary-token">
                 An AI System Administrator, or AI system admin, is software that
                 monitors IT systems, gathers live evidence, diagnoses routine
-                problems, applies permitted fixes, and verifies the outcome. ASTRA
+                problems, applies permitted fixes, and verifies the outcome. SAVIO
                 performs this governed workflow for Windows endpoints while keeping
                 sensitive actions behind human approval.
               </p>
               <p className="mt-4 text-sm leading-relaxed text-secondary-token">
-                Unlike a generic chatbot, ASTRA works from endpoint telemetry and an
+                Unlike a generic chatbot, SAVIO works from endpoint telemetry and an
                 enterprise knowledge base. Unlike script-only automation, it selects
                 from allowlisted actions, follows code-enforced approval tiers, and
                 records the result in an audit trail. Read the detailed guide to{" "}
@@ -217,11 +248,12 @@ export function AstraContent() {
       </Section>
 
       {/* ---------------------------------------------------- HOW IT WORKS */}
-      <Section>
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField flip />
         <Container>
           <Reveal>
             <SectionHeading
-              eyebrow={c("astra.loopHead.eyebrow", "The ASTRA loop")}
+              eyebrow={c("astra.loopHead.eyebrow", "The SAVIO loop")}
               title={c("astra.loopHead.title", "An agentic workflow, not a black box")}
               subtitle={c(
                 "astra.loopHead.subtitle",
@@ -229,35 +261,22 @@ export function AstraContent() {
               )}
             />
           </Reveal>
-          <div className="mt-14 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {workflow.map((w, i) => {
-              const Icon = workflowIcons[i % workflowIcons.length];
-              return (
-                <Reveal key={w.label} delay={i * 0.08}>
-                  <div className="relative h-full rounded-2xl border border-token bg-surface p-5 text-center">
-                    <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-brand-500/10 text-brand-500">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="mt-3 text-sm font-bold">{w.label}</div>
-                    <div className="mt-1 text-xs text-muted-token">{w.desc}</div>
-                    <span className="absolute -top-2 left-3 text-xs font-bold text-brand-500/40">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                  </div>
-                </Reveal>
-              );
-            })}
-          </div>
+          <Reveal>
+            <WorkflowLoop
+              steps={workflow.map((w, i) => ({ ...w, Icon: workflowIcons[i % workflowIcons.length] }))}
+            />
+          </Reveal>
         </Container>
       </Section>
 
       {/* ------------------------------------------------------- FEATURES */}
-      <Section className="bg-surface">
+      <Section className="relative isolate overflow-hidden bg-surface">
+        <TelemetryField />
         <Container>
           <Reveal>
             <SectionHeading
               eyebrow={c("astra.capsHead.eyebrow", "Capabilities")}
-              title={c("astra.capsHead.title", "Everything ASTRA does out of the box")}
+              title={c("astra.capsHead.title", "Everything SAVIO does out of the box")}
               subtitle={c(
                 "astra.capsHead.subtitle",
                 "A complete AI operations platform for your Windows fleet.",
@@ -266,15 +285,18 @@ export function AstraContent() {
           </Reveal>
           <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f, i) => {
-              const Icon = featureIcons[i % featureIcons.length];
+              const Icon = featureIcon(f.title);
               return (
                 <Reveal key={f.title} delay={(i % 3) * 0.08}>
                   <TiltCard className="h-full">
                     <div className="ring-conic h-full rounded-2xl border border-token bg-app p-6 transition-all hover:border-brand-500/40 hover:shadow-lg">
-                      <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand-500/10 text-brand-500">
-                        <Icon className="h-5 w-5" />
+                      <CapabilityVisual title={f.title} />
+                      <div className="flex items-center gap-2.5">
+                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-500">
+                          <Icon className="h-[18px] w-[18px]" />
+                        </div>
+                        <h3 className="text-base font-bold">{f.title}</h3>
                       </div>
-                      <h3 className="mt-4 text-base font-bold">{f.title}</h3>
                       <p className="mt-1.5 text-sm leading-relaxed text-secondary-token">
                         {f.desc}
                       </p>
@@ -288,10 +310,13 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------------ DEEP DIVE: INVENTORY */}
-      <Section>
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField flip />
         <Container>
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <Reveal>
+          {/* Deep dives alternate (zig-zag) from md up, like the hero: image left here, then right…
+              On mobile the text always comes first, then its visual. */}
+          <div className="grid items-center gap-10 md:grid-cols-2 lg:gap-12">
+            <Reveal className="md:order-2">
               <div>
                 <Badge>
                   <Boxes className="h-3.5 w-3.5 text-brand-500" />{" "}
@@ -303,7 +328,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.inventory.desc",
-                    "The moment an agent enrolls, ASTRA builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
+                    "The moment an agent enrolls, SAVIO builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
                   )}
                 </p>
                 <ul className="mt-5 space-y-2.5">
@@ -315,7 +340,7 @@ export function AstraContent() {
                 </ul>
               </div>
             </Reveal>
-            <Reveal delay={0.1}>
+            <Reveal delay={0.1} className="md:order-1">
               <InventoryPanel />
             </Reveal>
           </div>
@@ -323,13 +348,14 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------------ DEEP DIVE: TELEMETRY */}
-      <Section className="bg-surface">
+      <Section className="relative isolate overflow-hidden bg-surface">
+        <TelemetryField />
         <Container>
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <Reveal className="order-2 lg:order-1">
+          <div className="grid items-center gap-10 md:grid-cols-2 lg:gap-12">
+            <Reveal className="order-2">
               <TelemetryGauges />
             </Reveal>
-            <Reveal delay={0.1} className="order-1 lg:order-2">
+            <Reveal delay={0.1} className="order-1">
               <div>
                 <Badge>
                   <Cpu className="h-3.5 w-3.5 text-brand-500" />{" "}
@@ -341,7 +367,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.telemetry.desc",
-                    "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence ASTRA reasons over.",
+                    "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence SAVIO reasons over.",
                   )}
                 </p>
                 <div className="mt-6 grid grid-cols-2 gap-3">
@@ -364,7 +390,8 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------ DEEP DIVE: SELF-HEALING */}
-      <Section>
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField flip />
         <Container>
           <Reveal>
             <SectionHeading
@@ -372,7 +399,7 @@ export function AstraContent() {
               title={c("astra.healingHead.title", "Fixes that respect human control")}
               subtitle={c(
                 "astra.healingHead.subtitle",
-                "ASTRA never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt.",
+                "SAVIO never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt.",
               )}
             />
           </Reveal>
@@ -390,10 +417,11 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------ DEEP DIVE: PATCH MGMT */}
-      <Section className="bg-surface">
+      <Section className="relative isolate overflow-hidden bg-surface">
+        <TelemetryField />
         <Container>
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <Reveal>
+          <div className="grid items-center gap-10 md:grid-cols-2 lg:gap-12">
+            <Reveal className="md:order-2">
               <div>
                 <Badge>
                   <DownloadCloud className="h-3.5 w-3.5 text-brand-500" />{" "}
@@ -410,7 +438,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.patch.desc",
-                    "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. ASTRA orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
+                    "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. SAVIO orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
                   )}
                 </p>
                 <ul className="mt-5 space-y-2.5">
@@ -425,7 +453,7 @@ export function AstraContent() {
                 </ul>
               </div>
             </Reveal>
-            <Reveal delay={0.1}>
+            <Reveal delay={0.1} className="md:order-1">
               <PatchPushPanel />
             </Reveal>
           </div>
@@ -433,9 +461,10 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------ DEEP DIVE: OFFBOARDING */}
-      <Section>
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField flip />
         <Container>
-          <div className="grid items-center gap-12 lg:grid-cols-2">
+          <div className="grid items-center gap-10 md:grid-cols-2 lg:gap-12">
             <Reveal>
               <div>
                 <Badge>
@@ -453,7 +482,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.offboarding.desc",
-                    "Offboarding is the riskiest moment for your data — a leaver with an open session can copy files long after HR says goodbye. With ASTRA, lock down their account and force them out of their active Windows session in one click. Instant, precise and fully audited.",
+                    "Offboarding is the riskiest moment for your data — a leaver with an open session can copy files long after HR says goodbye. With SAVIO, lock down their account and force them out of their active Windows session in one click. Instant, precise and fully audited.",
                   )}
                 </p>
                 <ul className="mt-5 space-y-2.5">
@@ -514,10 +543,11 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------ DEEP DIVE: ASSISTANT */}
-      <Section>
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField />
         <Container>
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <Reveal>
+          <div className="grid items-center gap-10 md:grid-cols-2 lg:gap-12">
+            <Reveal className="md:order-2">
               <div>
                 <Badge>
                   <MessageSquare className="h-3.5 w-3.5 text-brand-500" />{" "}
@@ -529,7 +559,7 @@ export function AstraContent() {
                 <p className="mt-4 text-secondary-token">
                   {c(
                     "astra.assistant.desc",
-                    "Employees just describe the problem. ASTRA recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
+                    "Employees just describe the problem. SAVIO recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
                   )}
                 </p>
                 <div className="mt-6">
@@ -540,7 +570,7 @@ export function AstraContent() {
                 </div>
               </div>
             </Reveal>
-            <Reveal delay={0.1}>
+            <Reveal delay={0.1} className="md:order-1">
               <AiConsole />
             </Reveal>
           </div>
@@ -548,7 +578,8 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------------------- SECURITY */}
-      <Section>
+      <Section className="relative isolate overflow-hidden">
+        <TelemetryField flip />
         <Container>
           <Reveal>
             <SectionHeading
@@ -581,7 +612,8 @@ export function AstraContent() {
         </Container>
       </Section>
 
-      <Section className="bg-surface">
+      <Section className="relative isolate overflow-hidden bg-surface">
+        <TelemetryField />
         <Container>
           <Reveal>
             <SectionHeading
@@ -593,18 +625,18 @@ export function AstraContent() {
             {[
               {
                 q: "Can an AI System Administrator replace a human IT administrator?",
-                a: "No. ASTRA automates repeatable evidence collection and approved endpoint fixes. IT administrators retain control of sensitive, approval-required and admin-only actions.",
+                a: "No. SAVIO automates repeatable evidence collection and approved endpoint fixes. IT administrators retain control of sensitive, approval-required and admin-only actions.",
               },
               {
                 q: "How is an AI system admin different from an RMM tool?",
-                a: "RMM platforms primarily monitor devices and run predefined automation. ASTRA adds an evidence-to-decision-to-verification loop, while enforcing allowlists, approval tiers and audit records.",
+                a: "RMM platforms primarily monitor devices and run predefined automation. SAVIO adds an evidence-to-decision-to-verification loop, while enforcing allowlists, approval tiers and audit records.",
               },
               {
-                q: "Which devices can ASTRA manage?",
-                a: "ASTRA is currently focused on business fleets running Windows 10 and Windows 11, including office and remote-work endpoints.",
+                q: "Which devices can SAVIO manage?",
+                a: "SAVIO is currently focused on business fleets running Windows 10 and Windows 11, including office and remote-work endpoints.",
               },
               {
-                q: "How can a company evaluate ASTRA safely?",
+                q: "How can a company evaluate SAVIO safely?",
                 a: "Start with a limited-device pilot, review collected telemetry and audit records, then expand only after the approval policy and remediation results meet your requirements.",
               },
             ].map((item) => (
@@ -618,14 +650,15 @@ export function AstraContent() {
       </Section>
 
       {/* ------------------------------------------------------------ CTA */}
-      <Section className="pb-28">
+      <Section className="relative isolate overflow-hidden pb-28">
+        <TelemetryField flip />
         <Container>
           <Reveal>
-            <div className="relative overflow-hidden rounded-3xl border border-token bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center sm:px-16">
+            <div className="relative overflow-hidden rounded-3xl border border-token bg-gradient-to-br from-brand-600 to-cyan-500 px-8 py-14 text-center sm:px-16">
               <div className="absolute inset-0 grid-bg opacity-20" />
               <div className="relative">
                 <h2 className="text-3xl font-bold text-white sm:text-4xl">
-                  {c("astra.cta.title", "Deploy ASTRA across your fleet")}
+                  {c("astra.cta.title", "Deploy SAVIO across your fleet")}
                 </h2>
                 <p className="mx-auto mt-4 max-w-xl text-white/85">
                   {c(
@@ -638,7 +671,7 @@ export function AstraContent() {
                     href={site.appUrl}
                     className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-700 transition-transform hover:-translate-y-0.5"
                   >
-                    {c("astra.cta.btn1", "Launch ASTRA")}{" "}
+                    {c("astra.cta.btn1", "Launch SAVIO")}{" "}
                     <ArrowRight className="h-4 w-4" />
                   </a>
                   <a

@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "The agreement between Technomate IT-Solution Private Limited and customers of the ASTRA platform.",
+    "The agreement between Technomate IT-Solution Private Limited and customers of the SAVIO platform.",
   alternates: { canonical: "/terms/" },
 };
 
@@ -18,8 +18,8 @@ export default function TermsPage() {
       reviewed
       intro={
         <>
-          These terms govern your organisation&rsquo;s use of ASTRA, supplied by{" "}
-          {legal.displayName}. Please read <strong>section 4</strong> carefully: ASTRA
+          These terms govern your organisation&rsquo;s use of SAVIO, supplied by{" "}
+          {legal.displayName}. Please read <strong>section 4</strong> carefully: SAVIO
           executes commands on your computers, and section 4 is where you authorise that
           and decide who may approve it.
         </>
@@ -30,7 +30,7 @@ export default function TermsPage() {
         This agreement is between {legal.displayName}, a company incorporated in India
         under CIN {legal.cin}, with its registered office at{" "}
         {legal.registeredOffice.join(", ")} (&ldquo;Technomate&rdquo;), and the
-        organisation that creates an ASTRA account (&ldquo;Customer&rdquo;,
+        organisation that creates an SAVIO account (&ldquo;Customer&rdquo;,
         &ldquo;you&rdquo;).
       </p>
       <p>
@@ -41,7 +41,7 @@ export default function TermsPage() {
 
       <h2>2. The service</h2>
       <p>
-        ASTRA is a software-as-a-service platform for managing Windows device fleets. It
+        SAVIO is a software-as-a-service platform for managing Windows device fleets. It
         comprises a hosted backend, a web portal for administrators, and a Windows agent
         installed on your devices. Its functions include hardware and software inventory,
         performance telemetry, patch visibility, compliance reporting, AI-assisted
@@ -67,7 +67,7 @@ export default function TermsPage() {
 
       <h3>4.1 What you are authorising</h3>
       <p>
-        The ASTRA agent installs on your devices and runs with elevated system privileges.
+        The SAVIO agent installs on your devices and runs with elevated system privileges.
         On your instruction and in accordance with the tier settings you configure, it{" "}
         <strong>executes commands on those devices</strong>. This includes restarting
         applications and services, clearing temporary files, resetting network components,
@@ -80,7 +80,7 @@ export default function TermsPage() {
 
       <h3>4.2 The three tiers</h3>
       <p>
-        Every action ASTRA can perform belongs to exactly one tier. The tier is fixed in
+        Every action SAVIO can perform belongs to exactly one tier. The tier is fixed in
         our software and cannot be raised or lowered by the AI:
       </p>
       <table>
@@ -141,7 +141,7 @@ export default function TermsPage() {
           each tier, and you will keep that list current;
         </li>
         <li>
-          you maintain your own backups. ASTRA is a management tool, not a backup service.
+          you maintain your own backups. SAVIO is a management tool, not a backup service.
         </li>
       </ul>
 
@@ -152,7 +152,7 @@ export default function TermsPage() {
         device&rsquo;s screen. Each session starts only after the person at the device
         accepts an on-screen prompt naming the technician and the reason, is not recorded,
         has file transfer and command-line access disabled, and is logged in your audit
-        trail. Only your people can start a session; ASTRA&rsquo;s AI cannot. You are
+        trail. Only your people can start a session; SAVIO&rsquo;s AI cannot. You are
         responsible for deciding who in your organisation may request sessions and for
         how your technicians use them.
       </p>
@@ -166,14 +166,14 @@ export default function TermsPage() {
 
       <h2>5. Data</h2>
       <p>
-        You remain responsible for the data ASTRA processes for you. We process it only to
+        You remain responsible for the data SAVIO processes for you. We process it only to
         provide the service and on your instructions. What we collect, where it is held,
         and for how long, is set out in the <a href="/privacy/">Privacy Policy</a>; the
         providers we rely on are listed on the{" "}
         <a href="/sub-processors/">sub-processors page</a>.
       </p>
       <p>
-        <strong>Hosting location.</strong> The ASTRA application and database are hosted
+        <strong>Hosting location.</strong> The SAVIO application and database are hosted
         in <strong>Singapore</strong>. If your organisation requires data residency in
         India or elsewhere, raise it before you sign &mdash; we cannot change it after the
         fact.
@@ -219,7 +219,7 @@ export default function TermsPage() {
 
       <h2>7. Intellectual property</h2>
       <p>
-        ASTRA, including the backend, portal, agent, documentation and all associated
+        SAVIO, including the backend, portal, agent, documentation and all associated
         intellectual property, is and remains the property of {legal.displayName}. You are
         granted a non-exclusive, non-transferable right to use it for your internal
         business purposes for the term of your subscription. Installation and use of the
@@ -231,7 +231,7 @@ export default function TermsPage() {
 
       <h2>8. Acceptable use</h2>
       <p>
-        You must not use ASTRA to access devices you do not control, to circumvent the
+        You must not use SAVIO to access devices you do not control, to circumvent the
         tier controls, to reverse engineer the service, or in breach of applicable law.
         The full rules are in the <a href="/acceptable-use/">Acceptable Use Policy</a>,
         which forms part of these terms.
@@ -256,7 +256,7 @@ export default function TermsPage() {
 
       <h3>9.2 Remediation outcomes</h3>
       <p>
-        ASTRA changes a device only through the actions in its fixed catalogue, at the
+        SAVIO changes a device only through the actions in its fixed catalogue, at the
         tier you configured. We are responsible for each action doing what its catalogue
         entry says. We are not responsible for the consequences of an action you or your
         people approved, or enabled for automatic approval, where the action did what it

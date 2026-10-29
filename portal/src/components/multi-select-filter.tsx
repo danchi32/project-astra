@@ -40,7 +40,7 @@ export function MultiSelectFilter({
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap"
         style={{
-          background: selected.length ? "rgba(154,47,187,0.1)" : "var(--bg)",
+          background: selected.length ? "rgba(37,99,235,0.1)" : "var(--bg)",
           border: "1px solid var(--border)",
           color: selected.length ? "var(--accent)" : "var(--text-primary)",
         }}

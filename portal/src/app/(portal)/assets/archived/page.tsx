@@ -11,7 +11,7 @@ import type { Asset, AssetStatus } from "@/lib/api/types";
 
 const STATUS_STYLE: Record<AssetStatus, { label: string; color: string }> = {
   in_use: { label: "In use", color: "#10b981" },
-  in_storage: { label: "Idle", color: "#b246d4" },
+  in_storage: { label: "Idle", color: "#3b82f6" },
   in_repair: { label: "In repair", color: "#f59e0b" },
   retired: { label: "Retired", color: "#64748b" },
   lost: { label: "Lost", color: "#ef4444" },
@@ -54,7 +54,7 @@ export default function ArchivedAssetsPage() {
       </Link>
 
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <Archive size={18} />
         </div>
         <div>

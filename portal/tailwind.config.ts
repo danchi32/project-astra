@@ -12,18 +12,24 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Technomate purple (from the logo mark).
+        // SAVIO blue (from the logo mark, docs/brand/savio-icon.svg).
         brand: {
-          50: "#fbf3fe",
-          100: "#f5e2fc",
-          200: "#ecc6f9",
-          300: "#dd9cf2",
-          400: "#c86ce7",
-          500: "#b246d4",
-          600: "#9a2fbb",
-          700: "#7f2599",
-          800: "#69217b",
-          900: "#561d64",
+          50: "#eff6ff",
+          100: "#dbeafe",
+          200: "#bfdbfe",
+          300: "#93c5fd",
+          400: "#60a5fa",
+          500: "#3b82f6",
+          600: "#2563eb",
+          700: "#1d4ed8",
+          800: "#1e40af",
+          900: "#1e3a8a",
+        },
+        // The cyan the agent's eyes and signal glow in — the "AI" accent, used sparingly.
+        glow: {
+          300: "#67e8f9",
+          400: "#22d3ee",
+          500: "#06b6d4",
         },
       },
       fontFamily: {

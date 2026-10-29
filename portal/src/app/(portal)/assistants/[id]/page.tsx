@@ -130,7 +130,7 @@ export default function AssistantDetailPage() {
         <div className="flex items-center gap-2">
           <div
             className="p-2 rounded-lg"
-            style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}
+            style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}
           >
             <Bot size={18} />
           </div>
@@ -175,7 +175,7 @@ export default function AssistantDetailPage() {
             color: "var(--text-secondary)",
           }}
         >
-          ASTRA maintains this one. You can read how it is configured, but not change it —
+          SAVIO maintains this one. You can read how it is configured, but not change it —
           create your own assistant to run something different.
         </div>
       )}
@@ -200,7 +200,7 @@ export default function AssistantDetailPage() {
               Brief
             </label>
             <p className="text-xs mt-0.5 mb-2" style={{ color: "var(--text-secondary)" }}>
-              How this assistant should behave. Leave blank to use ASTRA&apos;s standard brief.
+              How this assistant should behave. Leave blank to use SAVIO&apos;s standard brief.
             </p>
             <textarea
               value={prompt}
@@ -226,7 +226,7 @@ export default function AssistantDetailPage() {
               Limit which tools it can use
             </label>
             <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
-              Off means every tool ASTRA offers. Ticking it and choosing nothing makes an
+              Off means every tool SAVIO offers. Ticking it and choosing nothing makes an
               answer-only assistant that takes no action at all.
             </p>
             {restrict && (
@@ -393,7 +393,7 @@ export default function AssistantDetailPage() {
                     )}
                     {!v.system_prompt && (
                       <p className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>
-                        Uses ASTRA&apos;s standard brief.
+                        Uses SAVIO&apos;s standard brief.
                       </p>
                     )}
                   </div>

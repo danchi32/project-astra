@@ -148,7 +148,7 @@ For a sample of automatic and approved actions, confirm the record shows:
 - Verification outcome
 - Timestamp
 
-Review [ASTRA security and trust controls](/security/) for the platform’s published approach to authorization, allowlists and auditability.
+Review [SAVIO security and trust controls](/security/) for the platform’s published approach to authorization, allowlists and auditability.
 
 ## 10. Agree success criteria
 
@@ -198,8 +198,8 @@ Before kickoff, complete this short brief:
 - **Exit and uninstall owner:**
 - **Final review date:**
 
-## Plan an ASTRA pilot
+## Plan an SAVIO pilot
 
-[ASTRA’s Windows endpoint automation](/windows-endpoint-automation/) follows an evidence-to-verification loop with code-enforced action tiers and endpoint allowlists. The software is available to supported Windows teams across India and can begin with a limited device group.
+[SAVIO’s Windows endpoint automation](/windows-endpoint-automation/) follows an evidence-to-verification loop with code-enforced action tiers and endpoint allowlists. The software is available to supported Windows teams across India and can begin with a limited device group.
 
 Start with the [14-day trial](https://astra.technomateai.com) or [book a 30-minute pilot-planning session](https://cal.com/astraai/30min). Bring one recurring issue, your device count and the approval boundaries your organization requires.

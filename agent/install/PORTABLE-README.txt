@@ -1,8 +1,8 @@
-ASTRA Agent - Portable Installer
+SAVIO Agent - Portable Installer
 ================================
 
-Copy this whole folder to any Windows PC to install the ASTRA agent. The PC will
-enroll into your ASTRA portal, send telemetry (device/asset info), and get the
+Copy this whole folder to any Windows PC to install the SAVIO agent. The PC will
+enroll into your SAVIO portal, send telemetry (device/asset info), and get the
 tray chat.
 
 BEFORE YOU START
@@ -20,13 +20,13 @@ INSTALL  (run as Administrator)
 WHAT IT DOES
   - Installs the .NET 8 Desktop Runtime if missing (official Microsoft, signed).
   - Adds a hosts entry so the backend is reachable when corporate DNS can't resolve it.
-  - Installs the ASTRA background service (auto-start) + the tray chat (auto-start at
+  - Installs the SAVIO background service (auto-start) + the tray chat (auto-start at
     login), both via the trusted `dotnet` host so antivirus/ASR does not block them.
 
 VERIFY
   - The script prints "AstraAgent ... Running".
   - The device shows ONLINE in the portal within a minute.
-  - An "ASTRA Assistant" icon appears in the system tray (its chat).
+  - An "SAVIO Assistant" icon appears in the system tray (its chat).
 
 UNINSTALL  (elevated PowerShell)
   sc.exe stop AstraAgent

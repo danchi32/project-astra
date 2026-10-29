@@ -1,6 +1,6 @@
 """Whether a device is told to install the remote-support agent at all.
 
-Nothing about remote support ships in the ASTRA installer. A device asks, and only
+Nothing about remote support ships in the SAVIO installer. A device asks, and only
 installs the relay agent if the answer says so — which is what keeps a remote-access
 executable off the machines of every customer who never bought remote control.
 

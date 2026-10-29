@@ -1,15 +1,15 @@
 # Technomate IT-Solution — Marketing Website
 
-Public marketing site for **technomateai.com**. Next.js 15 (App Router) + Tailwind CSS + framer-motion, sharing the ASTRA portal's design tokens (blue brand, Inter, dark/light).
+Public marketing site for **technomateai.com**. Next.js 15 (App Router) + Tailwind CSS + framer-motion, sharing the SAVIO portal's design tokens (blue brand, Inter, dark/light).
 
 ## Pages
 
 | Route | Purpose |
 |---|---|
-| `/` | Home — services + Astra overview with animated hero |
+| `/` | Home — services + Savio overview with animated hero |
 | `/about` | About Technomate — IT service provider & hardware supplier |
-| `/astra` | Astra product page — full feature showcase with animated demos |
-| `/pricing` | Astra plans & packages (placeholder tiers) |
+| `/astra` | Savio product page — full feature showcase with animated demos |
+| `/pricing` | Savio plans & packages (placeholder tiers) |
 | `/contact` | Inquiry form + address |
 | Login / Sign up | Links to `astra.technomateai.com` (the product app) |
 
@@ -24,8 +24,8 @@ npm run dev      # http://localhost:3200
 ## Site assistant (the chat bubble)
 
 `src/components/SupportChat.tsx` floats on every page and answers visitors' questions from
-ASTRA's documentation — never from the model's own memory, so it cannot invent a price or
-a promise. It posts to the ASTRA API:
+SAVIO's documentation — never from the model's own memory, so it cannot invent a price or
+a promise. It posts to the SAVIO API:
 
 `POST {site.apiUrl}/api/v1/public/assistant` → `{ answer, sources, grounded }`
 

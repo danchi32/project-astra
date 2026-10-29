@@ -20,10 +20,10 @@ class InvoiceStatus(str, enum.Enum):
 class Invoice(TimestampMixin, Base):
     """One billing event, stored so the customer and the operator can look it back up.
 
-    ASTRA records every invoice; it does not necessarily ISSUE every invoice. On Paddle,
+    SAVIO records every invoice; it does not necessarily ISSUE every invoice. On Paddle,
     Paddle is the Merchant of Record — legally the seller — and issues the compliant
-    document itself, so those rows carry `provider_invoice_url` and ASTRA renders nothing.
-    On Razorpay, ASTRA is the seller and must produce its own tax invoice, which is what the
+    document itself, so those rows carry `provider_invoice_url` and SAVIO renders nothing.
+    On Razorpay, SAVIO is the seller and must produce its own tax invoice, which is what the
     billing profile's legal name and tax id are for. Generating our own document for a Paddle
     sale would be a tax document naming the wrong seller.
 

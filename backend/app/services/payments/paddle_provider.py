@@ -2,7 +2,7 @@
 
 Paddle is the *seller of record*: it takes the payment, remits VAT/sales tax in
 every jurisdiction, and pays out to your bank. That removes cross-border tax
-compliance from ASTRA entirely — the reason to prefer it over PayPal when selling
+compliance from SAVIO entirely — the reason to prefer it over PayPal when selling
 software abroad from India.
 
 Flow: create a Transaction against a per-seat Price -> redirect the admin to the

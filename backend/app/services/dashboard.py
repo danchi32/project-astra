@@ -192,7 +192,7 @@ class DashboardService:
             actions.append(DashboardAction(
                 key="silent_devices",
                 title=f"{silent} device{'s' if silent != 1 else ''} not checking in",
-                detail="ASTRA can't see or fix a device that isn't reporting.",
+                detail="SAVIO can't see or fix a device that isn't reporting.",
                 count=silent, severity="medium" if silent < 5 else "high", href="/devices",
             ))
 

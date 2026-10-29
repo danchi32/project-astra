@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="ASTRA_", extra="ignore")
 
-    app_name: str = "ASTRA Backend API"
+    app_name: str = "SAVIO Backend API"
     environment: str = "development"
 
     # No defaults for secrets — must come from the environment.

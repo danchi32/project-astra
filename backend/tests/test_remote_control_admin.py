@@ -344,7 +344,7 @@ async def test_provision_creates_group_account_and_grant(monkeypatch):
     _with_fake_ws(monkeypatch, ws)
 
     mesh_id, user_id = await MeshCentralClient().provision_scoped_access(
-        mesh_name="ASTRA - Test", user_slug="astra-org-abc", password="Aa1!secret",
+        mesh_name="SAVIO - Test", user_slug="astra-org-abc", password="Aa1!secret",
         rights=REMOTE_CONTROL_MESH_RIGHTS,
     )
     assert mesh_id == "mesh//new"
@@ -367,7 +367,7 @@ async def test_provision_refuses_to_adopt_a_preexisting_site_admin(monkeypatch):
 
     with pytest.raises(MeshCentralError, match="site admin"):
         await MeshCentralClient().provision_scoped_access(
-            mesh_name="ASTRA - Test", user_slug="astra-org-abc", password="Aa1!secret",
+            mesh_name="SAVIO - Test", user_slug="astra-org-abc", password="Aa1!secret",
             rights=REMOTE_CONTROL_MESH_RIGHTS,
         )
     # The group was NEVER granted to the admin account.
@@ -385,7 +385,7 @@ async def test_provision_adopts_a_preexisting_plain_account(monkeypatch):
 
     # A non-admin account of the same name (our own retry) is adopted and granted the group.
     mesh_id, user_id = await MeshCentralClient().provision_scoped_access(
-        mesh_name="ASTRA - Test", user_slug="astra-org-abc", password="Aa1!secret",
+        mesh_name="SAVIO - Test", user_slug="astra-org-abc", password="Aa1!secret",
         rights=REMOTE_CONTROL_MESH_RIGHTS,
     )
     assert (mesh_id, user_id) == ("mesh//new", "user//astra-org-abc")

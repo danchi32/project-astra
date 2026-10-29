@@ -71,7 +71,7 @@ export default function AssistantsPage() {
         <div className="flex items-center gap-2">
           <div
             className="p-2 rounded-lg"
-            style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}
+            style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}
           >
             <Bot size={18} />
           </div>
@@ -98,7 +98,7 @@ export default function AssistantsPage() {
       <div
         className="flex items-start gap-2 rounded-lg p-3 text-sm"
         style={{
-          background: "rgba(154,47,187,0.06)",
+          background: "rgba(37,99,235,0.06)",
           border: "1px solid var(--border)",
           color: "var(--text-secondary)",
         }}
@@ -201,7 +201,7 @@ export default function AssistantsPage() {
                     <span
                       className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
                       style={{ background: "rgba(100,116,139,0.12)", color: "var(--text-secondary)" }}
-                      title="Maintained by ASTRA. Readable here, edited only by the platform."
+                      title="Maintained by SAVIO. Readable here, edited only by the platform."
                     >
                       <Lock size={10} /> Built-in
                     </span>

@@ -54,4 +54,4 @@ A few tips so the number means something:
 
 The fastest way to reduce MTTR is to remove humans from the routine path entirely and hand them evidence for everything else. That's precisely what an [AI System Administrator](/blog/what-is-an-ai-system-administrator/) does.
 
-[ASTRA](/astra/) auto-resolves the repetitive tickets within safe approval tiers, gathers live evidence before it acts, and escalates the rest with the context already attached — cutting the wait, triage and evidence stages that drive most of your MTTR. [Book a demo](/contact/) to see it in action.
+[SAVIO](/savio/) auto-resolves the repetitive tickets within safe approval tiers, gathers live evidence before it acts, and escalates the rest with the context already attached — cutting the wait, triage and evidence stages that drive most of your MTTR. [Book a demo](/contact/) to see it in action.

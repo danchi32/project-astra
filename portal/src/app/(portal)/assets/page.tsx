@@ -24,7 +24,7 @@ const STATUSES: AssetStatus[] = ["in_use", "in_storage", "in_repair", "retired",
 
 const STATUS_STYLE: Record<AssetStatus, { label: string; color: string }> = {
   in_use: { label: "In use", color: "#10b981" },
-  in_storage: { label: "In storage", color: "#b246d4" },
+  in_storage: { label: "In storage", color: "#3b82f6" },
   in_repair: { label: "In repair", color: "#f59e0b" },
   retired: { label: "Retired", color: "#64748b" },
   lost: { label: "Lost", color: "#ef4444" },
@@ -167,7 +167,7 @@ export default function AssetsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
             <Package size={18} />
           </div>
           <div>
@@ -197,7 +197,7 @@ export default function AssetsPage() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card label="Total assets" value={String(summary.total)} />
           <Card label="In use" value={String(summary.by_status["in_use"] ?? 0)} accent="#10b981" />
-          <Card label="Idle" value={String(summary.by_status["in_storage"] ?? 0)} accent="#b246d4" />
+          <Card label="Idle" value={String(summary.by_status["in_storage"] ?? 0)} accent="#3b82f6" />
           <Card label="In repair" value={String(summary.by_status["in_repair"] ?? 0)} accent="#f59e0b" />
           <Card label="Discard"
             value={String((summary.by_status["retired"] ?? 0) + (summary.by_status["lost"] ?? 0))}
@@ -209,13 +209,13 @@ export default function AssetsPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <select value={locFilter} onChange={(e) => setLocFilter(e.target.value)}
           className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
-          style={{ background: locFilter !== "all" ? "rgba(154,47,187,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: locFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+          style={{ background: locFilter !== "all" ? "rgba(37,99,235,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: locFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
           <option value="all">All locations</option>
           {locations.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | AssetStatus)}
           className="px-3 py-2 rounded-lg text-sm font-medium outline-none"
-          style={{ background: statusFilter !== "all" ? "rgba(154,47,187,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: statusFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
+          style={{ background: statusFilter !== "all" ? "rgba(37,99,235,0.1)" : "var(--surface)", border: "1px solid var(--border)", color: statusFilter !== "all" ? "var(--accent)" : "var(--text-primary)" }}>
           <option value="all">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{STATUS_STYLE[s].label}</option>)}
         </select>

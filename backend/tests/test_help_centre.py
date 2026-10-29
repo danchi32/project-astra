@@ -1,4 +1,4 @@
-"""ASTRA's customer-facing support documentation.
+"""SAVIO's customer-facing support documentation.
 
 The isolation tests matter most. This endpoint serves one organization content that was
 written outside it, which is exactly the shape of a tenant leak — so "only global, only
@@ -25,9 +25,9 @@ def _article(*, org_id=None, title="Agent will not install", content="Body text"
 
 
 async def test_only_global_published_articles_are_served(client, session_factory, org, admin_user):
-    """An organization's own runbook must never appear in ASTRA's help centre."""
+    """An organization's own runbook must never appear in SAVIO's help centre."""
     async with session_factory() as s:
-        s.add(_article(title="ASTRA install fails with 0x80070005", code="0x80070005"))
+        s.add(_article(title="SAVIO install fails with 0x80070005", code="0x80070005"))
         s.add(_article(org_id=org.id, title="Our internal VPN runbook", code="INTERNAL-9"))
         s.add(_article(title="Unfinished draft", published=False, code="DRAFT-1"))
         await s.commit()
@@ -37,7 +37,7 @@ async def test_only_global_published_articles_are_served(client, session_factory
     assert response.status_code == 200, response.text
 
     titles = [a["title"] for a in response.json()]
-    assert titles == ["ASTRA install fails with 0x80070005"]
+    assert titles == ["SAVIO install fails with 0x80070005"]
     assert "Our internal VPN runbook" not in response.text
     assert "Unfinished draft" not in response.text
 
@@ -245,7 +245,7 @@ async def test_authoring_requires_platform_admin(client, session_factory, admin_
 async def test_operator_cannot_edit_an_organizations_article(
     client, session_factory, org, admin_user
 ):
-    """The PATCH route is for ASTRA's own documentation, not a customer's runbooks."""
+    """The PATCH route is for SAVIO's own documentation, not a customer's runbooks."""
     headers = await _platform_admin(client, session_factory, admin_user)
     async with session_factory() as s:
         theirs = _article(org_id=org.id, title="Their runbook")

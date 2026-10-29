@@ -32,7 +32,7 @@ class AssistantAsk(BaseModel):
 class AssistantSource(BaseModel):
     """A document the answer came from.
 
-    `article_id` is present only for ASTRA help centre articles, which a signed-in user can
+    `article_id` is present only for SAVIO help centre articles, which a signed-in user can
     open. FAQ entries and an organization's own runbooks have no page to link to, so the
     UI shows the title alone rather than a dead link.
     """

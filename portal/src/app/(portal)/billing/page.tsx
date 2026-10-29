@@ -16,7 +16,7 @@ const PROVIDER_LABEL: Record<BillingProvider, string> = {
 };
 
 const STATUS_STYLE: Record<SubscriptionStatus, { label: string; color: string }> = {
-  trialing: { label: "Trial", color: "#b246d4" },
+  trialing: { label: "Trial", color: "#3b82f6" },
   active: { label: "Active", color: "#10b981" },
   past_due: { label: "Past due", color: "#f59e0b" },
   suspended: { label: "Suspended", color: "#ef4444" },
@@ -114,7 +114,7 @@ export default function BillingPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <CreditCard size={18} />
         </div>
         <div>
@@ -126,7 +126,7 @@ export default function BillingPage() {
       </div>
 
       {notice && (
-        <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "rgba(154,47,187,0.08)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+        <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "rgba(37,99,235,0.08)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
           {notice}
         </div>
       )}
@@ -192,7 +192,7 @@ export default function BillingPage() {
       {status && !status.billing_enabled && (
         <div className="rounded-xl px-4 py-3 text-sm" style={{ background: "var(--surface)", border: "1px dashed var(--border)", color: "var(--text-secondary)" }}>
           Online payments aren&apos;t enabled yet. Your account works normally on its trial —
-          contact ASTRA to set up a subscription.
+          contact SAVIO to set up a subscription.
         </div>
       )}
 

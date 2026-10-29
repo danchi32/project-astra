@@ -15,9 +15,9 @@ import type {
 import { formatRelativeTime } from "@/lib/utils";
 
 const STATUS: Record<SupportRequestStatus, { label: string; color: string; hint: string }> = {
-  open: { label: "Open", color: "var(--health-warn)", hint: "Waiting on ASTRA" },
+  open: { label: "Open", color: "var(--health-warn)", hint: "Waiting on SAVIO" },
   in_progress: { label: "In progress", color: "var(--accent)", hint: "Being worked on" },
-  waiting_customer: { label: "Waiting on you", color: "var(--accent)", hint: "ASTRA has replied" },
+  waiting_customer: { label: "Waiting on you", color: "var(--accent)", hint: "SAVIO has replied" },
   resolved: { label: "Resolved", color: "var(--health-good)", hint: "Fixed" },
   closed: { label: "Closed", color: "var(--text-secondary)", hint: "No further action" },
 };
@@ -108,7 +108,7 @@ export function MessageThread({ messages }: { messages: SupportMessage[] }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
-                {m.from_operator ? "ASTRA support" : (m.author_email ?? "Someone at your organization")}
+                {m.from_operator ? "SAVIO support" : (m.author_email ?? "Someone at your organization")}
               </span>
               <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
                 {formatRelativeTime(m.created_at)}

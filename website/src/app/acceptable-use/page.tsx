@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Acceptable Use Policy",
   description:
-    "What ASTRA may and may not be used for, including the rules for remote support sessions and remediation.",
+    "What SAVIO may and may not be used for, including the rules for remote support sessions and remediation.",
   alternates: { canonical: "/acceptable-use/" },
 };
 
@@ -17,7 +17,7 @@ export default function AcceptableUsePage() {
       reviewed
       intro={
         <>
-          ASTRA can see into, and act on, the computers people use every day. This policy
+          SAVIO can see into, and act on, the computers people use every day. This policy
           sets out what it may be used for. It forms part of the{" "}
           <a href="/terms/">Terms of Service</a>, and applies to every user of a
           customer&rsquo;s account.
@@ -25,7 +25,7 @@ export default function AcceptableUsePage() {
       }
     >
       <h2>1. Devices and people</h2>
-      <p>You must not use ASTRA to:</p>
+      <p>You must not use SAVIO to:</p>
       <ul>
         <li>enrol, monitor or act on a device your organisation does not own or control;</li>
         <li>
@@ -82,7 +82,7 @@ export default function AcceptableUsePage() {
 
       <h2>4. AI features</h2>
       <p>
-        Do not use ASTRA&rsquo;s assistant to generate content that is unlawful, harmful
+        Do not use SAVIO&rsquo;s assistant to generate content that is unlawful, harmful
         or deceptive, or attempt to make it ignore its safety rules. Review what it
         proposes before approving an action &mdash; approval tiers exist so a person makes
         the decision.
@@ -98,7 +98,7 @@ export default function AcceptableUsePage() {
 
       <h2>6. Reporting misuse</h2>
       <p>
-        If you believe ASTRA is being misused &mdash; including on a device you use
+        If you believe SAVIO is being misused &mdash; including on a device you use
         &mdash; write to{" "}
         <a href={`mailto:${site.legal.grievanceOfficer.email}`}>
           {site.legal.grievanceOfficer.email}

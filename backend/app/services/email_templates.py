@@ -78,7 +78,7 @@ ASSET_PLACEHOLDER_SPECS: list[PlaceholderSpec] = [
     PlaceholderSpec("software", "Installed apps", "device", "142 apps", needs_device=True),
     PlaceholderSpec("device_user", "Signed-in user", "device", "ACME\\sam", needs_device=True),
     PlaceholderSpec("device_last_seen", "Last checked in", "device", "2026-08-10 14:32 UTC", needs_device=True),
-    PlaceholderSpec("agent_version", "ASTRA agent version", "device", "0.7.3", needs_device=True),
+    PlaceholderSpec("agent_version", "SAVIO agent version", "device", "0.7.3", needs_device=True),
 
     PlaceholderSpec("org_name", "Organization name", "org", "Your Company"),
 ]
@@ -109,7 +109,7 @@ DEFAULT_ASSET_BODY = (
 
 def _shell(title: str, body_html: str) -> str:
     return f"""<div style="font-family:Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
-      <div style="font-size:22px;font-weight:700;color:#2563eb;margin-bottom:8px">⬡ ASTRA</div>
+      <div style="font-size:22px;font-weight:700;color:#2563eb;margin-bottom:8px">⬡ SAVIO</div>
       <h1 style="font-size:18px;margin:0 0 16px">{title}</h1>
       {body_html}
     </div>"""
