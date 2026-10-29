@@ -1,6 +1,6 @@
 """Per-organization outbound email identity (DNS-verified sending).
 
-An org sets the address it wants ASTRA to send as (e.g. it-support@acme.com); we register
+An org sets the address it wants SAVIO to send as (e.g. it-support@acme.com); we register
 that domain with Resend, hand back the DNS records to publish, and — once verified — send
 customer-facing mail (asset acknowledgements, etc.) AS the org. Designed so the OAuth methods
 can slot in later behind the same `resolve_sender` entry point.
@@ -54,8 +54,8 @@ class OrgSender:
     """Who one org's mail goes out as.
 
     `from_address` is None for the shared sender: the caller passes None down to
-    EmailService, which fills in ASTRA's own configured address. Saying it that way rather
-    than resolving our address here keeps one owner for "what is ASTRA's From address".
+    EmailService, which fills in SAVIO's own configured address. Saying it that way rather
+    than resolving our address here keeps one owner for "what is SAVIO's From address".
     """
     from_name: str | None
     from_address: str | None
@@ -66,7 +66,7 @@ class OrgSender:
 
 
 class SharedSenderNotEntitled(Exception):
-    """The org's plan doesn't include sending from ASTRA's own address."""
+    """The org's plan doesn't include sending from SAVIO's own address."""
 
 
 class EmailIntegrationService:
@@ -76,7 +76,7 @@ class EmailIntegrationService:
 
     @staticmethod
     async def shared_sender_allowed(session: AsyncSession, org_id: uuid.UUID) -> bool:
-        """Whether this org may send from ASTRA's address.
+        """Whether this org may send from SAVIO's address.
 
         Derived from the plan plus the operator's per-org overrides, like every other
         entitlement — so granting an exception is the same one-click act on the org page
@@ -166,8 +166,8 @@ class EmailIntegrationService:
             self.session, actor.org_id
         ):
             raise SharedSenderNotEntitled(
-                "Sending through ASTRA's address isn't included in your plan. Set up your "
-                "own sending domain below, or ask your ASTRA operator to enable it."
+                "Sending through SAVIO's address isn't included in your plan. Set up your "
+                "own sending domain below, or ask your SAVIO operator to enable it."
             )
 
         row = await self._row(actor.org_id)
@@ -257,7 +257,7 @@ class EmailIntegrationService:
         how far through setup they are:
 
           own domain, verified   ->  From: Acme IT <it@acme.com>
-          anything else          ->  From: Acme IT (via ASTRA) <astra@technomateai.com>
+          anything else          ->  From: Acme IT (via SAVIO) <astra@technomateai.com>
 
         The second is not a degraded mode. Getting DNS records added is a request to
         somebody else in most companies, and an org that has chosen not to do it still
@@ -287,7 +287,7 @@ class EmailIntegrationService:
         # recipient who checks is going to see that anyway — better they read it as an
         # organization using a tool than as mail impersonating their IT department.
         return OrgSender(
-            from_name=f"{(row.from_name if row else None) or org_name} (via ASTRA)",
+            from_name=f"{(row.from_name if row else None) or org_name} (via SAVIO)",
             from_address=None,
             reply_to=row.reply_to if row else None,
             shared=True,

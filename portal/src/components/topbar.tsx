@@ -168,7 +168,7 @@ export function Topbar() {
                     title={label}
                     className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition-colors"
                     style={{
-                      background: theme === value ? "rgba(154,47,187,0.12)" : "transparent",
+                      background: theme === value ? "rgba(37,99,235,0.12)" : "transparent",
                       color: theme === value ? "var(--accent)" : "var(--text-secondary)",
                       border: "1px solid " + (theme === value ? "var(--accent)" : "var(--border)"),
                     }}

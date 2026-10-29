@@ -125,14 +125,14 @@ class AuthService:
         """
         if get_settings().require_work_email and is_free_email_domain(email):
             raise ValidationError(
-                "Please sign up with your work email address. ASTRA accounts belong to an "
+                "Please sign up with your work email address. SAVIO accounts belong to an "
                 "organisation, so personal email providers aren't accepted. If your team "
                 "doesn't have a work domain, contact us and we'll set you up."
             )
         domain = corporate_domain(email)
         if domain is not None and await self.orgs.get_by_email_domain(domain) is not None:
             raise ConflictError(
-                f"Your organisation ({domain}) is already registered with ASTRA. "
+                f"Your organisation ({domain}) is already registered with SAVIO. "
                 "Ask your organisation's admin to add you to it, or sign in."
             )
         return domain

@@ -56,9 +56,9 @@ What secure offboarding really needs is to be *instant* and *complete*: the mome
 
 > 📄 **Free download:** Get this as a one-page PDF your team can print and reuse for every leaver → **[The Secure Offboarding Checklist](/resources/offboarding-checklist/)**
 
-## Automating offboarding with ASTRA
+## Automating offboarding with SAVIO
 
-This is exactly the problem [ASTRA's secure offboarding](/astra/) was built for. In one click, ASTRA:
+This is exactly the problem [SAVIO's secure offboarding](/savio/) was built for. In one click, SAVIO:
 
 - **Disables the leaver's local account** so they can't sign back in
 - **Forces them out of their active Windows session** — not just the next login

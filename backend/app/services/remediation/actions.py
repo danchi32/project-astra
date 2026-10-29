@@ -203,7 +203,7 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     # UNINSTALL_NEVER below binds both, and no organization can override it.
     RemediationAction("uninstall_application", "Uninstall software",
                       RemediationTier.ADMIN_ONLY,
-                      "Silently removes an installed application. ASTRA itself only proposes "
+                      "Silently removes an installed application. SAVIO itself only proposes "
                       "this for software the organization has restricted; an admin can remove "
                       "any unprotected application from the device's Software tab. Machine-wide "
                       "installations only, and only where the vendor provides a silent "
@@ -321,7 +321,8 @@ SAFE_TIMEZONES: frozenset[str] = frozenset({
 # restricted-software list is an IT policy; it is not a licence to strip a machine's
 # defences. Matched as a case-insensitive substring, so vendor naming variants are covered.
 UNINSTALL_NEVER: tuple[str, ...] = (
-    "astra", "windows defender", "microsoft defender", "crowdstrike", "falcon",
+    # Both names: devices installed before the SAVIO rename still register as "ASTRA Agent".
+    "astra", "savio", "windows defender", "microsoft defender", "crowdstrike", "falcon",
     "sentinelone", "sophos", "mcafee", "symantec", "eset", "kaspersky",
     "trend micro", "carbon black", "cylance", "bitdefender", "webroot",
     "malwarebytes", "cortex xdr", "forticlient", "trellix",

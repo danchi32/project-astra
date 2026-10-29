@@ -52,7 +52,7 @@ DEFAULT_BACKEND_IP = ""
 # Delimited with ''' because the embedded VBS line contains a triple double-quote.
 _PORTABLE_TEMPLATE = r'''#Requires -RunAsAdministrator
 <#
-    ASTRA Agent — portable installer, pre-configured for your organization.
+    SAVIO Agent — portable installer, pre-configured for your organization.
     Run elevated:  powershell -ExecutionPolicy Bypass -File .\Install-AstraAgent.ps1
     Installs the background Service + tray Chat via the trusted dotnet host so
     antivirus/ASR does not block them. The enrollment token is already baked in.
@@ -76,7 +76,7 @@ $svcName = "AstraAgent"
 $svcDir  = "$env:ProgramFiles\Astra\Agent"
 $trayDir = "$env:ProgramFiles\Astra\Tray"
 
-Write-Host "==== ASTRA agent -> $ServerUrl ====" -ForegroundColor Cyan
+Write-Host "==== SAVIO agent -> $ServerUrl ====" -ForegroundColor Cyan
 
 function Get-DotnetHost {
     $d = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
@@ -199,8 +199,8 @@ if (-not (Test-Path "$svcDir\AstraAgent.Service.dll")) { throw "AstraAgent.Servi
 @{ Astra = @{ ServerUrl = $ServerUrl; EnrollmentToken = $EnrollmentToken; HeartbeatIntervalSeconds = 60; ProxyUrl = $ProxyUrl } } |
     ConvertTo-Json -Depth 5 | Set-Content "$svcDir\appsettings.json" -Encoding UTF8
 $svcBin = '"{0}" "{1}"' -f $dotnet, "$svcDir\AstraAgent.Service.dll"
-New-Service -Name $svcName -BinaryPathName $svcBin -DisplayName "ASTRA Agent" `
-    -Description "ASTRA endpoint agent - telemetry and secure self-healing." -StartupType Automatic | Out-Null
+New-Service -Name $svcName -BinaryPathName $svcBin -DisplayName "SAVIO Agent" `
+    -Description "SAVIO endpoint agent - telemetry and secure self-healing." -StartupType Automatic | Out-Null
 sc.exe failure $svcName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
 Start-Service $svcName
 Write-Host "Service installed and started." -ForegroundColor Green
@@ -257,14 +257,14 @@ try {
 
 Start-Sleep -Seconds 4
 Get-Service $svcName | Select-Object Name, Status, StartType | Format-Table -AutoSize
-Write-Host "Done. This device should appear ONLINE in your ASTRA portal within a minute." -ForegroundColor Green
+Write-Host "Done. This device should appear ONLINE in your SAVIO portal within a minute." -ForegroundColor Green
 '''
 
 
-_PORTABLE_README = """ASTRA Agent - Portable Installer (pre-configured)
+_PORTABLE_README = """SAVIO Agent - Portable Installer (pre-configured)
 =================================================
 
-Copy this whole folder to any Windows PC. The PC enrolls into your ASTRA portal,
+Copy this whole folder to any Windows PC. The PC enrolls into your SAVIO portal,
 sends telemetry, and gets the tray chat. The enrollment token is already baked in.
 
 INSTALL - the easy way
@@ -276,7 +276,7 @@ INSTALL - the easy way
 
 WHAT IT DOES
   - Installs the .NET 8 Desktop Runtime if missing (official Microsoft, signed).
-  - Installs the ASTRA service (auto-start) + tray chat (auto-start at login for all
+  - Installs the SAVIO service (auto-start) + tray chat (auto-start at login for all
     users) via the trusted dotnet host, so antivirus/ASR does not block them.
 
 REQUIREMENTS
@@ -286,7 +286,7 @@ REQUIREMENTS
 
 VERIFY
   - The device shows ONLINE in the portal within a minute.
-  - An "ASTRA Assistant" tray icon appears (the chat).
+  - An "SAVIO Assistant" tray icon appears (the chat).
 
 Server:  @@SERVER_URL@@
 Token expires:  @@EXPIRES@@
@@ -299,8 +299,8 @@ management tool (Intune/SCCM/GPO) rather than copying this folder by hand.
 # Double-clickable launcher: self-elevates (one UAC prompt) then runs the installer
 # silently. cmd.exe and powershell.exe are trusted, so ASR does not block this.
 _INSTALL_BAT = r"""@echo off
-REM ASTRA Agent installer - just double-click this file.
-title ASTRA Agent Installer
+REM SAVIO Agent installer - just double-click this file.
+title SAVIO Agent Installer
 
 :: Re-launch elevated if we're not already admin (this is the one permission prompt).
 net session >nul 2>&1
@@ -310,7 +310,7 @@ if %errorlevel% neq 0 (
 )
 
 cd /d "%~dp0"
-echo Installing the ASTRA agent, please wait...
+echo Installing the SAVIO agent, please wait...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0Install-AstraAgent.ps1"
 set "rc=%errorlevel%"
 if not "%rc%"=="0" (

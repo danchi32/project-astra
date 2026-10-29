@@ -10,7 +10,7 @@ import { bookDemo, site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Self-Healing IT Automation for Windows Teams",
   description:
-    "Reduce repetitive Windows support work with evidence-first self-healing IT. ASTRA controls approvals, allowlists actions and verifies every attempted fix.",
+    "Reduce repetitive Windows support work with evidence-first self-healing IT. SAVIO controls approvals, allowlists actions and verifies every attempted fix.",
   keywords: [
     "self-healing IT", "self-healing IT automation", "automated IT remediation",
     "proactive IT support", "Windows self-healing", "AI IT operations",
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/self-healing-it/" },
   openGraph: {
     title: "Self-Healing IT That Keeps Your Team in Control",
-    description: "Turn live endpoint evidence into governed remediation and verified outcomes with ASTRA.",
+    description: "Turn live endpoint evidence into governed remediation and verified outcomes with SAVIO.",
     url: "/self-healing-it/",
     type: "website",
   },
@@ -49,19 +49,19 @@ const examples = [
 const faqs = [
   {
     question: "What does self-healing IT mean?",
-    answer: "Self-healing IT detects a known issue, gathers evidence, applies a permitted remediation and verifies the result. In ASTRA, it does not mean unrestricted autonomous access to devices.",
+    answer: "Self-healing IT detects a known issue, gathers evidence, applies a permitted remediation and verifies the result. In SAVIO, it does not mean unrestricted autonomous access to devices.",
   },
   {
-    question: "Does ASTRA replace an IT team?",
-    answer: "No. ASTRA reduces repetitive evidence collection and routine remediation while technicians retain control of sensitive decisions, exceptions and broader operational work.",
+    question: "Does SAVIO replace an IT team?",
+    answer: "No. SAVIO reduces repetitive evidence collection and routine remediation while technicians retain control of sensitive decisions, exceptions and broader operational work.",
   },
   {
-    question: "How does ASTRA decide what can run automatically?",
+    question: "How does SAVIO decide what can run automatically?",
     answer: "Each remediation has an automatic, approval-required or admin-only tier. The backend validates the action, actor and organization policy, while the endpoint agent separately enforces its allowlist.",
   },
   {
     question: "What happens when a remediation does not work?",
-    answer: "ASTRA records the attempted action and verification result. The issue can then be escalated with the available evidence rather than being reported as resolved without confirmation.",
+    answer: "SAVIO records the attempted action and verification result. The issue can then be escalated with the available evidence rather than being reported as resolved without confirmation.",
   },
   {
     question: "Can we start with a small rollout?",
@@ -74,7 +74,7 @@ const schema = {
   "@graph": [
     {
       "@type": "SoftwareApplication",
-      name: "ASTRA Self-Healing IT",
+      name: "SAVIO Self-Healing IT",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Windows 10, Windows 11",
       url: "https://technomateai.com/self-healing-it/",
@@ -104,7 +104,7 @@ export default function SelfHealingItPage() {
               Resolve routine IT issues before they become another manual ticket
             </h1>
             <p className="mt-6 max-w-3xl text-lg leading-relaxed text-secondary-token">
-              ASTRA turns live Windows endpoint evidence into a controlled remediation, then verifies the outcome. Your team defines what can run automatically and what must wait for approval.
+              SAVIO turns live Windows endpoint evidence into a controlled remediation, then verifies the outcome. Your team defines what can run automatically and what must wait for approval.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button href={bookDemo.href} external={bookDemo.external}>Plan a self-healing pilot <ArrowRight className="h-4 w-4" /></Button>
@@ -145,7 +145,7 @@ export default function SelfHealingItPage() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-wider text-brand-500">Operational value</p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight">Give a lean IT team more time for exceptions</h2>
-              <p className="mt-4 leading-relaxed text-secondary-token">ASTRA focuses automation on frequent, defined work. It helps the team investigate faster without pretending every incident should be autonomous.</p>
+              <p className="mt-4 leading-relaxed text-secondary-token">SAVIO focuses automation on frequent, defined work. It helps the team investigate faster without pretending every incident should be autonomous.</p>
               <Link href="/windows-endpoint-automation/" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">Explore Windows endpoint automation <ArrowRight className="h-4 w-4" /></Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -168,7 +168,7 @@ export default function SelfHealingItPage() {
               <p className="text-sm font-semibold uppercase tracking-wider text-brand-500">Boundaries by design</p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight">Match autonomy to operational risk</h2>
               <p className="mt-4 text-secondary-token">The model cannot promote a sensitive action into a lower tier. Authorization is enforced by application code and endpoint allowlists.</p>
-              <Link href="/security/" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">Review ASTRA security controls <ArrowRight className="h-4 w-4" /></Link>
+              <Link href="/security/" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">Review SAVIO security controls <ArrowRight className="h-4 w-4" /></Link>
             </div>
             <div className="overflow-hidden rounded-2xl border border-token">
               {examples.map(([action, control]) => (
@@ -203,7 +203,7 @@ export default function SelfHealingItPage() {
 
       <Section className="pb-28">
         <Container>
-          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center text-white">
+          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-cyan-500 px-8 py-14 text-center text-white">
             <h2 className="text-3xl font-bold">Choose one repetitive issue for your first pilot</h2>
             <p className="mx-auto mt-4 max-w-xl text-white/85">In a 30-minute session, we will map the evidence, action boundary, approver and verification step for a controlled Windows device group.</p>
             <a href={bookDemo.href} target={bookDemo.external ? "_blank" : undefined} rel={bookDemo.external ? "noopener" : undefined} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-700">Book the pilot session <ArrowRight className="h-4 w-4" /></a>

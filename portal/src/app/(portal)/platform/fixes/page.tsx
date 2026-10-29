@@ -62,7 +62,7 @@ export default function GlobalFixesPage() {
       </Link>
 
       <div className="flex items-center gap-2">
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <Zap size={18} />
         </div>
         <div>

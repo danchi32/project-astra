@@ -84,7 +84,7 @@ async def create_portal(
         if not url:
             raise ValidationError(
                 "Your payment provider has no self-serve portal. Use 'Cancel subscription', "
-                "or contact ASTRA support to change your payment details."
+                "or contact SAVIO support to change your payment details."
             )
         return PortalSession(url=url)
     return PortalSession(url=await service.create_portal_url(org))

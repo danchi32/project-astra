@@ -46,7 +46,7 @@ async def _capture(session, org_id, version=None) -> Recorder:
 
 async def _seed_builtin(session_factory, **version_fields) -> AssistantVersion:
     async with session_factory() as session:
-        assistant = Assistant(org_id=None, name="ASTRA System Administrator")
+        assistant = Assistant(org_id=None, name="SAVIO System Administrator")
         session.add(assistant)
         await session.flush()
         version = AssistantVersion(

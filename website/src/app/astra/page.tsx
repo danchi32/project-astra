@@ -1,27 +1,13 @@
 import type { Metadata } from "next";
-import { AstraContent } from "./AstraContent";
-import { AstraJsonLd } from "@/components/JsonLd";
+import { Redirect } from "@/components/Redirect";
 
+// The product page moved here → /savio/ when ASTRA was renamed SAVIO.
 export const metadata: Metadata = {
-  title: "AI System Administrator for Windows | ASTRA",
-  description:
-    "ASTRA is AI System Administrator software for Windows fleets. Diagnose endpoint issues, run governed fixes, and verify results with human approval controls.",
-  keywords: [
-    "AI System Administrator",
-    "AI System Admin",
-    "AI sysadmin",
-    "AI IT administrator",
-    "automated system administration",
-    "Windows IT automation",
-  ],
-  alternates: { canonical: "/astra/" },
+  title: "SAVIO — AI System Administrator",
+  robots: { index: false, follow: true },
+  alternates: { canonical: "/savio/" },
 };
 
-export default function AstraPage() {
-  return (
-    <>
-      <AstraJsonLd />
-      <AstraContent />
-    </>
-  );
+export default function AstraMoved() {
+  return <Redirect to="/savio/" />;
 }

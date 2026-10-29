@@ -1,4 +1,4 @@
-ASTRA AGENT - END USER LICENCE AGREEMENT
+SAVIO AGENT - END USER LICENCE AGREEMENT
 
 TECHNOMATE IT-SOLUTION PRIVATE LIMITED
 CIN: U62099UW2026PTC257827
@@ -18,13 +18,13 @@ authorised to accept this licence for it.
 --------------------------------------------------------------------
 Technomate IT-Solution Private Limited ("Technomate") grants you a
 non-exclusive, non-transferable, revocable licence to install and run
-the ASTRA Agent on devices you own or control, for the number of
+the SAVIO Agent on devices you own or control, for the number of
 licences covered by your active subscription and for its duration.
 
 --------------------------------------------------------------------
 2. WHAT THIS SOFTWARE DOES - PLEASE READ
 --------------------------------------------------------------------
-The ASTRA Agent has two parts:
+The SAVIO Agent has two parts:
 
   * a Windows service that runs with system privileges and performs
     machine-level work; and
@@ -33,7 +33,7 @@ The ASTRA Agent has two parts:
 
 It reports device inventory, performance telemetry, installed
 software, services, Windows Update status and event log entries to the
-ASTRA platform.
+SAVIO platform.
 
 It EXECUTES REMEDIATION ACTIONS ON THIS DEVICE, drawn from a fixed
 catalogue built into the agent, at the approval tier configured by the
@@ -69,13 +69,13 @@ this device. It lets your organisation's technicians ask to view and
 control this screen in order to help you. Every session:
 
   * starts ONLY after the person at this device clicks "Allow" on a
-    prompt titled "ASTRA Remote Support" that names the technician
+    prompt titled "SAVIO Remote Support" that names the technician
     and the reason they gave - an unanswered prompt is never a yes;
   * is streamed live and is NOT recorded;
   * shares the clipboard both ways, with file transfer and
     command-line access disabled;
   * is written to your organisation's audit log;
-  * can be started only by a person, never by ASTRA's AI.
+  * can be started only by a person, never by SAVIO's AI.
 
 The remote-support service is removed automatically when the feature
 is switched off for your organisation, and when the agent is removed.
@@ -99,7 +99,7 @@ verifies the signature against a public key built into the installed
 software before applying anything. An update that does not verify is
 refused.
 
-The private signing key is never held by the ASTRA backend, so a
+The private signing key is never held by the SAVIO backend, so a
 compromise of Technomate's servers cannot push software to your
 devices.
 

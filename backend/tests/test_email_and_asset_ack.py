@@ -477,14 +477,14 @@ async def test_a_new_org_can_send_before_touching_dns(session_factory, admin_use
             session, admin_user.org_id, org_name="Acme Corp"
         )
     assert sender.shared is True
-    assert sender.from_address is None, "None means 'use ASTRA's own configured address'"
-    assert sender.from_name == "Acme Corp (via ASTRA)", (
+    assert sender.from_address is None, "None means 'use SAVIO's own configured address'"
+    assert sender.from_name == "Acme Corp (via SAVIO)", (
         "said out loud — a recipient who checks the address will see it is ours anyway"
     )
 
 
 async def test_choosing_the_shared_sender_records_a_reply_to(session_factory, admin_user):
-    """Without one, an employee replying to an asset email writes to ASTRA, where nobody
+    """Without one, an employee replying to an asset email writes to SAVIO, where nobody
     reads a customer's staff mail. The question vanishes with no bounce and no trace."""
     from app.models import EmailSendMethod
     from app.services.email_integration import EmailIntegrationService
@@ -500,7 +500,7 @@ async def test_choosing_the_shared_sender_records_a_reply_to(session_factory, ad
             session, admin_user.org_id, org_name="Acme Corp"
         )
     assert sender.shared is True
-    assert sender.from_name == "Acme IT (via ASTRA)"
+    assert sender.from_name == "Acme IT (via SAVIO)"
     assert sender.reply_to == "helpdesk@acme.com"
 
 
@@ -535,12 +535,12 @@ async def test_the_reply_to_reaches_the_actual_send(session_factory, admin_user,
         await AssetService(session)._send_ack_email(asset)
 
     assert captured.get("reply_to") == "helpdesk@acme.com"
-    assert captured.get("from_email") is None, "shared sender uses ASTRA's own address"
+    assert captured.get("from_email") is None, "shared sender uses SAVIO's own address"
 
 
 async def test_registering_your_own_domain_selects_it(session_factory, admin_user, monkeypatch):
     """Setting up a sending domain IS choosing it. Without this an admin could finish DNS
-    verification and still have everything go out from ASTRA's address, which looks exactly
+    verification and still have everything go out from SAVIO's address, which looks exactly
     like the feature being broken with nothing anywhere explaining it."""
     from app.models import EmailSendMethod
     from app.services import email_domains
@@ -592,7 +592,7 @@ async def set_plan(session_factory, admin_user):
 
 
 async def test_an_essential_org_cannot_pick_the_shared_sender(session_factory, admin_user, set_plan):
-    """Sending from ASTRA's address is gated for reputation: on the shared sender every
+    """Sending from SAVIO's address is gated for reputation: on the shared sender every
     organization draws on one sending domain, so one bad recipient list degrades delivery
     for everyone else on it."""
     from app.models import EmailSendMethod

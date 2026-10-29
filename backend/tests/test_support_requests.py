@@ -1,4 +1,4 @@
-"""An organization asking ASTRA for help, and ASTRA answering.
+"""An organization asking SAVIO for help, and SAVIO answering.
 
 Three things are worth pinning down: who can read a thread, that the diagnostics snapshot
 is built from the database rather than from whatever the client claimed, and that the

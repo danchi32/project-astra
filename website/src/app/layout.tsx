@@ -13,11 +13,11 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${site.domain}`),
   title: {
-    default: `${site.company} — IT Services, Hardware & ASTRA AI`,
+    default: `${site.company} — IT Services, Hardware & SAVIO AI`,
     template: `%s — ${site.company}`,
   },
   description:
-    "Technomate IT-Solution delivers managed IT services, laptops & hardware, and ASTRA — an AI System Administrator that automates IT support with telemetry, self-healing and enterprise knowledge.",
+    "Technomate IT-Solution delivers managed IT services, laptops & hardware, and SAVIO — an AI System Administrator that automates IT support with telemetry, self-healing and enterprise knowledge.",
   keywords: [
     "IT services",
     "managed IT",
@@ -27,14 +27,14 @@ export const metadata: Metadata = {
     "AI System Administrator",
     "AI System Admin",
     "AI sysadmin",
-    "ASTRA",
+    "SAVIO",
     "self-healing IT",
     "Technomate",
   ],
   openGraph: {
-    title: `${site.company} — IT Services, Hardware & ASTRA AI`,
+    title: `${site.company} — IT Services, Hardware & SAVIO AI`,
     description:
-      "Managed IT services, hardware supply, and ASTRA — the AI System Administrator that fixes IT before your team even notices.",
+      "Managed IT services, hardware supply, and SAVIO — the AI System Administrator that fixes IT before your team even notices.",
     type: "website",
     url: `https://${site.domain}`,
     siteName: site.company,
@@ -50,9 +50,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: `${site.company} — IT Services, Hardware & ASTRA AI`,
+    title: `${site.company} — IT Services, Hardware & SAVIO AI`,
     description:
-      "Managed IT services, hardware supply, and ASTRA — the AI System Administrator that fixes IT before your team even notices.",
+      "Managed IT services, hardware supply, and SAVIO — the AI System Administrator that fixes IT before your team even notices.",
     images: ["/og.png"],
   },
   icons: {

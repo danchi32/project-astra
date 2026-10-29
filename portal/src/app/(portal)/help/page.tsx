@@ -43,7 +43,7 @@ export default function HelpPage() {
               Help &amp; support
             </h1>
             <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-              Search the guides, or ask the ASTRA team directly
+              Search the guides, or ask the SAVIO team directly
             </p>
           </div>
         </div>
@@ -146,7 +146,7 @@ function ArticlesTab({ onAskInstead }: { onAskInstead: () => void }) {
             className="px-3 py-2 rounded-lg text-sm font-medium text-white"
             style={{ background: "var(--accent)" }}
           >
-            Ask the ASTRA team
+            Ask the SAVIO team
           </button>
         </div>
       </Panel>
@@ -212,14 +212,14 @@ function ArticlesTab({ onAskInstead }: { onAskInstead: () => void }) {
               {query ? "Nothing matches that yet." : "No guides published yet."}
             </p>
             <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-              The ASTRA team can help directly.
+              The SAVIO team can help directly.
             </p>
             <button
               onClick={onAskInstead}
               className="mt-4 px-3 py-2 rounded-lg text-sm font-medium text-white"
               style={{ background: "var(--accent)" }}
             >
-              Ask the ASTRA team
+              Ask the SAVIO team
             </button>
           </div>
         </Panel>
@@ -373,7 +373,7 @@ function NewRequestForm({ onDone, onCancel }: { onDone: (id: string) => void; on
   return (
     <Panel>
       <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-        Ask the ASTRA team
+        Ask the SAVIO team
       </h2>
       <p className="text-xs mt-0.5 mb-4" style={{ color: "var(--text-secondary)" }}>
         Your plan, fleet size and how many devices are reporting in are attached

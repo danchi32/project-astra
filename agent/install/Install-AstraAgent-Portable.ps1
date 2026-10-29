@@ -1,10 +1,10 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Portable ASTRA agent installer — copy this whole folder to any Windows PC and run.
+    Portable SAVIO agent installer — copy this whole folder to any Windows PC and run.
 
 .DESCRIPTION
-    Installs the ASTRA agent (background Service + tray Chat) so the device enrolls
+    Installs the SAVIO agent (background Service + tray Chat) so the device enrolls
     and appears in your portal. Handles the three things that block locked-down
     corporate machines:
 
@@ -18,7 +18,7 @@
     A token from the portal (Devices -> Install agent -> Generate). Required.
 
 .PARAMETER ServerUrl
-    Backend URL. Defaults to the ASTRA production API on its custom domain.
+    Backend URL. Defaults to the SAVIO production API on its custom domain.
 
 .PARAMETER BackendIp
     Optional IP to pin $ServerUrl's hostname to in the hosts file, for networks
@@ -44,7 +44,7 @@ $svcName = "AstraAgent"
 $svcDir  = "$env:ProgramFiles\Astra\Agent"
 $trayDir = "$env:ProgramFiles\Astra\Tray"
 
-Write-Host "==== ASTRA agent portable installer ====" -ForegroundColor Cyan
+Write-Host "==== SAVIO agent portable installer ====" -ForegroundColor Cyan
 Write-Host "Backend: $ServerUrl" -ForegroundColor Cyan
 
 # ---------- 1. Ensure the .NET 8 Desktop runtime (needed by the tray + agent) ----------
@@ -164,8 +164,8 @@ if (-not (Test-Path "$svcDir\AstraAgent.Service.dll")) { throw "AstraAgent.Servi
     ConvertTo-Json -Depth 5 | Set-Content "$svcDir\appsettings.json" -Encoding UTF8
 
 $svcBin = '"{0}" "{1}"' -f $dotnet, "$svcDir\AstraAgent.Service.dll"
-New-Service -Name $svcName -BinaryPathName $svcBin -DisplayName "ASTRA Agent" `
-    -Description "ASTRA endpoint agent - telemetry and secure self-healing." -StartupType Automatic | Out-Null
+New-Service -Name $svcName -BinaryPathName $svcBin -DisplayName "SAVIO Agent" `
+    -Description "SAVIO endpoint agent - telemetry and secure self-healing." -StartupType Automatic | Out-Null
 sc.exe failure $svcName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
 Start-Service $svcName
 Write-Host "Service installed and started." -ForegroundColor Green
@@ -186,4 +186,4 @@ Write-Host "Tray chat installed and launched." -ForegroundColor Green
 Start-Sleep -Seconds 4
 Write-Host "==== Status ====" -ForegroundColor Cyan
 Get-Service $svcName | Select-Object Name, Status, StartType | Format-Table -AutoSize
-Write-Host "Done. This device should appear ONLINE in your ASTRA portal within a minute." -ForegroundColor Green
+Write-Host "Done. This device should appear ONLINE in your SAVIO portal within a minute." -ForegroundColor Green

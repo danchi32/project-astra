@@ -3,7 +3,7 @@
 Two rules carry this whole feature, and both are enforced here rather than asked for in a
 prompt:
 
-  **Ask first.** A ticket is raised only after ASTRA offered and the user answered. The
+  **Ask first.** A ticket is raised only after SAVIO offered and the user answered. The
   offer is a row; raising checks for it. A model that decides to file a ticket on its own
   would be filing it in someone's real production queue.
 
@@ -134,7 +134,7 @@ class EscalationService:
         dossier: Dossier,
         action_id: str | None = None,
     ) -> tuple[SupportEscalation | None, str]:
-        """Record that ASTRA is offering to escalate, and return what to say.
+        """Record that SAVIO is offering to escalate, and return what to say.
 
         Returns (None, message) when an open ticket already covers this — the user is told
         which one rather than being asked a question whose answer would create a duplicate.
@@ -273,7 +273,7 @@ class EscalationService:
     async def _audit(
         self, escalation: SupportEscalation, *, org_id: uuid.UUID, requester: str | None,
     ) -> AuditLog:
-        """Record that ASTRA is creating a record in someone else's system, on a named
+        """Record that SAVIO is creating a record in someone else's system, on a named
         employee's behalf, carrying that employee's device telemetry.
 
         The escalation row is the business record; this is the audit trail. The caller here

@@ -49,7 +49,7 @@ def _mesh_name(org: Organization) -> str:
     """The device group's display name on the relay. Kept readable but stripped to what
     MeshCentral's name validation accepts (1–128 chars, no control characters)."""
     clean = re.sub(r"[^\w .-]", "", org.name or "").strip()[:96]
-    return f"ASTRA - {clean or ('Org ' + str(org.id)[:8])}"
+    return f"SAVIO - {clean or ('Org ' + str(org.id)[:8])}"
 
 
 class RemoteControlAdminService:

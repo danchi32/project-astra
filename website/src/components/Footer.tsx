@@ -75,7 +75,7 @@ export function Footer() {
   ].filter((s) => s.href && s.href !== "#");
 
   const product = [
-    { label: "ASTRA", href: "/astra" },
+    { label: "SAVIO", href: "/savio" },
     { label: "Pricing", href: "/pricing" },
     { label: "Compare", href: "/compare" },
   ];
@@ -107,7 +107,7 @@ export function Footer() {
               <Rich
                 text={c(
                   "brand.footerBlurb",
-                  "Managed IT services, laptops & hardware, and **ASTRA** — the AI System Administrator that resolves IT issues before your team even notices.",
+                  "Managed IT services, laptops & hardware, and **SAVIO** — the AI System Administrator that resolves IT issues before your team even notices.",
                 )}
               />
             </p>
@@ -170,7 +170,7 @@ export function Footer() {
           className="mt-12 rounded-2xl px-6 py-6 sm:px-8"
           style={{
             background:
-              "linear-gradient(120deg, #7f2599 0%, #9a2fbb 40%, #b246d4 70%, #e04ad0 100%)",
+              "linear-gradient(120deg, #1e3a8a 0%, #1d4ed8 40%, #2563eb 70%, #06b6d4 100%)",
           }}
         >
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

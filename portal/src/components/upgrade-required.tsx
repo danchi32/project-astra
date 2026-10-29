@@ -53,7 +53,7 @@ export function UpgradeRequired({ feature }: { feature: string | null }) {
     <div className="rounded-xl p-8 text-center max-w-lg mx-auto"
       style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
       <div className="inline-flex p-3 rounded-xl mb-3"
-        style={{ background: "rgba(154,47,187,0.10)", color: "var(--accent)" }}>
+        style={{ background: "rgba(37,99,235,0.10)", color: "var(--accent)" }}>
         <Lock size={22} />
       </div>
       {isAddon ? (
@@ -72,7 +72,7 @@ export function UpgradeRequired({ feature }: { feature: string | null }) {
             Subscribe to Tracker <ArrowRight size={15} />
           </Link>
           <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
-            Talk to your ASTRA contact to turn it on.
+            Talk to your SAVIO contact to turn it on.
           </p>
         </>
       ) : (
@@ -90,7 +90,7 @@ export function UpgradeRequired({ feature }: { feature: string | null }) {
             See plans <ArrowRight size={15} />
           </Link>
           <p className="text-xs mt-3" style={{ color: "var(--text-secondary)" }}>
-            Talk to your ASTRA contact if you think this is wrong.
+            Talk to your SAVIO contact if you think this is wrong.
           </p>
         </>
       )}

@@ -52,4 +52,4 @@ Done well, IT automation for an SMB typically means:
 
 Modern AI-driven tools are designed for exactly this situation: they do the first-line work automatically and escalate only what needs a person. That's what lets a small IT team — or a single admin — cover a whole fleet.
 
-[ASTRA](/astra/) is built for teams that need enterprise-grade IT operations without an enterprise-sized team. It watches every device, resolves the repetitive work automatically within safe tiers, and escalates the rest with evidence attached. See our [pricing](/pricing/) or [book a demo](/contact/).
+[SAVIO](/savio/) is built for teams that need enterprise-grade IT operations without an enterprise-sized team. It watches every device, resolves the repetitive work automatically within safe tiers, and escalates the rest with evidence attached. See our [pricing](/pricing/) or [book a demo](/contact/).

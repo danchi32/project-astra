@@ -26,12 +26,12 @@ type Turn = { role: "user" | "assistant"; content: string };
 const GREETING: Turn = {
   role: "assistant",
   content:
-    "Hi — ask me anything about ASTRA: what it does, how it's priced, how a rollout " +
+    "Hi — ask me anything about SAVIO: what it does, how it's priced, how a rollout " +
     "works, or how to reach the team.",
 };
 
 const SUGGESTIONS = [
-  "What does ASTRA actually do?",
+  "What does SAVIO actually do?",
   "How is it priced?",
   "How long does a rollout take?",
 ];
@@ -125,15 +125,15 @@ export function SupportChat() {
           setOpen(true);
           trackEvent("site_assistant_open", {});
         }}
-        aria-label="Ask about ASTRA"
-        title="Ask about ASTRA"
+        aria-label="Ask about SAVIO"
+        title="Ask about SAVIO"
         className="group fixed bottom-5 right-5 z-50 flex h-14 items-center gap-0 rounded-full bg-brand-600 px-[1.05rem] text-sm font-semibold text-white shadow-xl shadow-brand-600/25 transition-all duration-300 hover:gap-2 hover:bg-brand-500 hover:pl-5 hover:pr-6 focus-visible:gap-2 focus-visible:pl-5 focus-visible:pr-6"
       >
         <MessageSquare className="h-5 w-5 shrink-0" />
         {/* Collapsed to zero width rather than unmounted, so the text is still in the
             accessibility tree and the expansion can animate. */}
         <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 group-hover:max-w-[10rem] group-hover:opacity-100 group-focus-visible:max-w-[10rem] group-focus-visible:opacity-100">
-          Ask about ASTRA
+          Ask about SAVIO
         </span>
       </button>
     );
@@ -142,7 +142,7 @@ export function SupportChat() {
   return (
     <div
       role="dialog"
-      aria-label="Ask about ASTRA"
+      aria-label="Ask about SAVIO"
       className="fixed bottom-5 right-5 z-50 flex w-[min(23rem,calc(100vw-2.5rem))] h-[min(32rem,calc(100vh-6rem))] flex-col overflow-hidden rounded-2xl border border-token bg-surface shadow-2xl"
     >
       <header className="flex shrink-0 items-center gap-2 border-b border-token px-4 py-3">

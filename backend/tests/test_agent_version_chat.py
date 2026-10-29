@@ -1,4 +1,4 @@
-"""Asking the ASTRA agent 'what version are you?' answers with the device's real agent
+"""Asking the SAVIO agent 'what version are you?' answers with the device's real agent
 version instead of the generic assistant reply."""
 from app.services.conversations import _is_version_question
 from tests.test_remediation import _enroll

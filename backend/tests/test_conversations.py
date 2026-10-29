@@ -59,7 +59,7 @@ async def test_greeting_message_no_tools(client, user_headers):
     body = resp.json()
     assert body["user_message"]["role"] == "user"
     assert body["assistant_message"]["role"] == "assistant"
-    assert "ASTRA" in body["assistant_message"]["content"]
+    assert "SAVIO" in body["assistant_message"]["content"]
     # A plain greeting gathers no evidence.
     assert not body["assistant_message"]["tool_trail"]
 

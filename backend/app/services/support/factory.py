@@ -72,7 +72,7 @@ async def build_connector(
 def category_for(settings: HelpdeskSettings | None, action_id: str | None) -> tuple[
     str | None, str | None
 ]:
-    """The org's category for the action ASTRA tried, if they mapped one.
+    """The org's category for the action SAVIO tried, if they mapped one.
 
     Unmapped returns (None, None) and the ticket is filed unclassified. That is
     deliberate: every helpdesk's category tree is its own, and a guessed category puts the

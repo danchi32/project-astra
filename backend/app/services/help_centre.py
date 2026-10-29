@@ -1,4 +1,4 @@
-"""ASTRA's own support documentation, as a customer reads it.
+"""SAVIO's own support documentation, as a customer reads it.
 
 Every organization sees exactly the same articles here, and they are the ones the platform
 operator wrote. That is the whole security surface of this module, so it is stated once and

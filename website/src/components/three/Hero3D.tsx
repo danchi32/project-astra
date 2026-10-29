@@ -28,7 +28,7 @@ function SceneFallback({ pulsing }: { pulsing?: boolean }) {
     <div className="absolute inset-0 grid place-items-center">
       <div
         className={cn(
-          "h-40 w-40 rounded-full bg-gradient-to-br from-brand-500 to-violet-500 blur-2xl",
+          "h-40 w-40 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 blur-2xl",
           pulsing && "animate-pulse",
         )}
       />
@@ -71,7 +71,7 @@ export function Hero3D({ className }: { className?: string }) {
       )}
     >
       {/* Ambient glow behind the canvas */}
-      <div className="pointer-events-none absolute inset-8 rounded-full bg-brand-500/20 blur-3xl" />
+      <div className="pointer-events-none absolute inset-8 rounded-full bg-blue-500/20 blur-3xl" />
       {webgl === false ? (
         <SceneFallback />
       ) : webgl ? (

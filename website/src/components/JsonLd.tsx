@@ -101,15 +101,15 @@ export function AstraJsonLd() {
     "@graph": [
       {
         "@type": "SoftwareApplication",
-        "@id": `${base}/astra/#software`,
+        "@id": `${base}/savio/#software`,
         name: site.product,
-        alternateName: ["ASTRA AI System Administrator", "ASTRA AI System Admin"],
+        alternateName: ["SAVIO AI System Administrator", "SAVIO AI System Admin"],
         applicationCategory: "BusinessApplication",
         applicationSubCategory: "AI system administration and endpoint management",
         operatingSystem: "Windows 10, Windows 11",
-        url: `${base}/astra/`,
+        url: `${base}/savio/`,
         description:
-          "ASTRA is AI System Administrator software that diagnoses Windows endpoint issues, applies governed remediations, and verifies results with human approval controls.",
+          "SAVIO is AI System Administrator software that diagnoses Windows endpoint issues, applies governed remediations, and verifies results with human approval controls.",
         publisher: { "@id": `${base}/#organization` },
         offers: {
           "@type": "AggregateOffer",
@@ -123,12 +123,12 @@ export function AstraJsonLd() {
       },
       {
         "@type": "FAQPage",
-        "@id": `${base}/astra/#faq`,
+        "@id": `${base}/savio/#faq`,
         mainEntity: [
-          ["Can an AI System Administrator replace a human IT administrator?", "No. ASTRA automates repeatable evidence collection and approved endpoint fixes. IT administrators retain control of sensitive, approval-required and admin-only actions."],
-          ["How is an AI system admin different from an RMM tool?", "RMM platforms primarily monitor devices and run predefined automation. ASTRA adds an evidence-to-decision-to-verification loop, while enforcing allowlists, approval tiers and audit records."],
-          ["Which devices can ASTRA manage?", "ASTRA is currently focused on business fleets running Windows 10 and Windows 11, including office and remote-work endpoints."],
-          ["How can a company evaluate ASTRA safely?", "Start with a limited-device pilot, review collected telemetry and audit records, then expand only after the approval policy and remediation results meet your requirements."],
+          ["Can an AI System Administrator replace a human IT administrator?", "No. SAVIO automates repeatable evidence collection and approved endpoint fixes. IT administrators retain control of sensitive, approval-required and admin-only actions."],
+          ["How is an AI system admin different from an RMM tool?", "RMM platforms primarily monitor devices and run predefined automation. SAVIO adds an evidence-to-decision-to-verification loop, while enforcing allowlists, approval tiers and audit records."],
+          ["Which devices can SAVIO manage?", "SAVIO is currently focused on business fleets running Windows 10 and Windows 11, including office and remote-work endpoints."],
+          ["How can a company evaluate SAVIO safely?", "Start with a limited-device pilot, review collected telemetry and audit records, then expand only after the approval policy and remediation results meet your requirements."],
         ].map(([name, text]) => ({
           "@type": "Question",
           name,

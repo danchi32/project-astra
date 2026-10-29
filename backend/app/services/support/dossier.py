@@ -4,7 +4,7 @@ An ordinary helpdesk ticket says "my laptop is slow". A technician then spends t
 twenty minutes finding out what "slow" means, what the machine is doing, and what has
 already been tried.
 
-ASTRA already knows all three. It watched the telemetry, it attempted fixes, it recorded
+SAVIO already knows all three. It watched the telemetry, it attempted fixes, it recorded
 what each one changed. Attaching that turns the ticket from a question into a report, and
 it is the one thing a helpdesk cannot produce for itself — the ticket is not the
 differentiator, the dossier is.
@@ -19,7 +19,7 @@ from datetime import datetime
 
 @dataclass
 class Attempt:
-    """One thing ASTRA tried, and what actually changed. `outcome` is the agent's own
+    """One thing SAVIO tried, and what actually changed. `outcome` is the agent's own
     measurement where it reported one ("Freed 2.1 GB") — the difference between a claim
     and a result."""
 
@@ -38,14 +38,14 @@ class Dossier:
     facts: list[tuple[str, str]] = field(default_factory=list)   # telemetry worth reading
     attempts: list[Attempt] = field(default_factory=list)
     knowledge_hit: str | None = None   # matching runbook title, if retrieval found one
-    device_url: str | None = None      # deep link back into ASTRA
+    device_url: str | None = None      # deep link back into SAVIO
 
     def subject(self) -> str:
         """What a technician scanning a queue sees. The user's words first, because that is
         what they will match against when the person phones to chase it."""
         words = " ".join(self.problem.split())[:80]
         where = f" — {self.hostname}" if self.hostname else ""
-        return f"[ASTRA] {words}{where}"
+        return f"[SAVIO] {words}{where}"
 
     def to_html(self) -> str:
         e = html.escape
@@ -65,7 +65,7 @@ class Dossier:
             parts.extend(f"{e(k)}: {e(v)}<br>" for k, v in self.facts)
             parts.append("</p>")
 
-        parts.append("<p><strong>What ASTRA already tried</strong><br>")
+        parts.append("<p><strong>What SAVIO already tried</strong><br>")
         if self.attempts:
             for a in self.attempts:
                 mark = "&#10003;" if a.succeeded else "&#10007;"
@@ -89,9 +89,9 @@ class Dossier:
             # The hook: a technician who follows this is reading ASTRA without anyone
             # having bought it for them.
             parts.append(
-                f'<p><a href="{e(self.device_url)}">Full device timeline in ASTRA</a></p>'
+                f'<p><a href="{e(self.device_url)}">Full device timeline in SAVIO</a></p>'
             )
         parts.append(
-            "<p><em>Raised automatically by ASTRA after the user agreed to escalate.</em></p>"
+            "<p><em>Raised automatically by SAVIO after the user agreed to escalate.</em></p>"
         )
         return "".join(parts)

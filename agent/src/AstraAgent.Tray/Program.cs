@@ -23,8 +23,8 @@ internal static class Program
         {
             // Surface startup failures instead of exiting silently with no icon.
             MessageBox.Show(
-                "ASTRA Assistant failed to start:\n\n" + ex.Message,
-                "ASTRA Assistant", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                "SAVIO Assistant failed to start:\n\n" + ex.Message,
+                "SAVIO Assistant", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }

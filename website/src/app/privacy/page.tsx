@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Technomate IT-Solution Private Limited collects, uses, stores and protects personal data across the ASTRA platform and this website.",
+    "How Technomate IT-Solution Private Limited collects, uses, stores and protects personal data across the SAVIO platform and this website.",
   alternates: { canonical: "/privacy/" },
 };
 
@@ -45,7 +45,7 @@ export default function PrivacyPage() {
           </tr>
           <tr>
             <td>
-              You are an administrator with an <strong>ASTRA account</strong>
+              You are an administrator with an <strong>SAVIO account</strong>
             </td>
             <td>
               We are the <strong>Data Fiduciary</strong> for your account and billing
@@ -54,7 +54,7 @@ export default function PrivacyPage() {
           </tr>
           <tr>
             <td>
-              You are an <strong>employee of an ASTRA customer</strong> and the agent runs
+              You are an <strong>employee of an SAVIO customer</strong> and the agent runs
               on your work device
             </td>
             <td>
@@ -93,7 +93,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h3>2.2 ASTRA accounts</h3>
+      <h3>2.2 SAVIO accounts</h3>
       <ul>
         <li>Organisation name; administrator name, work email and hashed password.</li>
         <li>
@@ -103,7 +103,7 @@ export default function PrivacyPage() {
         <li>Authentication and session records, and your acceptance of these terms.</li>
       </ul>
 
-      <h3>2.3 Data the ASTRA agent collects from managed devices</h3>
+      <h3>2.3 Data the SAVIO agent collects from managed devices</h3>
       <p>
         Collected on our customers&rsquo; instruction, from devices they own or control:
       </p>
@@ -144,7 +144,7 @@ export default function PrivacyPage() {
       <ul>
         <li>
           <strong>The person at the device is asked first.</strong> A prompt titled
-          &ldquo;ASTRA Remote Support&rdquo; appears on their screen, naming the technician
+          &ldquo;SAVIO Remote Support&rdquo; appears on their screen, naming the technician
           and the reason they gave. Nothing connects unless they click Allow. If they do
           not answer within about two minutes the request lapses; silence is never treated
           as a yes.
@@ -170,14 +170,14 @@ export default function PrivacyPage() {
           is removed automatically when the feature is switched off.
         </li>
         <li>
-          Remote support can only be started by a person. ASTRA&rsquo;s AI cannot request,
+          Remote support can only be started by a person. SAVIO&rsquo;s AI cannot request,
           start or join a remote session.
         </li>
       </ul>
 
       <h2>3. Why we process it</h2>
       <ul>
-        <li>To provide, secure, operate and support the ASTRA service.</li>
+        <li>To provide, secure, operate and support the SAVIO service.</li>
         <li>
           To diagnose faults and &mdash; where the customer has approved the relevant tier
           &mdash; to remediate them.
@@ -200,7 +200,7 @@ export default function PrivacyPage() {
         </thead>
         <tbody>
           <tr>
-            <td>Providing, securing and supporting the ASTRA service</td>
+            <td>Providing, securing and supporting the SAVIO service</td>
             <td>
               Our contract with the customer; for device data, the customer&rsquo;s own
               lawful basis as Data Fiduciary, on whose instructions we act
@@ -265,10 +265,10 @@ export default function PrivacyPage() {
 
       <h2>4. Artificial intelligence</h2>
       <p>
-        ASTRA uses a third-party large language model to reason about IT issues. When a
+        SAVIO uses a third-party large language model to reason about IT issues. When a
         support conversation or a diagnosis runs, the relevant conversation text and
         device telemetry are sent to that provider. Model providers are not permitted to
-        train on data sent through the ASTRA service. Our providers are listed on the{" "}
+        train on data sent through the SAVIO service. Our providers are listed on the{" "}
         <a href="/sub-processors/">sub-processors page</a>.
       </p>
       <p>
@@ -280,7 +280,7 @@ export default function PrivacyPage() {
 
       <h2>5. Where data is held</h2>
       <p>
-        The ASTRA application and database are hosted in <strong>Singapore</strong>. Some
+        The SAVIO application and database are hosted in <strong>Singapore</strong>. Some
         sub-processors operate elsewhere, including the United States. Full detail, with
         locations, is on the <a href="/sub-processors/">sub-processors page</a>.
       </p>
@@ -384,7 +384,7 @@ export default function PrivacyPage() {
         to them, because it is their data and their decision.
       </p>
       <p>
-        <strong>Children.</strong> ASTRA and this website are for businesses. We do not
+        <strong>Children.</strong> SAVIO and this website are for businesses. We do not
         knowingly collect personal data from anyone under 18; if you believe we have,
         write to us and we will delete it.
       </p>

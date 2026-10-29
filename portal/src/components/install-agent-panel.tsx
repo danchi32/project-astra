@@ -105,11 +105,11 @@ export function InstallAgentPanel({ defaultOpen = false }: { defaultOpen?: boole
     <div className="rounded-xl p-5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+          <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
             <Download size={18} />
           </div>
           <div>
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Install the ASTRA agent</h2>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Install the SAVIO agent</h2>
             <p className="text-xs mt-0.5 max-w-xl" style={{ color: "var(--text-secondary)" }}>
               Download your organization&apos;s installer and run it on any Windows machine. Your enrollment
               key is already built in — no tokens, nothing to type. Devices appear here within a minute.

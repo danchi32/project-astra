@@ -34,7 +34,7 @@ _OFF_TOPIC_MARKERS = (
 )
 
 OFF_TOPIC_REPLY = (
-    "I'm ASTRA, your IT assistant — I can only help with computer, device, and "
+    "I'm SAVIO, your IT assistant — I can only help with computer, device, and "
     "IT issues (things like a frozen app, no internet, printer trouble, or a "
     "password reset). For anything else, please use a general assistant. Is there "
     "a device or IT problem I can help you with?"

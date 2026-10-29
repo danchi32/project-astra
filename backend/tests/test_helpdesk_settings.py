@@ -314,7 +314,7 @@ async def test_a_domain_that_would_escape_the_template_is_refused(client, admin_
                                                                   hostile):
     """SSRF. `base_url` is f"https://{domain}.freshservice.com", and POST /verify makes the
     request — so a domain that can terminate the authority early turns any org admin into a
-    client of ASTRA's own network, with the response body read back to them."""
+    client of SAVIO's own network, with the response body read back to them."""
     resp = await client.patch("/api/v1/settings/helpdesk", headers=admin_headers,
                               json={"domain": hostile})
     assert resp.status_code == 422, f"{hostile!r} was accepted: {resp.text}"

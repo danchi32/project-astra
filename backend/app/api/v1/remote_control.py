@@ -120,7 +120,7 @@ async def _label_consent(
     """Put the requester and their reason on the endpoint's own consent prompt.
 
     The relay draws that prompt from the connecting account's realname — the `{0}` in the
-    consent template (infra/relay/apply_consent_branding.py) — so ASTRA sets the org's
+    consent template (infra/relay/apply_consent_branding.py) — so SAVIO sets the org's
     scoped account's realname to "<who> (reason: <why>)" just before the technician opens
     the viewer. The person being asked then reads who wants in and why, on their own screen,
     before anything connects.

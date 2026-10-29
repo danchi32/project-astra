@@ -3,7 +3,7 @@
 Two rules key off this list during self-service signup:
 
 * **Work email required** (``ASTRA_REQUIRE_WORK_EMAIL``, on by default) — a personal
-  provider cannot open an account at all. ASTRA is sold to organisations, and an org
+  provider cannot open an account at all. SAVIO is sold to organisations, and an org
   identified by a gmail address can't be verified, can't own a domain for the agent's
   enrollment story, and makes the one-org-per-domain rule below meaningless.
 * **One organisation per corporate domain** — every other domain may register exactly

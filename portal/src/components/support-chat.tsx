@@ -37,7 +37,7 @@ type Turn = {
 const GREETING: Turn = {
   role: "assistant",
   content:
-    "Hi — I'm the ASTRA help assistant. Ask me anything about installing the agent, " +
+    "Hi — I'm the SAVIO help assistant. Ask me anything about installing the agent, " +
     "devices, self-healing, billing or the portal, and I'll answer from the guides and " +
     "your organization's knowledge base.",
 };
@@ -117,13 +117,13 @@ export function SupportChat() {
     return (
       <button
         onClick={() => setOpen(true)}
-        aria-label="Ask the ASTRA help assistant"
-        title="Ask the ASTRA help assistant"
+        aria-label="Ask the SAVIO help assistant"
+        title="Ask the SAVIO help assistant"
         className="fixed bottom-5 right-5 z-40 flex items-center gap-2 pl-3.5 pr-4 py-3 rounded-full text-sm font-medium text-white shadow-lg transition-transform hover:scale-105"
         style={{ background: "var(--accent)" }}
       >
         <MessageSquare size={17} />
-        Ask ASTRA
+        Ask SAVIO
       </button>
     );
   }
@@ -131,7 +131,7 @@ export function SupportChat() {
   return (
     <div
       role="dialog"
-      aria-label="ASTRA help assistant"
+      aria-label="SAVIO help assistant"
       className="fixed bottom-5 right-5 z-40 flex flex-col rounded-2xl overflow-hidden shadow-2xl w-[min(24rem,calc(100vw-2.5rem))] h-[min(34rem,calc(100vh-6rem))]"
       style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
     >
@@ -150,7 +150,7 @@ export function SupportChat() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-            ASTRA help assistant
+            SAVIO help assistant
           </p>
           <p className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
             Answers from the guides and your knowledge base

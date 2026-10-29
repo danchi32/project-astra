@@ -39,7 +39,7 @@ export function ContactContent() {
               <p className="mt-5 text-lg text-secondary-token">
                 {c(
                   "contact.subtitle",
-                  "Questions about ASTRA, managed services, or hardware? Send us a note and our team will get back to you.",
+                  "Questions about SAVIO, managed services, or hardware? Send us a note and our team will get back to you.",
                 )}
               </p>
             </Reveal>

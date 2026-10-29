@@ -3,7 +3,7 @@
 Separate from `schemas.knowledge` because the audiences differ. A knowledge article is
 shown to IT staff who own it and may argue with it, so it carries the learning evidence.
 A help article is shown to whoever is stuck right now, so it carries the code they can see
-and the category they would browse — and nothing about how ASTRA scores itself.
+and the category they would browse — and nothing about how SAVIO scores itself.
 """
 import uuid
 from datetime import datetime

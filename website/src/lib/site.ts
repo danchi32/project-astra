@@ -15,7 +15,7 @@ export const site = {
   company: "Technomate IT-Solution",
   brandShort: "Technomate",
   domain: "technomateai.com",
-  product: "ASTRA",
+  product: "SAVIO",
   productTagline: "Your AI System Administrator",
   // Login / Sign-up redirects to the ASTRA product app.
   appUrl: "https://astra.technomateai.com",
@@ -113,7 +113,7 @@ export const bookDemo = {
 
 export const nav = [
   { label: "About Us", href: "/about" },
-  { label: "ASTRA", href: "/astra" },
+  { label: "SAVIO", href: "/savio" },
   { label: "Secure Vault", href: "/vault" },
   { label: "Pricing", href: "/pricing" },
   { label: "Blog", href: "/blog" },

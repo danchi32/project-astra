@@ -1,7 +1,7 @@
 """Thin client over Resend's Domains API — the machinery behind the DNS-verified
-sending model. ASTRA registers each customer's domain under its own single Resend
+sending model. SAVIO registers each customer's domain under its own single Resend
 account, hands the org the DNS records to add, and verifies them. One API key
-(ASTRA's) serves every tenant; orgs never see or hold a key.
+(SAVIO's) serves every tenant; orgs never see or hold a key.
 
 Docs: https://resend.com/docs/api-reference/domains
 """

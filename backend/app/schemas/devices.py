@@ -228,7 +228,7 @@ class RemoteSupportPlan(BaseModel):
 
     The decision is the server's. A device that has never bought remote control is told
     `enabled: false` and downloads nothing — which is why no remote-access binary is
-    bundled into the ASTRA installer in the first place.
+    bundled into the SAVIO installer in the first place.
 
     `enabled: false` is an instruction, not merely an absence: a device already running
     the relay agent removes it. Withdrawing the feature has to actually withdraw it, or a

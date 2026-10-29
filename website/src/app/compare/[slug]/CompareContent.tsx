@@ -40,7 +40,7 @@ export function CompareContent({ data }: { data: Comparison }) {
               <Button href={bookDemo.href} external={bookDemo.external}>
                 Book a demo <ArrowRight className="h-4 w-4" />
               </Button>
-              <Button href="/astra" variant="secondary">
+              <Button href="/savio" variant="secondary">
                 Explore {site.product}
               </Button>
             </div>

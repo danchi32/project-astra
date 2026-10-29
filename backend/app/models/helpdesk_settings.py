@@ -11,7 +11,7 @@ from app.models.base import GUID, Base, TimestampMixin, utcnow
 class HelpdeskSettings(TimestampMixin, Base):
     """One organization's connection to the ticketing system they already run.
 
-    ASTRA is not the ticketing system. This row is what lets it hand a ticket to theirs —
+    SAVIO is not the ticketing system. This row is what lets it hand a ticket to theirs —
     which is the answer to "why would we pay for two". Nothing here is global: every
     organization brings its own instance, its own credential, and its own idea of what a
     category means.

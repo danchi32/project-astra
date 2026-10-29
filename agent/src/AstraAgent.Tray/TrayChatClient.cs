@@ -92,7 +92,7 @@ public sealed class TrayChatClient
     {
         var token = _store.Load();
         if (token is null)
-            return "This device isn't enrolled with ASTRA yet. Please contact your IT administrator.";
+            return "This device isn't enrolled with SAVIO yet. Please contact your IT administrator.";
 
         var response = await PostChatAsync(token, message, ct);
 
@@ -109,12 +109,12 @@ public sealed class TrayChatClient
         using (response)
         {
             if (!response.IsSuccessStatusCode)
-                return $"Sorry, I couldn't reach ASTRA right now (error {(int)response.StatusCode}). "
+                return $"Sorry, I couldn't reach SAVIO right now (error {(int)response.StatusCode}). "
                      + "Please try again in a moment.";
 
             var body = await response.Content.ReadFromJsonAsync<ChatResponse>(ct);
             if (body is null)
-                return "Sorry, I received an empty response from ASTRA.";
+                return "Sorry, I received an empty response from SAVIO.";
 
             _conversationId = body.ConversationId;
             PersistConversationId();

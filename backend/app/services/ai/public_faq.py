@@ -26,13 +26,13 @@ from app.services.ai.faq import FaqEntry
 #: Everything the assistant is expected to know cold. Kept dense on purpose — it is
 #: re-sent on every question, and it sits inside the cached prefix of the prompt, so its
 #: cost is paid once per cache window rather than once per visitor.
-PRODUCT_BRIEF = """# ASTRA, by Technomate IT-Solution — product brief
+PRODUCT_BRIEF = """# SAVIO, by Technomate IT-Solution — product brief
 
 ## The company
 Technomate IT-Solution (technomateai.com) does three things: managed IT services
 (proactive support, monitoring, patching, security, helpdesk — on-site and remote); supply
 of business-grade hardware (laptops, desktops, workstations, servers, networking, sourced
-and configured ready to deploy); and ASTRA, its AI operations product. Based in Ayodhya
+and configured ready to deploy); and SAVIO, its AI operations product. Based in Ayodhya
 Ganj, Dadri, Greater Noida, Uttar Pradesh 203207, India. Hours Mon-Sat, 10:00-19:00 IST.
 Sales: sales@technomateai.com, +91 97115 31786. Product support: astra@technomateai.com.
 The portal lives at astra.technomateai.com.
@@ -41,7 +41,7 @@ The portal lives at astra.technomateai.com.
 An AI System Administrator for Windows fleets. A lightweight Windows agent (a service plus
 a tray app) streams telemetry to the platform; an AI reasoning engine diagnoses problems
 from that evidence and fixes them, either on its own or with IT approval. Employees can
-also just describe a problem in plain language and let ASTRA investigate.
+also just describe a problem in plain language and let SAVIO investigate.
 
 ## How it works, end to end
 Intent (understand the request) -> Knowledge (search the enterprise knowledge base) ->
@@ -64,7 +64,7 @@ Evidence before action is the rule: it gathers before it acts, never the other w
   rollout live; every push is audited.
 - Secure offboarding: disable a leaver's local account and force them out of their active
   Windows session in one click — matched by security ID, admin-only, fully audited.
-- Conversational AI: employees describe the problem; ASTRA investigates and resolves.
+- Conversational AI: employees describe the problem; SAVIO investigates and resolves.
 - Compliance and security posture: a live dashboard scoring the fleet and flagging devices
   that fall short.
 - Restricted-software detection: unapproved or risky applications surfaced across devices.
@@ -116,9 +116,9 @@ only allowlisted, approved actions.
 PUBLIC_FAQ: tuple[FaqEntry, ...] = (
     # -- what it is ------------------------------------------------------------
     FaqEntry(
-        question="What is ASTRA?",
+        question="What is SAVIO?",
         answer=(
-            "ASTRA is an AI System Administrator for Windows fleets, built by Technomate IT "
+            "SAVIO is an AI System Administrator for Windows fleets, built by Technomate IT "
             "Solution. A lightweight Windows agent streams telemetry — CPU, RAM, disk, event "
             "logs, running apps, services and Windows Update status — back to the platform, "
             "and the AI engine reasons over that evidence to diagnose problems and fix them, "
@@ -129,7 +129,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="Who am I talking to?",
         answer=(
-            "I'm the ASTRA assistant on Technomate's website — an AI that answers from the "
+            "I'm the SAVIO assistant on Technomate's website — an AI that answers from the "
             "product documentation and FAQ. I can't see any account or device, and I can't "
             "make commitments on the company's behalf. For anything beyond what's documented, "
             "the team is one click away on the contact page."
@@ -138,7 +138,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "chatbot", "hello", "hi", "hey"),
     ),
     FaqEntry(
-        question="What can ASTRA actually do?",
+        question="What can SAVIO actually do?",
         answer=(
             "Asset inventory, live telemetry on a 60-second heartbeat, an AI cognitive engine "
             "that diagnoses from evidence, tiered self-healing, Windows patch management "
@@ -152,7 +152,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "include", "modules"),
     ),
     FaqEntry(
-        question="How does ASTRA fix problems on its own?",
+        question="How does SAVIO fix problems on its own?",
         answer=(
             "Every remediation is allowlisted and falls into one of three tiers. Automatic "
             "fixes — restarting Explorer, Outlook, Teams or Zoom, flushing DNS, clearing temp "
@@ -178,7 +178,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
     ),
     # -- pricing ---------------------------------------------------------------
     FaqEntry(
-        question="How much does ASTRA cost?",
+        question="How much does SAVIO cost?",
         answer=(
             "Per device, per month, in three plans: Essential $4.49, Professional $5.99 and "
             "Expert $8.99. Annual billing is $44.90, $59.90 and $89.90 per device per year — "
@@ -247,7 +247,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
     ),
     # -- getting started -------------------------------------------------------
     FaqEntry(
-        question="What do I need to run ASTRA?",
+        question="What do I need to run SAVIO?",
         answer=(
             "Windows devices and outbound HTTPS. The agent installs as a Windows service plus "
             "a tray app, enrols with a token the portal issues, and starts reporting within a "
@@ -257,12 +257,12 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "premise", "onprem", "infrastructure", "setup", "install"),
     ),
     FaqEntry(
-        question="Does ASTRA work on Mac or Linux?",
+        question="Does SAVIO work on Mac or Linux?",
         answer=(
             "Not today — the agent is Windows-only, and that is where the self-healing "
             "actions are defined. If you have a mixed fleet, talk to the team about what "
             "coverage you need; Technomate's managed IT services extend beyond Windows even "
-            "where the ASTRA agent does not."
+            "where the SAVIO agent does not."
         ),
         keywords=("mac", "macos", "apple", "linux", "ubuntu", "android", "ios", "mobile",
                   "phone", "support", "platform", "os", "windows"),
@@ -289,7 +289,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
     ),
     # -- individual capabilities ----------------------------------------------
     FaqEntry(
-        question="Can ASTRA install Windows updates?",
+        question="Can SAVIO install Windows updates?",
         answer=(
             "Yes. Push Windows Updates to one device or the whole fleet from the admin panel "
             "and watch the rollout live, device by device. Every push is captured in the audit "
@@ -310,10 +310,10 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "disable", "lock", "employee", "departure", "data", "theft"),
     ),
     FaqEntry(
-        question="Can employees ask ASTRA for help themselves?",
+        question="Can employees ask SAVIO for help themselves?",
         answer=(
             "Yes — that is the point of the tray assistant. Someone describes the problem in "
-            "plain language ('Outlook keeps freezing'), ASTRA checks the machine's telemetry "
+            "plain language ('Outlook keeps freezing'), SAVIO checks the machine's telemetry "
             "and event log, and either fixes it or explains what it found. Fixes above the "
             "automatic tier are queued for the IT team instead of being applied silently."
         ),
@@ -321,16 +321,16 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "self service", "ticket", "conversational", "tray", "ask"),
     ),
     FaqEntry(
-        question="Does ASTRA integrate with our helpdesk?",
+        question="Does SAVIO integrate with our helpdesk?",
         answer=(
-            "Freshservice is supported: ASTRA raises a ticket for what it cannot fix itself, "
+            "Freshservice is supported: SAVIO raises a ticket for what it cannot fix itself, "
             "with the device's evidence attached, and only after the user agrees to it."
         ),
         keywords=("integration", "integrate", "freshservice", "jira", "servicenow",
                   "zendesk", "ticketing", "api", "connect", "webhook"),
     ),
     FaqEntry(
-        question="How does ASTRA handle compliance and reporting?",
+        question="How does SAVIO handle compliance and reporting?",
         answer=(
             "The Expert plan adds a live compliance and security-posture dashboard that scores "
             "the fleet and flags devices that fall short, plus restricted-software detection "
@@ -343,7 +343,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="Does it get better over time?",
         answer=(
-            "Yes — every confirmed fix teaches the knowledge base. ASTRA publishes what "
+            "Yes — every confirmed fix teaches the knowledge base. SAVIO publishes what "
             "repeatedly works, drops advice whose success rate falls, and keeps the words "
             "users actually type, so retrieval matches how your staff describe problems "
             "rather than how a technician would write them up."
@@ -393,7 +393,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
         question="Can a technician remote into a user's computer?",
         answer=(
             "Yes, on the Expert plan. From the portal a technician requests remote support "
-            "and gives a reason. The user sees an ASTRA Remote Support prompt naming the "
+            "and gives a reason. The user sees an SAVIO Remote Support prompt naming the "
             "technician and the reason, and nothing connects until they click Allow — an "
             "unanswered prompt lapses after about two minutes and is never treated as a yes. "
             "The session is live only and never recorded; the clipboard is shared, file "
@@ -416,12 +416,12 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
     ),
     # -- company and contact ---------------------------------------------------
     FaqEntry(
-        question="What else does Technomate do besides ASTRA?",
+        question="What else does Technomate do besides SAVIO?",
         answer=(
             "Managed IT services — proactive support, monitoring, patching, security and "
             "helpdesk, on-site and remote — and hardware supply: business-grade laptops, "
             "desktops, workstations, servers and networking, sourced, configured and "
-            "delivered ready to deploy. Devices can be bundled with ASTRA for a fully managed "
+            "delivered ready to deploy. Devices can be bundled with SAVIO for a fully managed "
             "rollout."
         ),
         keywords=("services", "managed", "hardware", "laptop", "laptops", "buy", "sell",
@@ -466,7 +466,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
                   "based", "hours", "timing", "visit"),
     ),
     FaqEntry(
-        question="I already use ASTRA and need help with my account",
+        question="I already use SAVIO and need help with my account",
         answer=(
             "Sign in at astra.technomateai.com — Help & support there has the full guides, an "
             "in-portal assistant, and a form that raises a request with our team. You can also "

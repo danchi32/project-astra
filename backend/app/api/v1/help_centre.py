@@ -1,4 +1,4 @@
-"""The customer-facing help centre — ASTRA's own support documentation.
+"""The customer-facing help centre — SAVIO's own support documentation.
 
 Read-only, and open to every authenticated role rather than staff only. The person who
 cannot get the agent installed, or who is staring at an error code, is often not an
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/help", tags=["help"])
 @router.get(
     "/articles",
     response_model=list[HelpArticleSummary],
-    summary="Search ASTRA's support articles",
+    summary="Search SAVIO's support articles",
 )
 async def list_help_articles(
     q: str | None = Query(None, max_length=200, description="Free text over title, body and code"),
@@ -101,7 +101,7 @@ async def ask_assistant(
     actor: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> AssistantReply:
-    """Answer a question from ASTRA's published help articles and the caller's own
+    """Answer a question from SAVIO's published help articles and the caller's own
     organization's knowledge base.
 
     Deliberately not a conversation resource: nothing is stored, and the client replays

@@ -131,7 +131,7 @@ class PayPalProvider:
                 "quantity": str(max(1, quantity)),
                 "custom_id": str(org.id),          # comes back on every webhook
                 "application_context": {
-                    "brand_name": "ASTRA",
+                    "brand_name": "SAVIO",
                     "user_action": "SUBSCRIBE_NOW",
                     "return_url": f"{base}/billing?checkout=success",
                     "cancel_url": f"{base}/billing?checkout=cancelled",
@@ -156,7 +156,7 @@ class PayPalProvider:
         await self._request(
             "POST",
             f"/v1/billing/subscriptions/{org.provider_subscription_id}/cancel",
-            {"reason": "Cancelled from the ASTRA billing page"},
+            {"reason": "Cancelled from the SAVIO billing page"},
         )
 
     def manage_url(self, org: Organization) -> str | None:

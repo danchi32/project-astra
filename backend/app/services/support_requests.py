@@ -1,4 +1,4 @@
-"""Customers asking ASTRA for help, and ASTRA answering.
+"""Customers asking SAVIO for help, and SAVIO answering.
 
 The diagnostics capture is the reason this exists inside the product rather than as a
 mailto: link. Everything needed to understand a support request is already in this
@@ -110,7 +110,7 @@ class SupportRequestService:
                 org_id=request.org_id,
                 category=NotificationCategory.SYSTEM,
                 severity=NotificationSeverity.INFO,
-                title=f"ASTRA support replied — {request.reference}",
+                title=f"SAVIO support replied — {request.reference}",
                 message=request.subject,
                 link="/help",
             )

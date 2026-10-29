@@ -128,7 +128,7 @@ class FleetService:
                 title, severity, fix, note = (
                     f"{kb} installed — restart pending", "medium", None,
                     "The update is already on these devices; only a reboot applies it. "
-                    "Reinstalling changes nothing. ASTRA never reboots a machine on its own, "
+                    "Reinstalling changes nothing. SAVIO never reboots a machine on its own, "
                     "so ask the user to restart, or schedule one through Intune/GPO.",
                 )
             elif state == UPDATE_FAILED:

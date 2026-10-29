@@ -10,7 +10,7 @@ import { bookDemo, site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "IT Support Software for 50–500 Employee Teams",
   description:
-    "ASTRA helps Indian organizations with 50–500 employees monitor Windows endpoints, reduce repetitive IT work and automate approved remediation.",
+    "SAVIO helps Indian organizations with 50–500 employees monitor Windows endpoints, reduce repetitive IT work and automate approved remediation.",
   keywords: [
     "IT support software India",
     "IT support for 50 employees",
@@ -55,29 +55,29 @@ const rollout = [
 
 const faqs = [
   {
-    question: "Is ASTRA available across India?",
+    question: "Is SAVIO available across India?",
     answer:
-      "Yes. ASTRA is cloud-delivered software for supported Windows endpoints and can be evaluated and deployed by organizations across India. Optional managed or on-site services are scoped separately by location.",
+      "Yes. SAVIO is cloud-delivered software for supported Windows endpoints and can be evaluated and deployed by organizations across India. Optional managed or on-site services are scoped separately by location.",
   },
   {
-    question: "Why is ASTRA suited to organizations with 50–500 employees?",
+    question: "Why is SAVIO suited to organizations with 50–500 employees?",
     answer:
-      "At this stage, device count and support demand often grow faster than the internal IT team. ASTRA provides shared fleet visibility and controlled automation without requiring every routine issue to be handled manually.",
+      "At this stage, device count and support demand often grow faster than the internal IT team. SAVIO provides shared fleet visibility and controlled automation without requiring every routine issue to be handled manually.",
   },
   {
-    question: "Does ASTRA replace our IT administrators?",
+    question: "Does SAVIO replace our IT administrators?",
     answer:
-      "No. ASTRA gathers evidence and handles permitted repeat work. Administrators keep control of sensitive remediation, exceptions, policy and broader infrastructure decisions.",
+      "No. SAVIO gathers evidence and handles permitted repeat work. Administrators keep control of sensitive remediation, exceptions, policy and broader infrastructure decisions.",
   },
   {
-    question: "Can ASTRA work alongside our current tools?",
+    question: "Can SAVIO work alongside our current tools?",
     answer:
-      "A pilot can evaluate ASTRA alongside the current environment. Integration and coexistence requirements should be documented during assessment rather than assumed before reviewing your toolset.",
+      "A pilot can evaluate SAVIO alongside the current environment. Integration and coexistence requirements should be documented during assessment rather than assumed before reviewing your toolset.",
   },
   {
-    question: "How can we evaluate ASTRA safely?",
+    question: "How can we evaluate SAVIO safely?",
     answer:
-      "Start with a limited device group, named approvers, a small action catalogue and agreed success criteria. ASTRA also offers a 14-day full-product trial without a credit card.",
+      "Start with a limited device group, named approvers, a small action catalogue and agreed success criteria. SAVIO also offers a 14-day full-product trial without a credit card.",
   },
 ];
 
@@ -86,7 +86,7 @@ const schema = {
   "@graph": [
     {
       "@type": "SoftwareApplication",
-      name: "ASTRA",
+      name: "SAVIO",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Windows 10, Windows 11",
       url: "https://technomateai.com/it-support-50-500-employees/",
@@ -123,7 +123,7 @@ export default function ItSupportForGrowingOrganizationsPage() {
                 Scale IT support across 50–500 employees without losing control
               </h1>
               <p className="mt-6 max-w-3xl text-lg leading-relaxed text-secondary-token">
-                ASTRA gives lean IT teams across India one view of Windows endpoint health, evidence-first diagnosis and approved remediation—so growth does not turn every routine issue into manual work.
+                SAVIO gives lean IT teams across India one view of Windows endpoint health, evidence-first diagnosis and approved remediation—so growth does not turn every routine issue into manual work.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button href={bookDemo.href} external={bookDemo.external}>Plan a limited-device pilot <ArrowRight className="h-4 w-4" /></Button>
@@ -174,7 +174,7 @@ export default function ItSupportForGrowingOrganizationsPage() {
         <Container>
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wider text-brand-500">ASTRA for the Windows fleet</p>
+              <p className="text-sm font-semibold uppercase tracking-wider text-brand-500">SAVIO for the Windows fleet</p>
               <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Standardize repeat work while people handle judgment</h2>
               <p className="mt-4 leading-relaxed text-secondary-token">
                 The platform combines endpoint evidence, enterprise knowledge and controlled automation. Sensitive actions cannot be lowered into an automatic tier by the model.
@@ -239,9 +239,9 @@ export default function ItSupportForGrowingOrganizationsPage() {
 
       <Section className="pb-28">
         <Container>
-          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center text-white">
+          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-cyan-500 px-8 py-14 text-center text-white">
             <ShieldCheck className="mx-auto h-10 w-10" />
-            <h2 className="mt-4 text-3xl font-bold">Map ASTRA to your current IT workload</h2>
+            <h2 className="mt-4 text-3xl font-bold">Map SAVIO to your current IT workload</h2>
             <p className="mx-auto mt-4 max-w-xl text-white/85">Bring your device count, recurring Windows issues and approval requirements to a 30-minute pilot-planning session.</p>
             <a href={bookDemo.href} target={bookDemo.external ? "_blank" : undefined} rel={bookDemo.external ? "noopener" : undefined} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-700">Book the pilot session <ArrowRight className="h-4 w-4" /></a>
           </div>

@@ -756,7 +756,7 @@ class PlatformService:
     ) -> tuple[str | None, list[str], list[RevenueMonth], int, int]:
         """Twelve months of invoiced-vs-collected, in a single currency.
 
-        ASTRA bills on Razorpay (INR) and Paddle (USD). Adding paise to cents produces a
+        SAVIO bills on Razorpay (INR) and Paddle (USD). Adding paise to cents produces a
         number that looks like money and is not, so the trend covers whichever currency
         carries the most invoices and names the rest rather than folding them in.
         """

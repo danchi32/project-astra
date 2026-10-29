@@ -65,7 +65,7 @@ def _weight(token: str, total: int, frequency: Counter) -> float:
     """How much matching this word should count for.
 
     Plain overlap counted every word the same, and these corpora are lists of questions:
-    "how" appears in a third of them, "ASTRA" in nearly all. So "how do I claim expenses"
+    "how" appears in a third of them, "SAVIO" in nearly all. So "how do I claim expenses"
     — a question about nothing in the corpus — matched three entries on the strength of
     "how" alone and was served as an answer. Rarity is what carries meaning here, so it
     is what carries weight. A word the corpus has never seen scores highest of all, which

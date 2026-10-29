@@ -1,11 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { comparisons, getComparison } from "@/lib/comparisons";
+import { Redirect } from "@/components/Redirect";
 import { CompareContent } from "./CompareContent";
 
-// Pre-render one static page per comparison (required for `output: export`).
+// Pages from before the ASTRA → SAVIO rename, kept as redirects so old links still land.
+const LEGACY_PREFIX = "astra-vs-";
+const renamed = (slug: string) => "savio-vs-" + slug.slice(LEGACY_PREFIX.length);
+
+// Pre-render one static page per comparison (required for `output: export`), plus a
+// redirect at each comparison's pre-rename address.
 export function generateStaticParams() {
-  return comparisons.map((c) => ({ slug: c.slug }));
+  return comparisons.flatMap((c) => [
+    { slug: c.slug },
+    { slug: LEGACY_PREFIX + c.slug.replace(/^savio-vs-/, "") },
+  ]);
 }
 
 export async function generateMetadata({
@@ -14,6 +23,12 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  if (slug.startsWith(LEGACY_PREFIX)) {
+    return {
+      robots: { index: false, follow: true },
+      alternates: { canonical: `/compare/${renamed(slug)}/` },
+    };
+  }
   const data = getComparison(slug);
   if (!data) return {};
   return {
@@ -35,6 +50,7 @@ export default async function ComparePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  if (slug.startsWith(LEGACY_PREFIX)) return <Redirect to={`/compare/${renamed(slug)}/`} />;
   const data = getComparison(slug);
   if (!data) notFound();
 

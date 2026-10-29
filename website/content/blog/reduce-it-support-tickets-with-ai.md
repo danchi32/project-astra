@@ -63,6 +63,6 @@ Even a modest deflection rate on your top categories compounds quickly. If a thi
 3. Watch the results and expand coverage as trust grows.
 4. Route everything else to humans with evidence pre-attached.
 
-[ASTRA](/astra/) is an AI System Administrator built for exactly this: it watches every device, resolves the repetitive tickets automatically within safe approval tiers, and escalates the rest with the evidence already gathered.
+[SAVIO](/savio/) is an AI System Administrator built for exactly this: it watches every device, resolves the repetitive tickets automatically within safe approval tiers, and escalates the rest with the evidence already gathered.
 
 Curious what it would deflect in your environment? [Book a demo](/contact/) and we'll walk through your top ticket categories.

@@ -59,7 +59,7 @@ _UNGATED_PREFIXES = (
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
-    description="ASTRA — Enterprise AI Operations Platform backend API",
+    description="SAVIO — Enterprise AI Operations Platform backend API",
 )
 
 app.add_middleware(

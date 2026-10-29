@@ -41,8 +41,8 @@ class EmailService:
 
     def _from_header(self, from_name: str | None, from_email: str | None) -> str:
         """The RFC 5322 From header. When an org has a verified sender we send AS them;
-        otherwise we fall back to ASTRA's default address (optionally with a display
-        name like 'Acme IT (via ASTRA)')."""
+        otherwise we fall back to SAVIO's default address (optionally with a display
+        name like 'Acme IT (via SAVIO)')."""
         address = from_email or self.from_addr
         name = from_name
         if name:
@@ -68,7 +68,7 @@ class EmailService:
         override the sender (used to send as a customer org's verified address).
 
         `reply_to` matters most when the From address is ours: without it a recipient who
-        hits Reply writes to ASTRA, and nobody here reads a customer's employees' mail.
+        hits Reply writes to SAVIO, and nobody here reads a customer's employees' mail.
         """
         # A copy addressed to the recipient themselves is noise, not a copy.
         cc = [a for a in (cc or []) if a.lower() != to.lower()] or None
@@ -162,13 +162,13 @@ class EmailService:
         ttl = settings.otp_ttl_minutes
         html = _shell(
             "Confirm your email",
-            f"""<p>Use this code to finish creating your ASTRA organization:</p>
+            f"""<p>Use this code to finish creating your SAVIO organization:</p>
             <p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:24px 0;color:#111">{code}</p>
             <p style="color:#666">This code expires in {ttl} minutes. If you didn't request it, you can ignore this email.</p>""",
         )
         return await self.send(
-            to=to, subject=f"Your ASTRA verification code: {code}", html=html,
-            text=f"Your ASTRA verification code is {code}. It expires in {ttl} minutes.",
+            to=to, subject=f"Your SAVIO verification code: {code}", html=html,
+            text=f"Your SAVIO verification code is {code}. It expires in {ttl} minutes.",
         )
 
     async def send_password_reset(self, *, to: str, name: str, link: str) -> bool:
@@ -176,27 +176,27 @@ class EmailService:
         html = _shell(
             "Reset your password",
             f"""<p>Hi {name},</p>
-            <p>We received a request to reset your ASTRA password. Click below to choose a new one:</p>
+            <p>We received a request to reset your SAVIO password. Click below to choose a new one:</p>
             <p style="margin:24px 0"><a href="{link}" style="display:inline-block;background:#2563eb;color:#fff;
             text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Reset password</a></p>
             <p style="color:#666">This link expires in {ttl} minutes. If you didn't request it, you can safely
             ignore this email — your password won't change.</p>""",
         )
         return await self.send(
-            to=to, subject="Reset your ASTRA password", html=html,
-            text=f"Reset your ASTRA password: {link} (expires in {ttl} minutes). If you didn't request this, ignore this email.",
+            to=to, subject="Reset your SAVIO password", html=html,
+            text=f"Reset your SAVIO password: {link} (expires in {ttl} minutes). If you didn't request this, ignore this email.",
         )
 
     async def send_password_changed(self, *, to: str, name: str) -> bool:
         html = _shell(
             "Your password was changed",
             f"""<p>Hi {name},</p>
-            <p>Your ASTRA password was just changed. If this was you, no action is needed.</p>
+            <p>Your SAVIO password was just changed. If this was you, no action is needed.</p>
             <p style="color:#666">If you didn't do this, contact your administrator immediately.</p>""",
         )
         return await self.send(
-            to=to, subject="Your ASTRA password was changed", html=html,
-            text="Your ASTRA password was just changed. If this wasn't you, contact your administrator immediately.",
+            to=to, subject="Your SAVIO password was changed", html=html,
+            text="Your SAVIO password was just changed. If this wasn't you, contact your administrator immediately.",
         )
 
     async def send_asset_assignment(
@@ -229,22 +229,22 @@ class EmailService:
         app_url = (settings.public_app_url or "").rstrip("/")
         button = (
             f'<a href="{app_url}" style="display:inline-block;background:#2563eb;color:#fff;'
-            f'text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Open ASTRA</a>'
+            f'text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Open SAVIO</a>'
             if app_url else ""
         )
         html = _shell(
-            "Welcome to ASTRA",
+            "Welcome to SAVIO",
             f"""<p>Hi {name},</p>
             <p>Your organization <strong>{org_name}</strong> is set up and your
             <strong>{trial_days}-day free trial</strong> has started.</p>
             <p>To get going: install the Windows agent from <em>Devices → Get installer</em>,
             then invite your team under <em>Users</em>.</p>
             <p style="margin:24px 0">{button}</p>
-            <p style="color:#666">Welcome aboard — the ASTRA team.</p>""",
+            <p style="color:#666">Welcome aboard — the SAVIO team.</p>""",
         )
         return await self.send(
-            to=to, subject="Welcome to ASTRA", html=html,
-            text=f"Hi {name}, your organization {org_name} is set up and your {trial_days}-day trial has started. Open ASTRA at {app_url}",
+            to=to, subject="Welcome to SAVIO", html=html,
+            text=f"Hi {name}, your organization {org_name} is set up and your {trial_days}-day trial has started. Open SAVIO at {app_url}",
         )
 
 
@@ -262,7 +262,7 @@ def _shell(title: str, body_html: str) -> str:
         f" &middot; GSTIN: {settings.company_gstin}" if settings.company_gstin else ""
     )
     return f"""<div style="font-family:Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
-      <div style="font-size:22px;font-weight:700;color:#2563eb;margin-bottom:8px">⬡ ASTRA</div>
+      <div style="font-size:22px;font-weight:700;color:#2563eb;margin-bottom:8px">⬡ SAVIO</div>
       <h1 style="font-size:18px;margin:0 0 16px">{title}</h1>
       {body_html}
       <div style="margin-top:28px;padding-top:16px;border-top:1px solid #e5e7eb;

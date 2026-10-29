@@ -65,7 +65,7 @@ export default function PlatformSupportPage() {
               Support queue
             </h1>
             <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-              Customers asking ASTRA for help — ours first
+              Customers asking SAVIO for help — ours first
             </p>
           </div>
         </div>

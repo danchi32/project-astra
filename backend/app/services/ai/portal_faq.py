@@ -1,6 +1,6 @@
-"""What the in-portal assistant knows without being told — ASTRA's own support manual.
+"""What the in-portal assistant knows without being told — SAVIO's own support manual.
 
-The portal bot has three sources: the organization's own knowledge base, ASTRA's published
+The portal bot has three sources: the organization's own knowledge base, SAVIO's published
 help articles, and this. This is the one that is always there. A fresh organization has an
 empty knowledge base and an operator may have published nothing yet, and "I couldn't find
 anything about that" is a poor first impression from the help widget of a product the
@@ -21,7 +21,7 @@ from app.services.ai.faq import FaqEntry
 #: Sent on every portal question, so the assistant can answer about the product itself
 #: even when retrieval finds nothing. Complements `public_faq.PRODUCT_BRIEF`, which covers
 #: what ASTRA is and what it costs; this one covers using it.
-PORTAL_BRIEF = """# Using ASTRA — orientation for the in-portal assistant
+PORTAL_BRIEF = """# Using SAVIO — orientation for the in-portal assistant
 
 ## The portal, page by page
 Dashboard (fleet health at a glance) · Devices (every enrolled machine, its telemetry and
@@ -29,7 +29,7 @@ history) · Compliance (security-posture scoring) · Fleet Issues (the same faul
 across devices, and mass remediation) · Users · Knowledge Base (the organization's own
 runbooks) · Self Healing (the remediation queue and approvals) · Reports · Audit Logs ·
 Billing (admins) · Get installer · Notifications · Help & Support (guides, the assistant,
-and requests to the ASTRA team) · Settings.
+and requests to the SAVIO team) · Settings.
 
 ## Roles
 - admin — everything, including billing, users, settings, and admin-only fixes.
@@ -56,7 +56,7 @@ Healing is for what the AI proposed and for anything above the automatic tier.
 
 ## What the assistant in the portal can and cannot do
 It answers from documentation. It cannot restart anything, run a fix, change a setting or
-open a ticket. Fixes are run from the device's page in the portal, or by asking ASTRA from
+open a ticket. Fixes are run from the device's page in the portal, or by asking SAVIO from
 the tray app on the machine itself, which does act.
 """
 
@@ -66,11 +66,11 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="What can you help me with?",
         answer=(
-            "Anything about running ASTRA: installing and enrolling the agent, why a device "
+            "Anything about running SAVIO: installing and enrolling the agent, why a device "
             "is offline, telemetry, self-healing and approvals, patching, compliance, users "
             "and roles, billing and seats, reports and audit, and your organization's own "
             "runbooks. I answer from the documentation — I can't run a fix myself. For that, "
-            "use the device's page in the portal, or ask ASTRA from the tray app on the "
+            "use the device's page in the portal, or ask SAVIO from the tray app on the "
             "machine, which can act."
         ),
         keywords=("hello", "hi", "hey", "assistant", "bot", "capabilities", "you", "there",
@@ -78,7 +78,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     ),
     # -- installing and enrolling ---------------------------------------------
     FaqEntry(
-        question="How do I install the ASTRA agent on a device?",
+        question="How do I install the SAVIO agent on a device?",
         answer=(
             "Open Get installer in the sidebar and download the .exe installer — it already "
             "carries your organization's enrolment ticket, so there is nothing to type in. "
@@ -111,7 +111,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
             "the machine may not be able to reach the service: it needs outbound HTTPS on 443 "
             "to api.astra.technomateai.com. Third, endpoint protection may have quarantined "
             "the agent — check your antivirus quarantine for AstraAgent, and add an exclusion "
-            "if it is there. On the machine itself, check that the ASTRA service is running "
+            "if it is there. On the machine itself, check that the SAVIO service is running "
             "in services.msc."
         ),
         keywords=("missing", "appear", "appearing", "showing", "enrol", "enroll", "failed",
@@ -123,7 +123,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
             "The agent sends a heartbeat every 60 seconds, and a device that has not been "
             "heard from for 3 minutes is marked offline. So a device shows offline when it is "
             "switched off, asleep, off the network, or when the agent service has stopped. If "
-            "the machine is definitely on and connected, check that the ASTRA service is "
+            "the machine is definitely on and connected, check that the SAVIO service is "
             "running on it, and that outbound HTTPS to api.astra.technomateai.com is not "
             "being blocked by a firewall or a proxy."
         ),
@@ -146,11 +146,11 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
                   "blocked", "tls", "ssl", "inspection", "outbound", "domains", "connect"),
     ),
     FaqEntry(
-        question="Our antivirus quarantined the ASTRA agent",
+        question="Our antivirus quarantined the SAVIO agent",
         answer=(
             "That is a false positive, most often Microsoft Defender flagging "
             "AstraAgent.Service.dll. Restore it from quarantine and add an exclusion for the "
-            "ASTRA agent's install folder through your endpoint-protection policy (in Intune, "
+            "SAVIO agent's install folder through your endpoint-protection policy (in Intune, "
             "a Defender exclusion for the folder). Until you do, the service will be removed "
             "again and the device will keep going offline."
         ),
@@ -197,7 +197,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="How does self-healing work?",
         answer=(
-            "ASTRA gathers evidence before it acts: it reads the device's telemetry and "
+            "SAVIO gathers evidence before it acts: it reads the device's telemetry and "
             "event log, checks the knowledge base, and only then proposes a fix from an "
             "allowlist. Where the fix lands decides what happens next — automatic fixes run "
             "straight away, approval-required ones wait in Self Healing for a technician or "
@@ -294,7 +294,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
         answer=(
             "It holds your organization's own runbooks — how your VPN is set up, which "
             "printer queue serves which floor — and the assistant answers from them alongside "
-            "ASTRA's own guides. Add an article from Knowledge Base in the sidebar. ASTRA "
+            "SAVIO's own guides. Add an article from Knowledge Base in the sidebar. SAVIO "
             "also writes its own: a fix that repeatedly resolves the same symptom is "
             "published automatically, and dropped again if its success rate collapses."
         ),
@@ -339,7 +339,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
                   "changed", "evidence", "compliance"),
     ),
     FaqEntry(
-        question="What reports can I get out of ASTRA?",
+        question="What reports can I get out of SAVIO?",
         answer=(
             "Reports covers fleet health, issue resolution and compliance — the summaries "
             "worth putting in front of stakeholders rather than raw telemetry. The Expert "
@@ -382,21 +382,21 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
                   "custody", "laptop", "who", "inventory", "receipt", "sign"),
     ),
     FaqEntry(
-        question="Can ASTRA raise tickets in our helpdesk?",
+        question="Can SAVIO raise tickets in our helpdesk?",
         answer=(
             "Yes — Freshservice. Connect it under Settings -> Helpdesk. Once it is connected "
-            "ASTRA offers to raise a ticket for what it cannot fix itself, with the device's "
+            "SAVIO offers to raise a ticket for what it cannot fix itself, with the device's "
             "evidence attached, and only after the user has agreed to it."
         ),
         keywords=("helpdesk", "ticket", "freshservice", "integration", "integrate",
                   "servicenow", "jira", "zendesk", "connect", "itsm", "escalate"),
     ),
     FaqEntry(
-        question="How do I send ASTRA's emails from our own domain?",
+        question="How do I send SAVIO's emails from our own domain?",
         answer=(
             "Settings -> Send email as your organization. Enter the domain, add the DNS "
             "records it shows you, and wait for verification. Until then asset "
-            "acknowledgement emails go out from ASTRA's own address rather than yours."
+            "acknowledgement emails go out from SAVIO's own address rather than yours."
         ),
         keywords=("email", "domain", "dns", "spf", "dkim", "verify", "verification",
                   "sender", "from", "branding", "smtp"),
@@ -405,7 +405,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
         question="What can employees do from the tray app?",
         answer=(
             "They describe the problem in plain language — 'Outlook keeps freezing' — and "
-            "ASTRA checks that machine's telemetry and event log, then either fixes it or "
+            "SAVIO checks that machine's telemetry and event log, then either fixes it or "
             "explains what it found. Anything above the automatic tier is queued for your "
             "team instead of being applied silently, so employees cannot talk it into "
             "something they are not entitled to."
@@ -425,7 +425,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
                   "change", "name", "settings", "preference"),
     ),
     FaqEntry(
-        question="How do I get help from the ASTRA team?",
+        question="How do I get help from the SAVIO team?",
         answer=(
             "Help & Support -> My requests, where you can raise a request and follow the "
             "replies. Diagnostics are attached server-side, so you do not need to gather "
@@ -456,7 +456,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="Outlook will not open, is frozen, or stopped sending",
         answer=(
-            "Restarting Outlook clears most of these, and ASTRA can do that automatically — "
+            "Restarting Outlook clears most of these, and SAVIO can do that automatically — "
             "a background Outlook process is usually still holding the profile. If it fails "
             "again straight after a restart, the install is damaged rather than stuck and it "
             "needs an Office repair, which waits for IT approval and closes every Office app, "
@@ -468,10 +468,10 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="Teams will not load, sign in, or shows a blank window",
         answer=(
-            "Restart Teams — ASTRA can do that automatically. If Teams loads but the "
+            "Restart Teams — SAVIO can do that automatically. If Teams loads but the "
             "microphone or camera is missing from a call, that is a Windows privacy setting "
             "rather than a Teams fault: allow microphone and camera access under Settings > "
-            "Privacy & security. ASTRA cannot change that for you."
+            "Privacy & security. SAVIO cannot change that for you."
         ),
         keywords=("teams", "meeting", "blank", "white", "splash", "sign", "microphone",
                   "camera", "audio", "video", "call", "loading"),
@@ -480,7 +480,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
         question="Printing does not work or the print queue is stuck",
         answer=(
             "A stuck print spooler is the most common cause, and restarting it clears the "
-            "queue — ASTRA can do that automatically. If the printer shows offline "
+            "queue — SAVIO can do that automatically. If the printer shows offline "
             "afterwards, check that it is powered on and reachable on the network; if only "
             "one application cannot print, restart that application rather than the spooler."
         ),
@@ -491,7 +491,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
         question="Wi-Fi keeps dropping or there is no internet",
         answer=(
             "Flushing DNS and restarting the network adapter fix most single-machine cases, "
-            "and ASTRA can run both automatically. If several devices in the same office "
+            "and SAVIO can run both automatically. If several devices in the same office "
             "report it at once, it is the access point or the line rather than the laptops — "
             "check Fleet Issues, which groups the same fault across machines."
         ),
@@ -524,7 +524,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="The taskbar, Start menu or desktop is frozen",
         answer=(
-            "Restarting Windows Explorer fixes almost all of these and ASTRA can do it "
+            "Restarting Windows Explorer fixes almost all of these and SAVIO can do it "
             "automatically — it is far quicker than a reboot and open applications are not "
             "closed. Icons briefly disappearing while it restarts is normal."
         ),
@@ -534,7 +534,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="Chrome or Edge is slow, hanging, or will not open",
         answer=(
-            "Restarting the browser clears most hangs and ASTRA can do it automatically; "
+            "Restarting the browser clears most hangs and SAVIO can do it automatically; "
             "clearing the browser cache is the next step when pages load wrongly rather than "
             "not at all. If one specific site fails while everything else works, that is the "
             "site or DNS rather than the browser."
@@ -545,7 +545,7 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
     FaqEntry(
         question="Zoom will not start or is stuck in a meeting",
         answer=(
-            "Restart Zoom — ASTRA can do that automatically, and it clears the case where "
+            "Restart Zoom — SAVIO can do that automatically, and it clears the case where "
             "Zoom still thinks it is in a call that ended. If audio or video is missing "
             "afterwards, that is Windows microphone and camera permission, not Zoom."
         ),
@@ -564,10 +564,10 @@ PORTAL_FAQ: tuple[FaqEntry, ...] = (
                   "install", "patch", "stuck", "reboot"),
     ),
     FaqEntry(
-        question="Does ASTRA support Mac or Linux?",
+        question="Does SAVIO support Mac or Linux?",
         answer=(
             "Not today — the agent is Windows-only, and that is where the self-healing "
-            "actions are defined. Mixed fleets are worth a conversation with the ASTRA team "
+            "actions are defined. Mixed fleets are worth a conversation with the SAVIO team "
             "about what coverage you need."
         ),
         keywords=("mac", "macos", "apple", "linux", "ubuntu", "android", "ios", "mobile",

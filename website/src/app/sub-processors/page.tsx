@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Sub-processors",
   description:
-    "The third-party providers ASTRA uses to deliver the service, what each one processes, and where it is located.",
+    "The third-party providers SAVIO uses to deliver the service, what each one processes, and where it is located.",
   alternates: { canonical: "/sub-processors/" },
 };
 
@@ -17,7 +17,7 @@ export default function SubProcessorsPage() {
       reviewed
       intro={
         <>
-          When you use ASTRA, {site.legal.displayName} processes data on your behalf. To
+          When you use SAVIO, {site.legal.displayName} processes data on your behalf. To
           do that we rely on the providers below. This page lists every one of them, what
           each processes, and where it is located.
         </>
@@ -36,7 +36,7 @@ export default function SubProcessorsPage() {
         <tbody>
           <tr>
             <td>Google Cloud Platform</td>
-            <td>Application hosting (Cloud Run) for the ASTRA API</td>
+            <td>Application hosting (Cloud Run) for the SAVIO API</td>
             <td>All service data in transit and in memory</td>
             <td>Singapore (asia-southeast1)</td>
           </tr>
@@ -61,7 +61,7 @@ export default function SubProcessorsPage() {
           </tr>
           <tr>
             <td>Vercel</td>
-            <td>Hosting for the ASTRA web portal</td>
+            <td>Hosting for the SAVIO web portal</td>
             <td>Portal application delivery; no service data at rest</td>
             <td>Global edge network</td>
           </tr>
@@ -88,7 +88,7 @@ export default function SubProcessorsPage() {
           <tr>
             <td>Anthropic</td>
             <td>
-              The reasoning engine behind ASTRA&rsquo;s diagnosis and support chat
+              The reasoning engine behind SAVIO&rsquo;s diagnosis and support chat
             </td>
             <td>
               Support conversation text and the device telemetry relevant to the issue
@@ -99,8 +99,8 @@ export default function SubProcessorsPage() {
         </tbody>
       </table>
       <p>
-        ASTRA sends the model only what is needed to reason about the issue in front of
-        it. Model providers are not permitted to train on data sent through the ASTRA
+        SAVIO sends the model only what is needed to reason about the issue in front of
+        it. Model providers are not permitted to train on data sent through the SAVIO
         service.
       </p>
       <p>
@@ -185,7 +185,7 @@ export default function SubProcessorsPage() {
       <h2>Marketing website analytics</h2>
       <p>
         These operate on <strong>{site.domain}</strong> only. They are not present in the
-        ASTRA product, and they never receive customer device or telemetry data.
+        SAVIO product, and they never receive customer device or telemetry data.
       </p>
       <ul>
         <li>Google Analytics and Google Ads — website usage and campaign measurement</li>
@@ -198,10 +198,10 @@ export default function SubProcessorsPage() {
 
       <h2>Integrations you choose to enable</h2>
       <p>
-        ASTRA can connect to your own helpdesk (currently Freshservice) if you configure
+        SAVIO can connect to your own helpdesk (currently Freshservice) if you configure
         it. That is a connection to <em>your</em> system, made on your instruction, and
         the provider is not our sub-processor — you remain the controller of anything
-        sent there. Credentials you entrust to ASTRA for this purpose are encrypted at
+        sent there. Credentials you entrust to SAVIO for this purpose are encrypted at
         rest.
       </p>
 

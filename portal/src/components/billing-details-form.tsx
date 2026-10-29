@@ -70,7 +70,7 @@ export function BillingDetailsForm({ canEdit }: { canEdit: boolean }) {
     <form onSubmit={save} className="rounded-xl p-5"
       style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
       <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <Building2 size={18} />
         </div>
         <div className="flex-1 min-w-0">

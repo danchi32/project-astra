@@ -109,7 +109,7 @@ List the current system of record for:
 - Remote support
 - Asset inventory
 
-Then decide whether the new software will replace, complement or exchange data with each system. Our sourced comparisons of [ASTRA vs Microsoft Intune](/compare/astra-vs-microsoft-intune/) and [ASTRA vs ManageEngine Endpoint Central](/compare/astra-vs-manageengine-endpoint-central/) explain where their operating models differ.
+Then decide whether the new software will replace, complement or exchange data with each system. Our sourced comparisons of [SAVIO vs Microsoft Intune](/compare/savio-vs-microsoft-intune/) and [SAVIO vs ManageEngine Endpoint Central](/compare/savio-vs-manageengine-endpoint-central/) explain where their operating models differ.
 
 ### 7. Commercial clarity
 
@@ -125,7 +125,7 @@ Include:
 - Minimum commitments
 - Internal administration time
 
-ASTRA publishes its [per-device pricing](/pricing/), but a meaningful comparison still depends on your fleet and current licensing.
+SAVIO publishes its [per-device pricing](/pricing/), but a meaningful comparison still depends on your fleet and current licensing.
 
 ## A practical vendor scorecard
 
@@ -175,8 +175,8 @@ Ask the vendor to demonstrate:
 
 The goal is to learn how the platform behaves when the simple path does not work.
 
-## When ASTRA is worth evaluating
+## When SAVIO is worth evaluating
 
-[ASTRA](/astra/) is designed for Windows-focused organizations that want evidence-first diagnosis and controlled self-healing without giving an AI unrestricted device access. It is available as software across India, with a 14-day trial and optional implementation support.
+[SAVIO](/savio/) is designed for Windows-focused organizations that want evidence-first diagnosis and controlled self-healing without giving an AI unrestricted device access. It is available as software across India, with a 14-day trial and optional implementation support.
 
 For the target operating model, see [IT support for 50–500 employee teams](/it-support-50-500-employees/). If the workflow fits your requirements, [book a 30-minute pilot-planning session](https://cal.com/astraai/30min) with your device count, recurring issues and current tools.

@@ -6,7 +6,7 @@ engine learns to read it in a later, separately tested change.
 Two rules shape every method:
 
   * A built-in assistant (org_id NULL) is the platform operator's, not the tenant's. Tenants
-    read it — that is how they get ASTRA's own persona — and can never write it.
+    read it — that is how they get SAVIO's own persona — and can never write it.
   * A published version is immutable. Editing behaviour means creating a draft; changing what
     is live means moving `published_version_id`, which is an audited act of its own.
 """
@@ -55,7 +55,7 @@ class AssistantService:
     async def published_builtin(self) -> AssistantVersion | None:
         """The published version of the platform's own assistant, or None if unseeded.
 
-        None is a supported state, not a failure: the engine reads it as "run as ASTRA has
+        None is a supported state, not a failure: the engine reads it as "run as SAVIO has
         always run". A deployment that has not run `scripts/seed_builtin_assistant.py` keeps
         working on the constants, which is what makes seeding a separate, unhurried step.
         """

@@ -69,7 +69,7 @@ def test_no_action_is_claimed_under_two_tiers(claims: dict) -> None:
 def test_actions_withheld_from_the_model_are_listed_as_such(claims: dict) -> None:
     """`operator_only` actions act on a person, not a fault.
 
-    Copy that describes ASTRA deciding to lock a screen or message a user is wrong about
+    Copy that describes SAVIO deciding to lock a screen or message a user is wrong about
     the product and, worse, describes a phishing primitive as a feature.
     """
     registry = {a.id for a in _ACTIONS if a.operator_only}

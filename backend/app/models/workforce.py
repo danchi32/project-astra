@@ -8,7 +8,7 @@ Three tables, in the shape the plan lays out (docs/WORKFORCE_INSIGHTS_PLAN.md §
         ↓
     daily_user_summary one row per (device, Windows account, day): first-in, last-out, worked
 
-Keyed on the Windows ACCOUNT the agent reports, not on an ASTRA portal user — those are the
+Keyed on the Windows ACCOUNT the agent reports, not on an SAVIO portal user — those are the
 IT staff who sign in to the portal, not the people being tracked, and there is no employee
 identity in the product yet. So the natural, zero-config unit is (device, username): it is
 exactly what the agent already enumerates, and the "Tracker → Users" list is just the

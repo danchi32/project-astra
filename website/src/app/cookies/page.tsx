@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Cookie Policy",
   description:
-    "The cookies and similar technologies used on technomateai.com and in the ASTRA portal, and how to control them.",
+    "The cookies and similar technologies used on technomateai.com and in the SAVIO portal, and how to control them.",
   alternates: { canonical: "/cookies/" },
 };
 
@@ -18,7 +18,7 @@ export default function CookiesPage() {
       intro={
         <>
           This page lists the cookies and similar storage used on{" "}
-          <strong>{site.domain}</strong> and in the ASTRA portal, what each is for, and
+          <strong>{site.domain}</strong> and in the SAVIO portal, what each is for, and
           how to control them.
         </>
       }
@@ -48,14 +48,14 @@ export default function CookiesPage() {
             <td>
               <code>astra_auth</code>
             </td>
-            <td>ASTRA portal (cookie)</td>
+            <td>SAVIO portal (cookie)</td>
             <td>Marks a signed-in session so the app can route you correctly</td>
           </tr>
           <tr>
             <td>
               <code>access_token</code>, <code>refresh_token</code>
             </td>
-            <td>ASTRA portal (local storage)</td>
+            <td>SAVIO portal (local storage)</td>
             <td>
               Keeps you signed in. Cleared when you sign out. Not used for tracking
             </td>
@@ -66,7 +66,7 @@ export default function CookiesPage() {
       <h2>2. Analytics and advertising</h2>
       <p>
         These operate on the marketing website only. They are <strong>not</strong> present
-        in the ASTRA product, and they never receive customer device or telemetry data.
+        in the SAVIO product, and they never receive customer device or telemetry data.
       </p>
       <table>
         <thead>

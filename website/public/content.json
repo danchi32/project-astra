@@ -3,12 +3,12 @@
     "company": "Technomate IT-Solution",
     "short": "Technomate",
     "tagline": "Automate today, innovate tomorrow",
-    "footerBlurb": "Managed IT services, laptops & hardware, and ASTRA — the AI System Administrator that resolves IT issues before your team even notices.",
-    "footerProduct": "ASTRA — Your AI System Administrator"
+    "footerBlurb": "Managed IT services, laptops & hardware, and SAVIO — the AI System Administrator that resolves IT issues before your team even notices.",
+    "footerProduct": "SAVIO — Your AI System Administrator"
   },
   "nav": {
     "about": "About Us",
-    "astra": "ASTRA",
+    "astra": "SAVIO",
     "pricing": "Pricing",
     "contact": "Contact",
     "login": "Login",
@@ -21,9 +21,9 @@
   "home": {
     "hero": {
       "badge": "IT Services · Hardware · AI Automation",
-      "title": "IT that runs itself,\npowered by [[ASTRA AI]]",
-      "subtitle": "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **ASTRA**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
-      "cta1": "Explore ASTRA",
+      "title": "IT that runs itself,\npowered by [[SAVIO AI]]",
+      "subtitle": "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **SAVIO**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
+      "cta1": "Explore SAVIO",
       "cta2": "Sign up free",
       "checks": [
         "No manual triage",
@@ -59,48 +59,48 @@
         "desc": "Business-grade laptops, desktops, workstations and networking gear — sourced, configured and delivered ready to work."
       },
       {
-        "title": "ASTRA — AI System Admin",
+        "title": "SAVIO — AI System Admin",
         "desc": "Our AI IT agent that watches every device, diagnoses issues, and self-heals them — with human approval where it matters."
       }
     ],
     "console": {
       "badge": "One console",
       "title": "Your whole fleet, [[one live view]]",
-      "subtitle": "Every device, every metric, every action ASTRA takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
+      "subtitle": "Every device, every metric, every action SAVIO takes — in a single real-time dashboard built for IT teams that would rather prevent tickets than chase them.",
       "bullets": [
         "Live device health & telemetry",
-        "ASTRA activity stream in real time",
+        "SAVIO activity stream in real time",
         "Drill into any endpoint instantly"
       ]
     },
     "teaser": {
-      "badge": "Meet ASTRA",
+      "badge": "Meet SAVIO",
       "title": "An AI teammate that fixes IT, [[not just tickets]]",
-      "subtitle": "ASTRA follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
+      "subtitle": "SAVIO follows a disciplined loop — gather evidence, reason, act, verify — so every fix is grounded in real telemetry and your enterprise knowledge, never guesswork.",
       "bullets": [
         "Understands issues in plain language",
         "Collects live telemetry across the fleet",
         "Self-heals with tiered approval controls",
         "Verifies and learns from every resolution"
       ],
-      "cta": "See everything ASTRA does"
+      "cta": "See everything SAVIO does"
     },
     "healingHead": {
-      "eyebrow": "How ASTRA heals",
+      "eyebrow": "How SAVIO heals",
       "title": "Evidence before action — every single time",
       "subtitle": "A transparent, auditable pipeline runs behind each resolution."
     },
     "cta": {
       "title": "Ready to put your IT on autopilot?",
-      "subtitle": "Talk to our team about managed IT, hardware, and deploying ASTRA across your organization.",
+      "subtitle": "Talk to our team about managed IT, hardware, and deploying SAVIO across your organization.",
       "btn1": "Get in touch",
-      "btn2": "Launch ASTRA"
+      "btn2": "Launch SAVIO"
     }
   },
   "about": {
     "badge": "About Technomate",
     "title": "Your technology partner for [[services, hardware & AI]]",
-    "subtitle": "Technomate IT-Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **ASTRA**.",
+    "subtitle": "Technomate IT-Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **SAVIO**.",
     "stats": [
       {
         "value": "33",
@@ -116,7 +116,7 @@
       },
       {
         "value": "24/7",
-        "label": "Monitoring with ASTRA"
+        "label": "Monitoring with SAVIO"
       }
     ],
     "whoHead": {
@@ -135,13 +135,13 @@
       },
       {
         "title": "AI-Powered Operations",
-        "desc": "With ASTRA, we bring AI-driven automation to IT support — detecting and healing issues across your fleet automatically."
+        "desc": "With SAVIO, we bring AI-driven automation to IT support — detecting and healing issues across your fleet automatically."
       }
     ],
     "missionEyebrow": "Our mission",
     "missionTitle": "Make enterprise-grade IT effortless for every business",
-    "missionText": "Great IT shouldn't require a large in-house team. By combining hands-on service, quality hardware and ASTRA's AI automation, we give growing organizations the same resilience the largest enterprises enjoy — without the overhead.",
-    "missionBtn1": "Discover ASTRA",
+    "missionText": "Great IT shouldn't require a large in-house team. By combining hands-on service, quality hardware and SAVIO's AI automation, we give growing organizations the same resilience the largest enterprises enjoy — without the overhead.",
+    "missionBtn1": "Discover SAVIO",
     "missionBtn2": "Work with us",
     "values": [
       {
@@ -162,17 +162,17 @@
       }
     ],
     "supportTitle": "Talk to a human — backed by an AI",
-    "supportText": "Whether you need a fleet of laptops, managed support, or a demo of ASTRA, our team is ready to help.",
+    "supportText": "Whether you need a fleet of laptops, managed support, or a demo of SAVIO, our team is ready to help.",
     "supportBtn": "Contact us"
   },
   "astra": {
-    "badge": "Meet ASTRA",
+    "badge": "Meet SAVIO",
     "title": "Your [[AI System Administrator]]",
-    "subtitle": "ASTRA watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
-    "cta1": "Launch ASTRA",
+    "subtitle": "SAVIO watches every device, understands issues in plain English, gathers evidence, and heals problems automatically — with human-in-the-loop control at every tier that matters.",
+    "cta1": "Launch SAVIO",
     "cta2": "View pricing",
     "loopHead": {
-      "eyebrow": "The ASTRA loop",
+      "eyebrow": "The SAVIO loop",
       "title": "An agentic workflow, not a black box",
       "subtitle": "Each step is a tool the model calls — evidence before action, verification after."
     },
@@ -204,7 +204,7 @@
     ],
     "capsHead": {
       "eyebrow": "Capabilities",
-      "title": "Everything ASTRA does out of the box",
+      "title": "Everything SAVIO does out of the box",
       "subtitle": "A complete AI operations platform for your Windows fleet."
     },
     "features": [
@@ -230,7 +230,7 @@
       },
       {
         "title": "Conversational AI",
-        "desc": "Users describe problems in plain language; ASTRA investigates and resolves."
+        "desc": "Users describe problems in plain language; SAVIO investigates and resolves."
       },
       {
         "title": "Approval Tiers",
@@ -262,19 +262,19 @@
       },
       {
         "title": "Fleet Correlation & Mass Remediation",
-        "desc": "ASTRA links the same fault across many devices, then fixes the whole affected group in one click instead of one by one."
+        "desc": "SAVIO links the same fault across many devices, then fixes the whole affected group in one click instead of one by one."
       },
       {
         "title": "Helpdesk Integration",
-        "desc": "Connect Freshservice and let ASTRA raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees."
+        "desc": "Connect Freshservice and let SAVIO raise a ticket for what it can't fix itself — with the device's evidence attached, and only after the user agrees."
       },
       {
         "title": "Self-Learning Knowledge Base",
-        "desc": "Every confirmed fix teaches the knowledge base. ASTRA publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type."
+        "desc": "Every confirmed fix teaches the knowledge base. SAVIO publishes what repeatedly works, drops advice whose success rate falls, and keeps the words users actually type."
       },
       {
         "title": "Asset Assignment & Acknowledgement",
-        "desc": "Hand a laptop to an employee and ASTRA emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record."
+        "desc": "Hand a laptop to an employee and SAVIO emails them to confirm receipt — sent from your own verified domain, with the signed acknowledgement kept on the asset record."
       },
       {
         "title": "Remote Support with Consent",
@@ -284,7 +284,7 @@
     "inventory": {
       "badge": "Inventory",
       "title": "Know every device, automatically",
-      "desc": "The moment an agent enrolls, ASTRA builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
+      "desc": "The moment an agent enrolls, SAVIO builds a live inventory — hardware specs, installed apps, services, licenses and health. No spreadsheets, no manual audits, always current.",
       "bullets": [
         "Auto-discovery on enrollment",
         "Hardware, software & license tracking",
@@ -295,7 +295,7 @@
     "telemetry": {
       "badge": "Telemetry",
       "title": "Real-time evidence from every endpoint",
-      "desc": "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence ASTRA reasons over.",
+      "desc": "A lightweight Windows agent streams CPU, memory, disk, event logs, running apps, services and Windows Update status back to the platform — the raw evidence SAVIO reasons over.",
       "items": [
         "60-second heartbeat",
         "Offline-safe queue",
@@ -306,12 +306,12 @@
     "healingHead": {
       "eyebrow": "Self-healing",
       "title": "Fixes that respect human control",
-      "subtitle": "ASTRA never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt."
+      "subtitle": "SAVIO never runs a higher-tier action without the right approval — enforced in the backend, never only in the prompt."
     },
     "patch": {
       "badge": "Patch Management",
       "title": "Push Windows Updates [[from the admin panel]]",
-      "desc": "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. ASTRA orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
+      "desc": "Spot a missing security patch in telemetry, then deploy it to a single device or the entire fleet in one click. SAVIO orchestrates the rollout and streams live progress — Pending, Downloading, Installing, Installed — so you always know exactly where every endpoint stands.",
       "bullets": [
         "One-click push to a device or whole fleet",
         "Live rollout status for every endpoint",
@@ -322,7 +322,7 @@
     "assistant": {
       "badge": "Conversational AI",
       "title": "Support that speaks human",
-      "desc": "Employees just describe the problem. ASTRA recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
+      "desc": "Employees just describe the problem. SAVIO recognizes intent, pulls the relevant knowledge, collects telemetry, and walks through the fix — escalating to a person only when a decision truly needs one.",
       "cta": "Try the assistant"
     },
     "securityHead": {
@@ -349,9 +349,9 @@
       }
     ],
     "cta": {
-      "title": "Deploy ASTRA across your fleet",
+      "title": "Deploy SAVIO across your fleet",
       "subtitle": "Get started in minutes, or talk to us about a guided rollout for your organization.",
-      "btn1": "Launch ASTRA",
+      "btn1": "Launch SAVIO",
       "btn2": "Book a demo"
     }
   },
@@ -414,7 +414,7 @@
     },
     "faqs": [
       {
-        "q": "How is ASTRA priced?",
+        "q": "How is SAVIO priced?",
         "a": "Per device, per month. Essential covers inventory, telemetry and patching; Professional adds the AI engine and automatic self-healing; Expert adds compliance, fleet-wide remediation and full audit. Annual billing saves about 17%."
       },
       {
@@ -435,7 +435,7 @@
       },
       {
         "q": "Do you supply the hardware too?",
-        "a": "Yes — Technomate is also a laptop and hardware supplier. Bundle devices with ASTRA for a fully managed rollout."
+        "a": "Yes — Technomate is also a laptop and hardware supplier. Bundle devices with SAVIO for a fully managed rollout."
       }
     ],
     "bulk": {
@@ -447,7 +447,7 @@
   "contact": {
     "badge": "Contact us",
     "title": "Let's talk about your [[IT & AI]]",
-    "subtitle": "Questions about ASTRA, managed services, or hardware? Send us a note and our team will get back to you.",
+    "subtitle": "Questions about SAVIO, managed services, or hardware? Send us a note and our team will get back to you.",
     "visitTitle": "Visit us",
     "emailTitle": "Email us",
     "callTitle": "Call us",
@@ -459,7 +459,7 @@
       "phone": "Phone",
       "interestLabel": "I'm interested in",
       "interests": [
-        "ASTRA AI",
+        "SAVIO AI",
         "Managed IT Services",
         "Laptops & Hardware",
         "Partnership",

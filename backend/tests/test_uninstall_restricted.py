@@ -105,7 +105,7 @@ async def test_one_org_cannot_reach_another_orgs_list(
 
 @pytest.mark.parametrize("protected", [
     "Windows Defender", "CrowdStrike Falcon Sensor", "SentinelOne Agent",
-    "ASTRA Agent", "Sophos Endpoint",
+    "SAVIO Agent", "Sophos Endpoint",
 ])
 async def test_protected_software_is_refused_even_when_restricted(
     session_factory, admin_user, protected

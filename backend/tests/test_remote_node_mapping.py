@@ -1,6 +1,6 @@
-"""The agent tells ASTRA which node it is, and ASTRA believes it — carefully.
+"""The agent tells SAVIO which node it is, and SAVIO believes it — carefully.
 
-The node id comes from the relay agent's own registry key, which the ASTRA agent reads and
+The node id comes from the relay agent's own registry key, which the SAVIO agent reads and
 reports on every heartbeat. Everything here is about the two ways that can go wrong: a
 silence erasing a working mapping, and a bad value reaching a URL that opens somebody's
 screen.

@@ -1,4 +1,4 @@
-"""An organization asking ASTRA for help.
+"""An organization asking SAVIO for help.
 
 Open to every authenticated role. The person who cannot get the agent installed is often
 not an administrator, and a support channel they cannot reach is not a support channel —
@@ -67,7 +67,7 @@ async def list_requests(
     "/requests",
     response_model=SupportRequestRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Ask ASTRA for help",
+    summary="Ask SAVIO for help",
 )
 async def create_request(
     body: SupportRequestCreate,

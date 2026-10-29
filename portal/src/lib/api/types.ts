@@ -174,7 +174,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   fleet_remediation: "Mass remediation",
   audit_export: "Audit export & retention",
   advanced_rbac: "Advanced RBAC & SSO",
-  shared_email_sender: "Send email via ASTRA",
+  shared_email_sender: "Send email via SAVIO",
   remote_control: "Remote control",
   workforce_insights: "Workforce Insights (Tracker)",
 };

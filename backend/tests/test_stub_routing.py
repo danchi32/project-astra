@@ -155,7 +155,7 @@ def test_every_alias_resolves_to_a_zone_the_server_will_accept(stub):
 async def test_the_rules_propose_set_timezone_with_the_resolved_id(stub):
     """End of the built-in path: the right action, carrying the right parameter."""
     response = await stub.generate(
-        system="You are ASTRA, acting for the logged-in user of device 'LSI-1322'.",
+        system="You are SAVIO, acting for the logged-in user of device 'LSI-1322'.",
         messages=[{"role": "user", "content": "change timezone from EST to IST"}],
         tools=[],
     )
@@ -228,7 +228,7 @@ async def test_the_repair_is_proposed_for_approval_and_warns_about_open_apps(stu
     """It stays approval-gated on purpose, and the reply has to say why the wait exists —
     and that work will be lost when it does run."""
     response = await stub.generate(
-        system="You are ASTRA, acting for the logged-in user of device 'LSI-1322'.",
+        system="You are SAVIO, acting for the logged-in user of device 'LSI-1322'.",
         messages=[{"role": "user", "content": "outlook keeps crashing"}],
         tools=[],
     )

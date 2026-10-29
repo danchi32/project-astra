@@ -1,4 +1,4 @@
-"""LLM provider abstraction for the ASTRA cognitive engine.
+"""LLM provider abstraction for the SAVIO cognitive engine.
 
 The engine is a provider-agnostic agentic tool-use loop. `AnthropicProvider` calls
 Claude via the official SDK; `StubProvider` is deterministic and lets the platform
@@ -322,7 +322,7 @@ class StubProvider:
         if self._is_greeting(user_text):
             return LLMResponse(
                 text=(
-                    "Hi! I'm ASTRA, your IT assistant. Tell me what's going wrong — for example "
+                    "Hi! I'm SAVIO, your IT assistant. Tell me what's going wrong — for example "
                     "\"Teams won't open\", \"my system is slow\", or \"clear my browser cache\" — "
                     "and I'll fix it for you."
                 )
@@ -478,7 +478,7 @@ class StubProvider:
         # (no tools), which the semantic cache can serve for free next time.
         return LLMResponse(
             text=(
-                "I'm ASTRA, your IT assistant. I can fix common problems for you — for example "
+                "I'm SAVIO, your IT assistant. I can fix common problems for you — for example "
                 "restarting an app that won't open, clearing temporary files or browser cache, "
                 "or flushing DNS when websites won't load. Tell me what's going wrong and I'll "
                 "take care of it."

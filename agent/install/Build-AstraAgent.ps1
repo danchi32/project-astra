@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Publishes a self-contained ASTRA agent build you can distribute to endpoints.
+    Publishes a self-contained SAVIO agent build you can distribute to endpoints.
 
 .DESCRIPTION
     Produces a single-file, self-contained win-x64 build (no .NET runtime required

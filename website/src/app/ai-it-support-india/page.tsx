@@ -17,7 +17,7 @@ import { bookDemo, site } from "@/lib/site";
 export const metadata: Metadata = {
   title: "AI IT Support India for Windows Teams",
   description:
-    "AI-powered IT support for growing Indian businesses. Monitor Windows endpoints, reduce manual triage and automate approved fixes with ASTRA and Technomate.",
+    "AI-powered IT support for growing Indian businesses. Monitor Windows endpoints, reduce manual triage and automate approved fixes with SAVIO and Technomate.",
   keywords: [
     "AI IT support India",
     "managed IT services India",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI IT Support India for Windows Teams",
     description:
-      "Combine ASTRA endpoint automation with India-based managed IT support for a safer, faster response to everyday Windows issues.",
+      "Combine SAVIO endpoint automation with India-based managed IT support for a safer, faster response to everyday Windows issues.",
     url: "/ai-it-support-india/",
     type: "website",
   },
@@ -40,7 +40,7 @@ const outcomes = [
   {
     icon: Clock3,
     title: "Reduce manual triage",
-    body: "ASTRA gathers device evidence and relevant knowledge before a technician has to investigate the issue.",
+    body: "SAVIO gathers device evidence and relevant knowledge before a technician has to investigate the issue.",
   },
   {
     icon: Wrench,
@@ -69,17 +69,17 @@ const faqs = [
   {
     question: "What is AI IT support?",
     answer:
-      "AI IT support combines endpoint data, operational knowledge and controlled automation to help diagnose and resolve IT issues. ASTRA gathers evidence first, then follows code-enforced approval and allowlist rules before any remediation can run.",
+      "AI IT support combines endpoint data, operational knowledge and controlled automation to help diagnose and resolve IT issues. SAVIO gathers evidence first, then follows code-enforced approval and allowlist rules before any remediation can run.",
   },
   {
-    question: "Does ASTRA replace an internal IT team?",
+    question: "Does SAVIO replace an internal IT team?",
     answer:
-      "No. ASTRA is designed to remove repetitive investigation and routine remediation work while technicians and administrators retain control of higher-risk decisions.",
+      "No. SAVIO is designed to remove repetitive investigation and routine remediation work while technicians and administrators retain control of higher-risk decisions.",
   },
   {
     question: "Which devices are supported?",
     answer:
-      "The ASTRA endpoint agent currently supports 64-bit Windows 10 and Windows 11 devices.",
+      "The SAVIO endpoint agent currently supports 64-bit Windows 10 and Windows 11 devices.",
   },
   {
     question: "Can Technomate provide on-site IT support?",
@@ -87,7 +87,7 @@ const faqs = [
       "Technomate provides managed IT and business hardware support from Dadri for organizations in Delhi NCR. Exact on-site coverage and response expectations are agreed during assessment.",
   },
   {
-    question: "Can we evaluate ASTRA before buying?",
+    question: "Can we evaluate SAVIO before buying?",
     answer:
       "Yes. Organizations can start a 14-day full-product trial without a credit card or book a guided fleet assessment and limited-device pilot.",
   },
@@ -122,7 +122,7 @@ export default function AiItSupportIndiaPage() {
                 AI IT support for growing Windows teams in India
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-relaxed text-secondary-token">
-                Combine ASTRA endpoint automation with Technomate managed IT support.
+                Combine SAVIO endpoint automation with Technomate managed IT support.
                 Detect issues early, collect evidence automatically and resolve approved
                 Windows problems without giving up human control.
               </p>
@@ -147,7 +147,7 @@ export default function AiItSupportIndiaPage() {
                   <Sparkles className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="font-bold">ASTRA AI System Administrator</p>
+                  <p className="font-bold">SAVIO AI System Administrator</p>
                   <p className="text-sm text-muted-token">Evidence, action, verification</p>
                 </div>
               </div>
@@ -160,7 +160,7 @@ export default function AiItSupportIndiaPage() {
                 ))}
               </ol>
               <Link href="/security/" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">
-                Review ASTRA security controls <ArrowRight className="h-4 w-4" />
+                Review SAVIO security controls <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="/blog/what-is-an-ai-system-administrator/" className="mt-3 flex items-center gap-2 text-sm font-semibold text-brand-500 hover:underline">
                 Learn what an AI System Administrator does <ArrowRight className="h-4 w-4" />
@@ -175,7 +175,7 @@ export default function AiItSupportIndiaPage() {
           <div className="mx-auto max-w-2xl text-center">
             <p className="text-sm font-semibold uppercase tracking-wider text-brand-500">Built for lean IT teams</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Prevent tickets instead of only responding to them</h2>
-            <p className="mt-4 text-secondary-token">ASTRA helps one-to-five-person IT teams manage growing Windows fleets without adding another dashboard that needs constant attention.</p>
+            <p className="mt-4 text-secondary-token">SAVIO helps one-to-five-person IT teams manage growing Windows fleets without adding another dashboard that needs constant attention.</p>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {outcomes.map(({ icon: Icon, title, body }) => (
@@ -196,10 +196,10 @@ export default function AiItSupportIndiaPage() {
               <Badge><Laptop className="h-3.5 w-3.5 text-brand-500" /> Windows endpoint operations</Badge>
               <h2 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl">One partner from endpoint software to hands-on support</h2>
               <p className="mt-4 leading-relaxed text-secondary-token">
-                Use ASTRA as software, work with Technomate on a guided rollout, or combine it with managed IT and business hardware support. The engagement can start with a limited device group and agreed success criteria.
+                Use SAVIO as software, work with Technomate on a guided rollout, or combine it with managed IT and business hardware support. The engagement can start with a limited device group and agreed success criteria.
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
-                <Button href="/astra/">Explore ASTRA</Button>
+                <Button href="/savio/">Explore SAVIO</Button>
                 <Button href="/windows-endpoint-automation/" variant="secondary">Endpoint automation</Button>
                 <Button href="/contact/" variant="secondary">Discuss managed IT</Button>
                 <Button href="/it-support-50-500-employees/" variant="secondary">For 50–500 employee teams</Button>
@@ -238,7 +238,7 @@ export default function AiItSupportIndiaPage() {
 
       <Section className="pb-28 pt-0">
         <Container>
-          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-violet-600 px-8 py-14 text-center text-white sm:px-14">
+          <div className="rounded-3xl bg-gradient-to-br from-brand-600 to-cyan-500 px-8 py-14 text-center text-white sm:px-14">
             <ShieldCheck className="mx-auto h-10 w-10" />
             <h2 className="mt-4 text-3xl font-bold">Start with a controlled device group</h2>
             <p className="mx-auto mt-4 max-w-xl text-white/85">Book a 30-minute assessment to review your Windows fleet, recurring tickets and the right pilot scope.</p>

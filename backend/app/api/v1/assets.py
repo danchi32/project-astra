@@ -26,7 +26,7 @@ def _ack_page(title: str, message: str) -> HTMLResponse:
         display:flex;min-height:100vh;align-items:center;justify-content:center">
         <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:40px;
         max-width:420px;text-align:center">
-        <div style="font-size:22px;font-weight:700;color:#2563eb;margin-bottom:12px">⬡ ASTRA</div>
+        <div style="font-size:22px;font-weight:700;color:#2563eb;margin-bottom:12px">⬡ SAVIO</div>
         <h1 style="font-size:18px;color:#0f172a;margin:0 0 8px">{title}</h1>
         <p style="color:#475569;margin:0">{message}</p></div></body></html>"""
     )

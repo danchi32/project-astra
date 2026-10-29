@@ -84,7 +84,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _foreground.Start();
 
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Open ASTRA Assistant", null, (_, _) => ShowChat());
+        menu.Items.Add("Open SAVIO Assistant", null, (_, _) => ShowChat());
         menu.Items.Add(_trackingItem);
         menu.Items.Add(_trackingSeparator);
         menu.Items.Add(new ToolStripSeparator());
@@ -93,7 +93,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         _icon = new NotifyIcon
         {
             Icon = _brandIcon,
-            Text = "ASTRA Assistant — click for help",
+            Text = "SAVIO Assistant — click for help",
             Visible = true,
             ContextMenuStrip = menu,
         };
@@ -112,8 +112,8 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         // Tell the user where the icon lives; clicking it opens the chat.
         _icon.ShowBalloonTip(
-            5000, "ASTRA Assistant",
-            "ASTRA is running. Click this icon whenever you need help. "
+            5000, "SAVIO Assistant",
+            "SAVIO is running. Click this icon whenever you need help. "
             + "(If you don't see the icon, click the ^ arrow near the clock.)",
             ToolTipIcon.Info);
     }
@@ -134,14 +134,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         _trackingItem.Visible = on;
         _trackingSeparator.Visible = on;
         _icon.Text = on
-            ? "ASTRA — activity tracking is on"   // NotifyIcon.Text caps at 63 chars
-            : "ASTRA Assistant — click for help";
+            ? "SAVIO — activity tracking is on"   // NotifyIcon.Text caps at 63 chars
+            : "SAVIO Assistant — click for help";
 
         if (on)
             _icon.ShowBalloonTip(
                 7000, "Activity tracking is on",
                 "Your organisation records work hours (sign-in, sign-out and active time) "
-                + "through ASTRA. No keystrokes, screenshots or screen recording.",
+                + "through SAVIO. No keystrokes, screenshots or screen recording.",
                 ToolTipIcon.Info);
     }
 
@@ -151,7 +151,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             _chatForm = new ChatForm(_client) { Icon = _brandIcon };
             _chatForm.HiddenToTray += (_, _) => _icon.ShowBalloonTip(
-                2500, "ASTRA Assistant",
+                2500, "SAVIO Assistant",
                 "I'm still here — click this icon to chat again.", ToolTipIcon.Info);
         }
         _chatForm.ShowInLowerRight();

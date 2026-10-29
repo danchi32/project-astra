@@ -45,9 +45,9 @@ export function Logo({ className }: { className?: string }) {
     >
       <defs>
         <linearGradient id="tm-mark" x1="10" y1="95" x2="130" y2="15">
-          <stop offset="0%" stopColor="#7f2599" />
-          <stop offset="45%" stopColor="#b246d4" />
-          <stop offset="100%" stopColor="#e04ad0" />
+          <stop offset="0%" stopColor="#1d4ed8" />
+          <stop offset="45%" stopColor="#3b82f6" />
+          <stop offset="100%" stopColor="#22d3ee" />
         </linearGradient>
       </defs>
 

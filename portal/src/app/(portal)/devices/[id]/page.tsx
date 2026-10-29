@@ -340,7 +340,7 @@ export default function DeviceDetailPage() {
     if (!device) return;
     const typed = prompt(
       `Uninstall "${name}" from ${device.hostname}?\n\n` +
-      "The agent runs the vendor's silent uninstaller. This cannot be undone from ASTRA — " +
+      "The agent runs the vendor's silent uninstaller. This cannot be undone from SAVIO — " +
       "reinstalling is a separate job, and may need a licence key.\n\n" +
       "Type the application name exactly to confirm:",
     );
@@ -525,7 +525,7 @@ export default function DeviceDetailPage() {
         style={{ border: "1px solid var(--border)", background: "radial-gradient(600px circle at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%), var(--surface)" }}>
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="p-3 rounded-2xl shrink-0" style={{ background: "rgba(154,47,187,0.12)", color: "var(--accent)" }}><Monitor size={26} /></div>
+            <div className="p-3 rounded-2xl shrink-0" style={{ background: "rgba(37,99,235,0.12)", color: "var(--accent)" }}><Monitor size={26} /></div>
             <div className="min-w-0">
               <h1 className="text-2xl font-semibold truncate" style={{ color: "var(--text-primary)" }}>{device.hostname}</h1>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -662,7 +662,7 @@ export default function DeviceDetailPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                      {healthy ? "Healthy — no issues detected" : `ASTRA detected ${list.length} issue${list.length === 1 ? "" : "s"} in the last 24 hours`}
+                      {healthy ? "Healthy — no issues detected" : `SAVIO detected ${list.length} issue${list.length === 1 ? "" : "s"} in the last 24 hours`}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
                       {healthy
@@ -685,7 +685,7 @@ export default function DeviceDetailPage() {
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div>
                         <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Push a fix to this device</p>
-                        <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>ASTRA runs it on the endpoint in the background. Tracked under Self-Healing.</p>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>SAVIO runs it on the endpoint in the background. Tracked under Self-Healing.</p>
                       </div>
                       <button onClick={() => setFixMenu(true)} disabled={busy}
                         className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 shrink-0" style={{ background: "var(--accent)" }}>
@@ -890,7 +890,7 @@ export default function DeviceDetailPage() {
                         onClick={() => uninstallApp(a.name)}
                         disabled={busy || protectedApp || !!running}
                         title={protectedApp
-                          ? "Endpoint protection and the ASTRA agent itself can never be uninstalled by ASTRA."
+                          ? "Endpoint protection and the SAVIO agent itself can never be uninstalled by SAVIO."
                           : running ? "Already queued on this device." : `Uninstall ${a.name}`}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                         style={{ background: "var(--surface)", border: "1px solid var(--border)", color: protectedApp ? "var(--text-secondary)" : "#ef4444" }}>
@@ -1028,7 +1028,7 @@ export default function DeviceDetailPage() {
               <div>
                 <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>Push a fix to {device.hostname}</h2>
                 <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
-                  ASTRA sends the fix to the endpoint and runs it in the background. Every push is approved by you and audit-logged.
+                  SAVIO sends the fix to the endpoint and runs it in the background. Every push is approved by you and audit-logged.
                 </p>
               </div>
               <button onClick={() => setFixMenu(false)} style={{ color: "var(--text-secondary)" }}><X size={18} /></button>

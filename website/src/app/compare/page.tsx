@@ -6,9 +6,9 @@ import { site } from "@/lib/site";
 import { comparisons } from "@/lib/comparisons";
 
 export const metadata: Metadata = {
-  title: "Compare ASTRA — AI IT Automation vs RMM Tools",
+  title: "Compare SAVIO — AI IT Automation vs RMM Tools",
   description:
-    "Compare ASTRA with Microsoft Intune, ManageEngine Endpoint Central, NinjaOne and Atera. Honest, sourced IT automation and endpoint management guides.",
+    "Compare SAVIO with Microsoft Intune, ManageEngine Endpoint Central, NinjaOne and Atera. Honest, sourced IT automation and endpoint management guides.",
   alternates: { canonical: "/compare/" },
 };
 
@@ -22,7 +22,7 @@ export default function CompareIndexPage() {
             How {site.product} Compares with RMM and Endpoint Tools
           </h1>
           <p className="mt-4 text-secondary-token">
-            Honest, side-by-side breakdowns of ASTRA against popular IT automation
+            Honest, side-by-side breakdowns of SAVIO against popular IT automation
             and RMM tools, including where each one is the better fit.
           </p>
         </div>

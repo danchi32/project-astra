@@ -183,7 +183,7 @@ export default function UserDetailPage() {
         <Link href="/tracker/users" className="p-2 rounded-lg" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
           <ArrowLeft size={16} />
         </Link>
-        <div className="p-2 rounded-lg" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+        <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
           <Clock size={18} />
         </div>
         <div>

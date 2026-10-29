@@ -31,7 +31,7 @@ import type { NotificationSeverity } from "@/lib/api/types";
 const REFETCH = 30_000;
 
 const SEVERITY_COLOR: Record<NotificationSeverity, string> = {
-  info: "#b246d4",
+  info: "#3b82f6",
   warning: "#f59e0b",
   critical: "#ef4444",
 };
@@ -133,7 +133,7 @@ export default function DashboardPage() {
   const remediationChartData: BarDatum[] = Object.entries(remediationStatusCounts).map(([status, count]) => ({
     name: REMEDIATION_STATUS_LABELS[status as keyof typeof REMEDIATION_STATUS_LABELS] ?? status.replace(/_/g, " "),
     value: count,
-    color: REMEDIATION_STATUS_COLORS[status as keyof typeof REMEDIATION_STATUS_COLORS] ?? "#b246d4",
+    color: REMEDIATION_STATUS_COLORS[status as keyof typeof REMEDIATION_STATUS_COLORS] ?? "#3b82f6",
   }));
   const pendingApprovalCount = remediationStatusCounts["pending_approval"] ?? 0;
 
@@ -343,7 +343,7 @@ export default function DashboardPage() {
           ) : (
             <Panel>
               <div className="flex items-center gap-2 mb-3">
-                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(154,47,187,0.1)", color: "var(--accent)" }}>
+                <div className="p-2 rounded-lg shrink-0" style={{ background: "rgba(37,99,235,0.1)", color: "var(--accent)" }}>
                   <Bell size={16} />
                 </div>
                 <MiniStat label="Unread" value={String(unreadNotifications?.length ?? 0)} />
