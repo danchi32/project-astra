@@ -132,7 +132,10 @@ async def _activity_settings(session: AsyncSession, org_id: uuid.UUID) -> tuple[
     summary="Get the current signed agent-update manifest (device-authenticated)",
 )
 async def get_update(
-    device: Device = Depends(get_rate_limited_device),
+    # Not subscription-gated, on purpose: a device whose org has lapsed must still be able to
+    # receive a new agent, or old agents that retry every minute could never be replaced by
+    # one that goes dormant. It hands out nothing but the signed manifest, and writes nothing.
+    device: Device = Depends(get_rate_limited_device_any_status),
 ) -> AgentUpdateEnvelope:
     # The backend only relays an already-signed manifest; the agent verifies it against a
     # pinned key, so this endpoint is not itself a trust boundary for update integrity.

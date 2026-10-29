@@ -96,9 +96,12 @@ async def get_current_device_any_status(
     return await _authenticate_device(credentials, session)
 
 
+# The header is the agent's cue to go dormant (agent 0.12.2+, Api/SubscriptionState.cs) rather
+# than retry every minute. It distinguishes this refusal from any other 403.
 _subscription_inactive_error = HTTPException(
     status_code=status.HTTP_403_FORBIDDEN,
     detail="Organization subscription is not active.",
+    headers={"X-Subscription-Status": "inactive"},
 )
 
 async def get_current_device(

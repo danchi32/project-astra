@@ -209,6 +209,14 @@ async def test_heartbeat_from_a_read_only_org_is_refused_and_writes_nothing(
         headers={"Authorization": f"Bearer {enrolled['device_token']}"},
     )
     assert beat.status_code == 403
+    # The agent's cue to go dormant, distinct from any other 403.
+    assert beat.headers["X-Subscription-Status"] == "inactive"
+
+    # The update check stays open, so a lapsed device can still be replaced by an agent that
+    # goes dormant instead of retrying every minute.
+    update = await client.get(
+        "/api/v1/agent/update", headers={"Authorization": f"Bearer {enrolled['device_token']}"})
+    assert update.status_code == 200
 
     after = await client.get(f"/api/v1/devices/{enrolled['device_id']}", headers=admin_headers)
     assert after.status_code == 402  # the portal read is locked too...
@@ -250,6 +258,7 @@ async def test_refused_device_is_remembered_so_repeat_calls_skip_the_database(
     first = await client.post("/api/v1/agent/heartbeat", json=beat_body, headers=beat_headers)
     second = await client.post("/api/v1/agent/heartbeat", json=beat_body, headers=beat_headers)
     assert (first.status_code, second.status_code) == (403, 403)
+    assert second.headers["X-Subscription-Status"] == "inactive"  # cached refusals carry it too
     assert lookups["n"] == 1  # the second refusal came from memory, not the database
 
     # The org upgrades: its remembered refusals are dropped immediately, no TTL wait.

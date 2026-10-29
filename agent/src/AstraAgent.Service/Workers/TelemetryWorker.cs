@@ -22,6 +22,7 @@ public sealed class TelemetryWorker(
     ISessionCollector sessions,
     IActivityTracker activityTracker,
     ActivityTrackingState trackingState,
+    SubscriptionState subscription,
     IOptions<AgentOptions> options,
     ILogger<TelemetryWorker> logger) : BackgroundService
 {
@@ -62,6 +63,11 @@ public sealed class TelemetryWorker(
     /// backend refused or was unreachable, so the caller backs off.</returns>
     private async Task<bool> CollectAndPushAsync(CancellationToken ct)
     {
+        // Dormant (organization inactive): collect nothing and send nothing. This is a local
+        // check each cycle, so pushes resume within one interval of the heartbeat waking up.
+        if (subscription.Dormant)
+            return true;
+
         var token = await enrollment.GetDeviceTokenAsync(ct);
         if (token is null) return true;
 

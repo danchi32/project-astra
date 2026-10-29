@@ -10,6 +10,9 @@ public enum HeartbeatStatus
     Ok,
     Unauthorized,
     Failed,
+    // The backend refused because this device's organization is inactive. Not a failure to
+    // back off from but a signal to go dormant (see SubscriptionState).
+    Suspended,
 }
 
 /// <summary>Outcome of a heartbeat: its status, plus any system-context remediation the
@@ -172,6 +175,8 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         var response = await http.SendAsync(message, ct);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
             return HeartbeatResult.From(HeartbeatStatus.Unauthorized);
+        if (SubscriptionState.IsInactiveResponse(response))
+            return HeartbeatResult.From(HeartbeatStatus.Suspended);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Heartbeat failed with status {Status}", response.StatusCode);
