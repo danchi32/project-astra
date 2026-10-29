@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Menu, X, ArrowRight } from "lucide-react";
+import { Menu, X, ArrowRight, ChevronDown } from "lucide-react";
 import { nav, site } from "@/lib/site";
+import { serviceCategories } from "@/lib/services";
 import { ThemeToggle } from "./ThemeToggle";
 import { BrandLogo } from "./BrandLogo";
 import { useContent } from "@/lib/content";
@@ -30,26 +31,56 @@ export function Navbar() {
           rather than off the top of the viewport. Kept smaller on mobile, where
           a wider mark would run into the controls. */}
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
-        <Link href="/" className="flex items-center self-start pt-2 sm:pt-3">
+        {/* data-brand-logo: where the about-page intro's logo flies to and lands. */}
+        <Link href="/" data-brand-logo className="flex items-center self-start pt-2 sm:pt-3">
           <BrandLogo className="h-20 sm:h-28" />
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
           {nav.map((item) => {
-            const active = pathname === item.href;
-            return (
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const link = (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-1 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
                   active
                     ? "text-brand-500"
                     : "text-secondary-token hover:text-primary-token",
                 )}
               >
                 {c(`nav.${item.href.slice(1)}`, item.label)}
+                {item.href === "/services" && (
+                  <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
+                )}
               </Link>
+            );
+            if (item.href !== "/services") return link;
+            // Services opens a dropdown of every service page on hover / focus.
+            return (
+              <div key={item.href} className="group relative">
+                {link}
+                <div className="invisible absolute left-1/2 top-full z-50 w-[560px] -translate-x-1/2 pt-2 opacity-0 transition-all duration-200 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+                  <div className="grid grid-cols-2 gap-1 rounded-2xl border border-token bg-surface p-2 shadow-2xl shadow-brand-600/10">
+                    {serviceCategories.map((s) => (
+                      <Link
+                        key={s.href}
+                        href={s.href}
+                        className="flex gap-3 rounded-xl p-3 transition-colors hover:bg-surface-2"
+                      >
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-600 to-cyan-500 text-white">
+                          <s.icon className="h-4 w-4" />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-semibold text-primary-token">{s.title}</span>
+                          <span className="block text-xs text-muted-token">{s.short}</span>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
             );
           })}
         </div>
@@ -84,13 +115,27 @@ export function Navbar() {
         <div className="border-b border-token bg-app md:hidden">
           <div className="space-y-1 px-5 py-4">
             {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary-token hover:bg-surface-2 hover:text-primary-token"
-              >
-                {c(`nav.${item.href.slice(1)}`, item.label)}
-              </Link>
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  className="block rounded-lg px-3 py-2.5 text-sm font-medium text-secondary-token hover:bg-surface-2 hover:text-primary-token"
+                >
+                  {c(`nav.${item.href.slice(1)}`, item.label)}
+                </Link>
+                {item.href === "/services" && (
+                  <div className="ml-3 border-l border-token pl-2">
+                    {serviceCategories.map((s) => (
+                      <Link
+                        key={s.href}
+                        href={s.href}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-token hover:bg-surface-2 hover:text-primary-token"
+                      >
+                        <s.icon className="h-3.5 w-3.5 text-brand-500" /> {s.title}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
             <div className="flex gap-2 pt-2">
               <a

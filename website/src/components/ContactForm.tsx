@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Send, CheckCircle2, Loader2 } from "lucide-react";
 import { site } from "@/lib/site";
 import { useContent } from "@/lib/content";
 import { getAttribution, trackEvent } from "@/lib/analytics";
 
 type Status = "idle" | "submitting" | "success";
+
+/** The options, plus the current choice if a link pre-filled one that isn't listed. */
+const withCurrent = (opts: string[], current: string) => (opts.includes(current) ? opts : [...opts, current]);
 
 const inputCls =
   "w-full rounded-xl border border-token bg-app px-4 py-3 text-sm text-primary-token placeholder:text-muted-token focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30";
@@ -25,6 +28,17 @@ export function ContactForm() {
     message: "",
     website: "", // honeypot — must stay empty
   });
+
+  // Quote buttons across /services link here with ?interest=…&message=… filled
+  // in. Read on mount: this is a static export, so no server sees the query.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const interest = q.get("interest")?.slice(0, 60);
+    const message = q.get("message")?.slice(0, 2000);
+    if (interest || message) {
+      setForm((f) => ({ ...f, interest: interest || f.interest, message: message || f.message }));
+    }
+  }, []);
 
   function update<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -175,13 +189,20 @@ export function ContactForm() {
           onChange={(e) => update("interest", e.target.value)}
           className={inputCls}
         >
-          {list<string>("contact.form.interests", [
-            "SAVIO AI",
-            "Managed IT Services",
-            "Laptops & Hardware",
-            "Partnership",
-            "Something else",
-          ]).map((opt) => (
+          {withCurrent(
+            list<string>("contact.form.interests", [
+              "SAVIO AI",
+              "Managed IT Services",
+              "Website Development",
+              "App Development",
+              "Custom Software",
+              "IT Hardware",
+              "Software Licenses",
+              "Partnership",
+              "Something else",
+            ]),
+            form.interest,
+          ).map((opt) => (
             <option key={opt}>{opt}</option>
           ))}
         </select>

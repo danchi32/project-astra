@@ -10,7 +10,7 @@ const AstraCoreScene = dynamic(() => import("./AstraCoreScene"), {
   loading: () => <SceneFallback pulsing />,
 });
 
-function hasWebGL(): boolean {
+export function hasWebGL(): boolean {
   try {
     const canvas = document.createElement("canvas");
     return !!(

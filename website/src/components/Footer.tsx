@@ -81,6 +81,10 @@ export function Footer() {
   ];
   const company = [
     { label: "About Us", href: "/about" },
+    { label: "Services", href: "/services" },
+    { label: "Website Templates", href: "/services/website-development" },
+    { label: "IT Hardware", href: "/services/it-hardware" },
+    { label: "Software Licenses", href: "/services/software-licenses" },
     { label: "Contact Us", href: "/contact" },
   ];
   const resources = [

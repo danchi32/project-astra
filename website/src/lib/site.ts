@@ -113,6 +113,7 @@ export const bookDemo = {
 
 export const nav = [
   { label: "About Us", href: "/about" },
+  { label: "Services", href: "/services" },
   { label: "SAVIO", href: "/savio" },
   { label: "Secure Vault", href: "/vault" },
   { label: "Pricing", href: "/pricing" },

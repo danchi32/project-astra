@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { legalNav, site } from "@/lib/site";
 import { comparisons } from "@/lib/comparisons";
 import { getAllPosts } from "@/lib/blog";
+import { siteTemplates } from "@/lib/services";
 
 // Generates /sitemap.xml at build time (static export compatible).
 export const dynamic = "force-static";
@@ -24,6 +25,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/resources/offboarding-checklist/", priority: 0.7, changeFrequency: "monthly" },
     { path: "/security/", priority: 0.8, changeFrequency: "monthly" },
     { path: "/about/", priority: 0.6, changeFrequency: "monthly" },
+    { path: "/services/", priority: 0.8, changeFrequency: "monthly" },
+    { path: "/services/website-development/", priority: 0.8, changeFrequency: "monthly" },
+    { path: "/services/app-development/", priority: 0.8, changeFrequency: "monthly" },
+    { path: "/services/it-hardware/", priority: 0.8, changeFrequency: "monthly" },
+    { path: "/services/software-licenses/", priority: 0.8, changeFrequency: "monthly" },
+    // One entry per website template preview.
+    ...siteTemplates.map((t) => ({
+      path: `/services/website-development/templates/${t.slug}/`,
+      priority: 0.5,
+      changeFrequency: "monthly" as const,
+    })),
     { path: "/contact/", priority: 0.6, changeFrequency: "monthly" },
     // Policy pages. Low priority but deliberately indexed — buyers' security reviewers
     // and the payment rails both look for these at a public URL.
