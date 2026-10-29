@@ -35,6 +35,7 @@ public sealed class HeartbeatWorker(
     IDeviceIdentityProvider identity,
     ISystemTaskRunner taskRunner,
     ActivityTrackingState trackingState,
+    SubscriptionState subscription,
     IOptions<AgentOptions> options,
     ILogger<HeartbeatWorker> logger) : BackgroundService
 {
@@ -101,9 +102,13 @@ public sealed class HeartbeatWorker(
                 logger.LogError(ex, "Heartbeat cycle failed");
             }
 
+            // Dormant: one probe an hour, not one a minute (see SubscriptionState).
+            var delay = subscription.Dormant
+                ? SubscriptionState.DormantProbeInterval
+                : BackoffCalculator.NextDelay(failures, interval, MaxBackoff);
             try
             {
-                await Task.Delay(BackoffCalculator.NextDelay(failures, interval, MaxBackoff), stoppingToken);
+                await Task.Delay(delay, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -140,6 +145,16 @@ public sealed class HeartbeatWorker(
         {
             logger.LogWarning(ex, "Remote support provisioning check failed");
         }
+    }
+
+    private bool EnterDormant()
+    {
+        if (!subscription.Dormant)
+            logger.LogWarning(
+                "Organization subscription is inactive; going dormant (one check every {Interval})",
+                SubscriptionState.DormantProbeInterval);
+        subscription.Set(true);
+        return true;
     }
 
     private async Task<bool> BeatOnceAsync(CancellationToken ct)
@@ -181,6 +196,12 @@ public sealed class HeartbeatWorker(
             logger.LogWarning(ex, "Heartbeat request failed");
         }
 
+        // An inactive org: go dormant and stop here, before the remote-support check, which the
+        // backend would refuse too. Counted as a successful beat — the loop then waits the
+        // dormant probe interval rather than backing off as if from a fault.
+        if (result?.Status == HeartbeatStatus.Suspended)
+            return EnterDormant();
+
         await MaybeProvisionRemoteSupportAsync(token, ct);
 
         if (result is null)
@@ -194,10 +215,17 @@ public sealed class HeartbeatWorker(
             if (token is null)
                 return false;
             result = await api.HeartbeatAsync(token, request, ct);
+            if (result.Status == HeartbeatStatus.Suspended)
+                return EnterDormant();
         }
 
         if (result.Status != HeartbeatStatus.Ok)
             return false;
+
+        // A confirmed-Ok beat is the wake-up: the org is active (again), so everything resumes.
+        if (subscription.Dormant)
+            logger.LogInformation("Organization is active again; leaving dormant mode");
+        subscription.Set(false);
 
         // Record whether this org may collect Tracker activity — gates the telemetry worker's
         // collection and drives the Tray's "Activity tracking: ON" indicator. Set only on a

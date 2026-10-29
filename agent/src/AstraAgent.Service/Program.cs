@@ -50,6 +50,7 @@ builder.Services.AddSingleton<ISessionCollector, SessionCollector>();
 // last), and the state is the shared on/off flag written by the heartbeat and read by the
 // telemetry push — both must be singletons.
 builder.Services.AddSingleton<AstraAgent.Service.Workforce.ActivityTrackingState>();
+builder.Services.AddSingleton<AstraAgent.Service.Api.SubscriptionState>();
 builder.Services.AddSingleton<AstraAgent.Service.Workforce.IActivityTracker,
                               AstraAgent.Service.Workforce.ActivityTracker>();
 

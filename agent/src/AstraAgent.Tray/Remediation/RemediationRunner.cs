@@ -7,7 +7,9 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using AstraAgent.Service.Api;
 using AstraAgent.Service.Security;
+using AstraAgent.Service.Workers;
 
 namespace AstraAgent.Tray.Remediation;
 
@@ -21,6 +23,9 @@ public sealed class RemediationRunner : IDisposable
     // now posts "Working on it" the moment a task is claimed, so the user sees progress
     // rather than silence while waiting for the next tick.
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
+    // A failing poll doubles its wait up to this, like the Service's workers. It used to retry
+    // every 30s whatever came back, and append a log line each time.
+    private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(15);
 
     private readonly HttpClient _http;
     private readonly ITokenStore _store;
@@ -62,24 +67,48 @@ public sealed class RemediationRunner : IDisposable
 
     private async Task LoopAsync(CancellationToken ct)
     {
+        var failures = 0;
+        var dormant = false;
         while (!ct.IsCancellationRequested)
         {
-            try { await PollOnceAsync(ct); }
-            catch (OperationCanceledException) { break; }
-            catch (Exception ex) { Log("Poll failed: " + ex.Message); }
+            // The Service records an inactive organization in the registry (SubscriptionState).
+            // While it says so, don't call the backend at all: this poll was most of an expired
+            // device's traffic. It is re-read every interval, so polling resumes as soon as the
+            // Service's hourly probe finds the organization active again.
+            var nowDormant = SubscriptionState.ReadFromRegistry();
+            if (nowDormant != dormant)
+            {
+                Log(nowDormant
+                    ? "Organization inactive; pausing task polling."
+                    : "Organization active again; resuming task polling.");
+                dormant = nowDormant;
+                failures = 0;
+            }
 
-            try { await Task.Delay(PollInterval, ct); }
+            if (!dormant)
+            {
+                try { failures = await PollOnceAsync(ct) ? 0 : failures + 1; }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex) { failures++; Log("Poll failed: " + ex.Message); }
+            }
+
+            var delay = dormant
+                ? PollInterval
+                : BackoffCalculator.NextDelay(failures, PollInterval, MaxBackoff);
+            try { await Task.Delay(delay, ct); }
             catch (OperationCanceledException) { break; }
         }
     }
 
-    private async Task PollOnceAsync(CancellationToken ct)
+    /// <returns>False when the backend refused or answered with an error, so the loop backs
+    /// off; true otherwise (including "not enrolled yet", which made no request).</returns>
+    private async Task<bool> PollOnceAsync(CancellationToken ct)
     {
         var token = _store.Load();
         if (token is null)
         {
             Log("No device credential yet — not enrolled? Skipping.");
-            return;
+            return true;
         }
 
         List<AgentTask>? tasks;
@@ -90,12 +119,12 @@ public sealed class RemediationRunner : IDisposable
             if (!response.IsSuccessStatusCode)
             {
                 Log($"GET /api/v1/agent/tasks -> {(int)response.StatusCode} {response.StatusCode}");
-                return;
+                return false;
             }
             tasks = await response.Content.ReadFromJsonAsync<List<AgentTask>>(ct);
         }
         if (tasks is null || tasks.Count == 0)
-            return;  // quiet on the common "nothing to do" case
+            return true;  // quiet on the common "nothing to do" case
 
         Log($"Claimed {tasks.Count} task(s).");
         foreach (var task in tasks)
@@ -112,6 +141,7 @@ public sealed class RemediationRunner : IDisposable
             using var reportResponse = await _http.SendAsync(report, ct);
             Log($"  reported result -> {(int)reportResponse.StatusCode}");
         }
+        return true;
     }
 
     public void Dispose()

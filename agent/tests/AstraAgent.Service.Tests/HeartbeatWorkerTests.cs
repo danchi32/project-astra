@@ -37,6 +37,7 @@ public class HeartbeatWorkerTests
         public int Beats => Volatile.Read(ref _beats);
         public int PlanChecks => Volatile.Read(ref _planChecks);
         public bool ThrowOnHeartbeat { get; set; }
+        public HeartbeatStatus Status { get; set; } = HeartbeatStatus.Ok;
         public IReadOnlyList<AgentRemediationTask> NextTasks { get; set; } = [];
         public readonly List<bool> IncludeTasksSeen = [];
 
@@ -46,6 +47,8 @@ public class HeartbeatWorkerTests
             if (ThrowOnHeartbeat)
                 throw new System.Net.Http.HttpRequestException("No such host is known.");
             lock (IncludeTasksSeen) IncludeTasksSeen.Add(request.IncludeTasks);
+            if (Status != HeartbeatStatus.Ok)
+                return Task.FromResult(HeartbeatResult.From(Status));
             var tasks = request.IncludeTasks ? NextTasks : [];
             NextTasks = [];   // hand each task out once, as the backend does
             return Task.FromResult(new HeartbeatResult(HeartbeatStatus.Ok, tasks));
@@ -86,13 +89,48 @@ public class HeartbeatWorkerTests
         }
     }
 
-    private static HeartbeatWorker Build(CountingApi api, ISystemTaskRunner runner)
+    private static HeartbeatWorker Build(
+        CountingApi api, ISystemTaskRunner runner, SubscriptionState? subscription = null)
     {
         var options = Options.Create(new AgentOptions { HeartbeatIntervalSeconds = 1 });
         return new HeartbeatWorker(
             new FakeEnrollment(), api, new FakeIdentity(), runner,
-            new AstraAgent.Service.Workforce.ActivityTrackingState(), options,
+            new AstraAgent.Service.Workforce.ActivityTrackingState(),
+            subscription ?? new SubscriptionState(), options,
             NullLogger<HeartbeatWorker>.Instance);
+    }
+
+    [Fact]
+    public async Task An_inactive_organization_puts_the_device_to_sleep()
+    {
+        // An expired org's agent used to call every minute regardless. Told the org is
+        // inactive, it must go dormant: no remote-support check, and no further beat for the
+        // dormant probe interval (an hour) rather than the one-second interval configured here.
+        var api = new CountingApi { Status = HeartbeatStatus.Suspended };
+        var subscription = new SubscriptionState();
+        var worker = Build(api, new BlockingRunner(), subscription);
+
+        using var cts = new CancellationTokenSource();
+        await worker.StartAsync(cts.Token);
+        try
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (api.Beats == 0 && DateTime.UtcNow < deadline)
+                await Task.Delay(50, cts.Token);
+            await Task.Delay(TimeSpan.FromSeconds(3), cts.Token);
+
+            Assert.True(subscription.Dormant, "the device did not go dormant");
+            Assert.Equal(1, api.Beats);
+            Assert.Equal(0, api.PlanChecks);
+        }
+        finally
+        {
+            cts.Cancel();
+            await worker.StopAsync(CancellationToken.None);
+            // Set mirrors to HKLM when the test host can write it; don't leave this machine's
+            // own Tray believing its org is inactive.
+            subscription.Set(false);
+        }
     }
 
     [Fact]
