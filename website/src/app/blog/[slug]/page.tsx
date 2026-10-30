@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, CalendarDays, Clock } from "lucide-react";
 import { Container, Button } from "@/components/ui";
 import { site, bookDemo } from "@/lib/site";
 import { getAllSlugs, getPost } from "@/lib/blog";
+import { BlogStickyCta } from "@/components/BlogStickyCta";
 
 export function generateStaticParams() {
   return getAllSlugs().map((slug) => ({ slug }));
@@ -112,6 +113,7 @@ export default async function BlogPostPage({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(aiAdminFaq) }}
         />
       ) : null}
+      <BlogStickyCta />
       <Container className="max-w-3xl">
         <Link
           href="/blog"
