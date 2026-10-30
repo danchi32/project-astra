@@ -30,6 +30,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/services/app-development/", priority: 0.8, changeFrequency: "monthly" },
     { path: "/services/it-hardware/", priority: 0.8, changeFrequency: "monthly" },
     { path: "/services/software-licenses/", priority: 0.8, changeFrequency: "monthly" },
+    { path: "/services/managed-it/", priority: 0.8, changeFrequency: "monthly" },
     // One entry per website template preview.
     ...siteTemplates.map((t) => ({
       path: `/services/website-development/templates/${t.slug}/`,

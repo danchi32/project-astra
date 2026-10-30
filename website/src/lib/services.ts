@@ -107,7 +107,7 @@ export const serviceCategories: ServiceCategory[] = [
   },
   {
     title: "Managed IT Services",
-    href: "/managed-it-services-noida/",
+    href: "/services/managed-it/",
     icon: Headphones,
     short: "Helpdesk, monitoring and support",
     desc: "Helpdesk, patching, monitoring and security for every device — we run your IT so your team can run the business.",
