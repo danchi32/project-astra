@@ -99,7 +99,7 @@ class FreshserviceConnector:
             "priority": PRIORITY.get((request.priority or "").lower(), self.default_priority),
             # Tags rather than a custom source: a source has to be created by an admin
             # first, while a tag needs no setup and still lets their reporting answer
-            # "how many tickets did ASTRA raise".
+            # "how many tickets did SAVIO raise".
             "tags": request.tags,
         }
         if self.source is not None:

@@ -121,7 +121,7 @@ async def dispatch(
             "say_to_user": message,
         })
 
-    # RAISE — file under the category this org mapped to the action ASTRA tried.
+    # RAISE — file under the category this org mapped to the action SAVIO tried.
     offered = await service.pending_offer(conversation_id)
     category, sub_category = factory.category_for(
         settings, offered.action_id if offered else None
@@ -130,7 +130,7 @@ async def dispatch(
         outcome = await service.raise_ticket(
             org_id=org_id, conversation_id=conversation_id,
             requester_email=who.email if who else None,
-            # No priority: the org's configured default wins. ASTRA files at the level its
+            # No priority: the org's configured default wins. SAVIO files at the level its
             # admin chose rather than judging how urgent someone else's problem is.
             category=category, sub_category=sub_category,
         )

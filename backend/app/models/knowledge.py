@@ -44,13 +44,13 @@ class KnowledgeArticle(TimestampMixin, Base):
     # ── Help-centre fields ─────────────────────────────────────────────────
     # Only meaningful on GLOBAL articles (org_id NULL) — the support content the platform
     # operator publishes for every customer to read. An organization's own articles leave
-    # both NULL: they are that org's runbooks, not ASTRA's support documentation.
+    # both NULL: they are that org's runbooks, not SAVIO's support documentation.
     #
     # These exist so the same article does two jobs. It is retrievable by the assistant
     # (which is how most people will meet it — they ask rather than browse) and it is
     # findable by a human who has an error code on screen and nothing else to go on.
     help_category: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
-    # The code a customer can actually see — ASTRA's own ("ASTRA-1001") or the one Windows
+    # The code a customer can actually see — SAVIO's own ("ASTRA-1001") or the one Windows
     # or .NET handed them ("0x80070005"). Not unique: two articles may legitimately cover
     # the same code on different Windows builds, and forcing uniqueness would mean the
     # second one silently cannot be written.

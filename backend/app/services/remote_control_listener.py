@@ -91,7 +91,7 @@ class RemoteControlListener:
             service = RemoteControlService(session)
             try:
                 if event.msgid == MSG_DESKTOP_REFUSED:
-                    # Only reachable while ASTRA still thinks the prompt is live. Past
+                    # Only reachable while SAVIO still thinks the prompt is live. Past
                     # its own consent window the session is already NO_RESPONSE and
                     # `_open_session_for_node` will not have returned it.
                     await service.record_response(

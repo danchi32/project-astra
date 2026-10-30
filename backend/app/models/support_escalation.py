@@ -54,7 +54,7 @@ class SupportEscalation(TimestampMixin, Base):
     embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
-    # What ASTRA last tried, if anything. Drives the helpdesk category, so a ticket lands
+    # What SAVIO last tried, if anything. Drives the helpdesk category, so a ticket lands
     # in the right queue instead of a generic bucket.
     action_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # Rendered at offer time and kept: the evidence as it stood when we escalated. If the

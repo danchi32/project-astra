@@ -39,7 +39,7 @@ class Assistant(TimestampMixin, Base):
 
     # NULL org_id = a BUILT-IN assistant owned by the platform operator and visible to every
     # organization — the same convention `knowledge_articles` already uses for global
-    # articles. The current ASTRA System Administrator persona is seeded this way, which is
+    # articles. The current SAVIO System Administrator persona is seeded this way, which is
     # why tenants must not be able to edit or delete a NULL-org row.
     org_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
 

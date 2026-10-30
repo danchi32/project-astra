@@ -92,7 +92,7 @@ class InvoiceRead(BaseModel):
     transaction_id: str | None
     payment_method: str | None
     #: Where the document lives. Set for rails that issue it themselves (Paddle is Merchant
-    #: of Record); null means ASTRA is the seller and renders its own.
+    #: of Record); null means SAVIO is the seller and renders its own.
     provider_invoice_url: str | None
     #: Only on the operator's cross-org view, so the list doesn't need a second lookup.
     org_name: str | None = None

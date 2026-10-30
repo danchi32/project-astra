@@ -41,7 +41,7 @@ from app.services.assistants import AssistantService
 from app.services.exceptions import NotFoundError
 from app.services.subscription import org_is_writable
 
-# "What version are you?" asked of the ASTRA agent itself — answered directly with the
+# "What version are you?" asked of the SAVIO agent itself — answered directly with the
 # device's real agent version, never routed to the generic assistant reply.
 _VERSION_WORD = re.compile(r"\b(version|build|v\d)\b", re.IGNORECASE)
 _VERSION_SUBJECT = ("your", "you", "astra", "agent", "assistant", "yourself", "u r", "ur ")
@@ -278,7 +278,7 @@ class ConversationService:
         # 0. An outstanding offer to raise a ticket owns this turn.
         #
         # Until now the only code that could answer one was the LLM's escalation tool, and
-        # the real LLM runs only for ai_pro orgs — so on every other org ASTRA asked "shall
+        # the real LLM runs only for ai_pro orgs — so on every other org SAVIO asked "shall
         # I raise a ticket?" after a failed fix, the user said yes, and nothing happened.
         # The offer sat open forever. Answering it here makes the question mean something
         # regardless of which provider is doing the talking.
@@ -342,7 +342,7 @@ class ConversationService:
         # has just told us what is going wrong is the worst of the available replies.
         #
         # `actionable` is the guard, and it is not decoration: without it "yes please" or
-        # "thanks" reaches this branch too, and ASTRA offers to open a ticket about a
+        # "thanks" reaches this branch too, and SAVIO offers to open a ticket about a
         # pleasantry. A ticket needs a complaint to be about.
         if (
             conversation_id is not None
@@ -357,7 +357,7 @@ class ConversationService:
             )
             if offered is not None:
                 return offered
-        # Which assistant answers. Today there is one: the platform's built-in ASTRA
+        # Which assistant answers. Today there is one: the platform's built-in SAVIO
         # persona, seeded from the same constants the engine falls back to, so this changes
         # nothing until an operator publishes a different version. None — an unseeded
         # deployment — means the engine runs on the constants exactly as before.

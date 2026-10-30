@@ -60,7 +60,7 @@ class OrgSender:
     from_name: str | None
     from_address: str | None
     reply_to: str | None = None
-    #: True when the From address belongs to ASTRA rather than to the organization. The
+    #: True when the From address belongs to SAVIO rather than to the organization. The
     #: portal uses it to explain what recipients will see.
     shared: bool = False
 
@@ -118,7 +118,7 @@ class EmailIntegrationService:
         row.from_address = from_address
         row.last_error = None
         # Registering your own domain IS choosing it. Without this an admin could complete
-        # DNS verification and still have every message go out from ASTRA's address,
+        # DNS verification and still have every message go out from SAVIO's address,
         # because `method` was left on the default — which looks exactly like the feature
         # not working, with nothing anywhere saying why.
         row.method = EmailSendMethod.DNS
@@ -283,7 +283,7 @@ class EmailIntegrationService:
                 reply_to=row.reply_to,
             )
 
-        # "(via ASTRA)" is said out loud rather than hidden. The address is ours, and a
+        # "(via SAVIO)" is said out loud rather than hidden. The address is ours, and a
         # recipient who checks is going to see that anyway — better they read it as an
         # organization using a tool than as mail impersonating their IT department.
         return OrgSender(

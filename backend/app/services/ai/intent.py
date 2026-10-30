@@ -76,7 +76,7 @@ _ACTIONABLE_MARKERS = (
 # *a* problem exists, these say *this* problem survived a fix — which is the sentence that
 # moves a conversation to the next tier. Meaningless on its own, so the caller must also
 # establish that something was actually tried; otherwise the first message of a chat that
-# happens to say "still not working" would escalate before ASTRA had lifted a finger.
+# happens to say "still not working" would escalate before SAVIO had lifted a finger.
 _STILL_BROKEN = (
     "still not", "still cant", "still can't", "still doesn't", "still does not",
     "still isnt", "still isn't", "still the same", "still same", "still happening",

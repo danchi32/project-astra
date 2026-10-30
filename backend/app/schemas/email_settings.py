@@ -45,7 +45,7 @@ class EmailSettingsRead(BaseModel):
     #: portal shows the same answer the send path will use rather than guessing at it.
     effective_from: str = ""
     reply_to: str | None = None
-    #: Whether this org's plan includes sending from ASTRA's address. False means the
+    #: Whether this org's plan includes sending from SAVIO's address. False means the
     #: shared option is not theirs to pick, and the portal has to say why rather than
     #: offering a control that answers 402.
     shared_sender_available: bool = True
@@ -87,9 +87,9 @@ class EmailSenderChoice(BaseModel):
     switching is never a period of silence.
     """
     method: EmailSendMethod
-    #: The name recipients see. For `shared` it is shown as "<name> (via ASTRA)".
+    #: The name recipients see. For `shared` it is shown as "<name> (via SAVIO)".
     from_name: str | None = Field(default=None, max_length=120)
-    #: Where replies go. Strongly advised on `shared`: the From address is ASTRA's, so
+    #: Where replies go. Strongly advised on `shared`: the From address is SAVIO's, so
     #: without this a reply reaches us and not the customer's IT team.
     reply_to: EmailStr | None = None
 
