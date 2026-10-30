@@ -55,9 +55,11 @@ export const metadata: Metadata = {
       "Managed IT services, hardware supply, and SAVIO — the AI System Administrator that fixes IT before your team even notices.",
     images: ["/og.png"],
   },
+  // The Technomate mark, cropped from public/logo.png (not the full wordmark,
+  // which is unreadable at tab size).
   icons: {
-    icon: "/icon.svg",
-    apple: "/logo.png",
+    icon: [{ url: "/favicon.png", type: "image/png", sizes: "256x256" }],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
   alternates: { canonical: "/" },
 };
