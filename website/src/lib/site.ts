@@ -62,7 +62,7 @@ export const site = {
       "India",
     ],
     email: "danish@technomateai.com",
-    phone: "+91 97115 31786",
+    phone: "+91 85954 92500",
     // Published contact for data-protection complaints. A named, reachable grievance
     // officer is a required element of the privacy notice, not a courtesy.
     grievanceOfficer: {
@@ -78,7 +78,7 @@ export const site = {
     // Where existing customers write. Kept separate from `email` so a support request
     // and a general enquiry can be routed to different people later without a code change.
     support: "support@technomateai.com",
-    phone: "+91 97115 31786",
+    phone: "+91 85954 92500",
     addressLines: [
       "Technomate IT-Solution Private Limited",
       "Ayodhya Ganj, Dadri",
