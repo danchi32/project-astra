@@ -99,8 +99,8 @@
   },
   "about": {
     "badge": "About Technomate",
-    "title": "Your technology partner for [[services, hardware & AI]]",
-    "subtitle": "Technomate IT-Solution is an IT service provider and hardware supplier. We help organizations run reliable, secure IT — from sourcing the right laptops and infrastructure to managing and automating day-to-day operations with our own AI System Administrator, **SAVIO**.",
+    "title": "Your technology partner for [[IT, software & AI]]",
+    "subtitle": "Technomate IT-Solution is an IT services, hardware and software development company. We keep your systems running, supply the hardware behind them, build the custom software, websites and web apps your business runs on — and automate day-to-day IT with our own AI System Administrator, **SAVIO**.",
     "stats": [
       {
         "value": "33",
@@ -117,25 +117,6 @@
       {
         "value": "24/7",
         "label": "Monitoring with SAVIO"
-      }
-    ],
-    "whoHead": {
-      "eyebrow": "Who we are",
-      "title": "Two things done exceptionally well",
-      "subtitle": "We provide IT services and we supply the hardware behind them — a single accountable partner for your whole environment."
-    },
-    "offerings": [
-      {
-        "title": "IT Service Provider",
-        "desc": "Managed IT support, monitoring, patching, security and helpdesk — we run the technology so your team can run the business."
-      },
-      {
-        "title": "Laptop & Hardware Supplier",
-        "desc": "Business-grade laptops, desktops, workstations, servers and networking — procured, configured and delivered ready to deploy."
-      },
-      {
-        "title": "AI-Powered Operations",
-        "desc": "With SAVIO, we bring AI-driven automation to IT support — detecting and healing issues across your fleet automatically."
       }
     ],
     "missionEyebrow": "Our mission",
@@ -162,7 +143,7 @@
       }
     ],
     "supportTitle": "Talk to a human — backed by an AI",
-    "supportText": "Whether you need a fleet of laptops, managed support, or a demo of SAVIO, our team is ready to help.",
+    "supportText": "Whether you need a fleet of laptops, managed support, a custom software project, a new website or a demo of SAVIO, our team is ready to help.",
     "supportBtn": "Contact us"
   },
   "astra": {
@@ -461,7 +442,11 @@
       "interests": [
         "SAVIO AI",
         "Managed IT Services",
-        "Laptops & Hardware",
+        "Website Development",
+        "App Development",
+        "Custom Software",
+        "IT Hardware",
+        "Software Licenses",
         "Partnership",
         "Something else"
       ],
