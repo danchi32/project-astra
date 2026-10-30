@@ -217,7 +217,7 @@ class DevicePage(BaseModel):
 
 
 #: The Windows service name the relay agent installs under, and therefore the registry
-#: key the ASTRA agent reads its node id from. Set on the relay via agentCustomization;
+#: key the SAVIO agent reads its node id from. Set on the relay via agentCustomization;
 #: the two must not drift, so it is stated once here and sent to the agent rather than
 #: hardcoded at both ends.
 REMOTE_SUPPORT_SERVICE_NAME = "AstraRemoteSupport"

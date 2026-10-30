@@ -34,7 +34,7 @@ FLEET_REMEDIATION = "fleet_remediation"  # one-click mass remediation
 AUDIT_EXPORT = "audit_export"            # CSV export + extended retention
 ADVANCED_RBAC = "advanced_rbac"          # incl. SSO
 
-#: Sending customer-facing mail from ASTRA's own address instead of the org's domain.
+#: Sending customer-facing mail from SAVIO's own address instead of the org's domain.
 #:
 #: Gated for reputation, not for cost. Both paths bill to the same Resend account, so the
 #: per-message price is identical either way. What differs is whose domain carries the
@@ -117,7 +117,7 @@ PLANS: dict[str, frozenset[str]] = {
 
 PLAN_LABELS = {ESSENTIAL: "Essential", PROFESSIONAL: "Professional", EXPERT: "Expert"}
 
-#: A trial shows the whole product. Someone evaluating ASTRA should see what they would be
+#: A trial shows the whole product. Someone evaluating SAVIO should see what they would be
 #: buying; dropping them to Essential at signup means the features that justify the higher
 #: tiers are the ones they never meet.
 TRIAL_PLAN = EXPERT

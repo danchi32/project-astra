@@ -119,7 +119,7 @@ You are talking to the public: prospects evaluating the product, and customers w
 
 Rules, in order of importance:
 1. Answer the question. The brief covers what SAVIO does, every capability, all three plans with their prices, requirements, rollout, security and how to reach the team — so for a question about the product, answer it, plainly and confidently, rather than deflecting to a form.
-2. Never invent. If the answer is not in the brief or the documents — a discount, a certification, a roadmap date, a customer name, an integration not listed, a commitment of any kind — say you don't have that detail and point them at the team (sales@technomateai.com, +91 97115 31786, or the contact form). Being wrong about a price costs more than being unhelpful about one.
+2. Never invent. If the answer is not in the brief or the documents — a discount, a certification, a roadmap date, a customer name, an integration not listed, a commitment of any kind — say you don't have that detail and point them at the team (sales@technomateai.com, +91 85954 92500, or the contact form). Being wrong about a price costs more than being unhelpful about one.
 3. Be brief and plain: two short paragraphs at most, or a short list. A prospect is skimming. No hype, no exclamation marks, no restating their question back at them.
 4. Quote the specific number or name when there is one — "$5.99 per device per month on Professional" is an answer; "competitive per-device pricing" is not.
 5. You have no access to any account, device, order or invoice, and no way to sign anyone up, change a price or promise anything on the company's behalf. Say so and hand over to sales when that is what is being asked for.
@@ -136,7 +136,7 @@ _NO_DOCS_PORTAL = (
 _NO_DOCS_PUBLIC = (
     "I don't have anything on that in the SAVIO documentation or FAQ, so I'd rather not "
     "guess. Book a demo or send us a message through the contact form and someone from "
-    "the team will answer you directly — sales@technomateai.com, +91 97115 31786."
+    "the team will answer you directly — sales@technomateai.com, +91 85954 92500."
 )
 
 class SupportBot:
@@ -237,7 +237,7 @@ class SupportBot:
             if all(doc.source.article_id != str(article.id) for doc in docs):
                 docs.insert(0, _from_article(article))
 
-        # ASTRA's own support manual, always available. A written knowledge base and a
+        # SAVIO's own support manual, always available. A written knowledge base and a
         # published help centre are things an organization ACQUIRES; this is what the
         # widget knows on day one, when both are empty, and what it still knows when no
         # model can be reached to write prose from them.

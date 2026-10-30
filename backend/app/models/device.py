@@ -30,7 +30,7 @@ class Device(TimestampMixin, Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Whether USB mass storage is blocked on the device, as the agent reads it from the
-    # registry on each heartbeat — the actual state, not what ASTRA last asked for, so a port
+    # registry on each heartbeat — the actual state, not what SAVIO last asked for, so a port
     # reopened by hand or by Group Policy shows here as allowed. NULL means no agent new
     # enough to report it has checked in yet; the compliance count shows those as "unknown"
     # rather than guessing.
@@ -66,10 +66,10 @@ class Device(TimestampMixin, Base):
     sessions_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # This device as the remote-control engine knows it. A mapping column and nothing more:
-    # `machine_id` above is what identifies a device to ASTRA, and this hangs beneath it.
+    # `machine_id` above is what identifies a device to SAVIO, and this hangs beneath it.
     #
     # Never surface it and never key anything off it. The engine derives its own id from
     # the machine's GUID, and two machines can report the same one — a re-imaged laptop, a
     # cloned VM image — which puts two rows with identical names in front of a technician,
-    # one of them dead. Whichever they click is a coin toss; ASTRA's own identity is not.
+    # one of them dead. Whichever they click is a coin toss; SAVIO's own identity is not.
     meshcentral_node_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

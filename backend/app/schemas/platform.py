@@ -198,7 +198,7 @@ class PlatformAnalytics(BaseModel):
     """The operator console's analytical layer: real revenue history and per-customer
     health, as opposed to the point-in-time counters on /platform/overview."""
 
-    # Revenue is denominated in ONE currency. ASTRA bills on Razorpay (INR) and Paddle
+    # Revenue is denominated in ONE currency. SAVIO bills on Razorpay (INR) and Paddle
     # (USD), and adding paise to cents produces a number that means nothing — so the trend
     # covers the currency most invoices are in, and names any others it left out.
     revenue_currency: str | None

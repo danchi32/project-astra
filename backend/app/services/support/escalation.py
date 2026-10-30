@@ -47,7 +47,7 @@ DEDUPE_SIMILARITY = 0.6
 # Named rather than inline because the state alone does not say what happened, and anything
 # reading these rows back has to tell the cases apart:
 #
-#   * A `declined` row that was SUPERSEDED is ASTRA closing its own duplicate, not a user
+#   * A `declined` row that was SUPERSEDED is SAVIO closing its own duplicate, not a user
 #     saying no.
 #   * A `failed` row with NO_HELPDESK means there was nowhere to file — which the tool gate
 #     normally prevents, so it is the narrow race where a helpdesk is disabled between the

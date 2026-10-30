@@ -86,7 +86,7 @@ class Dossier:
         parts.append("</p>")
 
         if self.device_url:
-            # The hook: a technician who follows this is reading ASTRA without anyone
+            # The hook: a technician who follows this is reading SAVIO without anyone
             # having bought it for them.
             parts.append(
                 f'<p><a href="{e(self.device_url)}">Full device timeline in SAVIO</a></p>'

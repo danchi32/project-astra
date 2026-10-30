@@ -104,7 +104,7 @@ class RemoteControlAdminService:
                 "cannot be enabled. Configure the MeshCentral connection first."
             )
         # A random password that meets any reasonable complexity rule. It is never used — the
-        # browser logs into this account by a cookie ASTRA signs, never by password — so it
+        # browser logs into this account by a cookie SAVIO signs, never by password — so it
         # exists only so the account can be created to hold the group grant.
         password = "Aa1!" + secrets.token_urlsafe(24)
         try:

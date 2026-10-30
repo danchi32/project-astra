@@ -320,7 +320,7 @@ async def organization_assets(
     return await AssetService(session).list_for_org(org_id=org_id)
 
 
-# ── Support requests: customers asking ASTRA itself for help ──────────────────
+# ── Support requests: customers asking SAVIO itself for help ──────────────────
 @router.get(
     "/support-requests",
     response_model=SupportQueue,

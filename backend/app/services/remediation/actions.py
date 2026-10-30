@@ -287,7 +287,7 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       params=("session_id", "username"), execution_context="system"),
 )
 
-# Windows time-zone identifiers ASTRA may set. An allowlist rather than a format check,
+# Windows time-zone identifiers SAVIO may set. An allowlist rather than a format check,
 # because the value names a real place: a typo that still looked like an identifier would be
 # accepted by tzutil, shift every meeting in the person's calendar, and give no clue why.
 # Windows knows about 140; this is the set a business fleet actually asks for.
@@ -315,7 +315,7 @@ SAFE_TIMEZONES: frozenset[str] = frozenset({
     "New Zealand Standard Time",
 })
 
-# Software ASTRA will never uninstall, whatever an organization lists as restricted.
+# Software SAVIO will never uninstall, whatever an organization lists as restricted.
 # Removing endpoint protection across a fleet is precisely what someone who got into the
 # portal would try, and disarming the agent would end the platform's own visibility. A
 # restricted-software list is an IT policy; it is not a licence to strip a machine's

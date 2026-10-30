@@ -48,18 +48,18 @@ logger = logging.getLogger(__name__)
 MSG_DESKTOP_STARTED = 15
 
 #: "Ended desktop session <id> ... N second(s)" — carries `bytesin`/`bytesout` too, which
-#: is the session accounting ASTRA would otherwise have to measure for itself.
+#: is the session accounting SAVIO would otherwise have to measure for itself.
 MSG_DESKTOP_ENDED = 11
 
 #: "Failed to start remote desktop after local user rejected" — and this is the one to be
 #: careful with. MeshCentral reports a DECLINE and a TIMEOUT with the same id, because to
-#: it they are the same outcome. They are not the same event to a technician, so ASTRA
+#: it they are the same outcome. They are not the same event to a technician, so SAVIO
 #: must have already decided which happened before this arrives. See CONSENT_HEADROOM.
 MSG_DESKTOP_REFUSED = 34
 
-#: MeshCentral's own consent window must be far longer than ASTRA's, so that in practice
+#: MeshCentral's own consent window must be far longer than SAVIO's, so that in practice
 #: its timer never fires. Then MSG_DESKTOP_REFUSED can only mean a person pressed Deny,
-#: and a prompt nobody answered is retired by ASTRA's own sweep as NO_RESPONSE.
+#: and a prompt nobody answered is retired by SAVIO's own sweep as NO_RESPONSE.
 #:
 #: Get this backwards — MeshCentral timing out first — and every unanswered prompt is
 #: recorded as a refusal, which is the exact bug the spike surfaced and this whole design
@@ -72,7 +72,7 @@ REQUIRED_RELAY_CONSENT_TIMEOUT = 600
 #: the shape the relay builds for its own token logins, so it is the shape it expects.
 _COOKIE_ACCESS_LEVEL = 3
 
-#: The relay refuses a login cookie older than an hour. ASTRA hands out far shorter ones
+#: The relay refuses a login cookie older than an hour. SAVIO hands out far shorter ones
 #: — a viewer URL is for a session starting now — but the ceiling is the relay's and this
 #: is it, so nothing here may assume a longer life.
 COOKIE_MAX_AGE_SECONDS = 3600

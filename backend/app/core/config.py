@@ -288,7 +288,7 @@ class Settings(BaseSettings):
     agent_update_max_stale_seconds: int = 86400
 
     # ── Company identity ────────────────────────────────────────────────────
-    # The registered entity behind ASTRA. Companies Act 2013 s.12(3)(c), read with
+    # The registered entity behind SAVIO. Companies Act 2013 s.12(3)(c), read with
     # Rule 26 of the Companies (Incorporation) Rules 2014, requires the name,
     # registered office, CIN, telephone and email on business letters, billheads and
     # official publications — so invoices and transactional email render these.
@@ -307,7 +307,7 @@ class Settings(BaseSettings):
         "Ayodhya Ganj, Dadri, Gautam Budh Nagar, Uttar Pradesh 203207, India"
     )
     company_email: str = "danish@technomateai.com"
-    company_phone: str = "+91 97115 31786"
+    company_phone: str = "+91 85954 92500"
     company_incorporated_on: str = "2026-08-25"
 
     #: PAN and TAN are NOT public disclosures. They live here because invoicing and

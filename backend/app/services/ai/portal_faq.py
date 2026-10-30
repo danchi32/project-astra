@@ -20,7 +20,7 @@ from app.services.ai.faq import FaqEntry
 
 #: Sent on every portal question, so the assistant can answer about the product itself
 #: even when retrieval finds nothing. Complements `public_faq.PRODUCT_BRIEF`, which covers
-#: what ASTRA is and what it costs; this one covers using it.
+#: what SAVIO is and what it costs; this one covers using it.
 PORTAL_BRIEF = """# Using SAVIO — orientation for the in-portal assistant
 
 ## The portal, page by page

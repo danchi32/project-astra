@@ -34,10 +34,10 @@ Technomate IT-Solution (technomateai.com) does three things: managed IT services
 of business-grade hardware (laptops, desktops, workstations, servers, networking, sourced
 and configured ready to deploy); and SAVIO, its AI operations product. Based in Ayodhya
 Ganj, Dadri, Greater Noida, Uttar Pradesh 203207, India. Hours Mon-Sat, 10:00-19:00 IST.
-Sales: sales@technomateai.com, +91 97115 31786. Product support: astra@technomateai.com.
+Sales: sales@technomateai.com, +91 85954 92500. Product support: astra@technomateai.com.
 The portal lives at astra.technomateai.com.
 
-## What ASTRA is
+## What SAVIO is
 An AI System Administrator for Windows fleets. A lightweight Windows agent (a service plus
 a tray app) streams telemetry to the platform; an AI reasoning engine diagnoses problems
 from that evidence and fixes them, either on its own or with IT approval. Employees can
@@ -124,7 +124,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
             "and the AI engine reasons over that evidence to diagnose problems and fix them, "
             "either automatically or with IT approval."
         ),
-        keywords=("astra", "product", "overview", "software", "platform"),
+        keywords=("savio", "astra", "product", "overview", "software", "platform"),
     ),
     FaqEntry(
         question="Who am I talking to?",
@@ -240,7 +240,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
         question="Do you offer volume pricing for a large fleet?",
         answer=(
             "Yes. Above 50 devices, contact sales for volume pricing and a guided rollout — "
-            "sales@technomateai.com or +91 97115 31786."
+            "sales@technomateai.com or +91 85954 92500."
         ),
         keywords=("volume", "discount", "bulk", "enterprise", "large", "fleet", "many",
                   "hundred", "thousand", "negotiate", "deal"),
@@ -433,7 +433,7 @@ PUBLIC_FAQ: tuple[FaqEntry, ...] = (
         answer=(
             "Use the Book a demo button at the top of any page, or the contact form on the "
             "Contact page. You can also email sales@technomateai.com or call "
-            "+91 97115 31786 (Mon-Sat, 10:00 AM - 7:00 PM IST)."
+            "+91 85954 92500 (Mon-Sat, 10:00 AM - 7:00 PM IST)."
         ),
         keywords=("demo", "sales", "contact", "call", "email", "phone", "meeting", "talk",
                   "speak", "reach", "human", "someone", "book", "schedule"),
