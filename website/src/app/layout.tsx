@@ -8,6 +8,8 @@ import { Analytics } from "@/components/Analytics";
 import { CookieConsent } from "@/components/CookieConsent";
 import { ConversionTracker } from "@/components/ConversionTracker";
 import { SupportChat } from "@/components/SupportChat";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { LeadMagnetPopup } from "@/components/LeadMagnetPopup";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -96,6 +98,8 @@ export default function RootLayout({
           {/* Floats above every page. Reads the same content layer as the rest of the
               site, so it answers with what the pages already say. */}
           <SupportChat />
+          <WhatsAppButton />
+          <LeadMagnetPopup />
         </ContentProvider>
         <Analytics />
         <ConversionTracker />

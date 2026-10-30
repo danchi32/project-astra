@@ -26,6 +26,7 @@ const META_EVENTS: Record<string, string> = {
   generate_lead: "Lead",
   book_demo_click: "Schedule",
   signup_click: "StartTrial",
+  whatsapp_click: "Contact",
 };
 
 /**

@@ -34,6 +34,8 @@ export function ConversionTracker() {
         trackEvent("book_demo_click", context);
       } else if (href.startsWith(site.appUrl)) {
         trackEvent("signup_click", context);
+      } else if (href.startsWith("https://wa.me/")) {
+        trackEvent("whatsapp_click", context);
       }
     }
 

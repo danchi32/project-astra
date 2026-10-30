@@ -79,6 +79,9 @@ export const site = {
     // and a general enquiry can be routed to different people later without a code change.
     support: "support@technomateai.com",
     phone: "+91 85954 92500",
+    // wa.me wants the number as bare digits with the country code. Kept apart from
+    // `phone` so WhatsApp can move to a business number without changing the call line.
+    whatsapp: "918595492500",
     addressLines: [
       "Technomate IT-Solution Private Limited",
       "Ayodhya Ganj, Dadri",
