@@ -1,6 +1,6 @@
 # Technomate Marketing Execution Tracker
 
-Updated: 2026-08-31
+Updated: 2026-10-31
 
 Status legend: `DONE`, `IN PROGRESS`, `NEXT`, `BLOCKED`, `LATER`
 
@@ -58,6 +58,7 @@ Qualified organizations that start an agreed ASTRA pilot. Supporting conversions
 | Cold outreach sequence | DONE | Growth + Sales | Five-touch, 24-day sequence created without fabricated proof; first-touch CTA asks for a reply. |
 | LinkedIn organic campaign | DONE | Founder + Growth | Five posts and unique UTM links ready for founder/company publishing. |
 | First 25 verified accounts | IN PROGRESS | Growth | Discovery target reached: 25 sourced candidates across five batches. Deep verification promoted EDAG India to `qualified_pending_contact` using official Windows endpoint evidence; S&B India and Epiroc Nashik remain research-only because endpoint ownership is not public. No record is send-ready yet. |
+| Batch 6 research (2026-10-31) | IN PROGRESS | Growth | 8 new accounts added (33 total). Netrio India (Pune MSP, 70) is the only Warm one and fits the MSP partner pilot; NeoXam Noida has the strongest Windows/Intune evidence but no named IT owner. All are `research_only` and none is send-ready. Batches 1-5 reach `delete_after` on 2026-11-28, so re-verify or purge them before then. |
 | First controlled outreach batch | NEXT | Founder | Send to a maximum of 10 newly verified contacts per business day; stop on deliverability or complaint warnings. |
 | Remote/hybrid startup segment | IN PROGRESS | Growth + Engineering | Landing page is live. Buyer verification ranks TechUp (75) and Navana (70) as executive-sponsor hypotheses; account-specific qualification gates and discovery questions are documented. Both remain research-only pending supported Windows-fleet evidence. |
 
