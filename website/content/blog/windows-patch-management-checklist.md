@@ -71,7 +71,7 @@ Keep a short, ordered runbook:
 1. Read the error code Windows recorded for the attempt.
 2. Check free disk space and clear temporary files if needed.
 3. Retry once.
-4. If it still fails, reset the Windows Update components (the SoftwareDistribution and catroot2 caches) — a heavier step that discards in-flight downloads, so it should need a senior approval.
+4. If it still fails, [reset the Windows Update components](/blog/reset-windows-update-components/) (the SoftwareDistribution and catroot2 caches) — a heavier step that discards in-flight downloads, so it should need a senior approval.
 5. Record what fixed it, so the next occurrence is faster.
 
 ## 6. Prove it — keep an audit trail

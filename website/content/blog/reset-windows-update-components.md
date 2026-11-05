@@ -23,7 +23,7 @@ It is written for IT teams looking after business Windows 10 and Windows 11 PCs.
 Most stuck updates have a simpler cause. Check these first. Each takes a minute.
 
 1. **Is the update actually stuck, or waiting on a restart?** An update that says "pending restart" is already installed. Installing it again does nothing. Restart the PC and check again.
-2. **Is there enough free disk space?** Feature updates need many gigabytes free on the system drive. Error `0x80070070` means the disk is full. Clear temporary files before anything else.
+2. **Is there enough free disk space?** Feature updates need many gigabytes free on the system drive. Error `0x80070070` means the disk is full. [Clear temporary files](/blog/windows-pc-slow-disk-full-fix/) before anything else.
 3. **Can the PC reach Microsoft?** Proxies, VPNs and firewall rules often block update downloads. `0x8024402C` usually points to a connection or proxy problem, not a broken update cache.
 4. **What does the error code say?** Note the exact code under *Settings → Windows Update → Update history*. Two different devices failing with the same code usually share a cause.
 
