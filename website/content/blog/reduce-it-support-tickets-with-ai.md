@@ -20,12 +20,13 @@ You can't automate what you haven't measured. Pull the last 90 days of tickets a
 
 Typical high-volume, low-complexity tickets include:
 
-- "My computer is slow" (often disk, memory or a runaway app)
-- "The internet isn't working" (DNS, adapter, or a dropped connection)
-- "Outlook / Teams / Zoom is frozen"
+- ["My computer is slow"](/blog/windows-pc-slow-disk-full-fix/) (often disk, memory or a runaway app)
+- ["The internet isn't working"](/blog/internet-not-working-windows-flush-dns-reset-network/) (DNS, adapter, or a dropped connection)
+- ["Outlook](/blog/outlook-not-responding-fix/) / Teams / Zoom is frozen"
 - "I'm out of disk space"
 - "This app won't open"
-- Print spooler and printer issues
+- [Print spooler and printer issues](/blog/printer-not-printing-fix-print-spooler/)
+- [No sound or a microphone that stopped working](/blog/no-sound-microphone-not-working-windows/)
 
 These are the tickets AI can resolve without a technician — and they're usually the biggest slice of the pie.
 
