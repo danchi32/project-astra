@@ -48,7 +48,7 @@ Automating IT support does **not** mean handing your endpoints to a black box. T
 
 ## Measuring the ROI
 
-To prove the value, track a few numbers before and after:
+Start with a baseline: our free [IT ticket cost calculator](/resources/it-ticket-cost-calculator/) puts a rupee figure on what your tickets cost today, in IT time and employee downtime. Then track a few numbers before and after:
 
 - **Ticket deflection rate** — % of issues resolved without a technician
 - **Mean time to resolution (MTTR)** — how fast issues close

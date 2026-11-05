@@ -96,6 +96,7 @@ export function Footer() {
     { label: "Free 10-Device Pilot", href: "/pilot" },
     { label: "Security & Trust", href: "/security" },
     { label: "Offboarding checklist", href: "/resources/offboarding-checklist" },
+    { label: "IT ticket cost calculator", href: "/resources/it-ticket-cost-calculator" },
   ];
 
   return (
