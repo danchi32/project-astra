@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Server,
@@ -26,12 +26,10 @@ import {
   Building2,
   MapPin,
   ArrowRight,
-  Play,
 } from "lucide-react";
 import { Container, Section, Reveal, Badge, SectionHeading, Button } from "@/components/ui";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { TiltCard, Counter, Marquee } from "@/components/enhance";
-import { TechnomateIntro } from "@/components/three/TechnomateIntro";
 import { useContent, Rich } from "@/lib/content";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
@@ -218,18 +216,6 @@ export function AboutContent() {
   const values = list("about.values", valueDefaults);
   const stats = list<AStat>("about.stats", statDefaults);
   const [filter, setFilter] = useState<"all" | Cat>("all");
-  // intro: the overlay is mounted. revealed: its logo has started flying to the navbar,
-  // so the hero can come in underneath while it travels.
-  const [intro, setIntro] = useState(true);
-  const [revealed, setRevealed] = useState(false);
-  const endIntro = useCallback(() => setIntro(false), []);
-  const reveal = useCallback(() => setRevealed(true), []);
-  // Hero items wait behind the intro, then rise in one after another.
-  const heroIn = (delay: number) => ({
-    initial: false as const,
-    animate: revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 36 },
-    transition: { duration: 0.7, delay: revealed ? 0.3 + delay : 0, ease: [0.21, 0.47, 0.32, 0.98] },
-  });
 
   // Icons follow the default list's order, so match on title, not position.
   const iconFor = (title: string, i: number) => {
@@ -240,22 +226,16 @@ export function AboutContent() {
 
   return (
     <>
-      {/* Intro — the real logo assembles in 3D, then flies into the navbar logo slot. */}
-      {intro && <TechnomateIntro onReveal={reveal} onFinish={endIntro} />}
-      <noscript>
-        <style>{`#tm-intro{display:none}.tm-hero{opacity:1!important;transform:none!important}`}</style>
-      </noscript>
-
       {/* Hero */}
       <section className="aurora grain relative -mt-16 overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-24">
         <AnimatedBackground />
         <Container className="relative z-10">
-          <motion.div {...heroIn(0)} className="tm-hero text-center">
+          <Reveal className="text-center">
             <Badge>
               <Users className="h-3.5 w-3.5 text-brand-500" /> {c("about.badge", "About Technomate")}
             </Badge>
-          </motion.div>
-          <motion.div {...heroIn(0.1)} className="tm-hero mx-auto mt-6 max-w-3xl text-center">
+          </Reveal>
+          <Reveal delay={0.1} className="mx-auto mt-6 max-w-3xl text-center">
             <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
               <Rich text={c("about.title", "Your technology partner for [[IT, software & AI]]")} />
             </h1>
@@ -275,17 +255,7 @@ export function AboutContent() {
                 {c("about.heroBtn2", "Start a project")}
               </Button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setRevealed(false);
-                setIntro(true);
-              }}
-              className="mt-6 inline-flex items-center gap-1.5 text-xs font-medium text-muted-token transition hover:text-brand-500"
-            >
-              <Play className="h-3.5 w-3.5" /> {c("about.replayIntro", "Replay intro")}
-            </button>
-          </motion.div>
+          </Reveal>
         </Container>
       </section>
 

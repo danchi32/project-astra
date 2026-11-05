@@ -67,7 +67,7 @@ export const metadata: Metadata = {
 };
 
 // Apply saved / preferred theme before first paint to avoid a flash.
-const themeScript = `(function(){try{var t=localStorage.getItem('tm-theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem('tm-theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}try{if(sessionStorage.getItem('tm-intro-seen')==='1')document.documentElement.classList.add('tm-intro-seen');}catch(e){}})();`;
 
 export default function RootLayout({
   children,

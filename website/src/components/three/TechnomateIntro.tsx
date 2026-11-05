@@ -39,11 +39,17 @@ function Finish({ onFinish }: { onFinish: () => void }) {
  * at exactly that spot and the PNG animates to the navbar logo's rect. The
  * navbar logo is hidden (html.tm-intro-active) until the PNG reaches it.
  *
+ * Plays once per browser session (sessionStorage SEEN_KEY): the homepage is visited
+ * over and over, and nobody wants to sit through it every time. A head script in
+ * layout.tsx marks <html> before first paint so a repeat visit never flashes it.
+ *
  * onReveal fires as the flight starts (bring the content in), onFinish when it
  * lands (unmount this). Skipped outright without WebGL or with
  * prefers-reduced-motion, and it gives up if the scene has not started in 6s.
  */
-export function TechnomateIntro({ onReveal, onFinish }: { onReveal: () => void; onFinish: () => void }) {
+export const SEEN_KEY = "tm-intro-seen";
+
+export function TechnomateIntro({ onReveal, onFinish }: { onReveal?: () => void; onFinish: () => void }) {
   const [src, setSrc] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [flight, setFlight] = useState<{ from: Rect; to: Rect } | null>(null);
@@ -54,7 +60,7 @@ export function TechnomateIntro({ onReveal, onFinish }: { onReveal: () => void; 
     if (stage.current === "done") return;
     stage.current = "done";
     document.documentElement.classList.remove("tm-intro-active");
-    onReveal();
+    onReveal?.();
     onFinish();
   }, [onReveal, onFinish]);
 
@@ -73,11 +79,18 @@ export function TechnomateIntro({ onReveal, onFinish }: { onReveal: () => void; 
       from: { left: (vw - width) / 2, top: (vh - width * imgAspect.current) / 2, width },
       to: { left: r.left, top: r.top, width: r.width },
     });
-    onReveal();
+    onReveal?.();
   }, [end, onReveal]);
 
   useEffect(() => {
-    if (!hasWebGL() || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem(SEEN_KEY) === "1";
+      sessionStorage.setItem(SEEN_KEY, "1");
+    } catch {
+      // Storage blocked: play it, every time, rather than never.
+    }
+    if (seen || !hasWebGL() || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       end();
       return;
     }

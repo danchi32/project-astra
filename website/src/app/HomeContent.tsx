@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import {
   ArrowRight,
   Sparkles,
@@ -24,6 +25,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { DashboardMockup, AiConsole, SelfHealingFlow } from "@/components/visuals";
 import { TiltCard, Counter, Magnetic, Marquee } from "@/components/enhance";
 import { Hero3D } from "@/components/three/Hero3D";
+import { TechnomateIntro } from "@/components/three/TechnomateIntro";
 import { AgentActivity } from "@/components/AgentActivity";
 import { TelemetryField } from "@/components/TelemetryField";
 import { SavioMark } from "@/components/SavioMark";
@@ -92,9 +94,18 @@ export function HomeContent() {
     "Verifies and learns from every resolution",
   ]);
   const outcomes = list("home.outcomes", outcomeDefaults);
+  const [intro, setIntro] = useState(true);
+  const endIntro = useCallback(() => setIntro(false), []);
 
   return (
     <>
+      {/* Intro — the real logo assembles in 3D, then flies into the navbar logo slot.
+          Once per session; see TechnomateIntro. */}
+      {intro && <TechnomateIntro onFinish={endIntro} />}
+      <noscript>
+        <style>{`#tm-intro{display:none}`}</style>
+      </noscript>
+
       {/* ------------------------------------------------------------ HERO */}
       {/* Pulled up by the header's height so the aurora starts at the very top
           of the page and washes behind the (transparent) header. The top
