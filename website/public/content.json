@@ -20,9 +20,9 @@
   },
   "home": {
     "hero": {
-      "badge": "IT Services · Hardware · AI Automation",
+      "badge": "IT Services · Software · Hardware · AI",
       "title": "IT that runs itself,\npowered by [[SAVIO AI]]",
-      "subtitle": "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **SAVIO**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
+      "subtitle": "Technomate IT-Solution runs your IT, supplies your hardware and licenses, and builds custom software, websites and apps — supercharged by **SAVIO**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
       "cta1": "Explore SAVIO",
       "cta2": "Sign up free",
       "checks": [
@@ -43,25 +43,6 @@
       "Compliance",
       "Helpdesk Escalation",
       "Self-Learning KB"
-    ],
-    "pillarsHead": {
-      "eyebrow": "What we do",
-      "title": "One partner for your entire IT stack",
-      "subtitle": "From the laptop on the desk to the AI that keeps it running — Technomate covers it end to end."
-    },
-    "pillars": [
-      {
-        "title": "Managed IT Services",
-        "desc": "Proactive support, monitoring, patching and helpdesk that keep your workforce productive — on-site and remote."
-      },
-      {
-        "title": "Laptops & Hardware",
-        "desc": "Business-grade laptops, desktops, workstations and networking gear — sourced, configured and delivered ready to work."
-      },
-      {
-        "title": "SAVIO — AI System Admin",
-        "desc": "Our AI IT agent that watches every device, diagnoses issues, and self-heals them — with human approval where it matters."
-      }
     ],
     "console": {
       "badge": "One console",

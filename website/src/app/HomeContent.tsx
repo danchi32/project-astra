@@ -3,9 +3,6 @@
 import { useCallback, useState } from "react";
 import {
   ArrowRight,
-  Sparkles,
-  Server,
-  Laptop,
   Wrench,
   ShieldCheck,
   Boxes,
@@ -25,6 +22,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { DashboardMockup, AiConsole, SelfHealingFlow } from "@/components/visuals";
 import { TiltCard, Counter, Magnetic, Marquee } from "@/components/enhance";
 import { Hero3D } from "@/components/three/Hero3D";
+import { ServicesGrid, DevSpotlight } from "@/components/CompanySections";
 import { TechnomateIntro } from "@/components/three/TechnomateIntro";
 import { AgentActivity } from "@/components/AgentActivity";
 import { TelemetryField } from "@/components/TelemetryField";
@@ -32,22 +30,6 @@ import { SavioMark } from "@/components/SavioMark";
 import { useContent, Rich } from "@/lib/content";
 import { bookDemo, site } from "@/lib/site";
 import { statCards, usePlatformStats } from "@/lib/platformStats";
-
-const pillarIcons = [Server, Laptop, Sparkles];
-const pillarDefaults = [
-  {
-    title: "Managed IT Services",
-    desc: "Proactive support, monitoring, patching and helpdesk that keep your workforce productive — on-site and remote.",
-  },
-  {
-    title: "Laptops & Hardware",
-    desc: "Business-grade laptops, desktops, workstations and networking gear — sourced, configured and delivered ready to work.",
-  },
-  {
-    title: "SAVIO — AI System Admin",
-    desc: "Our AI IT agent that watches every device, diagnoses issues, and self-heals them — with human approval where it matters.",
-  },
-];
 
 const capIcons = [Boxes, Wrench, Activity, DownloadCloud, UserX, BrainCircuit, ShieldCheck, Gauge];
 const capDefaults = [
@@ -75,7 +57,6 @@ const outcomeIcons = [TicketCheck, Clock3, ShieldCheck];
 export function HomeContent() {
   const statsState = usePlatformStats();
   const { c, list } = useContent();
-  const pillars = list("home.pillars", pillarDefaults);
   const marquee = list<string>("home.marquee", capDefaults);
   const heroChecks = list<string>("home.hero.checks", [
     "No manual triage",
@@ -118,7 +99,7 @@ export function HomeContent() {
               <Reveal>
                 <Badge>
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                  {c("home.hero.badge", "IT Services · Hardware · AI Automation")}
+                  {c("home.hero.badge", "IT Services · Software · Hardware · AI")}
                 </Badge>
               </Reveal>
               <Reveal delay={0.05}>
@@ -136,7 +117,7 @@ export function HomeContent() {
                   <Rich
                     text={c(
                       "home.hero.subtitle",
-                      "Technomate IT-Solution delivers managed IT services and business hardware — supercharged by **SAVIO**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
+                      "Technomate IT-Solution runs your IT, supplies your hardware and licenses, and builds custom software, websites and apps — supercharged by **SAVIO**, an AI System Administrator that detects, diagnoses and heals IT issues before your team even notices.",
                     )}
                   />
                 </p>
@@ -211,6 +192,12 @@ export function HomeContent() {
         </Container>
       </section>
 
+      {/* ------------------------------------------- SERVICES + DEVELOPMENT
+          What Technomate does, before the SAVIO story: every service, then custom
+          software and websites with the process. See CompanySections. */}
+      <ServicesGrid />
+      <DevSpotlight />
+
       {/* --------------------------------------------------------- STATS
         *
         * Read live from the platform. These four were hand-written until 2026-08-29 —
@@ -259,43 +246,6 @@ export function HomeContent() {
                     <h3 className="mt-5 text-lg font-bold">{outcome.title}</h3>
                     <p className="mt-2 text-sm leading-relaxed text-secondary-token">{outcome.desc}</p>
                   </div>
-                </Reveal>
-              );
-            })}
-          </div>
-        </Container>
-      </Section>
-
-      {/* -------------------------------------------------------- PILLARS */}
-      <Section className="relative isolate overflow-hidden pt-6">
-        <TelemetryField flip />
-        <Container>
-          <Reveal>
-            <SectionHeading
-              eyebrow={c("home.pillarsHead.eyebrow", "What we do")}
-              title={c("home.pillarsHead.title", "One partner for your entire IT stack")}
-              subtitle={c(
-                "home.pillarsHead.subtitle",
-                "From the laptop on the desk to the AI that keeps it running — Technomate covers it end to end.",
-              )}
-            />
-          </Reveal>
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
-            {pillars.map((p, i) => {
-              const Icon = pillarIcons[i % pillarIcons.length];
-              return (
-                <Reveal key={p.title} delay={i * 0.1}>
-                  <TiltCard className="h-full">
-                    <div className="ring-conic h-full rounded-2xl border border-token bg-surface p-7 transition-all hover:border-brand-500/40 hover:shadow-xl">
-                      <div className="grid h-12 w-12 place-items-center rounded-xl bg-brand-500/10 text-brand-500">
-                        <Icon className="h-6 w-6" />
-                      </div>
-                      <h3 className="mt-5 text-lg font-bold">{p.title}</h3>
-                      <p className="mt-2 text-sm leading-relaxed text-secondary-token">
-                        {p.desc}
-                      </p>
-                    </div>
-                  </TiltCard>
                 </Reveal>
               );
             })}
