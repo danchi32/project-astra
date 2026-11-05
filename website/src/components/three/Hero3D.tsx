@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { WebGLBoundary } from "./WebGLBoundary";
 
@@ -38,6 +38,7 @@ function SceneFallback({ pulsing }: { pulsing?: boolean }) {
 
 export function Hero3D({ className }: { className?: string }) {
   const [webgl, setWebgl] = useState<boolean | null>(null);
+  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setWebgl(hasWebGL());
@@ -52,7 +53,8 @@ export function Hero3D({ className }: { className?: string }) {
     let ticks = 0;
     const id = window.setInterval(() => {
       ticks += 1;
-      const c = document.querySelector("canvas");
+      // This scene's own canvas: the homepage can have another one (the logo intro).
+      const c = box.current?.querySelector("canvas");
       if (c && c.clientWidth > 300) {
         window.clearInterval(id);
         return;
@@ -65,6 +67,7 @@ export function Hero3D({ className }: { className?: string }) {
 
   return (
     <div
+      ref={box}
       className={cn(
         "relative aspect-square w-full max-w-[520px]",
         className,

@@ -170,6 +170,8 @@ body {
 @keyframes tm-progress { to { width: 100%; } }
 /* The navbar logo stays hidden until the intro's logo has flown into its place. */
 .tm-intro-active [data-brand-logo] img { visibility: hidden; }
+/* Already played this session (set in layout.tsx's head script): never paint the overlay. */
+.tm-intro-seen #tm-intro { display: none; }
 
 /* Thin, theme-aware scrollbars for mock panels */
 .mini-scroll::-webkit-scrollbar {
