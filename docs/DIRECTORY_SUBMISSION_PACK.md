@@ -213,7 +213,7 @@ Fill this in as you go. **Live URL** is the listing's public page. Check it once
 
 | # | Site | Submitted | Status | Live URL | Notes |
 |---|---|---|---|---|---|
-| 1 | G2 | | | | |
+| 1 | G2 | before 2026-11-06 | live | | Add the profile URL here |
 | 2 | Capterra / GetApp / Software Advice | | | | |
 | 3 | Techjockey | | | | |
 | 4 | SoftwareSuggest | | | | |
@@ -223,7 +223,7 @@ Fill this in as you go. **Live URL** is the listing's public page. Check it once
 | 8 | SourceForge | | | | |
 | 9 | Crozdesk | | | | |
 | 10 | Google Business Profile | done | live | | |
-| 11 | Bing Places | | | | |
+| 11 | Bing Places | | | | Site added to Bing Webmaster Tools on 2026-11-06; the Places business listing is separate |
 | 12 | Apple Business Connect | | | | |
 | 13 | JustDial | | | | |
 | 14 | IndiaMART | | | | |

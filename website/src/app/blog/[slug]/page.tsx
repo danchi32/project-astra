@@ -67,37 +67,19 @@ export default async function BlogPostPage({
     mainEntityOfPage: `${base}/blog/${slug}/`,
     keywords: post.keywords.join(", "),
   };
-  const aiAdminFaq =
-    slug === "what-is-an-ai-system-administrator"
+  // FAQ comes from the post's frontmatter, and the same questions are rendered on the page
+  // below: Google only honours FAQPage markup for questions the reader can actually see.
+  const faqLd =
+    post.faq.length > 0
       ? {
           "@context": "https://schema.org",
           "@type": "FAQPage",
-          mainEntity: [
-            {
-              "@type": "Question",
-              name: "Is an AI System Administrator the same as an AI IT assistant?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Not necessarily. An assistant may answer questions or draft instructions. An AI System Administrator is connected to operational evidence and can execute governed actions, subject to explicit permissions and verification.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "Does an AI System Administrator replace Microsoft Intune or an RMM?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Not automatically. The right architecture depends on current device management, security and integration requirements. A limited pilot should test coexistence and workflow value before any replacement decision.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "How should a company evaluate an AI System Administrator?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Start with a small group of representative Windows devices. Measure diagnosis quality, approval behavior, remediation success, audit completeness and user impact before a wider rollout.",
-              },
-            },
-          ],
+          mainEntity: post.faq.map((f) => ({
+            "@type": "Question",
+            name: f.q,
+            // Plain text for structured data: keep a link's words, drop its URL.
+            acceptedAnswer: { "@type": "Answer", text: f.a.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") },
+          })),
         }
       : null;
 
@@ -107,10 +89,10 @@ export default async function BlogPostPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
       />
-      {aiAdminFaq ? (
+      {faqLd ? (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(aiAdminFaq) }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
         />
       ) : null}
       <BlogStickyCta />
@@ -141,6 +123,23 @@ export default async function BlogPostPage({
           className="prose prose-neutral mt-10 max-w-none dark:prose-invert prose-headings:tracking-tight prose-a:font-medium prose-a:text-brand-600 prose-a:no-underline hover:prose-a:underline dark:prose-a:text-brand-400"
           dangerouslySetInnerHTML={{ __html: post.html }}
         />
+
+        {post.faqHtml.length > 0 ? (
+          <section className="mt-14">
+            <h2 className="text-2xl font-bold tracking-tight">Frequently asked questions</h2>
+            <div className="mt-6 space-y-6">
+              {post.faqHtml.map((f) => (
+                <div key={f.q}>
+                  <h3 className="text-base font-semibold">{f.q}</h3>
+                  <p
+                    className="mt-1.5 text-sm leading-relaxed text-secondary-token [&_a]:font-medium [&_a]:text-brand-500 hover:[&_a]:underline"
+                    dangerouslySetInnerHTML={{ __html: f.html }}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* End-of-article CTA */}
         <div className="mt-14 rounded-2xl border border-token bg-brand-600/[0.07] p-8 text-center">

@@ -10,6 +10,13 @@ keywords:
   - restart print spooler
   - print spooler keeps stopping
   - printer offline Windows 11
+faq:
+  - q: "How do I clear a stuck print queue in Windows?"
+    a: "Stop the Print Spooler, delete the files in `C:\\Windows\\System32\\spool\\PRINTERS`, then start the spooler again. This removes every pending job on that PC, so users may need to print again."
+  - q: "Why does the Print Spooler keep stopping?"
+    a: "Usually a faulty or outdated printer driver. Check Event Viewer under PrintService for the driver named in the error, remove old printers, and install the manufacturer's current driver."
+  - q: "Why does Windows say my printer is offline when it is on?"
+    a: "The printer's IP address may have changed, 'Use Printer Offline' may be ticked, or the PC may be on a network that can't see the printer, such as a VPN or guest Wi-Fi. Give network printers a reserved IP address."
 ---
 
 "The printer isn't working" is one of the most common tickets in any office. Usually the printer is fine. The problem is on the PC: a job is stuck in the queue and everything behind it waits.

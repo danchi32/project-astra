@@ -10,6 +10,15 @@ keywords:
   - clear temp files Windows
   - Disk Cleanup
   - computer running slow fix
+faq:
+  - q: "How much free disk space does Windows need?"
+    a: "Keep at least 10 to 15% of the C: drive free. Below that, Windows slows down, updates start failing and apps like Outlook struggle."
+  - q: "Is it safe to clear temp files in Windows?"
+    a: "Yes. Use Settings, System, Storage, Temporary files. Files that are in use are skipped. Check the Downloads entry before ticking it, because it deletes the user's Downloads folder."
+  - q: "Can I delete the SoftwareDistribution Download folder?"
+    a: "Its contents are update files Windows no longer needs once updates are installed. Use Windows Update Cleanup in Disk Cleanup or Storage settings rather than deleting files by hand, and never while an update is installing."
+  - q: "When should a slow PC be upgraded instead of cleaned?"
+    a: "When it still has a spinning hard drive, has 8 GB of RAM or less for a full day of Teams, browser and Office, or keeps filling a disk that is simply too small."
 ---
 
 "My computer is slow" is the vaguest ticket an IT team receives, and one of the most common. Sometimes the cause is a full disk. Sometimes it is one browser tab using all the memory. Sometimes the laptop is simply too old.

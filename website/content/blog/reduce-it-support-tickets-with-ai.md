@@ -2,6 +2,7 @@
 title: "How to Reduce IT Support Tickets with AI Automation"
 description: "A practical playbook for cutting IT support tickets with AI — which tickets to automate first, how it works, and how to measure the ROI."
 date: "2026-07-15"
+updated: "2026-11-06"
 author: "Technomate IT-Solution"
 keywords:
   - reduce IT support tickets

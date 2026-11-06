@@ -10,6 +10,15 @@ keywords:
   - netsh winsock reset
   - DNS_PROBE_FINISHED_NXDOMAIN
   - network reset Windows 11
+faq:
+  - q: "What does ipconfig /flushdns do?"
+    a: "It clears the PC's cache of recent website name lookups. It is instant and safe, and fixes websites that fail because the PC remembers an old or wrong address."
+  - q: "Is netsh winsock reset safe?"
+    a: "It is safe but heavier than it looks. It needs a restart, can remove components installed by VPN or security software, and may clear a static IP address. Try flushing DNS, renewing the IP and restarting the adapter first."
+  - q: "Why can I ping 8.8.8.8 but not open websites?"
+    a: "The PC is online but can't turn website names into addresses, which is a DNS problem. Flush the DNS cache, then check which DNS servers the adapter is using."
+  - q: "What does an IP address starting with 169.254 mean?"
+    a: "The PC did not get an address from the network. Check the cable or Wi-Fi connection, then restart the network adapter."
 ---
 
 Everyone else in the office is online. One PC can't load websites, or Teams connects but the browser says `DNS_PROBE_FINISHED_NXDOMAIN`, or the network icon shows "No internet" on a cable that clearly works.

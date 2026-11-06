@@ -16,6 +16,23 @@ Primary audience: organizations with roughly 25–500 Windows endpoints, lean IT
 - Remote workforce IT support in India: https://technomateai.com/remote-workforce-it-support-india/
 - Contact: https://technomateai.com/contact/
 
+## Free resources
+
+- IT support ticket cost calculator (INR): https://technomateai.com/resources/it-ticket-cost-calculator/
+- Secure employee offboarding checklist: https://technomateai.com/resources/offboarding-checklist/
+
+## Windows troubleshooting guides
+
+Step-by-step fixes for the most common business Windows tickets, each noting which SAVIO action handles it and at what approval tier.
+
+- Windows Update stuck or failing (reset Windows Update components): https://technomateai.com/blog/reset-windows-update-components/
+- Printer not printing (stuck Print Spooler): https://technomateai.com/blog/printer-not-printing-fix-print-spooler/
+- Internet not working on one PC (flush DNS, renew IP, Winsock reset): https://technomateai.com/blog/internet-not-working-windows-flush-dns-reset-network/
+- Outlook not responding: https://technomateai.com/blog/outlook-not-responding-fix/
+- No sound or microphone not working: https://technomateai.com/blog/no-sound-microphone-not-working-windows/
+- Windows PC slow or disk full: https://technomateai.com/blog/windows-pc-slow-disk-full-fix/
+- Windows patch management checklist: https://technomateai.com/blog/windows-patch-management-checklist/
+
 ## Verified product facts
 
 - Focuses on Windows 10 and Windows 11 business endpoints.
