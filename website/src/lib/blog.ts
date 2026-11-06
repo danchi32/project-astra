@@ -11,6 +11,9 @@ import { marked } from "marked";
 
 const BLOG_DIR = path.join(process.cwd(), "content", "blog");
 
+/** A question and its answer. The answer is Markdown, so it may carry links. */
+export type Faq = { q: string; a: string };
+
 export type PostMeta = {
   slug: string;
   title: string;
@@ -20,9 +23,10 @@ export type PostMeta = {
   author: string;
   keywords: string[];
   readingMinutes: number;
+  faq: Faq[];
 };
 
-export type Post = PostMeta & { html: string };
+export type Post = PostMeta & { html: string; faqHtml: { q: string; html: string }[] };
 
 function readRaw(slug: string): { data: Record<string, unknown>; content: string } {
   const full = path.join(BLOG_DIR, `${slug}.md`);
@@ -45,6 +49,9 @@ function toMeta(slug: string, data: Record<string, unknown>, content: string): P
     author: String(data.author ?? "Technomate IT-Solution"),
     keywords: Array.isArray(data.keywords) ? (data.keywords as string[]) : [],
     readingMinutes: estimateReadingMinutes(content),
+    faq: Array.isArray(data.faq)
+      ? (data.faq as Record<string, unknown>[]).map((f) => ({ q: String(f.q), a: String(f.a) }))
+      : [],
   };
 }
 
@@ -71,7 +78,11 @@ export async function getPost(slug: string): Promise<Post | null> {
   try {
     const { data, content } = readRaw(slug);
     const html = await marked.parse(content);
-    return { ...toMeta(slug, data, content), html };
+    const meta = toMeta(slug, data, content);
+    const faqHtml = await Promise.all(
+      meta.faq.map(async (f) => ({ q: f.q, html: await marked.parseInline(f.a) })),
+    );
+    return { ...meta, html, faqHtml };
   } catch {
     return null;
   }

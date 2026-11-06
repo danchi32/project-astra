@@ -10,6 +10,15 @@ keywords:
   - SoftwareDistribution folder
   - catroot2
   - Windows Update error 0x80070002
+faq:
+  - q: "Is it safe to delete the SoftwareDistribution folder?"
+    a: "Renaming it is safer than deleting it. Windows rebuilds the folder on the next update check, and the renamed copy stays available if you need to restore it. Stop the Windows Update, Cryptographic, BITS and Windows Installer services first."
+  - q: "Will resetting Windows Update components delete my files?"
+    a: "No. It only rebuilds Windows Update's own caches. Downloads in progress are discarded and the update history list in Settings may look empty afterwards, but personal files and installed apps are untouched."
+  - q: "What should I try before resetting Windows Update?"
+    a: "Restart the PC if a restart is pending, free up disk space, and check the PC can reach Microsoft through any proxy or VPN. A reset only helps when the update cache itself is corrupted."
+  - q: "What if updates still fail after the reset?"
+    a: "Run `DISM /Online /Cleanup-Image /RestoreHealth` and then `sfc /scannow` from an elevated Command Prompt, restart, and try again. If the same device keeps failing, consider a repair upgrade or a rebuild."
 ---
 
 An update sits at 0% for an hour. Or it downloads, installs, fails, and tries again the next night. Or Windows shows an error code and nothing else.

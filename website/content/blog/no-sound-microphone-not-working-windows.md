@@ -10,6 +10,13 @@ keywords:
   - restart Windows Audio service
   - Teams microphone not working
   - Audio Endpoint Builder
+faq:
+  - q: "Why is my microphone not working in Teams or Zoom?"
+    a: "Check that the right microphone is selected in both Windows and the meeting app, that it isn't muted on the headset, and that microphone access is allowed for desktop apps under Settings, Privacy & security, Microphone."
+  - q: "How do I restart the Windows audio service?"
+    a: "From an elevated Command Prompt, stop Windows Audio (`audiosrv`) and then Audio Endpoint Builder, and start them again in the reverse order. Restarting only Windows Audio often fixes nothing."
+  - q: "Why doesn't Windows detect my headset?"
+    a: "Open Device Manager and choose Action, Scan for hardware changes. Try a USB port directly on the PC rather than on a dock or hub, and update the headset or dock driver if it shows a warning icon."
 ---
 
 "I can't hear anyone" and "they can't hear me" usually arrive two minutes before an important call. In most cases the fix takes less time than the ticket.

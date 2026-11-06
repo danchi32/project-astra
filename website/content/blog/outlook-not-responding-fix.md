@@ -10,6 +10,13 @@ keywords:
   - repair Microsoft Office
   - rebuild OST file
   - Outlook stuck on processing
+faq:
+  - q: "How do I start Outlook in safe mode?"
+    a: "Press Win + R, type `outlook.exe /safe` and press Enter. Outlook starts without add-ins, which tells you whether an add-in is causing the freezes."
+  - q: "Is it safe to delete the Outlook OST file?"
+    a: "For Microsoft 365 and Exchange mailboxes, yes: the OST is a local copy and Outlook downloads the mailbox again. Rename it rather than deleting it. Never do this with a PST file, which may be the only copy of some mail."
+  - q: "What is the difference between Quick Repair and Online Repair?"
+    a: "Quick Repair is fast and works offline. Online Repair reinstalls Office completely, takes longer and needs an internet connection. Try Quick Repair first; both close every Office app."
 ---
 
 Outlook is the application people notice first when it breaks. When it freezes, nobody can read or send mail, and the ticket arrives marked urgent.

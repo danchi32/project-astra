@@ -9,7 +9,7 @@ export const dynamic = "force-static";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = `https://${site.domain}`;
-  const routes: { path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"] }[] = [
+  const routes: { path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; lastModified?: string }[] = [
     { path: "/", priority: 1.0, changeFrequency: "weekly" },
     { path: "/savio/", priority: 0.9, changeFrequency: "weekly" },
     { path: "/vault/", priority: 0.9, changeFrequency: "monthly" },
@@ -57,6 +57,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       path: `/blog/${p.slug}/`,
       priority: 0.7,
       changeFrequency: "monthly" as const,
+      lastModified: p.updated ?? p.date,
     })),
   ];
 
@@ -64,5 +65,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     url: `${base}${r.path}`,
     changeFrequency: r.changeFrequency,
     priority: r.priority,
+    // Only posts carry a date; a made-up one on every other page would just be noise.
+    ...(r.lastModified ? { lastModified: r.lastModified } : {}),
   }));
 }
