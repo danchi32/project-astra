@@ -31,18 +31,28 @@ Stay out of: antivirus/EDR, mobile MDM, full ITSM, 1000+ seat enterprise, macOS 
 - [ ] Docs updated (this file's status column, plus user-facing help where relevant)
 
 ### 0.3 Delivery mechanics
-- **Branch → test locally → merge.** Every module is built on its own branch cut from the
-  latest `main` (e.g. `phase1/f4-user-apps`, `phase1/a1-create-local-user`), tested locally
-  first, and merged to `main` only once its tests pass. Nothing is built on `main` directly,
-  and unrelated local changes (website, marketing) never ride along in a module branch.
+- **One branch per phase; `main` only when the whole phase is verified** (decided 9 Nov).
+  Phase 1 lives on `phase-1` (cut from `main`). Each module is committed there and, once its
+  local test gate passes, gets an annotated tag `phase1-<module>` (e.g. `phase1-f4`). Nothing
+  reaches `main` until every Phase 1 module is done and verified end to end; then one PR
+  `phase-1` → `main`. Unrelated local changes (website, marketing) never ride along.
+- **Never tag `agent-v*` before the phase merges.** That tag triggers the signed release and
+  every enrolled agent auto-updates. Test agent builds by installing them by hand on the
+  test VMs.
+- **Pushing a non-`main` branch deploys it to shared staging** (`deploy-staging.yml`) and
+  runs its migrations there. The workflow skips migrations when staging is already ahead,
+  so other branches don't break, but staging then runs this branch's code until someone else
+  pushes. Push `phase-1` only when that is wanted.
+- **Migrations inside a phase are numbered in order** (0072, 0073, …). If `main` gains a
+  migration meanwhile, renumber ours before the phase PR.
 - **Local test gate before opening the PR:**
   1. `docker compose -f infra/docker-compose.yml up -d`; backend `pytest` + `ruff check` green
   2. migrations: `alembic upgrade head` then `alembic downgrade -1` and back up, on a local DB
   3. portal `npm run build` (+ Vitest where added) for portal changes
   4. agent: `dotnet test`, then install the build on the test VMs and walk the module's
      "Done when" list by hand
-- Then PR to `main`; CI = ruff + the full suite. The user merges PRs themselves, in the
-  order of the sub-phase table, one at a time.
+- At phase end: full gate again on the whole branch, then the phase PR to `main`; the user
+  merges it themselves. Only then tag `agent-v0.14.0` and rebuild installers.
 - **Shared-staging gotcha:** every PR's deploy check runs `alembic upgrade head` against the
   shared staging DB. Merge migration-carrying PRs promptly, in order, or other PRs fail with
   "Can't locate revision".
