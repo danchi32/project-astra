@@ -64,6 +64,15 @@ class InstalledAppEntry(_SanitizedInput):
     user_name: str | None = Field(default=None, max_length=256)
 
 
+class LicensingEntry(_SanitizedInput):
+    kind: Literal["windows", "office"]
+    name: str = Field(max_length=200)
+    description: str | None = Field(default=None, max_length=300)
+    license_status: int = Field(ge=-1, le=6)
+    channel: str | None = Field(default=None, max_length=50)
+    kms_host: str | None = Field(default=None, max_length=255)
+
+
 class ServiceEntry(_SanitizedInput):
     name: str = Field(max_length=200)
     display_name: str = Field(max_length=300)
@@ -183,6 +192,10 @@ class TelemetryPush(_SanitizedInput):
     # workforce_insights entitlement — the ingest path checks, so a stray payload from an
     # untracked org is dropped rather than quietly collected.
     activity: list[ActivityEvent] | None = None
+
+    # Windows/Office activation, sent with the hourly inventory. None = not collected on this
+    # push (or an agent older than 0.14): keep the stored rows. A list replaces them.
+    licensing: list[LicensingEntry] | None = None
 
 
 class TelemetryPushResponse(BaseModel):

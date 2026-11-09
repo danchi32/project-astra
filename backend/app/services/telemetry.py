@@ -10,6 +10,7 @@ from app.models.device_session import DeviceSession
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
+    DeviceLicensing,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetrySnapshot,
@@ -185,6 +186,26 @@ class TelemetryService:
                     ],
                 )
                 device.updates_hash = digest
+
+        # Licensing: a handful of rows, once an hour, so no fingerprint — just replace.
+        if data.licensing is not None:
+            await self.repo.replace_licensing(
+                device.id,
+                [
+                    DeviceLicensing(
+                        device_id=device.id,
+                        org_id=device.org_id,
+                        kind=lic.kind,
+                        name=lic.name,
+                        description=lic.description,
+                        license_status=lic.license_status,
+                        channel=lic.channel,
+                        kms_host=lic.kms_host,
+                        collected_at=now,
+                    )
+                    for lic in data.licensing
+                ],
+            )
 
         # Sessions. `is not None` rather than a truthiness test, because an empty list is a
         # real answer here — "nobody is signed in" — and every other collection above uses

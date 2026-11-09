@@ -183,3 +183,27 @@ class DeviceWindowsUpdate(TimestampMixin, Base):
             )
         state = kw.get("state") or UPDATE_PENDING
         super().__init__(**kw, is_installed=state in _ON_DISK)
+
+
+class DeviceLicensing(TimestampMixin, Base):
+    """Windows / Office products holding a key, as the Software Protection Platform reports
+    them. Facts only — whether they look cracked is decided in `app.services.licensing`, so the
+    signature list can change without a migration or an agent release."""
+
+    __tablename__ = "device_licensing"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)  # "windows" | "office"
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # SPP's LicenseStatus: 0 unlicensed, 1 licensed, 2 OOB grace, 3 OOT grace,
+    # 4 non-genuine grace, 5 notification, 6 extended grace. -1 = unreadable.
+    license_status: Mapped[int] = mapped_column(nullable=False)
+    channel: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Retail, OEM_DM, Volume:GVLK…
+    kms_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

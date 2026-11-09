@@ -59,6 +59,17 @@ _CHECK_ISSUES: dict[str, tuple[str, str, str | None, str | None]] = {
         "Detection only for now — removal isn't automated. Uninstall on the device, or "
         "block it centrally.",
     ),
+    "genuine_windows": (
+        "Windows not activated", "medium", None,
+        "Activation needs a valid licence for that edition — enter a genuine key or activate "
+        "against your organisation's KMS. Nothing SAVIO can push will create a licence.",
+    ),
+    "no_activation_tools": (
+        "Cracked activation detected", "high", None,
+        "A piracy activator is installed or Windows/Office points at a piracy KMS host. Remove "
+        "the activator and activate with a genuine licence — activators are also a common "
+        "malware carrier.",
+    ),
     "agent_reporting": (
         "Agent not reporting", "low", None,
         "Nothing can be pushed to a device that isn't checking in. Confirm it's powered on "

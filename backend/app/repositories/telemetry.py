@@ -11,6 +11,7 @@ from app.models.telemetry import (
     UPDATE_INSTALLED,
     DeviceEventLog,
     DeviceInstalledApp,
+    DeviceLicensing,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetryDailyRollup,
@@ -170,6 +171,17 @@ class TelemetryRepository:
             )
         )
         return result.scalar_one()
+
+    # ── Licensing ──────────────────────────────────────────────────────────
+
+    async def replace_licensing(
+        self, device_id: uuid.UUID, entries: list[DeviceLicensing]
+    ) -> None:
+        await self.session.execute(
+            delete(DeviceLicensing).where(DeviceLicensing.device_id == device_id)
+        )
+        self.session.add_all(entries)
+        await self.session.flush()
 
     # ── Installed apps ─────────────────────────────────────────────────────
 

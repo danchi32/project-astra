@@ -52,6 +52,7 @@ from app.models.support_request import (
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
+    DeviceLicensing,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetryDailyRollup,
@@ -99,6 +100,7 @@ __all__ = [
     "DeviceGroup",
     "DeviceGroupMember",
     "DeviceInstalledApp",
+    "DeviceLicensing",
     "DeviceService",
     "DeviceSession",
     "DeviceWindowsUpdate",

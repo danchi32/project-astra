@@ -151,7 +151,18 @@ public sealed record TelemetryPush(
     // Workforce Insights ("Tracker") presence transitions since the last push. Null when
     // tracking is off for this org (the backend told us so on the heartbeat) — the field is
     // simply absent, and the backend stores nothing. Only ever sent for an entitled org.
-    [property: JsonPropertyName("activity")] IReadOnlyList<TelemetryActivityEvent>? Activity = null);
+    [property: JsonPropertyName("activity")] IReadOnlyList<TelemetryActivityEvent>? Activity = null,
+    // Windows/Office activation, with the hourly inventory. Null on the pushes in between and
+    // when SPP couldn't be read — the backend keeps what it has; older backends ignore it.
+    [property: JsonPropertyName("licensing")] IReadOnlyList<TelemetryLicensingProduct>? Licensing = null);
+
+public sealed record TelemetryLicensingProduct(
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("description")] string? Description,
+    [property: JsonPropertyName("license_status")] int LicenseStatus,
+    [property: JsonPropertyName("channel")] string? Channel,
+    [property: JsonPropertyName("kms_host")] string? KmsHost);
 
 // ── Remote support provisioning ─────────────────────────────────────────────
 

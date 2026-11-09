@@ -16,6 +16,7 @@ public sealed class TelemetryWorker(
     IDiskCollector disk,
     IEventLogCollector events,
     IInstalledAppsCollector apps,
+    ILicensingCollector licensing,
     IServicesCollector services,
     IWindowsUpdateCollector updates,
     IHardwareCollector hardware,
@@ -116,7 +117,11 @@ public sealed class TelemetryWorker(
             Sessions: sessionList.Select(x => new TelemetrySessionEntry(
                 x.SessionId, x.Username, x.State, x.Connection,
                 x.Station, x.ClientName, x.LogonAt, x.IdleSeconds)).ToList(),
-            Activity: activityList);
+            Activity: activityList,
+            Licensing: collectInventory
+                ? licensing.GetProducts()?.Select(l => new TelemetryLicensingProduct(
+                    l.Kind, l.Name, l.Description, l.LicenseStatus, l.Channel, l.KmsHost)).ToList()
+                : null);
 
         var pushed = await api.PushTelemetryAsync(token, payload, ct);
         if (pushed && collectInventory)

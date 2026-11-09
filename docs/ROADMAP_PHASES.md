@@ -131,6 +131,13 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   `genuine_windows` and `no_activation_tools`.
 - Done when: a genuine VM shows "Licensed"; a VM pointed at a fake KMS host is flagged;
   unknown states read "unknown", never "pass".
+- As built (9 Nov): two checks, `genuine_windows` ("Windows activated") and
+  `no_activation_tools` ("No cracked activation"). **Office is not judged for activation** —
+  a properly licensed Microsoft 365 laptop still shows `Office16O365…R_Grace` products in
+  SPP notification mode (found on a real machine); Office is used only for the KMS-host
+  check. Activators are matched in app *and* service names, so pre-0.14 agents are covered
+  for that half. Scheduled-task names were left out of v1 (the service + app lists cover
+  KMSpico/KMSAuto); add them only if a real miss shows up.
 
 **L5a · Serial number + BIOS**
 - Already there (found 9 Nov): the agent reads `Win32_BIOS.SerialNumber` at enrollment

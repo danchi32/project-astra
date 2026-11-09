@@ -41,6 +41,7 @@ builder.Services.AddSingleton<IMemoryCollector, MemoryCollector>();
 builder.Services.AddSingleton<IDiskCollector, DiskCollector>();
 builder.Services.AddSingleton<IEventLogCollector, EventLogCollector>();
 builder.Services.AddSingleton<IInstalledAppsCollector, InstalledAppsCollector>();
+builder.Services.AddSingleton<ILicensingCollector, LicensingCollector>();
 builder.Services.AddSingleton<IServicesCollector, ServicesCollector>();
 builder.Services.AddSingleton<IWindowsUpdateCollector, WindowsUpdateCollector>();
 builder.Services.AddSingleton<IHardwareCollector, HardwareCollector>();
