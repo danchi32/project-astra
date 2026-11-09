@@ -514,6 +514,9 @@ export interface Device {
   cpu_name: string | null;
   total_ram_mb: number | null;
   total_storage_gb: number | null;
+  // Agent 0.14+; null before that.
+  bios_version?: string | null;
+  bios_release_date?: string | null;
   installed_app_count: number;
 }
 

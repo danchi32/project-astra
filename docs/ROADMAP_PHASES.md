@@ -153,6 +153,13 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   for L5b.
 - Done when: VM/real-PC serials appear on the device page; placeholder serials show as
   "not available"; admin-entered asset serials are untouched.
+- As built (9 Nov): serial, BIOS version and BIOS date ride on the hourly hardware info, so
+  serials read wrong (or never) at enrollment get corrected. One rule set in
+  `app/services/hardware.py` cleans the serial at enrollment and on every push, and also
+  clears placeholder **manufacturer/model** — assembled PCs report "To Be Filled By O.E.M."
+  there too, and it must not reach the asset register. Linked assets get only their empty
+  fields filled, with a history note. `normalize_vendor()` is ready for L5b.
+  `Win32_ComputerSystemProduct` (UUID) was left out — nothing needs it yet.
 
 ### 1b — Backend-only (parallel)
 

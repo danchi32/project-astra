@@ -3,9 +3,11 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Device, User
+from app.models import Asset, Device, User
+from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.device_session import DeviceSession
 from app.models.telemetry import (
     DeviceEventLog,
@@ -22,6 +24,7 @@ from app.schemas.telemetry import DashboardSummary, TelemetryPush
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
 from app.services.exceptions import NotFoundError
+from app.services.hardware import clean_serial, clean_text
 from app.services.workforce import WorkforceAggregator
 
 
@@ -45,21 +48,50 @@ class TelemetryService:
         self.repo = TelemetryRepository(session)
         self.devices = DeviceRepository(session)
 
+    async def _fill_linked_assets(self, device: Device) -> None:
+        """Copy what the device knows into the asset record it is linked to — but only into
+        EMPTY fields. Anything an admin typed is theirs and is never overwritten."""
+        assets = (await self.session.execute(
+            select(Asset).where(Asset.device_id == device.id)
+        )).scalars().all()
+        for asset in assets:
+            filled = []
+            for field, value in (("serial_number", device.serial_number),
+                                 ("manufacturer", device.manufacturer),
+                                 ("model", device.model)):
+                if value and not getattr(asset, field):
+                    setattr(asset, field, value)
+                    filled.append(field.replace("_", " "))
+            if filled:
+                self.session.add(AssetEvent(
+                    org_id=asset.org_id, asset_id=asset.id, event_type=AssetEventType.NOTE,
+                    note=f"Filled from the device agent: {', '.join(filled)}",
+                ))
+
     async def ingest(self, *, device: Device, data: TelemetryPush) -> None:
         now = data.collected_at
 
         if data.hardware is not None:
             hw = data.hardware
             if hw.manufacturer is not None:
-                device.manufacturer = hw.manufacturer
+                device.manufacturer = clean_text(hw.manufacturer)
             if hw.model is not None:
-                device.model = hw.model
+                device.model = clean_text(hw.model)
             if hw.cpu_name is not None:
                 device.cpu_name = hw.cpu_name
             if hw.total_ram_mb is not None:
                 device.total_ram_mb = hw.total_ram_mb
             if hw.total_storage_gb is not None:
                 device.total_storage_gb = hw.total_storage_gb
+            # Only when the agent sent the field at all: an older agent's silence must not wipe
+            # the serial it gave at enrollment, but a placeholder from a new one must clear it.
+            if "serial_number" in hw.model_fields_set:
+                device.serial_number = clean_serial(hw.serial_number)
+            if hw.bios_version is not None:
+                device.bios_version = hw.bios_version
+            if hw.bios_release_date is not None:
+                device.bios_release_date = hw.bios_release_date
+            await self._fill_linked_assets(device)
 
         snapshot = await self.repo.add_snapshot(
             TelemetrySnapshot(

@@ -591,6 +591,9 @@ export default function DeviceDetailPage() {
                 <Row label="CPU" value={device.cpu_name} />
                 <Row label="RAM" value={formatRam(device.total_ram_mb)} />
                 <Row label="Storage" value={formatStorage(device.total_storage_gb)} />
+                <Row label="BIOS" value={device.bios_version
+                  ? `${device.bios_version}${device.bios_release_date ? ` (${device.bios_release_date})` : ""}`
+                  : null} />
                 <Row label="Agent version" value={device.agent_version} />
                 <Row label="Chat tray version" value={device.tray_version} />
                 <Row label="Logged-in user" value={device.logged_in_user} />

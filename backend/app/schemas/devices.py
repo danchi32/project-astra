@@ -175,6 +175,8 @@ class DeviceRead(BaseModel):
     cpu_name: str | None
     total_ram_mb: int | None
     total_storage_gb: float | None
+    bios_version: str | None = None
+    bios_release_date: str | None = None
     installed_app_count: int
 
     @classmethod
@@ -202,6 +204,8 @@ class DeviceRead(BaseModel):
             cpu_name=device.cpu_name,
             total_ram_mb=device.total_ram_mb,
             total_storage_gb=device.total_storage_gb,
+            bios_version=device.bios_version,
+            bios_release_date=device.bios_release_date,
             installed_app_count=installed_app_count,
         )
 

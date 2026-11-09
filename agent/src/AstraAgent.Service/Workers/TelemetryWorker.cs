@@ -134,5 +134,6 @@ public sealed class TelemetryWorker(
     }
 
     private static TelemetryHardware ToHardware(HardwareInfo h) =>
-        new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb);
+        new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb,
+            h.SerialNumber, h.BiosVersion, h.BiosReleaseDate);
 }

@@ -130,7 +130,10 @@ public sealed record TelemetryHardware(
     [property: JsonPropertyName("model")] string? Model,
     [property: JsonPropertyName("cpu_name")] string? CpuName,
     [property: JsonPropertyName("total_ram_mb")] long? TotalRamMb,
-    [property: JsonPropertyName("total_storage_gb")] double? TotalStorageGb);
+    [property: JsonPropertyName("total_storage_gb")] double? TotalStorageGb,
+    [property: JsonPropertyName("serial_number")] string? SerialNumber = null,
+    [property: JsonPropertyName("bios_version")] string? BiosVersion = null,
+    [property: JsonPropertyName("bios_release_date")] string? BiosReleaseDate = null);
 
 public sealed record TelemetryPush(
     [property: JsonPropertyName("collected_at")] DateTimeOffset CollectedAt,

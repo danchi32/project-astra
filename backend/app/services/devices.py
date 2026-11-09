@@ -13,6 +13,7 @@ from app.core.security import (
 )
 from app.models import Device, EnrollmentToken, Organization, User
 from app.models.base import as_utc, utcnow
+from app.services.hardware import clean_serial
 from app.repositories.devices import DeviceRepository
 from app.repositories.enrollment_tokens import EnrollmentTokenRepository
 from app.repositories.organizations import OrganizationRepository
@@ -271,7 +272,7 @@ class DeviceService:
                     hostname=data.hostname,
                     machine_id=data.machine_id,
                     os_version=data.os_version,
-                    serial_number=data.serial_number,
+                    serial_number=clean_serial(data.serial_number),
                     agent_version=data.agent_version,
                     token_hash=hash_opaque_token(raw_device_token),
                 )
@@ -281,7 +282,7 @@ class DeviceService:
             # Re-enrollment (agent reinstall): rotate the credential, refresh facts.
             device.hostname = data.hostname
             device.os_version = data.os_version
-            device.serial_number = data.serial_number
+            device.serial_number = clean_serial(data.serial_number)
             device.agent_version = data.agent_version
             device.token_hash = hash_opaque_token(raw_device_token)
             action = "device.re_enroll"

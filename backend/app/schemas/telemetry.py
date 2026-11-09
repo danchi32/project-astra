@@ -156,6 +156,11 @@ class HardwareInfo(_SanitizedInput):
     cpu_name: str | None = Field(default=None, max_length=200)
     total_ram_mb: int | None = Field(default=None, ge=0)
     total_storage_gb: float | None = Field(default=None, ge=0)
+    # Agent 0.14+. As Windows reports them; app.services.hardware.clean_serial drops OEM
+    # placeholders. Absent from older agents, which must leave the stored values alone.
+    serial_number: str | None = Field(default=None, max_length=200)
+    bios_version: str | None = Field(default=None, max_length=100)
+    bios_release_date: str | None = Field(default=None, max_length=10)
 
 
 class TelemetryPush(_SanitizedInput):
