@@ -123,7 +123,10 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   unknown states read "unknown", never "pass".
 
 **L5a · Serial number + BIOS**
-- Agent: add `Win32_BIOS` (`SerialNumber`, `SMBIOSBIOSVersion`, release date) and
+- Already there (found 9 Nov): the agent reads `Win32_BIOS.SerialNumber` at enrollment
+  (`DeviceIdentity.cs`) and the backend stores it in `devices.serial_number`. So L5a is the
+  remainder below, not a new collector.
+- Agent: add `SMBIOSBIOSVersion` + release date and
   `Win32_ComputerSystemProduct` (`IdentifyingNumber`, `UUID`) to the hardware collector.
   Treat OEM placeholders ("To Be Filled By O.E.M.", "Default string", "System Serial
   Number", all zeros) as **no serial**, never as a real one.
