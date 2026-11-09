@@ -58,6 +58,10 @@ class InstalledAppEntry(_SanitizedInput):
     version: str | None = Field(default=None, max_length=100)
     publisher: str | None = Field(default=None, max_length=200)
     install_date: str | None = Field(default=None, max_length=20)
+    # Defaults keep pre-0.14 agents (which send neither field) valid: everything they
+    # report is machine-wide.
+    scope: Literal["machine", "user"] = "machine"
+    user_name: str | None = Field(default=None, max_length=256)
 
 
 class ServiceEntry(_SanitizedInput):
@@ -233,6 +237,8 @@ class DeviceInstalledAppRead(BaseModel):
     version: str | None
     publisher: str | None
     install_date: str | None
+    scope: str
+    user_name: str | None
     collected_at: datetime
 
 

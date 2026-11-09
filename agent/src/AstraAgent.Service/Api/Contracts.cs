@@ -84,7 +84,9 @@ public sealed record TelemetryInstalledApp(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("version")] string? Version,
     [property: JsonPropertyName("publisher")] string? Publisher,
-    [property: JsonPropertyName("install_date")] string? InstallDate);
+    [property: JsonPropertyName("install_date")] string? InstallDate,
+    [property: JsonPropertyName("scope")] string Scope,
+    [property: JsonPropertyName("user_name")] string? UserName);
 
 public sealed record TelemetryServiceEntry(
     [property: JsonPropertyName("name")] string Name,

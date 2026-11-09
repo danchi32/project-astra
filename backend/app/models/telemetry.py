@@ -103,6 +103,13 @@ class DeviceInstalledApp(TimestampMixin, Base):
     version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
     install_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # "machine" = installed for everyone (HKLM); "user" = installed into one person's profile
+    # (their HKCU), which is where ChatGPT, Claude, Cursor, Zoom and friends go by default.
+    # Agents older than 0.14 only ever report "machine".
+    scope: Mapped[str] = mapped_column(String(10), nullable=False, default="machine",
+                                       server_default="machine")
+    # The profile's account (DOMAIN\name) for a "user" install; null for "machine".
+    user_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

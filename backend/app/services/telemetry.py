@@ -110,7 +110,8 @@ class TelemetryService:
 
         if data.installed_apps:
             digest = _fingerprint(
-                data.installed_apps, ("name", "version", "publisher", "install_date")
+                data.installed_apps,
+                ("name", "version", "publisher", "install_date", "scope", "user_name"),
             )
             if digest != device.apps_hash:
                 await self.repo.replace_installed_apps(
@@ -123,6 +124,8 @@ class TelemetryService:
                             version=a.version,
                             publisher=a.publisher,
                             install_date=a.install_date,
+                            scope=a.scope,
+                            user_name=a.user_name,
                             collected_at=now,
                         )
                         for a in data.installed_apps

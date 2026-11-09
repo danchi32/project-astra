@@ -99,7 +99,7 @@ public sealed class TelemetryWorker(
             Hardware: collectInventory ? ToHardware(hardware.GetHardwareInfo()) : null,
             EventLogs: eventList.Select(e => new TelemetryEventLogEntry(e.LogName, e.Source, e.EventId, e.Level, e.Message, e.OccurredAt)).ToList(),
             InstalledApps: collectInventory
-                ? apps.GetInstalledApps().Select(a => new TelemetryInstalledApp(a.Name, a.Version, a.Publisher, a.InstallDate)).ToList()
+                ? apps.GetInstalledApps().Select(a => new TelemetryInstalledApp(a.Name, a.Version, a.Publisher, a.InstallDate, a.Scope, a.UserName)).ToList()
                 : [],
             Services: collectInventory
                 ? services.GetServices().Select(s => new TelemetryServiceEntry(s.Name, s.DisplayName, s.Status, s.StartType)).ToList()

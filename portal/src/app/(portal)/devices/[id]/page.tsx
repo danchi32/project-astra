@@ -879,18 +879,28 @@ export default function DeviceDetailPage() {
               </tr></thead><tbody>
                 {shown.map((a) => {
                   const protectedApp = isProtectedApp(a.name);
+                  // The agent's uninstaller reads the machine-wide Uninstall keys only, so a
+                  // per-user install can't be removed from here yet — say so rather than queue
+                  // a task that is bound to fail.
+                  const perUser = a.scope === "user";
                   const running = runningJob("uninstall_application", { app_name: a.name });
                   return (
                   <tr key={a.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td className="py-2" style={{ color: "var(--text-primary)" }}>{a.name}</td>
+                    <td className="py-2" style={{ color: "var(--text-primary)" }}>
+                      {a.name}
+                      {perUser && <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                        Installed for {a.user_name ?? "one user"} only
+                      </div>}
+                    </td>
                     <td className="py-2" style={{ color: "var(--text-secondary)" }}>{a.version ?? "—"}</td>
                     <td className="py-2" style={{ color: "var(--text-secondary)" }}>{a.publisher ?? "—"}</td>
                     {isAdmin && <td className="py-2 text-right">
                       <button
                         onClick={() => uninstallApp(a.name)}
-                        disabled={busy || protectedApp || !!running}
+                        disabled={busy || protectedApp || perUser || !!running}
                         title={protectedApp
                           ? "Endpoint protection and the SAVIO agent itself can never be uninstalled by SAVIO."
+                          : perUser ? "Installed in one person's profile — SAVIO can't remove per-user installs yet."
                           : running ? "Already queued on this device." : `Uninstall ${a.name}`}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                         style={{ background: "var(--surface)", border: "1px solid var(--border)", color: protectedApp ? "var(--text-secondary)" : "#ef4444" }}>

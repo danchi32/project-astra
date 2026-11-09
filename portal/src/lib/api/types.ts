@@ -542,6 +542,10 @@ export interface DeviceInstalledApp {
   version: string | null;
   publisher: string | null;
   install_date: string | null;
+  /** "machine" = installed for everyone; "user" = installed into one person's profile. */
+  scope: "machine" | "user";
+  /** The profile's account for a "user" install, e.g. ACME\asha. */
+  user_name: string | null;
 }
 
 export interface DeviceServiceRow {
