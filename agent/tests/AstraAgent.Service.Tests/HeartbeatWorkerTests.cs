@@ -56,6 +56,9 @@ public class HeartbeatWorkerTests
 
         public Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct)
             => Task.FromResult<EnrollResponse?>(null);
+        public Task<bool> PushOfflineEventsAsync(string token, IReadOnlyList<AstraAgent.Service.Net.JournalEntry> entries, CancellationToken ct)
+            => Task.FromResult(true);
+
         public Task<bool> PushTelemetryAsync(string token, TelemetryPush payload, CancellationToken ct)
             => Task.FromResult(true);
         public Task<UpdateEnvelope?> GetUpdateAsync(string token, CancellationToken ct)

@@ -305,6 +305,17 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
 - Tray: menu item + simple progress / result text (Hindi + English strings).
 - Done when: works with the network cable out; repeated clicks respect the cooldown;
   security review confirms the pipe exposes nothing else.
+- As built (11 Nov, B1+B2): `Net/NetworkDoctor.cs` (pure diagnosis + ladder + limiter, one
+  shared instance), `NetworkHealthWorker` (2-min boot grace, then every 60 s) and
+  `NetworkFixPipeServer` (`SAVIO.FixMyInternet`, one verb, INTERACTIVE may talk, NETWORK
+  denied). New diagnosis the plan didn't have: **"internet works, only SAVIO is down"** —
+  the ladder does nothing then, instead of restarting a healthy adapter. Journal at
+  `%ProgramData%\SAVIO\offline-journal.jsonl`, uploaded to `/agent/offline-events` → audit
+  log `device.offline_self_heal`. Live-checked on a real laptop: real probes and the real
+  Tray↔service pipe (diagnosis "only SAVIO's server isn't answering"). The ladder's steps
+  then ran live too, as SYSTEM on the same laptop (user's request): flush DNS ok, renew IP
+  ok, restart Wi-Fi adapter ok (~48 s), back online after each. Remote-control-session guard
+  not added yet.
 
 ### 1e — Free IT Health Check
 
