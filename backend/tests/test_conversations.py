@@ -267,6 +267,7 @@ async def test_tool_dispatch_reads_telemetry_directly(session_factory, admin_use
             org_id=admin_user.org_id,
             name="get_device_telemetry",
             tool_input={"hostname": "TOOL-PC"},
+            fleet_access=True,   # staff chat; without it only the caller's own PC answers
         )
     data = json.loads(out)
     assert data["cpu_percent"] == 42.0

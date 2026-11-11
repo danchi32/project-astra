@@ -271,8 +271,11 @@ async def remote_support_plan(
 class _OfflineEvent(BaseModel):
     at: datetime
     trigger: Literal["automatic", "tray", "test"] = "automatic"
-    diagnosis: str = Field(max_length=40)
-    step: str | None = Field(default=None, max_length=40)
+    # Fixed values (the agent's Diagnosis / FixStep enums), not free text, so nothing a device
+    # sends can put arbitrary words into the customer's audit log.
+    diagnosis: Literal["Healthy", "BackendOnlyDown", "NoAddress", "GatewayUnreachable",
+                       "DnsFailing", "NoInternet"]
+    step: Literal["FlushDns", "RenewIp", "RestartAdapter"] | None = None
     step_ok: bool | None = None
     output: str | None = Field(default=None, max_length=300)
     fixed_after: bool = False

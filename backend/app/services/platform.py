@@ -1120,6 +1120,9 @@ class PlatformService:
         org = await self.orgs.get(org_id)
         if org is None:
             raise NotFoundError("Organization not found")
+        if org.id == actor.org_id:
+            # Deleting the operator's own org cascades every platform admin with it.
+            raise ConflictError("You can't delete the organization you belong to")
         name = org.name
         # Tables keyed by org_id with no FK cascade from `organizations` would otherwise
         # outlive the org with a dead id (Record of Processing, G3). Children first.

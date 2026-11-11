@@ -222,6 +222,18 @@ def requires(feature: str):
     return dependency
 
 
+async def deny_view_as(user: User = Depends(get_current_user)) -> User:
+    """For GETs that hand out a credential (the enrollment key) or bulk personal data. View-as
+    blocks writes, but a read of a permanent secret outlives the support window it was taken
+    in: the customer can close the window, not un-read a key."""
+    if getattr(user, "_view_as", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not available while viewing as an organization.",
+        )
+    return user
+
+
 def require_roles(*roles: UserRole):
     async def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:

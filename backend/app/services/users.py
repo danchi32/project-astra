@@ -103,6 +103,8 @@ class UserService:
         user = await self.get_user(actor=actor, user_id=user_id)
         if user.id == actor.id:
             raise ConflictError("You cannot delete your own account")
+        if user.is_platform_admin:
+            raise ConflictError("A platform operator account can't be deleted from here")
         # Not a bare row delete: that left the email in the audit log and assets pointing at a
         # dead id. Same account-side clean-up as a Z2 erase (Record of Processing, G10).
         await PersonalDataService(self.session).delete_account(actor, user)

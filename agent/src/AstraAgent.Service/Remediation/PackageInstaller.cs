@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -8,9 +9,11 @@ namespace AstraAgent.Service.Remediation;
 
 /// <summary>Installs one software package with winget, machine-wide (A2).
 ///
-/// The id has already been checked against the server's catalog; the agent re-checks its
-/// SHAPE (a winget id is Publisher.Name, letters/digits/.-+_) so a malformed value can't reach
-/// a command line. It is passed as one argv element, never through a shell.
+/// The id has already been checked against the server's catalog; the agent checks it AGAIN
+/// against its own copy (`Catalog`), so a compromised or buggy backend can't install anything
+/// else as SYSTEM — the CLAUDE.md "agent runs only allowlisted things" rule. The backend test
+/// `test_agent_catalog_matches` keeps the two lists equal. It is passed as one argv element,
+/// never through a shell.
 ///
 /// winget ships as a per-user Store app, so LocalSystem has no `winget` on its PATH. The
 /// executable is found in the machine-wide WindowsApps folder instead (newest version wins).
@@ -18,6 +21,17 @@ namespace AstraAgent.Service.Remediation;
 public static class PackageInstaller
 {
     private static readonly Regex IdOk = new(@"^[A-Za-z0-9][A-Za-z0-9.+_-]{1,99}$", RegexOptions.Compiled);
+
+    /// <summary>Mirrors backend/app/services/software_catalog.py CATALOG. Adding a package
+    /// means adding it in both places and shipping an agent release.</summary>
+    internal static readonly HashSet<string> Catalog = new(StringComparer.Ordinal)
+    {
+        "Google.Chrome", "Mozilla.Firefox", "Microsoft.Edge", "Zoom.Zoom", "Microsoft.Teams",
+        "SlackTechnologies.Slack", "Microsoft.Office", "Adobe.Acrobat.Reader.64-bit",
+        "Foxit.FoxitReader", "Notepad++.Notepad++", "7zip.7zip", "VideoLAN.VLC",
+        "Microsoft.PowerToys", "Google.GoogleDrive", "Dropbox.Dropbox",
+        "Microsoft.VisualStudioCode", "Git.Git", "Python.Python.3.12",
+    };
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(45);
 
     public static (bool, string) Install(string? packageId)
@@ -25,6 +39,8 @@ public static class PackageInstaller
         var id = (packageId ?? string.Empty).Trim();
         if (!IdOk.IsMatch(id) || !id.Contains('.'))
             return (false, $"'{packageId}' is not a valid package id.");
+        if (!Catalog.Contains(id))
+            return (false, $"'{id}' is not in this agent's software catalog, so it wasn't installed.");
 
         var winget = FindWinget();
         if (winget is null)
@@ -67,16 +83,26 @@ public static class PackageInstaller
         try
         {
             var apps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps");
-            return Directory.GetDirectories(apps, "Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe")
-                .Select(d => Path.Combine(d, "winget.exe"))
-                .Where(File.Exists)
-                .OrderByDescending(p => p, StringComparer.OrdinalIgnoreCase)
+            var arch = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture
+                == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64";
+            // Newest by real version: as text, "1.9" sorts above "1.10".
+            return Directory.GetDirectories(apps, $"Microsoft.DesktopAppInstaller_*_{arch}__8wekyb3d8bbwe")
+                .Select(d => (dir: d, version: VersionOf(d)))
+                .Where(x => File.Exists(Path.Combine(x.dir, "winget.exe")))
+                .OrderByDescending(x => x.version)
+                .Select(x => Path.Combine(x.dir, "winget.exe"))
                 .FirstOrDefault();
         }
         catch
         {
             return null;   // WindowsApps is ACL'd; a non-SYSTEM caller may not list it
         }
+    }
+
+    internal static Version VersionOf(string dir)
+    {
+        var parts = Path.GetFileName(dir).Split('_');
+        return parts.Length > 1 && Version.TryParse(parts[1], out var v) ? v : new Version(0, 0);
     }
 
     private static (int, string) Run(string exe, params string[] args)
@@ -90,6 +116,13 @@ public static class PackageInstaller
             CreateNoWindow = true,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
+        // winget stages the downloaded installer under %TEMP%. SYSTEM's is C:\Windows\Temp,
+        // where any user can create the staging folder first and swap the installer between
+        // winget's hash check and its launch. Give it a temp only SYSTEM/Administrators can write.
+        var temp = Path.Combine(AstraAgent.Service.Security.SecureDirectory.StateRoot, "winget-temp");
+        AstraAgent.Service.Security.SecureDirectory.Ensure(temp);
+        psi.Environment["TEMP"] = temp;
+        psi.Environment["TMP"] = temp;
         using var p = Process.Start(psi)!;
         var stdout = p.StandardOutput.ReadToEndAsync();
         var stderr = p.StandardError.ReadToEndAsync();

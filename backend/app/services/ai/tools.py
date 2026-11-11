@@ -209,8 +209,10 @@ async def dispatch_tool(
 
     if name == "list_devices":
         rows = await devices.list_by_org(org_id)
-        # An employee's tray chat sees their own machine, not the whole fleet's hostnames.
-        if not fleet_access and acting_device_id is not None:
+        # Anyone without fleet access (an employee's tray chat, or a plain `user` in the portal,
+        # who has no device of their own here) sees their own machine at most — never the
+        # fleet's hostnames.
+        if not fleet_access:
             rows = [d for d in rows if d.id == acting_device_id]
         now = utcnow()
         return json.dumps(
@@ -231,6 +233,10 @@ async def dispatch_tool(
         device = await _find_by_hostname(devices, org_id, hostname)
         if device is None:
             return json.dumps({"error": f"No device found with hostname '{hostname}'."})
+        # Checked in code, not left to the prompt: the hostname comes from the model, which
+        # an employee — or text injected into telemetry — can steer at someone else's PC.
+        if not fleet_access and device.id != acting_device_id:
+            return json.dumps({"error": "You can only look at your own computer."})
 
         if name == "get_device_telemetry":
             snap = await telemetry.get_latest_snapshot(device.id)

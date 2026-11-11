@@ -1,9 +1,11 @@
+using AstraAgent.Service.Security;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text.Json;
@@ -70,8 +72,12 @@ public sealed class FixLimiter(Func<DateTimeOffset> now)
     public const int MaxLaddersPerHour = 3;
     public static readonly TimeSpan AdapterRestartGap = TimeSpan.FromHours(1);
     public static readonly TimeSpan ManualGap = TimeSpan.FromMinutes(2);
+    /// <summary>Clicks from the Tray get their own hourly budget: the 2-minute gap alone still
+    /// allowed ~30 runs an hour, each able to release every adapter's lease.</summary>
+    public const int MaxManualPerHour = 6;
 
     private readonly List<DateTimeOffset> _ladders = [];
+    private readonly List<DateTimeOffset> _manuals = [];
     private DateTimeOffset? _lastAdapterRestart;
     private DateTimeOffset? _lastManual;
     private readonly object _lock = new();
@@ -82,12 +88,15 @@ public sealed class FixLimiter(Func<DateTimeOffset> now)
         {
             var t = now();
             _ladders.RemoveAll(x => t - x > TimeSpan.FromHours(1));
+            _manuals.RemoveAll(x => t - x > TimeSpan.FromHours(1));
             if (manual && _lastManual is { } m && t - m < ManualGap)
                 return "A network repair just ran — give it a couple of minutes before trying again.";
+            if (manual && _manuals.Count >= MaxManualPerHour)
+                return "Network repair has already run several times this hour. If it still isn't working, contact IT.";
             if (!manual && _ladders.Count >= MaxLaddersPerHour)
                 return "Automatic network repair already ran 3 times this hour; waiting before trying again.";
-            _ladders.Add(t);
-            if (manual) _lastManual = t;
+            if (manual) { _manuals.Add(t); _lastManual = t; }
+            else _ladders.Add(t);
             return null;
         }
     }
@@ -115,8 +124,16 @@ public sealed class NetworkDoctor
     private readonly ILogger<NetworkDoctor> _logger;
 
     public NetworkDoctor(IOptions<AgentOptions> options, ILogger<NetworkDoctor> logger)
-        : this(logger, BackendProbe(options.Value.ServerUrl), JournalPathDefault(),
-               new FixLimiter(() => DateTimeOffset.UtcNow)) { }
+        : this(logger, BackendProbe(options.Value.ServerUrl, options.Value.ProxyUrl), JournalPathDefault(),
+               new FixLimiter(() => DateTimeOffset.UtcNow))
+    {
+        _hardenJournalDir = true;
+    }
+
+    private readonly bool _hardenJournalDir;
+    /// <summary>Keep the newest this many entries: a device offline for days must not grow the
+    /// file without bound, and the backend accepts at most 200 per upload.</summary>
+    internal const int MaxJournalEntries = 1000;
 
     internal NetworkDoctor(ILogger<NetworkDoctor> logger, Func<CancellationToken, Task<bool>> backendReachable,
         string journalPath, FixLimiter limiter)
@@ -220,8 +237,15 @@ public sealed class NetworkDoctor
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_journalPath)!);
+            var dir = Path.GetDirectoryName(_journalPath)!;
+            // SYSTEM appends, reads and deletes this file: its folder must be one no standard
+            // user can create, own or swap for a junction (fails closed — no journal then).
+            if (_hardenJournalDir) SecureDirectory.Ensure(dir);
+            else Directory.CreateDirectory(dir);
             File.AppendAllText(_journalPath, JsonSerializer.Serialize(e, JsonOpts) + Environment.NewLine);
+            var lines = File.ReadAllLines(_journalPath);
+            if (lines.Length > MaxJournalEntries)
+                File.WriteAllLines(_journalPath, lines[^MaxJournalEntries..]);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "Could not write the offline journal"); }
     }
@@ -231,14 +255,27 @@ public sealed class NetworkDoctor
         try
         {
             if (!File.Exists(_journalPath)) return [];
-            return File.ReadAllLines(_journalPath).Where(l => l.Length > 0)
-                .Select(l => JsonSerializer.Deserialize<JournalEntry>(l, JsonOpts)!).ToList();
+            // One bad line must not hide every good one (or block uploads for good).
+            var entries = new List<JournalEntry>();
+            foreach (var l in File.ReadAllLines(_journalPath).Where(l => l.Length > 0))
+            {
+                try { if (JsonSerializer.Deserialize<JournalEntry>(l, JsonOpts) is { } e) entries.Add(e); }
+                catch (JsonException) { /* skipped */ }
+            }
+            return entries;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Offline journal unreadable; discarding it");
             return [];
         }
+    }
+
+    /// <summary>Rewrite the journal with only `remaining` (what an upload didn't get to).</summary>
+    public void KeepJournal(IEnumerable<JournalEntry> remaining)
+    {
+        try { File.WriteAllLines(_journalPath, remaining.Select(e => JsonSerializer.Serialize(e, JsonOpts))); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Could not rewrite the offline journal"); }
     }
 
     public void ClearJournal()
@@ -248,16 +285,30 @@ public sealed class NetworkDoctor
 
     private static string Trim(string s) => s.Length <= 300 ? s : s[..300];
 
-    private static string JournalPathDefault() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "SAVIO", "offline-journal.jsonl");
+    // Under the install root, not C:\ProgramData (where any user may create the folder first).
+    private static string JournalPathDefault() => Path.Combine(SecureDirectory.StateRoot, "offline-journal.jsonl");
 
     // ── probes ───────────────────────────────────────────────────────────────
 
-    private static Func<CancellationToken, Task<bool>> BackendProbe(string serverUrl) => async ct =>
+    /// <summary>"Can SAVIO be reached" the way the agent really reaches it: an HTTP request
+    /// through the same proxy handler as every API call. A raw TCP connect ignored the proxy,
+    /// so a proxy-only office looked permanently offline — the ladder kept restarting adapters
+    /// and the journal never uploaded. Any HTTP answer, even an error status, means reachable.</summary>
+    private static Func<CancellationToken, Task<bool>> BackendProbe(string serverUrl, string? proxyUrl)
     {
-        if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out var u)) return false;
-        return await TcpReachable(u.Host, u.Port, ct);
-    };
+        if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out var u)) return _ => Task.FromResult(false);
+        var http = new HttpClient(ProxyHttp.CreateHandler(proxyUrl)) { Timeout = TimeSpan.FromSeconds(8) };
+        var health = new Uri(u, "/health");
+        return async ct =>
+        {
+            try
+            {
+                using var resp = await http.GetAsync(health, HttpCompletionOption.ResponseHeadersRead, ct);
+                return true;
+            }
+            catch { return false; }
+        };
+    }
 
     private async Task<Probe> ProbeAsync(CancellationToken ct)
     {

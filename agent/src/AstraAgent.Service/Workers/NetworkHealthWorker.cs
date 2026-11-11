@@ -19,6 +19,7 @@ public sealed class NetworkHealthWorker(
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
     // Give the machine time to finish booting and joining Wi-Fi before judging the network.
     private static readonly TimeSpan StartupGrace = TimeSpan.FromMinutes(2);
+    internal const int UploadChunk = 200;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -48,8 +49,17 @@ public sealed class NetworkHealthWorker(
         if (entries.Count == 0) return;
         var token = await enrollment.GetDeviceTokenAsync(ct);
         if (token is null) return;
-        if (await api.PushOfflineEventsAsync(token, entries, ct))
-            doctor.ClearJournal();
+        // The backend takes at most 200 per request; one oversized upload used to fail forever
+        // and keep every entry off the audit log. Send in chunks; keep only what wasn't accepted.
+        for (var i = 0; i < entries.Count; i += UploadChunk)
+        {
+            if (!await api.PushOfflineEventsAsync(token, entries.Skip(i).Take(UploadChunk).ToList(), ct))
+            {
+                doctor.KeepJournal(entries.Skip(i));
+                return;
+            }
+        }
+        doctor.ClearJournal();
     }
 }
 
@@ -68,12 +78,21 @@ public sealed class NetworkFixPipeServer(NetworkDoctor doctor, ILogger<NetworkFi
         {
             try
             {
+                // FirstPipeInstance: if anyone else already created this name (a squatter waiting
+                // for the Tray), fail and log rather than share it with them.
                 await using var pipe = NamedPipeServerStreamAcl.Create(PipeName, PipeDirection.InOut, 1,
-                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 256, 1024, Security());
+                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance,
+                    256, 1024, Security());
                 await pipe.WaitForConnectionAsync(stoppingToken);
 
+                // A client that connects and never writes would otherwise hold the only
+                // instance until the service restarts — for every user on the PC.
+                using var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                readTimeout.CancelAfter(TimeSpan.FromSeconds(2));
                 var buf = new byte[16];
-                var n = await pipe.ReadAsync(buf, stoppingToken);
+                int n;
+                try { n = await pipe.ReadAsync(buf, readTimeout.Token); }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested) { continue; }
                 var reply = Encoding.UTF8.GetString(buf, 0, n).Trim() == Verb
                     ? await doctor.RunAsync("tray", manual: true, stoppingToken)
                     : "Unknown request.";
@@ -94,6 +113,9 @@ public sealed class NetworkFixPipeServer(NetworkDoctor doctor, ILogger<NetworkFi
     internal static PipeSecurity Security()
     {
         var s = new PipeSecurity();
+        // Owned by SYSTEM explicitly: the Tray checks the owner before it trusts the reply,
+        // so a pipe created by anyone else is refused.
+        s.SetOwner(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null));
         s.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
             PipeAccessRights.FullControl, AccessControlType.Allow));
         s.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.InteractiveSid, null),

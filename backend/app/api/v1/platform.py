@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_platform_admin
 from app.core.database import get_db
-from app.models import User
+from app.models import Organization, User
 from app.models.invoice import InvoiceStatus
 from app.models.organization import SubscriptionStatus
 from app.models.support_request import SupportRequestStatus
@@ -43,7 +43,8 @@ from app.schemas.platform import (
     ViewAsToken,
 )
 from app.schemas.remediation import RemediationTaskRead
-from app.services.support_access import SupportAccessService
+from app.services.audit import AuditService
+from app.services.support_access import SupportAccessService, window_open
 from app.schemas.support_request import (
     SupportQueue,
     SupportReplyCreate,
@@ -64,6 +65,7 @@ from app.services.remote_control_admin import (
 )
 from app.services.support_requests import SupportRequestService
 from app.services.remediation.actions import ACTIONS
+from app.services.remediation.service import redact_result
 from app.api.v1.support import thread_detail
 
 
@@ -80,6 +82,7 @@ router = APIRouter(prefix="/platform", tags=["platform"])
 
 def _enrich_task(task, hostname_by_id: dict) -> RemediationTaskRead:
     read = RemediationTaskRead.model_validate(task)
+    read.result = redact_result(task, None)   # the platform console never sees one-time passwords
     read.device_hostname = hostname_by_id.get(task.device_id)
     action = ACTIONS.get(task.action_id)
     read.action_label = action.label if action else task.action_id
@@ -283,6 +286,25 @@ async def get_organization(
     return await PlatformService(session).get_organization(org_id)
 
 
+async def _customer_data_window(
+    org_id: uuid.UUID, section: str, actor: User, session: AsyncSession,
+) -> None:
+    """The per-org lists below are the customer's data, not ours: they follow the same
+    support-access window as view-as (E1), and each look is recorded in the customer's audit
+    log with who looked. Counts stay on the org overview, which needs no window."""
+    org = await session.get(Organization, org_id)
+    if org is None:
+        raise NotFoundError("Organization not found")
+    if not window_open(org):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="The customer hasn't opened support access.")
+    await AuditService(session).record(
+        org_id=org_id, actor_id=actor.id, action="platform.org_data_view",
+        target_type="organization", target_id=str(org_id),
+        detail={"section": section, "by": actor.email})
+    await session.commit()
+
+
 @router.get(
     "/organizations/{org_id}/users",
     response_model=list[UserRead],
@@ -290,9 +312,10 @@ async def get_organization(
 )
 async def organization_users(
     org_id: uuid.UUID,
-    _: User = Depends(require_platform_admin),
+    actor: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_db),
 ) -> list[User]:
+    await _customer_data_window(org_id, "users", actor, session)
     return await UserRepository(session).list_by_org(org_id)
 
 
@@ -303,9 +326,10 @@ async def organization_users(
 )
 async def organization_devices(
     org_id: uuid.UUID,
-    _: User = Depends(require_platform_admin),
+    actor: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_db),
 ) -> list[DeviceRead]:
+    await _customer_data_window(org_id, "devices", actor, session)
     devices = await DeviceRepository(session).list_by_org(org_id)
     counts = await TelemetryRepository(session).count_apps_by_device_for_org(org_id)
     return [DeviceRead.from_device(d, counts.get(d.id, 0)) for d in devices]
@@ -318,9 +342,10 @@ async def organization_devices(
 )
 async def organization_remediation(
     org_id: uuid.UUID,
-    _: User = Depends(require_platform_admin),
+    actor: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_db),
 ) -> list[RemediationTaskRead]:
+    await _customer_data_window(org_id, "remediation", actor, session)
     tasks = await RemediationRepository(session).list_by_org(org_id)
     devices = await DeviceRepository(session).list_by_org(org_id)
     hostname_by_id = {d.id: d.hostname for d in devices}
@@ -334,9 +359,10 @@ async def organization_remediation(
 )
 async def organization_assets(
     org_id: uuid.UUID,
-    _: User = Depends(require_platform_admin),
+    actor: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_db),
 ) -> list[AssetRead]:
+    await _customer_data_window(org_id, "assets", actor, session)
     return await AssetService(session).list_for_org(org_id=org_id)
 
 

@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import deny_view_as, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.repositories.users import UserRepository
@@ -97,6 +97,7 @@ async def personal_data_summary(
     user_id: uuid.UUID,
     windows_username: list[str] = Query(default_factory=list, max_length=20),
     actor: User = Depends(admin_required),
+    _: User = Depends(deny_view_as),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     svc = PersonalDataService(session)
@@ -110,6 +111,7 @@ async def personal_data_export(
     user_id: uuid.UUID,
     windows_username: list[str] = Query(default_factory=list, max_length=20),
     actor: User = Depends(admin_required),
+    _: User = Depends(deny_view_as),
     session: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     data = await PersonalDataService(session).export(actor, user_id, windows_username)

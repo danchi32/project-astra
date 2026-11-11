@@ -2,8 +2,12 @@
 
 `install_package` accepts only an id from this map, the way `restart_service` accepts only a
 name from SAFE_SERVICES: the portal never sends a free-form package id or installer URL, so
-the push button can't become "run anything on every PC". It lives on the server, not in the
-agent, so it can grow without an agent release.
+the push button can't become "run anything on every PC". The agent pins the same list
+(`PackageInstaller.Catalog`), so a compromised or buggy backend can't widen it either; adding
+a package needs an agent release, and `test_agent_catalog_matches` keeps the two equal.
+
+No remote-access tools (AnyDesk, TeamViewer…): a technician could self-approve one onto a
+thousand PCs, opening a remote channel outside SAVIO's own consented, audited remote support.
 
 Machine-wide installs only: the agent runs as SYSTEM with `--scope machine`. That rules out
 Microsoft Store-only apps (WhatsApp, for one), which install per user and can't be pushed
@@ -29,7 +33,6 @@ CATALOG: dict[str, CatalogItem] = {i.winget_id: i for i in (
     CatalogItem("Zoom.Zoom", "Zoom Workplace", "Zoom", "Meetings"),
     CatalogItem("Microsoft.Teams", "Microsoft Teams", "Microsoft", "Meetings"),
     CatalogItem("SlackTechnologies.Slack", "Slack", "Slack", "Meetings"),
-    CatalogItem("AnyDesk.AnyDesk", "AnyDesk", "AnyDesk", "Remote access"),
     CatalogItem("Microsoft.Office", "Microsoft 365 Apps", "Microsoft", "Office"),
     CatalogItem("Adobe.Acrobat.Reader.64-bit", "Adobe Acrobat Reader", "Adobe", "Documents"),
     CatalogItem("Foxit.FoxitReader", "Foxit PDF Reader", "Foxit", "Documents"),

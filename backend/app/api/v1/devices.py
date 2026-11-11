@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import deny_view_as, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.devices import (
@@ -41,6 +41,7 @@ admin_required = require_roles(UserRole.ADMIN)
 )
 async def get_installer(
     actor: User = Depends(admin_required),
+    _: User = Depends(deny_view_as),
     session: AsyncSession = Depends(get_db),
 ) -> InstallerRead:
     return await DeviceService(session).get_installer(actor=actor)

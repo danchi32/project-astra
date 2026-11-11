@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -18,7 +19,7 @@ from app.models import (
     User,
     UserRole,
 )
-from app.models.base import utcnow
+from app.models.base import as_utc, utcnow
 from app.repositories.devices import DeviceRepository
 
 settings = get_settings()
@@ -39,6 +40,34 @@ from app.services.remediation.actions import (
 
 
 logger = logging.getLogger(__name__)
+
+
+#: Results that carry a one-time password the agent generated (LocalAccountCreator /
+#: LocalPasswordReset). Shown only to an admin of the org, never under view-as or in the
+#: platform console or a personal-data export, and only for a day: the person must change
+#: it at first sign-in, so after that the line has no business being on anyone's screen.
+_AUDITED_PARAMS = ("username", "make_admin", "package_id", "kb_article_id", "session_id")
+_SECRET_LINE = re.compile(r"(?im)^(One-time password|Temporary password):.*$")
+SECRET_RESULT_TTL = timedelta(hours=24)
+
+
+def redact_result(task: Any, reader: Any | None) -> dict | None:
+    """`task.result` as `reader` may see it. `reader=None` means "nobody may see secrets"."""
+    result = task.result
+    if not result or not isinstance(result.get("output"), str) or not _SECRET_LINE.search(result["output"]):
+        return result
+    may_see = (
+        reader is not None
+        and reader.role is UserRole.ADMIN
+        and not getattr(reader, "_view_as", False)
+        and reader.org_id == task.org_id
+        and task.completed_at is not None
+        and utcnow() - as_utc(task.completed_at) < SECRET_RESULT_TTL
+    )
+    if may_see:
+        return result
+    return {**result, "output": _SECRET_LINE.sub(
+        lambda m: f"{m.group(1)}: [hidden - shown only to an admin, for 24 hours]", result["output"])}
 
 
 class RemediationError(ServiceError):
@@ -444,6 +473,11 @@ class RemediationService:
         action = get_action(action_id)
         if action is None:
             raise RemediationError(f"Unknown remediation action '{action_id}'.")
+        # Second layer under the AI tool's own refusal: whatever path reaches here, the model
+        # never creates an operator_only task (CLAUDE.md: withheld "whatever its tier"). An
+        # admin_only proposal is allowed here — it only ever waits for an admin's approval.
+        if source is RemediationSource.ASSISTANT and action.operator_only:
+            raise RemediationError(f"'{action_id}' can only be started by a person.")
         params = self._validate_params(action_id, params)
         # Checked here rather than in _validate_params because the answer depends on the
         # organization's own policy list, which is a database read, not a constant.
@@ -541,7 +575,11 @@ class RemediationService:
             target_type="remediation_task",
             target_id=str(task.id),
             detail={"action": action_id, "tier": action.tier.value, "status": status.value,
-                    "device": device.hostname, "source": source.value},
+                    "device": device.hostname, "source": source.value,
+                    # Which account / package, so "who made whom an admin" is answerable from
+                    # the log alone. Only these keys: nothing else in params is guaranteed
+                    # free of personal text.
+                    **{k: params[k] for k in _AUDITED_PARAMS if k in params}},
         )
         # Record the approval as its own audit entry so "who cleared this" is answerable
         # from the log alone, exactly as it is when someone approves from the queue.
@@ -656,7 +694,7 @@ class RemediationService:
         if "package_id" in action.params:
             from app.services.software_catalog import CATALOG
 
-            if params.get("package_id") not in CATALOG:
+            if not isinstance(params.get("package_id"), str) or params["package_id"] not in CATALOG:
                 raise RemediationError(
                     f"'{params.get('package_id')}' is not in SAVIO's software catalog."
                 )

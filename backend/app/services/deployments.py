@@ -69,6 +69,7 @@ class DeploymentService:
                      "exclude_device_ids": [str(i) for i in exclude_ids]},
         )
         self.session.add(dep)
+        await self.session.flush()          # dep.id exists only after a flush
         await AuditService(self.session).record(
             org_id=actor.org_id, actor_id=actor.id, action="deployment.create",
             target_type="deployment", target_id=str(dep.id),

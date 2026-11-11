@@ -1,5 +1,6 @@
 using System;
 using System.IO.Pipes;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,12 +20,19 @@ public static class FixMyInternet
     {
         try
         {
-            await using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            // Identification: whoever is on the other end may learn who we are, never act as us.
+            await using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut,
+                PipeOptions.Asynchronous, TokenImpersonationLevel.Identification);
             using (var connect = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
                 connect.CancelAfter(TimeSpan.FromSeconds(5));
                 await pipe.ConnectAsync(connect.Token);
             }
+            // Pipe names are shared by every session on the PC, so another signed-in user could
+            // create this one first and answer in SAVIO's name. The service's pipe is owned by
+            // SYSTEM; anything else is not SAVIO.
+            if (!OwnedBySystem(pipe))
+                return "Something other than SAVIO answered, so nothing was run. Contact IT.";
             await pipe.WriteAsync(Encoding.UTF8.GetBytes(Verb), ct);
             await pipe.FlushAsync(ct);
 
@@ -44,5 +52,15 @@ public static class FixMyInternet
         {
             return $"Couldn't reach SAVIO's background service ({ex.GetType().Name}). Restart the PC, or contact IT.";
         }
+    }
+
+    private static bool OwnedBySystem(NamedPipeClientStream pipe)
+    {
+        try
+        {
+            var owner = pipe.GetAccessControl().GetOwner(typeof(SecurityIdentifier)) as SecurityIdentifier;
+            return owner is not null && owner.IsWellKnown(WellKnownSidType.LocalSystemSid);
+        }
+        catch { return false; }
     }
 }

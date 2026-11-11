@@ -151,13 +151,20 @@ class PersonalDataService:
         # are searched by their part after the backslash: in the detail's JSON text the
         # backslash itself is escaped ("ACME\\\\asha"), so the full form never matches.
         # autoescape: Postgres LIKE treats "\\" (and "_", "%") as special; SQLite does not.
+        # NOT the full name: any user can set their own name (PATCH /auth/me), so "e" or another
+        # admin's email as a name would pull — and on erase rewrite — the whole org's audit log.
+        # Email is set by an admin and Windows usernames are confirmed by one.
         text = cast(AuditLog.detail, String)
-        needles = {user.email, user.full_name, *(n.split("\\")[-1] for n in names)}
+        needles = {user.email, *(n.split("\\")[-1] for n in names)}
         return or_(
             AuditLog.actor_id == user.id,
             (AuditLog.target_type == "user") & (AuditLog.target_id == str(user.id)),
             *(text.contains(n, autoescape=True) for n in needles if n),
         )
+
+    @staticmethod
+    def _tied_by_id(entry: AuditLog, user: User) -> bool:
+        return entry.actor_id == user.id or (entry.target_type == "user" and entry.target_id == str(user.id))
 
     async def summary(self, actor: User, user_id: uuid.UUID, names: list[str]) -> dict:
         """The dry run: how many rows each erase step would touch. Nothing changes."""
@@ -188,6 +195,12 @@ class PersonalDataService:
         for key, stmt in (await self._selects(user, names)).items():
             rows = [] if stmt is None else list((await self.session.execute(stmt)).scalars().all())
             out[key] = [_row(r) for r in rows]
+            if key == "remediations":
+                # A technician's export would otherwise carry other accounts' one-time
+                # passwords (in `result`) and other people's details (in `params`).
+                for data in out[key]:
+                    data.pop("result", None)
+                    data.pop("params", None)
             if key == "conversations":
                 for conv, data in zip(rows, out[key]):
                     data["messages"] = [_row(m) for m in (await self.session.execute(
@@ -231,10 +244,14 @@ class PersonalDataService:
         org, uid = user.org_id, user.id
 
         # Pseudonymise audit entries before anything else: the match uses the email.
-        needles = [user.email, user.full_name, *names]
+        # The full name is replaced only inside entries tied to this user by id, where it can only
+        # mean them; elsewhere a self-chosen name could rewrite other people's history.
+        # Longest first: "Asha Verma" before the bare username "asha", or the name half-survives.
         for entry in (await self.session.execute(
                 select(AuditLog).where(AuditLog.org_id == org, self._audit_about(user, names)))).scalars():
             if entry.detail:
+                own = self._tied_by_id(entry, user) and len(user.full_name.strip()) >= 3
+                needles = [user.email, *([user.full_name] if own else []), *names]
                 entry.detail = _replace(entry.detail, needles, alias)
 
         for model in _BY_USERNAME if names else ():

@@ -56,10 +56,13 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   });
   const enabled = !!me?.is_platform_admin;
   const { data: org } = useQuery({ queryKey: ["platform-org", id], queryFn: () => getOrganization(id), enabled });
-  const { data: users } = useQuery({ queryKey: ["platform-org-users", id], queryFn: () => getOrgUsers(id), enabled });
-  const { data: devices } = useQuery({ queryKey: ["platform-org-devices", id], queryFn: () => getOrgDevices(id), enabled });
-  const { data: assets } = useQuery({ queryKey: ["platform-org-assets", id], queryFn: () => getOrgAssets(id), enabled });
-  const { data: remediation } = useQuery({ queryKey: ["platform-org-remediation", id], queryFn: () => getOrgRemediation(id), enabled });
+  // The customer's own data (users, devices, history, assets) follows their support-access
+  // window, like view-as. A refusal here is that, not an outage — no retries, and say so.
+  const { data: users, error: usersError } = useQuery({ queryKey: ["platform-org-users", id], queryFn: () => getOrgUsers(id), enabled, retry: false });
+  const { data: devices } = useQuery({ queryKey: ["platform-org-devices", id], queryFn: () => getOrgDevices(id), enabled, retry: false });
+  const { data: assets } = useQuery({ queryKey: ["platform-org-assets", id], queryFn: () => getOrgAssets(id), enabled, retry: false });
+  const { data: remediation } = useQuery({ queryKey: ["platform-org-remediation", id], queryFn: () => getOrgRemediation(id), enabled, retry: false });
+  const dataLocked = (usersError as { response?: { status?: number } } | null)?.response?.status === 403;
 
   async function viewAs() {
     if (!org) return;
@@ -431,7 +434,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "users" && (
+          {tab === "users" && dataLocked && <LockedNotice />}
+          {tab === "users" && !dataLocked && (
             <>
         {/* Users */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -469,7 +473,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "devices" && (
+          {tab === "devices" && dataLocked && <LockedNotice />}
+          {tab === "devices" && !dataLocked && (
             <>
         {/* Devices */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -516,7 +521,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "healing" && (
+          {tab === "healing" && dataLocked && <LockedNotice />}
+          {tab === "healing" && !dataLocked && (
             <>
         {/* Self-healing history — what went wrong and what was applied */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -556,7 +562,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "assets" && (
+          {tab === "assets" && dataLocked && <LockedNotice />}
+          {tab === "assets" && !dataLocked && (
             <>
         {/* Assets */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -597,6 +604,15 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function LockedNotice() {
+  return (
+    <div className="rounded-xl p-5 text-sm" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+      Hidden until the customer opens support access (Settings → Support access). Counts are on the Overview tab;
+      &ldquo;View full portal&rdquo; above offers to ask them.
     </div>
   );
 }

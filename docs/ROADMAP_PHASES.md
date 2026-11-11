@@ -344,6 +344,51 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
 
 ### 1f — Release
 - 🔒 `security-reviewer` on A1, A2, B2, E1 and Z2 (erase deletes data) together before the tag.
+  - Done 11 Nov (three parallel reviews). 7 High + 7 Medium found, every High re-checked in
+    code, all fixed the same day:
+    - **H1, older than Phase 1:** `ProgramData\Astra\agent.credential` was Users-readable, and
+      it's LocalMachine DPAPI, so any local user could take the device token. Folder and file
+      are now SYSTEM + Administrators only, re-applied on every load, which repairs existing
+      installs.
+    - **H2:** offline journal moved out of ProgramData to `...\Astra\state`, with a hardened
+      ACL and junctions refused.
+    - **H3:** the reachability probe now goes over HTTP through the agent's proxy.
+    - **H4:** one-time passwords are shown only to an org admin, only for 24 h; never to
+      technicians, view-as, the platform console or an export.
+    - **H5:** AI telemetry and event tools are limited to the person's own PC without fleet
+      access.
+    - **H6:** view-as can't read the enrollment key or personal-data exports.
+    - **H7:** erase and delete match audit entries by id, email and confirmed usernames,
+      never a self-chosen full name.
+    - **Medium:**
+      - Tray checks the pipe is owned by SYSTEM (identification-level client, FirstPipeInstance).
+      - winget gets a private TEMP.
+      - The agent pins the catalog (`test_agent_catalog_matches`).
+      - AnyDesk removed from the catalog.
+      - Platform console lists follow the support window and are audited.
+      - Export drops task results and params.
+      - Operators can't delete their own org.
+    - **Lows also fixed:**
+      - deployment audit id
+      - audited params
+      - `create_task` refuses `operator_only` from the AI (admin_only proposals still wait for approval)
+      - `package_id` type check
+      - offline-event fixed values
+      - chunked journal upload, capped journal
+      - manual-run hourly cap
+      - 2 s pipe read timeout
+      - winget version sort and ARM64
+      - operators can't be deleted by an org admin
+  - Left open (low):
+    - Network ladder doesn't pause during a remote session.
+    - Circuit-breaker count/insert race.
+    - Windows usernames in the export query string reach access logs.
+    - `support-access-request` is unthrottled.
+    - Tray `get_installed_apps` shows other profiles' apps on shared PCs.
+    - Org delete doesn't clean the relay group or billing customer.
+    - Self-approval for approval-tier pushes kept by design.
+  - **Not yet live-checked:** the Tray↔service pipe owner check and the token-folder
+    hardening need one run as SYSTEM on a real PC before `agent-v0.14.0`.
 - QA pass on both VMs; release notes; bump to 0.14.0; tag `agent-v0.14.0`; rebuild installers.
 - Update help centre: Software page, Create user, Fix my internet, Support Access.
 
