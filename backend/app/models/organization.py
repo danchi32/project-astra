@@ -120,6 +120,14 @@ class Organization(TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
 
+    # Until when SAVIO support may open a read-only "view as" session on this org. Set by the
+    # customer's admin from Settings (1/24/72 h), cleared on revoke; NULL = no access. Checked
+    # when a view-as token is minted AND on every request made with one. See
+    # app.services.support_access.
+    support_access_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # The relay device group this org's machines enroll into. NULL means remote support
     # cannot be provisioned here, which is the right state for an org nobody has set one
     # up for — and for every org that exists today.

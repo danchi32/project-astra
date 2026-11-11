@@ -6,7 +6,7 @@ import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-quer
 import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone, Clock } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken,
+  getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken, requestSupportAccess,
   updateOrganization, setOrgRemoteControl, getOrgBillingProfile, getPlatformInvoices,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
@@ -63,7 +63,19 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
 
   async function viewAs() {
     if (!org) return;
-    const { access_token } = await createViewToken(id);
+    let access_token: string;
+    try {
+      ({ access_token } = await createViewToken(id));
+    } catch (e) {
+      // Refused unless the customer opened support access. Offer to ask them.
+      const reason = window.prompt(
+        `${apiErrorMessage(e, "Can't open this organization.")}\n\nAsk their admins for access? Say why:`);
+      if (reason && reason.trim().length >= 3) {
+        await requestSupportAccess(id, reason.trim());
+        window.alert("Request sent. Their admins have been notified.");
+      }
+      return;
+    }
     queryClient.clear();
     enterViewAs(access_token, { id, name: org.name });
     router.push("/dashboard");

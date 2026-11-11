@@ -66,6 +66,9 @@ async def test_view_as_scopes_to_target_and_is_read_only(client, session_factory
     hb = {"Authorization": f"Bearer {b.json()['access_token']}"}
     await _enroll(client, hb, "T-PC", "t1")  # Target Co's device
     bid = await _org_id(session_factory, "Target Co")
+    # The customer opens the window first; without it no view-as token is minted.
+    assert (await client.put("/api/v1/settings/support-access", headers=hb,
+                             json={"hours": 1})).status_code == 200
 
     vt = await client.post(f"/api/v1/platform/organizations/{bid}/view-token", headers=ha)
     assert vt.status_code == 200, vt.text

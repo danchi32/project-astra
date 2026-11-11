@@ -8,6 +8,7 @@ import type {
   OrganizationSettings,
   OrganizationSettingsInput,
   PermissionMatrix,
+  SupportAccess,
 } from "./types";
 
 // Per-org outbound email (DNS-verified sending domain).
@@ -52,3 +53,13 @@ export const updateHelpdeskSettings = (data: HelpdeskSettingsInput) =>
 /** Reads the instance's field schema. Creates nothing, so it is safe to press repeatedly. */
 export const verifyHelpdeskSettings = () =>
   apiClient.post<HelpdeskVerifyResult>("/settings/helpdesk/verify").then((r) => r.data);
+
+// SAVIO support access — the customer decides when support may look (read-only, time-boxed).
+export const getSupportAccess = () =>
+  apiClient.get<SupportAccess>("/settings/support-access").then((r) => r.data);
+
+export const grantSupportAccess = (hours: 1 | 24 | 72) =>
+  apiClient.put<SupportAccess>("/settings/support-access", { hours }).then((r) => r.data);
+
+export const revokeSupportAccess = () =>
+  apiClient.delete<SupportAccess>("/settings/support-access").then((r) => r.data);

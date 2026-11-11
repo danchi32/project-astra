@@ -24,7 +24,10 @@ from app.schemas.settings import (
     OrganizationSettingsRead,
     OrganizationSettingsUpdate,
     PermissionMatrix,
+    SupportAccessGrant,
+    SupportAccessRead,
 )
+from app.services.support_access import SupportAccessService, window_open
 from app.services.email_domains import EmailProviderError, provider_configured
 from app.services.email_integration import EmailIntegrationService, SharedSenderNotEntitled
 from app.services.settings import SettingsService
@@ -312,3 +315,45 @@ async def get_permission_matrix(
     session: AsyncSession = Depends(get_db),
 ) -> PermissionMatrix:
     return await SettingsService(session).permission_matrix(org_id=actor.org_id)
+
+
+def _support_read(org) -> SupportAccessRead:
+    open_ = window_open(org) and not org.is_demo
+    return SupportAccessRead(active=open_, until=org.support_access_until if open_ else None)
+
+
+@router.get(
+    "/support-access",
+    response_model=SupportAccessRead,
+    summary="Whether SAVIO support may view this organization (admin)",
+)
+async def get_support_access(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> SupportAccessRead:
+    return _support_read(await SupportAccessService(session).get(actor=actor))
+
+
+@router.put(
+    "/support-access",
+    response_model=SupportAccessRead,
+    summary="Let SAVIO support view this organization, read-only, for 1/24/72 hours (admin; audited)",
+)
+async def grant_support_access(
+    body: SupportAccessGrant,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> SupportAccessRead:
+    return _support_read(await SupportAccessService(session).grant(actor=actor, hours=body.hours))
+
+
+@router.delete(
+    "/support-access",
+    response_model=SupportAccessRead,
+    summary="End SAVIO support access now, including any open session (admin; audited)",
+)
+async def revoke_support_access(
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> SupportAccessRead:
+    return _support_read(await SupportAccessService(session).revoke(actor=actor))

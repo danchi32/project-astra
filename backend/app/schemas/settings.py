@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,3 +51,14 @@ class PermissionMatrix(BaseModel):
     # Ordered list of capability keys → human labels, so the UI can render columns.
     capabilities: list[dict[str, str]]
     roles: list[RolePermissions]
+
+
+class SupportAccessRead(BaseModel):
+    """Whether SAVIO support may currently open a read-only view of this organization."""
+    active: bool
+    until: datetime | None
+
+
+class SupportAccessGrant(BaseModel):
+    # Only short windows: access nobody remembers to revoke should still end on its own.
+    hours: Literal[1, 24, 72]

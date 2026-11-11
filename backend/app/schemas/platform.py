@@ -34,6 +34,10 @@ class OrganizationAdminRead(BaseModel):
     # Expert plan grants the entitlement by default, so the bare entitlement over-reports; the
     # operator toggle reflects this instead. Derived on read, never stored.
     remote_control_active: bool = False
+    # Customer-granted window for read-only "view as" (null = not granted). Demo orgs don't
+    # need one.
+    support_access_until: datetime | None = None
+    is_demo: bool = False
 
 
 class RemediationActionOption(BaseModel):

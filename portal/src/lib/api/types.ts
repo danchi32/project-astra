@@ -202,6 +202,15 @@ export interface OrganizationAdmin {
    *  entitlement over-reports (a trial/Expert plan grants it by default), so the operator's
    *  remote-control toggle reflects this, not `entitlements.includes("remote_control")`. */
   remote_control_active: boolean;
+  /** Until when the customer lets SAVIO support view their portal; null = not granted. */
+  support_access_until?: string | null;
+  is_demo?: boolean;
+}
+
+/** Whether SAVIO support may currently open a read-only view of this organization. */
+export interface SupportAccess {
+  active: boolean;
+  until: string | null;
 }
 
 export interface PlatformOverview {

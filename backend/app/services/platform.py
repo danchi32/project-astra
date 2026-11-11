@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import create_view_as_token, generate_opaque_token, hash_password
+from app.services.support_access import remaining_minutes, window_open
 from app.models import (
     OrganizationBillingProfile,
     AuditLog,
@@ -982,10 +983,20 @@ class PlatformService:
         org = await self.orgs.get(org_id)
         if org is None:
             raise NotFoundError("Organization not found")
-        token = create_view_as_token(admin_user_id=actor.id, org_id=org.id)
+        if not window_open(org):
+            raise ConflictError(
+                "This organization hasn't granted SAVIO support access. Ask them to open it "
+                "in Settings → Support access, or send a request."
+            )
+        # Never outlive the customer's window.
+        token = create_view_as_token(admin_user_id=actor.id, org_id=org.id,
+                                     minutes=min(60, remaining_minutes(org)))
         await self.audit.record(
             org_id=org.id, actor_id=actor.id, action="platform.view_as",
-            target_type="organization", target_id=str(org.id), detail={"org_name": org.name},
+            target_type="organization", target_id=str(org.id),
+            # The viewer belongs to SAVIO's org, so the customer's audit page can't resolve
+            # their id to a name — say who it was here, or the entry reads "system".
+            detail={"org_name": org.name, "by": actor.email},
         )
         await self.session.commit()
         return ViewAsToken(access_token=token, org_id=org.id, org_name=org.name)

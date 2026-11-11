@@ -7,9 +7,10 @@ import { Building2, Eye, Plus, Search, X, Sparkles } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   listOrganizations, updateOrganization, deleteOrganization,
-  setOrgDiscount, clearOrgDiscount, createViewToken, createOrganizationAsAdmin,
+  setOrgDiscount, clearOrgDiscount, createViewToken, requestSupportAccess, createOrganizationAsAdmin,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
+import { apiErrorMessage } from "@/lib/utils";
 import type { OrganizationAdmin, SubscriptionStatus } from "@/lib/api/types";
 import { PLAN_TIERS } from "@/lib/api/types";
 import { Pagination } from "@/components/pagination";
@@ -80,7 +81,19 @@ export default function PlatformOrganizationsPage() {
   const filtered = orgs ?? [];
 
   async function viewAs(o: OrganizationAdmin) {
-    const { access_token } = await createViewToken(o.id);
+    let access_token: string;
+    try {
+      ({ access_token } = await createViewToken(o.id));
+    } catch (e) {
+      // Refused unless the customer opened support access. Offer to ask them.
+      const reason = window.prompt(
+        `${apiErrorMessage(e, "Can't open this organization.")}\n\nAsk their admins for access? Say why:`);
+      if (reason && reason.trim().length >= 3) {
+        await requestSupportAccess(o.id, reason.trim());
+        window.alert("Request sent. Their admins have been notified.");
+      }
+      return;
+    }
     queryClient.clear(); // drop this operator's own cached data before switching context
     enterViewAs(access_token, { id: o.id, name: o.name });
     router.push("/dashboard");

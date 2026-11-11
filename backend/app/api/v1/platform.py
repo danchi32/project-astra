@@ -4,6 +4,7 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_platform_admin
@@ -42,6 +43,7 @@ from app.schemas.platform import (
     ViewAsToken,
 )
 from app.schemas.remediation import RemediationTaskRead
+from app.services.support_access import SupportAccessService
 from app.schemas.support_request import (
     SupportQueue,
     SupportReplyCreate,
@@ -158,6 +160,24 @@ async def create_view_token(
     session: AsyncSession = Depends(get_db),
 ) -> ViewAsToken:
     return await PlatformService(session).create_view_as_token(actor=actor, org_id=org_id)
+
+
+class SupportAccessRequestBody(BaseModel):
+    reason: str = Field(min_length=3, max_length=300)
+
+
+@router.post(
+    "/organizations/{org_id}/support-access-request",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Ask an org's admins to grant SAVIO support access (platform admin; audited in their log)",
+)
+async def request_support_access(
+    org_id: uuid.UUID,
+    body: SupportAccessRequestBody,
+    actor: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    await SupportAccessService(session).request(actor=actor, org_id=org_id, reason=body.reason)
 
 
 @router.post(
