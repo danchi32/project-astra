@@ -12,6 +12,7 @@ import {
   getEmailSettings, configureEmailSettings, verifyEmailSettings, chooseEmailSender,
   updateAssetEmailTemplate,
   getHelpdeskSettings, updateHelpdeskSettings, verifyHelpdeskSettings,
+  getSupportAccess, grantSupportAccess, revokeSupportAccess,
 } from "@/lib/api/settings";
 import { listLocations, createLocation, renameLocation, deleteLocation } from "@/lib/api/locations";
 import { RichTextEditor, type RichTextHandle } from "@/components/rich-text-editor";
@@ -44,6 +45,54 @@ function Panel({ title, description, children }: { title: string; description?: 
       </div>
       {children}
     </div>
+  );
+}
+
+/** The customer, not SAVIO, decides when support may look. Its buttons are type="button" —
+ *  it sits inside the organization form but saves on its own, immediately. */
+function SupportAccessPanel() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["support-access"], queryFn: getSupportAccess });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true); setErr("");
+    try {
+      await fn();
+      await qc.invalidateQueries({ queryKey: ["support-access"] });
+    } catch (e) {
+      setErr(errDetail(e) ?? "Couldn't change support access.");
+    } finally { setBusy(false); }
+  }
+
+  const windows: [1 | 24 | 72, string][] = [[1, "1 hour"], [24, "24 hours"], [72, "3 days"]];
+  return (
+    <Panel title="SAVIO support access"
+      description="SAVIO's support team can't see your portal unless you let them. Access is read-only, ends on its own, and every grant and view is in your audit log.">
+      <p className="text-sm" style={{ color: "var(--text-primary)" }}>
+        {data?.active && data.until
+          ? <>Open until <strong>{new Date(data.until).toLocaleString()}</strong></>
+          : "Closed — SAVIO support can't view your portal."}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {windows.map(([h, label]) => (
+          <button key={h} type="button" disabled={busy} onClick={() => run(() => grantSupportAccess(h))}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+            {data?.active ? `Reset to ${label}` : `Allow for ${label}`}
+          </button>
+        ))}
+        {data?.active && (
+          <button type="button" disabled={busy} onClick={() => run(revokeSupportAccess)}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
+            style={{ background: "var(--surface)", border: "1px solid #ef4444", color: "#ef4444" }}>
+            Revoke now
+          </button>
+        )}
+      </div>
+      {err && <p className="text-xs" style={{ color: "#ef4444" }}>{err}</p>}
+    </Panel>
   );
 }
 
@@ -224,6 +273,7 @@ function OrganizationTab() {
     if (data) setForm({
       org_name: data.org_name,
       auto_approve_automatic: data.auto_approve_automatic,
+      email_critical_alerts: data.email_critical_alerts,
       require_admin_for_approval_tier: data.require_admin_for_approval_tier,
       min_password_length: data.min_password_length,
       enrollment_token_default_days: data.enrollment_token_default_days,
@@ -277,6 +327,18 @@ function OrganizationTab() {
         </div>
       </Panel>
 
+      <Panel title="Alerts" description="SAVIO raises an alert when a device turns unhealthy — or is about to, like a disk that will fill up within a week.">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Email admins about critical alerts</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              Defender or firewall off, a disk nearly full or filling fast, cracked activation. Alerts always appear under Notifications; this adds an email.
+            </p>
+          </div>
+          <Toggle on={form.email_critical_alerts !== false} onChange={(v) => setForm({ ...form, email_critical_alerts: v })} />
+        </div>
+      </Panel>
+
       <Panel title="Security & enrollment" description="Baseline policy for accounts and agent enrollment.">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Minimum password length">
@@ -294,6 +356,8 @@ function OrganizationTab() {
           Password length has an enforced floor of 8 characters; you can only raise it.
         </p>
       </Panel>
+
+      <SupportAccessPanel />
 
       <div className="flex items-center gap-3">
         <button type="submit" disabled={saving}

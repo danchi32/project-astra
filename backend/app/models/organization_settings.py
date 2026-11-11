@@ -42,6 +42,11 @@ class OrganizationSettings(TimestampMixin, Base):
 
     # Default lifetime applied to new enrollment tokens when the request omits one.
     enrollment_token_default_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
+    # Email the org's admins when a CRITICAL early-warning alert turns on (N1). In-app
+    # notifications are always created; this only controls the email.
+    email_critical_alerts: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False

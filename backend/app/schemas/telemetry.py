@@ -58,6 +58,27 @@ class InstalledAppEntry(_SanitizedInput):
     version: str | None = Field(default=None, max_length=100)
     publisher: str | None = Field(default=None, max_length=200)
     install_date: str | None = Field(default=None, max_length=20)
+    # Defaults keep pre-0.14 agents (which send neither field) valid: everything they
+    # report is machine-wide.
+    scope: Literal["machine", "user"] = "machine"
+    user_name: str | None = Field(default=None, max_length=256)
+
+
+class LicensingEntry(_SanitizedInput):
+    kind: Literal["windows", "office"]
+    name: str = Field(max_length=200)
+    description: str | None = Field(default=None, max_length=300)
+    license_status: int = Field(ge=-1, le=6)
+    channel: str | None = Field(default=None, max_length=50)
+    kms_host: str | None = Field(default=None, max_length=255)
+
+
+class LocalAccountEntry(_SanitizedInput):
+    name: str = Field(max_length=100)
+    full_name: str | None = Field(default=None, max_length=200)
+    enabled: bool
+    is_admin: bool
+    built_in: bool = False
 
 
 class ServiceEntry(_SanitizedInput):
@@ -143,6 +164,11 @@ class HardwareInfo(_SanitizedInput):
     cpu_name: str | None = Field(default=None, max_length=200)
     total_ram_mb: int | None = Field(default=None, ge=0)
     total_storage_gb: float | None = Field(default=None, ge=0)
+    # Agent 0.14+. As Windows reports them; app.services.hardware.clean_serial drops OEM
+    # placeholders. Absent from older agents, which must leave the stored values alone.
+    serial_number: str | None = Field(default=None, max_length=200)
+    bios_version: str | None = Field(default=None, max_length=100)
+    bios_release_date: str | None = Field(default=None, max_length=10)
 
 
 class TelemetryPush(_SanitizedInput):
@@ -179,6 +205,14 @@ class TelemetryPush(_SanitizedInput):
     # workforce_insights entitlement — the ingest path checks, so a stray payload from an
     # untracked org is dropped rather than quietly collected.
     activity: list[ActivityEvent] | None = None
+
+    # Windows/Office activation, sent with the hourly inventory. None = not collected on this
+    # push (or an agent older than 0.14): keep the stored rows. A list replaces them.
+    licensing: list[LicensingEntry] | None = None
+
+    # Local Windows accounts, hourly. None = not collected on this push (or an older agent):
+    # keep the stored rows. A list replaces them.
+    local_accounts: list[LocalAccountEntry] | None = None
 
 
 class TelemetryPushResponse(BaseModel):
@@ -233,6 +267,8 @@ class DeviceInstalledAppRead(BaseModel):
     version: str | None
     publisher: str | None
     install_date: str | None
+    scope: str
+    user_name: str | None
     collected_at: datetime
 
 
@@ -272,3 +308,14 @@ class DashboardSummary(BaseModel):
     avg_ram_percent: float
     critical_event_count: int
     pending_update_count: int
+
+
+class DeviceLocalAccountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    full_name: str | None
+    enabled: bool
+    is_admin: bool
+    built_in: bool
+    collected_at: datetime

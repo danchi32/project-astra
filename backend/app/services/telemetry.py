@@ -1,15 +1,20 @@
 import hashlib
+import logging
 import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Device, User
+from app.models import Asset, Device, User
+from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.device_session import DeviceSession
 from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
+    DeviceLicensing,
+    DeviceLocalAccount,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetrySnapshot,
@@ -21,7 +26,11 @@ from app.schemas.telemetry import DashboardSummary, TelemetryPush
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
 from app.services.exceptions import NotFoundError
+from app.services.alerts import AlertService, email_critical_alerts
+from app.services.hardware import clean_serial, clean_text
 from app.services.workforce import WorkforceAggregator
+
+log = logging.getLogger(__name__)
 
 
 def _fingerprint(items: Sequence[Any], fields: tuple[str, ...]) -> str:
@@ -44,21 +53,50 @@ class TelemetryService:
         self.repo = TelemetryRepository(session)
         self.devices = DeviceRepository(session)
 
+    async def _fill_linked_assets(self, device: Device) -> None:
+        """Copy what the device knows into the asset record it is linked to — but only into
+        EMPTY fields. Anything an admin typed is theirs and is never overwritten."""
+        assets = (await self.session.execute(
+            select(Asset).where(Asset.device_id == device.id)
+        )).scalars().all()
+        for asset in assets:
+            filled = []
+            for field, value in (("serial_number", device.serial_number),
+                                 ("manufacturer", device.manufacturer),
+                                 ("model", device.model)):
+                if value and not getattr(asset, field):
+                    setattr(asset, field, value)
+                    filled.append(field.replace("_", " "))
+            if filled:
+                self.session.add(AssetEvent(
+                    org_id=asset.org_id, asset_id=asset.id, event_type=AssetEventType.NOTE,
+                    note=f"Filled from the device agent: {', '.join(filled)}",
+                ))
+
     async def ingest(self, *, device: Device, data: TelemetryPush) -> None:
         now = data.collected_at
 
         if data.hardware is not None:
             hw = data.hardware
             if hw.manufacturer is not None:
-                device.manufacturer = hw.manufacturer
+                device.manufacturer = clean_text(hw.manufacturer)
             if hw.model is not None:
-                device.model = hw.model
+                device.model = clean_text(hw.model)
             if hw.cpu_name is not None:
                 device.cpu_name = hw.cpu_name
             if hw.total_ram_mb is not None:
                 device.total_ram_mb = hw.total_ram_mb
             if hw.total_storage_gb is not None:
                 device.total_storage_gb = hw.total_storage_gb
+            # Only when the agent sent the field at all: an older agent's silence must not wipe
+            # the serial it gave at enrollment, but a placeholder from a new one must clear it.
+            if "serial_number" in hw.model_fields_set:
+                device.serial_number = clean_serial(hw.serial_number)
+            if hw.bios_version is not None:
+                device.bios_version = hw.bios_version
+            if hw.bios_release_date is not None:
+                device.bios_release_date = hw.bios_release_date
+            await self._fill_linked_assets(device)
 
         snapshot = await self.repo.add_snapshot(
             TelemetrySnapshot(
@@ -110,7 +148,8 @@ class TelemetryService:
 
         if data.installed_apps:
             digest = _fingerprint(
-                data.installed_apps, ("name", "version", "publisher", "install_date")
+                data.installed_apps,
+                ("name", "version", "publisher", "install_date", "scope", "user_name"),
             )
             if digest != device.apps_hash:
                 await self.repo.replace_installed_apps(
@@ -123,6 +162,8 @@ class TelemetryService:
                             version=a.version,
                             publisher=a.publisher,
                             install_date=a.install_date,
+                            scope=a.scope,
+                            user_name=a.user_name,
                             collected_at=now,
                         )
                         for a in data.installed_apps
@@ -183,6 +224,34 @@ class TelemetryService:
                 )
                 device.updates_hash = digest
 
+        # Licensing: a handful of rows, once an hour, so no fingerprint — just replace.
+        if data.licensing is not None:
+            await self.repo.replace_licensing(
+                device.id,
+                [
+                    DeviceLicensing(
+                        device_id=device.id,
+                        org_id=device.org_id,
+                        kind=lic.kind,
+                        name=lic.name,
+                        description=lic.description,
+                        license_status=lic.license_status,
+                        channel=lic.channel,
+                        kms_host=lic.kms_host,
+                        collected_at=now,
+                    )
+                    for lic in data.licensing
+                ],
+            )
+
+        if data.local_accounts is not None:
+            await self.repo.replace_local_accounts(device.id, [
+                DeviceLocalAccount(device_id=device.id, org_id=device.org_id, name=a.name,
+                                   full_name=a.full_name, enabled=a.enabled, is_admin=a.is_admin,
+                                   built_in=a.built_in, collected_at=now)
+                for a in data.local_accounts
+            ])
+
         # Sessions. `is not None` rather than a truthiness test, because an empty list is a
         # real answer here — "nobody is signed in" — and every other collection above uses
         # truthiness precisely because an empty inventory from those means "not collected".
@@ -229,7 +298,18 @@ class TelemetryService:
                 device=device, events=data.activity
             )
 
+        # Early-warning alerts (N1). In a savepoint and fenced off: a bug in alerting must
+        # never cost the device its telemetry.
+        fired = []
+        try:
+            async with self.session.begin_nested():
+                fired = await AlertService(self.session).evaluate(device=device, data=data)
+        except Exception:
+            log.exception("alert evaluation failed for device %s", device.id)
+
         await self.session.commit()
+        if fired:
+            await email_critical_alerts(self.session, device.org_id, fired)
 
     async def get_dashboard_summary(self, *, actor: User) -> DashboardSummary:
         org_devices = await self.devices.list_by_org(actor.org_id)

@@ -124,6 +124,9 @@ async def test_operator_can_view_an_orgs_users_and_devices(client, session_facto
         "enrollment_token": tok.json()["token"], "hostname": "D-PC",
         "machine_id": "d1", "os_version": "Windows 11", "agent_version": "0.1.0"})
 
+    # The per-org lists follow the customer's support-access window (security review, M5).
+    assert (await client.put("/api/v1/settings/support-access", headers=headers,
+                             json={"hours": 1})).status_code == 200
     users = (await client.get(f"/api/v1/platform/organizations/{oid}/users", headers=headers)).json()
     assert any(u["email"] == "member@d.com" for u in users)
     devices = (await client.get(f"/api/v1/platform/organizations/{oid}/devices", headers=headers)).json()
@@ -179,7 +182,9 @@ async def test_operator_sees_org_remediation_and_assets(client, session_factory)
     # Create an asset in the org.
     await client.post("/api/v1/assets", headers=headers, json={"name": "Reception laptop", "category": "laptop"})
 
-    # Platform detail endpoints respond (support visibility).
+    # Platform detail endpoints respond (support visibility) once the window is open.
+    assert (await client.put("/api/v1/settings/support-access", headers=headers,
+                             json={"hours": 1})).status_code == 200
     assets = await client.get(f"/api/v1/platform/organizations/{oid}/assets", headers=headers)
     assert assets.status_code == 200
     assert any(a["name"] == "Reception laptop" for a in assets.json())

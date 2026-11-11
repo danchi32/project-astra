@@ -103,6 +103,13 @@ class DeviceInstalledApp(TimestampMixin, Base):
     version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     publisher: Mapped[str | None] = mapped_column(String(200), nullable=True)
     install_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # "machine" = installed for everyone (HKLM); "user" = installed into one person's profile
+    # (their HKCU), which is where ChatGPT, Claude, Cursor, Zoom and friends go by default.
+    # Agents older than 0.14 only ever report "machine".
+    scope: Mapped[str] = mapped_column(String(10), nullable=False, default="machine",
+                                       server_default="machine")
+    # The profile's account (DOMAIN\name) for a "user" install; null for "machine".
+    user_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -176,3 +183,46 @@ class DeviceWindowsUpdate(TimestampMixin, Base):
             )
         state = kw.get("state") or UPDATE_PENDING
         super().__init__(**kw, is_installed=state in _ON_DISK)
+
+
+class DeviceLicensing(TimestampMixin, Base):
+    """Windows / Office products holding a key, as the Software Protection Platform reports
+    them. Facts only — whether they look cracked is decided in `app.services.licensing`, so the
+    signature list can change without a migration or an agent release."""
+
+    __tablename__ = "device_licensing"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)  # "windows" | "office"
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # SPP's LicenseStatus: 0 unlicensed, 1 licensed, 2 OOB grace, 3 OOT grace,
+    # 4 non-genuine grace, 5 notification, 6 extended grace. -1 = unreadable.
+    license_status: Mapped[int] = mapped_column(nullable=False)
+    channel: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Retail, OEM_DM, Volume:GVLK…
+    kms_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DeviceLocalAccount(TimestampMixin, Base):
+    """Local Windows accounts on a device (agent 0.14+, hourly): who can sign in, and who is a
+    local administrator. Replaced as a set on each report."""
+
+    __tablename__ = "device_local_accounts"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    enabled: Mapped[bool] = mapped_column(nullable=False)
+    is_admin: Mapped[bool] = mapped_column(nullable=False)
+    built_in: Mapped[bool] = mapped_column(nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

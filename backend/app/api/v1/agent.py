@@ -1,6 +1,9 @@
 import logging
+from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid
@@ -261,3 +264,48 @@ async def remote_support_plan(
         download_url=client.agent_download_url(org.meshcentral_mesh_id),
         service_name=REMOTE_SUPPORT_SERVICE_NAME,
     )
+
+
+# ── B1: what the offline self-heal did while SAVIO was unreachable ──────────
+
+class _OfflineEvent(BaseModel):
+    at: datetime
+    trigger: Literal["automatic", "tray", "test"] = "automatic"
+    # Fixed values (the agent's Diagnosis / FixStep enums), not free text, so nothing a device
+    # sends can put arbitrary words into the customer's audit log.
+    diagnosis: Literal["Healthy", "BackendOnlyDown", "NoAddress", "GatewayUnreachable",
+                       "DnsFailing", "NoInternet"]
+    step: Literal["FlushDns", "RenewIp", "RestartAdapter"] | None = None
+    step_ok: bool | None = None
+    output: str | None = Field(default=None, max_length=300)
+    fixed_after: bool = False
+
+
+class _OfflineEvents(BaseModel):
+    events: list[_OfflineEvent] = Field(max_length=200)
+
+
+@router.post(
+    "/offline-events",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Report network repairs the agent made while offline (agent only; audited)",
+)
+async def offline_events(
+    body: _OfflineEvents,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Each repair attempt becomes an audit entry on the device, so automatic changes made
+    with no server in the loop still leave the same trail as any other remediation."""
+    from app.services.audit import AuditService
+
+    audit = AuditService(session)
+    for e in body.events:
+        await audit.record(
+            org_id=device.org_id, actor_id=None, action="device.offline_self_heal",
+            target_type="device", target_id=str(device.id),
+            detail={"at": e.at.isoformat(), "trigger": e.trigger, "diagnosis": e.diagnosis,
+                    "step": e.step, "step_ok": e.step_ok, "output": e.output,
+                    "fixed_after": e.fixed_after, "hostname": device.hostname},
+        )
+    await session.commit()

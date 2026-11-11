@@ -84,7 +84,9 @@ public sealed record TelemetryInstalledApp(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("version")] string? Version,
     [property: JsonPropertyName("publisher")] string? Publisher,
-    [property: JsonPropertyName("install_date")] string? InstallDate);
+    [property: JsonPropertyName("install_date")] string? InstallDate,
+    [property: JsonPropertyName("scope")] string Scope,
+    [property: JsonPropertyName("user_name")] string? UserName);
 
 public sealed record TelemetryServiceEntry(
     [property: JsonPropertyName("name")] string Name,
@@ -128,7 +130,10 @@ public sealed record TelemetryHardware(
     [property: JsonPropertyName("model")] string? Model,
     [property: JsonPropertyName("cpu_name")] string? CpuName,
     [property: JsonPropertyName("total_ram_mb")] long? TotalRamMb,
-    [property: JsonPropertyName("total_storage_gb")] double? TotalStorageGb);
+    [property: JsonPropertyName("total_storage_gb")] double? TotalStorageGb,
+    [property: JsonPropertyName("serial_number")] string? SerialNumber = null,
+    [property: JsonPropertyName("bios_version")] string? BiosVersion = null,
+    [property: JsonPropertyName("bios_release_date")] string? BiosReleaseDate = null);
 
 public sealed record TelemetryPush(
     [property: JsonPropertyName("collected_at")] DateTimeOffset CollectedAt,
@@ -149,7 +154,28 @@ public sealed record TelemetryPush(
     // Workforce Insights ("Tracker") presence transitions since the last push. Null when
     // tracking is off for this org (the backend told us so on the heartbeat) — the field is
     // simply absent, and the backend stores nothing. Only ever sent for an entitled org.
-    [property: JsonPropertyName("activity")] IReadOnlyList<TelemetryActivityEvent>? Activity = null);
+    [property: JsonPropertyName("activity")] IReadOnlyList<TelemetryActivityEvent>? Activity = null,
+    // Windows/Office activation, with the hourly inventory. Null on the pushes in between and
+    // when SPP couldn't be read — the backend keeps what it has; older backends ignore it.
+    [property: JsonPropertyName("licensing")] IReadOnlyList<TelemetryLicensingProduct>? Licensing = null,
+    // Local Windows accounts, with the hourly inventory. Null between inventories and when WMI
+    // couldn't be read — the backend keeps what it has.
+    [property: JsonPropertyName("local_accounts")] IReadOnlyList<TelemetryLocalAccount>? LocalAccounts = null);
+
+public sealed record TelemetryLocalAccount(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("full_name")] string? FullName,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("is_admin")] bool IsAdmin,
+    [property: JsonPropertyName("built_in")] bool BuiltIn);
+
+public sealed record TelemetryLicensingProduct(
+    [property: JsonPropertyName("kind")] string Kind,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("description")] string? Description,
+    [property: JsonPropertyName("license_status")] int LicenseStatus,
+    [property: JsonPropertyName("channel")] string? Channel,
+    [property: JsonPropertyName("kms_host")] string? KmsHost);
 
 // ── Remote support provisioning ─────────────────────────────────────────────
 

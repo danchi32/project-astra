@@ -21,33 +21,5 @@ internal static class UpdatePaths
 
     /// <summary>Create (or re-secure) WorkRoot so only SYSTEM and Administrators can touch it.
     /// Throws if the directory can't be locked down — callers treat that as "do not update".</summary>
-    public static void EnsureHardened()
-    {
-        var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
-        var admins = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
-
-        var security = new DirectorySecurity();
-        // Break inheritance and drop any inherited Users/CreatorOwner rights.
-        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-        foreach (var sid in new[] { system, admins })
-        {
-            security.AddAccessRule(new FileSystemAccessRule(
-                sid,
-                FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
-                AccessControlType.Allow));
-        }
-        try { security.SetOwner(admins); } catch (Exception) { /* owner set needs privilege; ACL is the guard */ }
-
-        if (!Directory.Exists(WorkRoot))
-        {
-            FileSystemAclExtensions.CreateDirectory(security, WorkRoot);
-        }
-        else
-        {
-            // A pre-existing dir may have been planted with a weak DACL — overwrite it.
-            new DirectoryInfo(WorkRoot).SetAccessControl(security);
-        }
-    }
+    public static void EnsureHardened() => Security.SecureDirectory.Ensure(WorkRoot);
 }

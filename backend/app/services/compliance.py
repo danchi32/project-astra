@@ -16,6 +16,7 @@ from app.models import (
     Device,
     DeviceEventLog,
     DeviceInstalledApp,
+    DeviceLicensing,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetrySnapshot,
@@ -36,6 +37,11 @@ from app.schemas.compliance import (
 )
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.licensing import (
+    ACTIVATOR_SIGNATURES,
+    activation_tool_findings,
+    windows_activation,
+)
 
 # The checks and the remediation (if any) that fixes each. Order = display order.
 CHECKS: list[tuple[str, str, str | None]] = [
@@ -46,6 +52,8 @@ CHECKS: list[tuple[str, str, str | None]] = [
     ("no_critical_events", "No critical system errors", None),
     ("agent_reporting", "Agent reporting in", None),
     ("no_banned_software", "No restricted software", None),
+    ("genuine_windows", "Windows activated", None),
+    ("no_activation_tools", "No cracked activation", None),
 ]
 CHECK_LABELS = {key: label for key, label, _ in CHECKS}
 CHECK_FIX = {key: fix for key, _, fix in CHECKS}
@@ -203,7 +211,9 @@ class ComplianceService:
         # Banned software: which devices have a matching installed app.
         banned = await self.list_banned(org_id=org_id)
         banned_hits: dict[uuid.UUID, list[str]] = {}
-        have_apps: set[uuid.UUID] = set()
+        have_apps: set[uuid.UUID] = {r[0] for r in (await self.session.execute(
+            select(DeviceInstalledApp.device_id).where(DeviceInstalledApp.org_id == org_id).distinct()
+        )).all()}
         if banned:
             conds = [
                 func.lower(DeviceInstalledApp.name).like(
@@ -217,9 +227,23 @@ class ComplianceService:
             )).all()
             for dev_id, app_name in hit_rows:
                 banned_hits.setdefault(dev_id, []).append(app_name)
-            have_apps = {r[0] for r in (await self.session.execute(
-                select(DeviceInstalledApp.device_id).where(DeviceInstalledApp.org_id == org_id).distinct()
-            )).all()}
+
+        # Activation: what SPP reported, plus any activator among the apps or services.
+        licensing: dict[uuid.UUID, list[DeviceLicensing]] = {}
+        for row in (await self.session.execute(
+            select(DeviceLicensing).where(DeviceLicensing.org_id == org_id)
+        )).scalars():
+            licensing.setdefault(row.device_id, []).append(row)
+        activator_names: dict[uuid.UUID, list[str]] = {}
+        for model, column in ((DeviceInstalledApp, DeviceInstalledApp.name),
+                              (DeviceService, DeviceService.name),
+                              (DeviceService, DeviceService.display_name)):
+            conds = [func.lower(column).like(f"%{_like_literal(s)}%", escape="\\")
+                     for s in ACTIVATOR_SIGNATURES]
+            for dev_id, found in (await self.session.execute(
+                select(model.device_id, column).where(model.org_id == org_id, or_(*conds))
+            )).all():
+                activator_names.setdefault(dev_id, []).append(found)
 
         now = utcnow()
         results: list[DeviceCompliance] = []
@@ -283,6 +307,18 @@ class ComplianceService:
                     checks.append(self._chk("no_banned_software", "pass", "None found"))
                 else:
                     checks.append(self._chk("no_banned_software", "unknown", "No app inventory yet"))
+
+            # activation — "activated" alone can't catch a crack (a KMS emulator reports
+            # Licensed), so the second check looks at how it got activated.
+            lic = licensing.get(d.id, [])
+            checks.append(self._chk("genuine_windows", *windows_activation(lic)))
+            findings = activation_tool_findings(lic, activator_names.get(d.id, []), d.hostname)
+            if findings:
+                checks.append(self._chk("no_activation_tools", "fail", "; ".join(findings[:3])))
+            elif lic or d.id in have_apps:
+                checks.append(self._chk("no_activation_tools", "pass", "None found"))
+            else:
+                checks.append(self._chk("no_activation_tools", "unknown", "Not reported yet"))
 
             passed = sum(1 for c in checks if c.status == "pass")
             failed = sum(1 for c in checks if c.status == "fail")

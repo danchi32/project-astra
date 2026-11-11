@@ -85,6 +85,14 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open SAVIO Assistant", null, (_, _) => ShowChat());
+        // B2: works with no internet — it talks only to SAVIO's own service on this PC.
+        menu.Items.Add("Fix my internet", null, async (_, _) =>
+        {
+            _icon?.ShowBalloonTip(4000, "SAVIO", "Checking your connection…", ToolTipIcon.Info);
+            var result = await FixMyInternet.RunAsync();
+            _icon?.ShowBalloonTip(10000, "SAVIO — Fix my internet", result,
+                result.StartsWith("Fixed") || result.Contains("looks fine") ? ToolTipIcon.Info : ToolTipIcon.Warning);
+        });
         menu.Items.Add(_trackingItem);
         menu.Items.Add(_trackingSeparator);
         menu.Items.Add(new ToolStripSeparator());

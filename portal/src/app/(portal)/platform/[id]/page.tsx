@@ -6,7 +6,7 @@ import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-quer
 import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone, Clock } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken,
+  getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken, requestSupportAccess,
   updateOrganization, setOrgRemoteControl, getOrgBillingProfile, getPlatformInvoices,
 } from "@/lib/api/platform";
 import { enterViewAs } from "@/lib/viewAs";
@@ -56,14 +56,29 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   });
   const enabled = !!me?.is_platform_admin;
   const { data: org } = useQuery({ queryKey: ["platform-org", id], queryFn: () => getOrganization(id), enabled });
-  const { data: users } = useQuery({ queryKey: ["platform-org-users", id], queryFn: () => getOrgUsers(id), enabled });
-  const { data: devices } = useQuery({ queryKey: ["platform-org-devices", id], queryFn: () => getOrgDevices(id), enabled });
-  const { data: assets } = useQuery({ queryKey: ["platform-org-assets", id], queryFn: () => getOrgAssets(id), enabled });
-  const { data: remediation } = useQuery({ queryKey: ["platform-org-remediation", id], queryFn: () => getOrgRemediation(id), enabled });
+  // The customer's own data (users, devices, history, assets) follows their support-access
+  // window, like view-as. A refusal here is that, not an outage — no retries, and say so.
+  const { data: users, error: usersError } = useQuery({ queryKey: ["platform-org-users", id], queryFn: () => getOrgUsers(id), enabled, retry: false });
+  const { data: devices } = useQuery({ queryKey: ["platform-org-devices", id], queryFn: () => getOrgDevices(id), enabled, retry: false });
+  const { data: assets } = useQuery({ queryKey: ["platform-org-assets", id], queryFn: () => getOrgAssets(id), enabled, retry: false });
+  const { data: remediation } = useQuery({ queryKey: ["platform-org-remediation", id], queryFn: () => getOrgRemediation(id), enabled, retry: false });
+  const dataLocked = (usersError as { response?: { status?: number } } | null)?.response?.status === 403;
 
   async function viewAs() {
     if (!org) return;
-    const { access_token } = await createViewToken(id);
+    let access_token: string;
+    try {
+      ({ access_token } = await createViewToken(id));
+    } catch (e) {
+      // Refused unless the customer opened support access. Offer to ask them.
+      const reason = window.prompt(
+        `${apiErrorMessage(e, "Can't open this organization.")}\n\nAsk their admins for access? Say why:`);
+      if (reason && reason.trim().length >= 3) {
+        await requestSupportAccess(id, reason.trim());
+        window.alert("Request sent. Their admins have been notified.");
+      }
+      return;
+    }
     queryClient.clear();
     enterViewAs(access_token, { id, name: org.name });
     router.push("/dashboard");
@@ -419,7 +434,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "users" && (
+          {tab === "users" && dataLocked && <LockedNotice />}
+          {tab === "users" && !dataLocked && (
             <>
         {/* Users */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -457,7 +473,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "devices" && (
+          {tab === "devices" && dataLocked && <LockedNotice />}
+          {tab === "devices" && !dataLocked && (
             <>
         {/* Devices */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -504,7 +521,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "healing" && (
+          {tab === "healing" && dataLocked && <LockedNotice />}
+          {tab === "healing" && !dataLocked && (
             <>
         {/* Self-healing history — what went wrong and what was applied */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -544,7 +562,8 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
             </>
           )}
 
-          {tab === "assets" && (
+          {tab === "assets" && dataLocked && <LockedNotice />}
+          {tab === "assets" && !dataLocked && (
             <>
         {/* Assets */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -585,6 +604,15 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function LockedNotice() {
+  return (
+    <div className="rounded-xl p-5 text-sm" style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+      Hidden until the customer opens support access (Settings → Support access). Counts are on the Overview tab;
+      &ldquo;View full portal&rdquo; above offers to ask them.
     </div>
   );
 }

@@ -32,6 +32,10 @@ public sealed class SystemRemediationExecutor
             // that one, while this service runs as LocalSystem and can address any of them
             // by id — which is the entire point on a machine with more than one user on it.
             "lock_session", "logoff_session", "message_session", "reset_local_password",
+            // Provisioning (A1): a new local account, agent-generated one-time password.
+            "create_local_user", "set_local_admin",
+            // Software push (A2): one catalog package, machine-wide, via winget.
+            "install_package",
         };
 
     public (bool Success, string Output) Execute(
@@ -77,6 +81,12 @@ public sealed class SystemRemediationExecutor
                 // The password is generated on the device and returned once — see
                 // LocalPasswordReset for why the portal never sends one.
                 "reset_local_password" => LocalPasswordReset.Reset(GetParam(parameters, "username")),
+                "install_package" => PackageInstaller.Install(GetParam(parameters, "package_id")),
+                "set_local_admin" => LocalAccountManager.SetAdmin(
+                    GetParam(parameters, "username"), GetParam(parameters, "make_admin")),
+                "create_local_user" => LocalAccountCreator.Create(
+                    GetParam(parameters, "username"), GetParam(parameters, "full_name"),
+                    GetParam(parameters, "make_admin")),
                 _ => (false,
                     $"Action '{actionId}' is not a system-context action supported by the "
                     + "elevated service."),

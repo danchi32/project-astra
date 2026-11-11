@@ -67,7 +67,9 @@ async def test_reports_rollup(client, session_factory):
 
 async def test_audit_feed_records_operator_actions(client, session_factory):
     headers = await _operator(client, session_factory, org="Aud Co", email="op@aud.com")
-    await _register_org(client, session_factory, "Aud Cust", "a@audcust.com")
+    cust = await _register_org(client, session_factory, "Aud Cust", "a@audcust.com")
+    await client.put("/api/v1/settings/support-access", json={"hours": 1},
+                     headers={"Authorization": f"Bearer {cust.json()['access_token']}"})
     # Do an audited platform action: mint a view-as token for a customer org.
     orgs = (await client.get("/api/v1/platform/organizations", headers=headers)).json()["items"]
     org_id = next(o["id"] for o in orgs if o["name"] == "Aud Cust")
@@ -95,7 +97,9 @@ async def test_console_endpoints_require_platform_admin(client, session_factory)
 
 async def test_me_reports_view_as_mode(client, session_factory):
     headers = await _operator(client, session_factory, org="Me Co", email="op@meco.com")
-    await _register_org(client, session_factory, "Me Cust", "a@mecust.com")
+    cust = await _register_org(client, session_factory, "Me Cust", "a@mecust.com")
+    await client.put("/api/v1/settings/support-access", json={"hours": 24},
+                     headers={"Authorization": f"Bearer {cust.json()['access_token']}"})
     me = (await client.get("/api/v1/auth/me", headers=headers)).json()
     assert me["view_as"] is False
 

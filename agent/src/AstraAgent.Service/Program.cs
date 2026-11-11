@@ -41,6 +41,7 @@ builder.Services.AddSingleton<IMemoryCollector, MemoryCollector>();
 builder.Services.AddSingleton<IDiskCollector, DiskCollector>();
 builder.Services.AddSingleton<IEventLogCollector, EventLogCollector>();
 builder.Services.AddSingleton<IInstalledAppsCollector, InstalledAppsCollector>();
+builder.Services.AddSingleton<ILicensingCollector, LicensingCollector>();
 builder.Services.AddSingleton<IServicesCollector, ServicesCollector>();
 builder.Services.AddSingleton<IWindowsUpdateCollector, WindowsUpdateCollector>();
 builder.Services.AddSingleton<IHardwareCollector, HardwareCollector>();
@@ -61,6 +62,11 @@ builder.Services.AddSingleton<AstraAgent.Service.Remediation.ISystemTaskRunner,
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
 builder.Services.AddHostedService<UpdateWorker>();
+// Offline self-heal (B1) and the Tray's "Fix my internet" (B2) share one doctor, so the
+// two can never run network fixes at the same time.
+builder.Services.AddSingleton<AstraAgent.Service.Net.NetworkDoctor>();
+builder.Services.AddHostedService<NetworkHealthWorker>();
+builder.Services.AddHostedService<NetworkFixPipeServer>();
 
 var host = builder.Build();
 

@@ -37,7 +37,12 @@ export const createOrganizationAsAdmin = (data: {
   admin_password: string;
 }) => apiClient.post<OrganizationAdmin>("/platform/organizations", data).then((r) => r.data);
 
+// Ask an org's admins to open SAVIO support access (notifies them; audited in their log).
+export const requestSupportAccess = (id: string, reason: string) =>
+  apiClient.post(`/platform/organizations/${id}/support-access-request`, { reason }).then(() => undefined);
+
 // Mint a read-only token to browse an org's full portal, then enter view-as mode.
+// Refused (409) unless the customer has opened support access from their Settings.
 export const createViewToken = (id: string) =>
   apiClient
     .post<{ access_token: string; org_id: string; org_name: string }>(`/platform/organizations/${id}/view-token`)

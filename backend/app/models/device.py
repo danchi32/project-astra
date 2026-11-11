@@ -43,6 +43,8 @@ class Device(TimestampMixin, Base):
     cpu_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     total_ram_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_storage_gb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bios_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bios_release_date: Mapped[str | None] = mapped_column(String(10), nullable=True)  # yyyy-mm-dd
 
     # Fingerprints of the last inventory the agent sent, one per collection.
     #

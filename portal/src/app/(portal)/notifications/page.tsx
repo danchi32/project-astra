@@ -111,7 +111,7 @@ export default function NotificationsPage() {
           <div>
             <h1 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>Notifications</h1>
             <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-              Alerts from remediation approvals and failures across your fleet
+              Device health alerts — including early warnings like a disk filling up — plus remediation approvals and failures
             </p>
           </div>
         </div>

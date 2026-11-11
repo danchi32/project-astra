@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import deny_view_as, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.schemas.devices import (
@@ -17,6 +17,7 @@ from app.schemas.devices import (
     InstallerRead,
 )
 from app.schemas.telemetry import (
+    DeviceLocalAccountRead,
     DeviceEventLogRead,
     DeviceInstalledAppRead,
     DeviceServiceRead,
@@ -40,6 +41,7 @@ admin_required = require_roles(UserRole.ADMIN)
 )
 async def get_installer(
     actor: User = Depends(admin_required),
+    _: User = Depends(deny_view_as),
     session: AsyncSession = Depends(get_db),
 ) -> InstallerRead:
     return await DeviceService(session).get_installer(actor=actor)
@@ -277,6 +279,21 @@ async def get_device_events(
     device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
     rows = await TelemetryRepository(session).get_event_logs(device.id)
     return [DeviceEventLogRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/{device_id}/local-accounts",
+    response_model=list[DeviceLocalAccountRead],
+    summary="Local Windows accounts on a device, with admin and enabled state",
+)
+async def get_device_local_accounts(
+    device_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[DeviceLocalAccountRead]:
+    device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
+    rows = await TelemetryRepository(session).get_local_accounts(device.id)
+    return [DeviceLocalAccountRead.model_validate(r) for r in rows]
 
 
 @router.get(

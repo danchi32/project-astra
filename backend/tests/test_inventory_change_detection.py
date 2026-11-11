@@ -118,3 +118,51 @@ async def test_first_push_after_upgrade_writes(client, admin_headers, session_fa
             select(func.count()).select_from(DeviceService).where(DeviceService.device_id == d.id)
         )).scalar_one()
     assert count == 2
+
+
+async def _apps(session_factory):
+    async with session_factory() as s:
+        return (await s.execute(
+            select(DeviceInstalledApp.name, DeviceInstalledApp.scope, DeviceInstalledApp.user_name)
+        )).all()
+
+
+async def test_pre_014_agent_apps_are_machine_scope(client, admin_headers, session_factory):
+    """Older agents send neither scope nor user_name; that must still ingest, as machine-wide."""
+    token = await _enroll(client, admin_headers)
+    await _ingest(client, token, _push(apps=APP_A))
+    assert await _apps(session_factory) == [("Chrome", "machine", None)]
+
+
+async def test_per_user_installs_are_kept_per_person(client, admin_headers, session_factory):
+    """The same app installed for two people is two installs, and a machine-wide copy is a
+    third — uninstalling one leaves the others, so none may be collapsed into another."""
+    token = await _enroll(client, admin_headers)
+    apps = [
+        {"name": "ChatGPT", "version": "1.0", "publisher": "OpenAI", "scope": "user", "user_name": "ACME\asha"},
+        {"name": "ChatGPT", "version": "1.0", "publisher": "OpenAI", "scope": "user", "user_name": "ACME\ravi"},
+        {"name": "Chrome", "version": "120.0", "publisher": "Google", "scope": "machine"},
+    ]
+    await _ingest(client, token, _push(apps=apps))
+    assert sorted(await _apps(session_factory)) == [
+        ("ChatGPT", "user", "ACME\asha"),
+        ("ChatGPT", "user", "ACME\ravi"),
+        ("Chrome", "machine", None),
+    ]
+
+
+async def test_new_user_install_counts_as_a_change(client, admin_headers, session_factory):
+    """A second person installing the same app must not be skipped as 'unchanged'."""
+    token = await _enroll(client, admin_headers)
+    one = [{"name": "Zoom", "version": "6.0", "publisher": "Zoom", "scope": "user", "user_name": "ACME\asha"}]
+    await _ingest(client, token, _push(apps=one))
+    two = one + [dict(one[0], user_name="ACME\ravi")]
+    await _ingest(client, token, _push(apps=two))
+    assert len(await _apps(session_factory)) == 2
+
+
+async def test_unknown_scope_is_rejected(client, admin_headers):
+    token = await _enroll(client, admin_headers)
+    r = await client.post("/api/v1/agent/telemetry", json=_push(apps=[dict(APP_A[0], scope="global")]),
+                          headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 422

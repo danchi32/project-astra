@@ -11,6 +11,8 @@ from app.models.telemetry import (
     UPDATE_INSTALLED,
     DeviceEventLog,
     DeviceInstalledApp,
+    DeviceLicensing,
+    DeviceLocalAccount,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetryDailyRollup,
@@ -170,6 +172,36 @@ class TelemetryRepository:
             )
         )
         return result.scalar_one()
+
+    # ── Licensing ──────────────────────────────────────────────────────────
+
+    async def replace_licensing(
+        self, device_id: uuid.UUID, entries: list[DeviceLicensing]
+    ) -> None:
+        await self.session.execute(
+            delete(DeviceLicensing).where(DeviceLicensing.device_id == device_id)
+        )
+        self.session.add_all(entries)
+        await self.session.flush()
+
+    # ── Local accounts ─────────────────────────────────────────────────────
+
+    async def replace_local_accounts(
+        self, device_id: uuid.UUID, entries: list[DeviceLocalAccount]
+    ) -> None:
+        await self.session.execute(
+            delete(DeviceLocalAccount).where(DeviceLocalAccount.device_id == device_id)
+        )
+        self.session.add_all(entries)
+        await self.session.flush()
+
+    async def get_local_accounts(self, device_id: uuid.UUID) -> list[DeviceLocalAccount]:
+        result = await self.session.execute(
+            select(DeviceLocalAccount)
+            .where(DeviceLocalAccount.device_id == device_id)
+            .order_by(DeviceLocalAccount.built_in, DeviceLocalAccount.name)
+        )
+        return list(result.scalars().all())
 
     # ── Installed apps ─────────────────────────────────────────────────────
 

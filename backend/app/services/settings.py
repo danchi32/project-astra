@@ -74,6 +74,7 @@ class SettingsService:
 
         for field in (
             "auto_approve_automatic",
+            "email_critical_alerts",
             "require_admin_for_approval_tier",
             "min_password_length",
             "enrollment_token_default_days",
@@ -152,6 +153,7 @@ class SettingsService:
         return OrganizationSettingsRead(
             org_name=org_name,
             auto_approve_automatic=settings.auto_approve_automatic,
+            email_critical_alerts=settings.email_critical_alerts,
             require_admin_for_approval_tier=settings.require_admin_for_approval_tier,
             min_password_length=settings.min_password_length,
             enrollment_token_default_days=settings.enrollment_token_default_days,

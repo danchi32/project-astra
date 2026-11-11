@@ -202,6 +202,15 @@ export interface OrganizationAdmin {
    *  entitlement over-reports (a trial/Expert plan grants it by default), so the operator's
    *  remote-control toggle reflects this, not `entitlements.includes("remote_control")`. */
   remote_control_active: boolean;
+  /** Until when the customer lets SAVIO support view their portal; null = not granted. */
+  support_access_until?: string | null;
+  is_demo?: boolean;
+}
+
+/** Whether SAVIO support may currently open a read-only view of this organization. */
+export interface SupportAccess {
+  active: boolean;
+  until: string | null;
 }
 
 export interface PlatformOverview {
@@ -514,6 +523,9 @@ export interface Device {
   cpu_name: string | null;
   total_ram_mb: number | null;
   total_storage_gb: number | null;
+  // Agent 0.14+; null before that.
+  bios_version?: string | null;
+  bios_release_date?: string | null;
   installed_app_count: number;
 }
 
@@ -542,6 +554,20 @@ export interface DeviceInstalledApp {
   version: string | null;
   publisher: string | null;
   install_date: string | null;
+  /** "machine" = installed for everyone; "user" = installed into one person's profile. */
+  scope: "machine" | "user";
+  /** The profile's account for a "user" install, e.g. ACME\asha. */
+  user_name: string | null;
+}
+
+/** A local Windows account on a device (agent 0.14+). */
+export interface DeviceLocalAccount {
+  name: string;
+  full_name: string | null;
+  enabled: boolean;
+  is_admin: boolean;
+  built_in: boolean;
+  collected_at: string;
 }
 
 export interface DeviceServiceRow {
@@ -836,6 +862,8 @@ export interface Installer {
 export interface OrganizationSettings {
   org_name: string;
   auto_approve_automatic: boolean;
+  /** Email admins when a critical early-warning alert turns on (in-app alerts always happen). */
+  email_critical_alerts?: boolean;
   require_admin_for_approval_tier: boolean;
   min_password_length: number;
   enrollment_token_default_days: number;

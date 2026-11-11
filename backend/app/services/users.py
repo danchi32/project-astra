@@ -9,6 +9,7 @@ from app.repositories.users import UserRepository
 from app.schemas.users import UserCreate, UserUpdate
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.personal_data import PersonalDataService
 from app.services.settings import SettingsService
 
 
@@ -102,14 +103,8 @@ class UserService:
         user = await self.get_user(actor=actor, user_id=user_id)
         if user.id == actor.id:
             raise ConflictError("You cannot delete your own account")
-        email = user.email
-        await self.users.delete(user)
-        await self.audit.record(
-            org_id=actor.org_id,
-            actor_id=actor.id,
-            action="user.delete",
-            target_type="user",
-            target_id=str(user_id),
-            detail={"email": email},
-        )
-        await self.session.commit()
+        if user.is_platform_admin:
+            raise ConflictError("A platform operator account can't be deleted from here")
+        # Not a bare row delete: that left the email in the audit log and assets pointing at a
+        # dead id. Same account-side clean-up as a Z2 erase (Record of Processing, G10).
+        await PersonalDataService(self.session).delete_account(actor, user)

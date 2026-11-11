@@ -1,14 +1,18 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import deny_view_as, require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.repositories.users import UserRepository
 from app.schemas.pagination import DEFAULT_PAGE_SIZE, Page, build, clamp
 from app.schemas.users import UserCreate, UserRead, UserUpdate
+from app.services.personal_data import PersonalDataService
 from app.services.users import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -76,3 +80,50 @@ async def delete_user(
     session: AsyncSession = Depends(get_db),
 ) -> None:
     await UserService(session).delete_user(actor=actor, user_id=user_id)
+
+
+# --- Z2: one person's data — what we hold, export it, erase it --------------------------------
+# Admin only. The Windows usernames are the admin's confirmation of who this person is on the
+# computers (SAVIO does not link the two by itself); `candidates` suggests them.
+
+
+class PersonalDataErase(BaseModel):
+    windows_usernames: list[str] = Field(default_factory=list, max_length=20)
+    confirm_email: str = Field(min_length=3, max_length=320)
+
+
+@router.get("/{user_id}/personal-data", summary="What SAVIO holds about this person (dry run of an erase)")
+async def personal_data_summary(
+    user_id: uuid.UUID,
+    windows_username: list[str] = Query(default_factory=list, max_length=20),
+    actor: User = Depends(admin_required),
+    _: User = Depends(deny_view_as),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    svc = PersonalDataService(session)
+    out = await svc.summary(actor, user_id, windows_username)
+    out["windows_username_candidates"] = await svc.candidates(actor, user_id)
+    return out
+
+
+@router.get("/{user_id}/personal-data/export", summary="Download everything SAVIO holds about this person")
+async def personal_data_export(
+    user_id: uuid.UUID,
+    windows_username: list[str] = Query(default_factory=list, max_length=20),
+    actor: User = Depends(admin_required),
+    _: User = Depends(deny_view_as),
+    session: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    data = await PersonalDataService(session).export(actor, user_id, windows_username)
+    return JSONResponse(jsonable_encoder(data), headers={
+        "Content-Disposition": f'attachment; filename="personal-data-{user_id}.json"'})
+
+
+@router.post("/{user_id}/personal-data/erase", summary="Erase this person (audit entries are pseudonymised)")
+async def personal_data_erase(
+    user_id: uuid.UUID,
+    body: PersonalDataErase,
+    actor: User = Depends(admin_required),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    return await PersonalDataService(session).erase(actor, user_id, body.windows_usernames, body.confirm_email)

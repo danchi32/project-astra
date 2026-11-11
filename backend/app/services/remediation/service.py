@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -18,7 +19,7 @@ from app.models import (
     User,
     UserRole,
 )
-from app.models.base import utcnow
+from app.models.base import as_utc, utcnow
 from app.repositories.devices import DeviceRepository
 
 settings = get_settings()
@@ -39,6 +40,34 @@ from app.services.remediation.actions import (
 
 
 logger = logging.getLogger(__name__)
+
+
+#: Results that carry a one-time password the agent generated (LocalAccountCreator /
+#: LocalPasswordReset). Shown only to an admin of the org, never under view-as or in the
+#: platform console or a personal-data export, and only for a day: the person must change
+#: it at first sign-in, so after that the line has no business being on anyone's screen.
+_AUDITED_PARAMS = ("username", "make_admin", "package_id", "kb_article_id", "session_id")
+_SECRET_LINE = re.compile(r"(?im)^(One-time password|Temporary password):.*$")
+SECRET_RESULT_TTL = timedelta(hours=24)
+
+
+def redact_result(task: Any, reader: Any | None) -> dict | None:
+    """`task.result` as `reader` may see it. `reader=None` means "nobody may see secrets"."""
+    result = task.result
+    if not result or not isinstance(result.get("output"), str) or not _SECRET_LINE.search(result["output"]):
+        return result
+    may_see = (
+        reader is not None
+        and reader.role is UserRole.ADMIN
+        and not getattr(reader, "_view_as", False)
+        and reader.org_id == task.org_id
+        and task.completed_at is not None
+        and utcnow() - as_utc(task.completed_at) < SECRET_RESULT_TTL
+    )
+    if may_see:
+        return result
+    return {**result, "output": _SECRET_LINE.sub(
+        lambda m: f"{m.group(1)}: [hidden - shown only to an admin, for 24 hours]", result["output"])}
 
 
 class RemediationError(ServiceError):
@@ -147,6 +176,25 @@ def _validate_username(value: Any) -> str:
         raise RemediationError(
             f"'{value}' is not a valid local Windows account name."
         )
+    return name
+
+
+def _validate_new_username(value: Any) -> str:
+    """A name for a NEW local account. Stricter than _validate_username: Windows caps local
+    (SAM) account names at 20 characters, and a "DOMAIN\\name" here is a mistake to refuse,
+    not a prefix to strip — this creates a local account, never a domain one."""
+    raw = str(value or "").strip()
+    if "\\" in raw or len(raw) > 20:
+        raise RemediationError(
+            f"'{value}' can't be a local account name: up to 20 characters, no domain prefix."
+        )
+    return _validate_username(raw)
+
+
+def _validate_full_name(value: Any) -> str:
+    name = str(value or "").strip()
+    if len(name) > 100 or any(ord(c) < 32 for c in name) or any(c in name for c in '"<>'):
+        raise RemediationError("Full name must be up to 100 printable characters.")
     return name
 
 
@@ -408,6 +456,7 @@ class RemediationService:
         actor_user_id: uuid.UUID | None,
         conversation_id: uuid.UUID | None = None,
         approver: User | None = None,
+        deployment_id: uuid.UUID | None = None,
     ) -> RemediationTask:
         """Queue a remediation.
 
@@ -424,6 +473,11 @@ class RemediationService:
         action = get_action(action_id)
         if action is None:
             raise RemediationError(f"Unknown remediation action '{action_id}'.")
+        # Second layer under the AI tool's own refusal: whatever path reaches here, the model
+        # never creates an operator_only task (CLAUDE.md: withheld "whatever its tier"). An
+        # admin_only proposal is allowed here — it only ever waits for an admin's approval.
+        if source is RemediationSource.ASSISTANT and action.operator_only:
+            raise RemediationError(f"'{action_id}' can only be started by a person.")
         params = self._validate_params(action_id, params)
         # Checked here rather than in _validate_params because the answer depends on the
         # organization's own policy list, which is a database read, not a constant.
@@ -511,6 +565,7 @@ class RemediationService:
                 requested_by_user_id=actor_user_id,
                 conversation_id=conversation_id,
                 approved_by_user_id=approver.id if approver is not None else None,
+                deployment_id=deployment_id,
             )
         )
         await self.audit.record(
@@ -520,7 +575,11 @@ class RemediationService:
             target_type="remediation_task",
             target_id=str(task.id),
             detail={"action": action_id, "tier": action.tier.value, "status": status.value,
-                    "device": device.hostname, "source": source.value},
+                    "device": device.hostname, "source": source.value,
+                    # Which account / package, so "who made whom an admin" is answerable from
+                    # the log alone. Only these keys: nothing else in params is guaranteed
+                    # free of personal text.
+                    **{k: params[k] for k in _AUDITED_PARAMS if k in params}},
         )
         # Record the approval as its own audit entry so "who cleared this" is answerable
         # from the log alone, exactly as it is when someone approves from the queue.
@@ -630,7 +689,24 @@ class RemediationService:
         if "kb_article_id" in action.params and params.get("kb_article_id"):
             params["kb_article_id"] = _validate_kb_article_id(params["kb_article_id"])
         if "username" in action.params:
-            params["username"] = _validate_username(params.get("username"))
+            params["username"] = (_validate_new_username if action_id == "create_local_user"
+                                  else _validate_username)(params.get("username"))
+        if "package_id" in action.params:
+            from app.services.software_catalog import CATALOG
+
+            if not isinstance(params.get("package_id"), str) or params["package_id"] not in CATALOG:
+                raise RemediationError(
+                    f"'{params.get('package_id')}' is not in SAVIO's software catalog."
+                )
+        if "full_name" in action.params:
+            params["full_name"] = _validate_full_name(params.get("full_name"))
+        if "make_admin" in action.params:
+            # The agent's params are a string->string map, so a JSON boolean would fail to
+            # deserialize there. Normalise to exactly "true"/"false" here.
+            flag = params.get("make_admin", False)
+            if flag not in (True, False, "true", "false", None):
+                raise RemediationError("make_admin must be true or false.")
+            params["make_admin"] = "true" if flag in (True, "true") else "false"
         if "session_id" in action.params:
             params["session_id"] = _validate_session_id(params.get("session_id"))
         if "message" in action.params:

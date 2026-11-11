@@ -12,6 +12,7 @@ from app.core.security import decode_access_token, hash_opaque_token
 from app.models import Device, Organization, User, UserRole
 from app.repositories.devices import DeviceRepository
 from app.repositories.users import UserRepository
+from app.services.support_access import window_open
 from app.services.subscription import (
     device_refused_recently,
     org_is_writable,
@@ -67,6 +68,14 @@ async def get_current_user(
             target = uuid.UUID(view_as)
         except (ValueError, TypeError):
             raise _credentials_error
+        # The customer can close the window at any time; that has to end an open session on
+        # its next request, not whenever the token happens to expire.
+        org = await session.get(Organization, target)
+        if org is None or not window_open(org):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Support access to this organization has ended.",
+            )
         session.expunge(user)          # detached: the org_id override can never persist
         user.org_id = target
         user.role = UserRole.ADMIN     # full read access within the viewed org
@@ -211,6 +220,18 @@ def requires(feature: str):
         return user
 
     return dependency
+
+
+async def deny_view_as(user: User = Depends(get_current_user)) -> User:
+    """For GETs that hand out a credential (the enrollment key) or bulk personal data. View-as
+    blocks writes, but a read of a permanent secret outlives the support window it was taken
+    in: the customer can close the window, not un-read a key."""
+    if getattr(user, "_view_as", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not available while viewing as an organization.",
+        )
+    return user
 
 
 def require_roles(*roles: UserRole):

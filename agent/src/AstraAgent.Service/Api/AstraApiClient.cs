@@ -36,6 +36,7 @@ public interface IAstraApiClient
     Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct);
     Task<HeartbeatResult> HeartbeatAsync(string deviceToken, HeartbeatRequest request, CancellationToken ct);
     Task<bool> PushTelemetryAsync(string deviceToken, TelemetryPush payload, CancellationToken ct);
+    Task<bool> PushOfflineEventsAsync(string deviceToken, IReadOnlyList<Net.JournalEntry> entries, CancellationToken ct);
 
     /// <summary>Ask the backend for the current signed update manifest. Returns null on any
     /// transport error; an envelope with Available=false means no channel is configured.</summary>
@@ -82,6 +83,28 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         if (!response.IsSuccessStatusCode)
             logger.LogWarning("Telemetry push failed with status {Status}", response.StatusCode);
         return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>B1 — what the offline self-heal did while SAVIO was unreachable, for the audit log.</summary>
+    public async Task<bool> PushOfflineEventsAsync(
+        string deviceToken, IReadOnlyList<Net.JournalEntry> entries, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/offline-events")
+        {
+            Content = JsonContent.Create(new { events = entries.Select(e => new
+            {
+                at = e.At, trigger = e.Trigger, diagnosis = e.Diagnosis, step = e.Step,
+                step_ok = e.StepOk, output = e.Output, fixed_after = e.FixedAfter,
+            }) }),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException) { return false; }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested) { return false; }
     }
 
     public async Task<UpdateEnvelope?> GetUpdateAsync(string deviceToken, CancellationToken ct)

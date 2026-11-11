@@ -16,6 +16,7 @@ public sealed class TelemetryWorker(
     IDiskCollector disk,
     IEventLogCollector events,
     IInstalledAppsCollector apps,
+    ILicensingCollector licensing,
     IServicesCollector services,
     IWindowsUpdateCollector updates,
     IHardwareCollector hardware,
@@ -99,7 +100,7 @@ public sealed class TelemetryWorker(
             Hardware: collectInventory ? ToHardware(hardware.GetHardwareInfo()) : null,
             EventLogs: eventList.Select(e => new TelemetryEventLogEntry(e.LogName, e.Source, e.EventId, e.Level, e.Message, e.OccurredAt)).ToList(),
             InstalledApps: collectInventory
-                ? apps.GetInstalledApps().Select(a => new TelemetryInstalledApp(a.Name, a.Version, a.Publisher, a.InstallDate)).ToList()
+                ? apps.GetInstalledApps().Select(a => new TelemetryInstalledApp(a.Name, a.Version, a.Publisher, a.InstallDate, a.Scope, a.UserName)).ToList()
                 : [],
             Services: collectInventory
                 ? services.GetServices().Select(s => new TelemetryServiceEntry(s.Name, s.DisplayName, s.Status, s.StartType)).ToList()
@@ -116,7 +117,15 @@ public sealed class TelemetryWorker(
             Sessions: sessionList.Select(x => new TelemetrySessionEntry(
                 x.SessionId, x.Username, x.State, x.Connection,
                 x.Station, x.ClientName, x.LogonAt, x.IdleSeconds)).ToList(),
-            Activity: activityList);
+            Activity: activityList,
+            Licensing: collectInventory
+                ? licensing.GetProducts()?.Select(l => new TelemetryLicensingProduct(
+                    l.Kind, l.Name, l.Description, l.LicenseStatus, l.Channel, l.KmsHost)).ToList()
+                : null,
+            LocalAccounts: collectInventory
+                ? Remediation.LocalAccountManager.List()?.Select(a => new TelemetryLocalAccount(
+                    a.Name, a.FullName, a.Enabled, a.IsAdmin, a.BuiltIn)).ToList()
+                : null);
 
         var pushed = await api.PushTelemetryAsync(token, payload, ct);
         if (pushed && collectInventory)
@@ -129,5 +138,6 @@ public sealed class TelemetryWorker(
     }
 
     private static TelemetryHardware ToHardware(HardwareInfo h) =>
-        new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb);
+        new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb,
+            h.SerialNumber, h.BiosVersion, h.BiosReleaseDate);
 }

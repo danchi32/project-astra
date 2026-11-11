@@ -56,6 +56,7 @@ actions:
     - windows_update_install
     - lock_session
     - message_session
+    - install_package
 
   admin_only:          # only an admin may approve
     - reset_windows_update_components
@@ -66,6 +67,8 @@ actions:
     - unblock_usb_storage
     - logoff_session
     - reset_local_password
+    - create_local_user
+    - set_local_admin
 
   # Withheld from the reasoning engine whatever their tier. These act on a PERSON rather
   # than a fault, and no telemetry can establish that someone should be interrupted. Never
@@ -73,6 +76,12 @@ actions:
   withheld_from_ai:
     - lock_session
     - message_session
+    # Provisioning, not repair: a new account is a new way into the machine, and no
+    # telemetry can establish that one should exist. A human asks for it.
+    - create_local_user
+    - set_local_admin
+    # Software appears on a PC because a person decided it should.
+    - install_package
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Capabilities. Each one names the file that makes it true.

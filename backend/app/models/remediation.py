@@ -61,6 +61,10 @@ class RemediationTask(TimestampMixin, Base):
     # When the AI proposed this from a device chat, the conversation to post the
     # execution result back into ("✅ done" / "⚠️ couldn't complete").
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True, index=True)
+    # Set when this task is one device's share of a multi-device push (A4).
+    deployment_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("deployments.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

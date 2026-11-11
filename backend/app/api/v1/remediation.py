@@ -18,6 +18,7 @@ from app.services.remediation.service import (
     AlreadyQueuedError,
     RemediationError,
     RemediationService,
+    redact_result,
 )
 
 router = APIRouter(prefix="/remediations", tags=["remediation"])
@@ -25,8 +26,9 @@ router = APIRouter(prefix="/remediations", tags=["remediation"])
 staff_required = require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)
 
 
-def _enrich(task, hostname_by_id: dict) -> RemediationTaskRead:
+def _enrich(task, hostname_by_id: dict, reader: User | None = None) -> RemediationTaskRead:
     read = RemediationTaskRead.model_validate(task)
+    read.result = redact_result(task, reader)
     read.device_hostname = hostname_by_id.get(task.device_id)
     action = ACTIONS.get(task.action_id)
     read.action_label = action.label if action else task.action_id
@@ -69,7 +71,7 @@ async def list_tasks(
     hostname_by_id = await DeviceRepository(session).hostnames_for(
         actor.org_id, {r.device_id for r in rows}
     )
-    return build([_enrich(t, hostname_by_id) for t in rows], total, page, page_size)
+    return build([_enrich(t, hostname_by_id, actor) for t in rows], total, page, page_size)
 
 
 @router.get("/summary", response_model=dict[str, int], summary="Task counts by status")
