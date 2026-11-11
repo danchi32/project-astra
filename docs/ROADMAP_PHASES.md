@@ -330,6 +330,17 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   day-7 email with the report link (existing Resend).
 - Done when: a seeded org renders a credible report; every number traces to a query; the
   page prints cleanly in light theme.
+- As built (11 Nov): `app/services/health_check.py` + `GET /reports/health-check` (admin and
+  technician; outside the AUDIT_EXPORT-gated reports router, so every plan and the trial get
+  it). Sections: score and counts, findings worst-first with machines named and an
+  owner-facing "what to do", disks the N1 forecast says fill within a week, PCs over 4 years
+  (purchase date, else BIOS date), warranty ending in 90 days, software (distinct apps,
+  per-user installs, desktop AI tools by word match). Portal `/reports/health-check`, linked
+  from Reports — including when Reports itself is behind an upgrade; "Download PDF" is
+  `window.print()`, and the portal chrome is `print:hidden`. **No "₹ at risk" lines** — none
+  could show its arithmetic from data we hold, so the report is counts only. Checked on
+  Postgres with a seeded 4-PC fleet, on screen and with the print rules applied. Not done:
+  the day-7 email (needs the Phase 2.0 scheduler decision) and the website CTA.
 
 ### 1f — Release
 - 🔒 `security-reviewer` on A1, A2, B2 and E1 together before the tag.

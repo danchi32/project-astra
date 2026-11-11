@@ -1,7 +1,8 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Download, HardDrive, Wrench, Package, X } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, Download, HardDrive, Wrench, Package, X, ShieldCheck } from "lucide-react";
 import {
   getFleetHealthReport, getRemediationReport, getAssetReport,
   exportFleetHealthCsv, exportRemediationCsv, exportAssetsCsv,
@@ -492,6 +493,19 @@ function ErrorBanner({ text }: { text: string }) {
   );
 }
 
+// L1: the health check is free on every plan, so it is offered even where the rest of
+// Reports is behind an upgrade.
+function HealthCheckLink() {
+  return (
+    <Link href="/reports/health-check"
+      className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm"
+      style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+      <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
+      <span><strong>IT Health Check</strong> — a one-page, printable report of what SAVIO found on your computers</span>
+    </Link>
+  );
+}
+
 export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>("fleet");
 
@@ -506,7 +520,7 @@ export default function ReportsPage() {
     retry: (count, err) => !isUpgradeRequired(err) && count < 2,
   });
   if (isUpgradeRequired(error)) {
-    return <UpgradeRequired feature={requiredFeature(error)} />;
+    return <div className="space-y-6"><HealthCheckLink /><UpgradeRequired feature={requiredFeature(error)} /></div>;
   }
 
   return (
@@ -522,6 +536,8 @@ export default function ReportsPage() {
           </p>
         </div>
       </div>
+
+      <HealthCheckLink />
 
       <div className="flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
         {TABS.map(({ key, label, icon: Icon }) => (
