@@ -261,6 +261,13 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   in telemetry so the portal greys out devices that can't install.
 - Done when: Chrome installs on the Win11 VM; the no-winget VM reports "winget not
   available" instead of failing silently; an ID outside the catalog is refused by the backend.
+- As built (11 Nov): catalog is a server-side constant (`app/services/software_catalog.py`,
+  19 apps; WhatsApp left out — Store-only, per-user). Editing it from the portal is later.
+  Live test as SYSTEM on a real laptop: winget found in WindowsApps, run as SYSTEM, catalog
+  lookup works ("couldn't find" for an unknown id) — but the 7-Zip download (GitHub
+  releases) timed out, from the user's own session too: that network blocks GitHub
+  downloads. Error 0x80072EE2 now reads as a blocked download. A full successful install is
+  still to be shown (Chrome's dl.google.com is reachable there).
 
 **A4 · Push to chosen devices + per-device status**
 - New `deployments` table (who, action, params, target summary, created_at) and

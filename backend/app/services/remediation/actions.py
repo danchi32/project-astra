@@ -286,6 +286,15 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "name, and for names Windows can't use. Admin approval only.",
                       params=("username", "full_name", "make_admin"), execution_context="system",
                       operator_only=True),
+    # Software push (A2). Installs one package from the server-side catalog
+    # (app/services/software_catalog.py) machine-wide with winget. Approval-required: it
+    # changes what runs on the machine. Withheld from the AI — software appears on a PC
+    # because a person decided it should.
+    RemediationAction("install_package", "Install software", RemediationTier.APPROVAL_REQUIRED,
+                      "Installs one application from SAVIO's software catalog for every user of "
+                      "this PC (winget, machine-wide, silent). Only catalog packages are "
+                      "accepted. Needs technician or admin approval.",
+                      params=("package_id",), execution_context="system", operator_only=True),
     RemediationAction("set_local_admin", "Make administrator / standard user",
                       RemediationTier.ADMIN_ONLY,
                       "Adds a LOCAL account to this PC's Administrators group, or removes it so "

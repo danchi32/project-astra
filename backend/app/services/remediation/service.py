@@ -427,6 +427,7 @@ class RemediationService:
         actor_user_id: uuid.UUID | None,
         conversation_id: uuid.UUID | None = None,
         approver: User | None = None,
+        deployment_id: uuid.UUID | None = None,
     ) -> RemediationTask:
         """Queue a remediation.
 
@@ -530,6 +531,7 @@ class RemediationService:
                 requested_by_user_id=actor_user_id,
                 conversation_id=conversation_id,
                 approved_by_user_id=approver.id if approver is not None else None,
+                deployment_id=deployment_id,
             )
         )
         await self.audit.record(
@@ -651,6 +653,13 @@ class RemediationService:
         if "username" in action.params:
             params["username"] = (_validate_new_username if action_id == "create_local_user"
                                   else _validate_username)(params.get("username"))
+        if "package_id" in action.params:
+            from app.services.software_catalog import CATALOG
+
+            if params.get("package_id") not in CATALOG:
+                raise RemediationError(
+                    f"'{params.get('package_id')}' is not in SAVIO's software catalog."
+                )
         if "full_name" in action.params:
             params["full_name"] = _validate_full_name(params.get("full_name"))
         if "make_admin" in action.params:
