@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import uuid
 from collections.abc import Sequence
 from typing import Any
@@ -24,8 +25,11 @@ from app.schemas.telemetry import DashboardSummary, TelemetryPush
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
 from app.services.exceptions import NotFoundError
+from app.services.alerts import AlertService, email_critical_alerts
 from app.services.hardware import clean_serial, clean_text
 from app.services.workforce import WorkforceAggregator
+
+log = logging.getLogger(__name__)
 
 
 def _fingerprint(items: Sequence[Any], fields: tuple[str, ...]) -> str:
@@ -285,7 +289,18 @@ class TelemetryService:
                 device=device, events=data.activity
             )
 
+        # Early-warning alerts (N1). In a savepoint and fenced off: a bug in alerting must
+        # never cost the device its telemetry.
+        fired = []
+        try:
+            async with self.session.begin_nested():
+                fired = await AlertService(self.session).evaluate(device=device, data=data)
+        except Exception:
+            log.exception("alert evaluation failed for device %s", device.id)
+
         await self.session.commit()
+        if fired:
+            await email_critical_alerts(self.session, device.org_id, fired)
 
     async def get_dashboard_summary(self, *, actor: User) -> DashboardSummary:
         org_devices = await self.devices.list_by_org(actor.org_id)

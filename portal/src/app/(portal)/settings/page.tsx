@@ -273,6 +273,7 @@ function OrganizationTab() {
     if (data) setForm({
       org_name: data.org_name,
       auto_approve_automatic: data.auto_approve_automatic,
+      email_critical_alerts: data.email_critical_alerts,
       require_admin_for_approval_tier: data.require_admin_for_approval_tier,
       min_password_length: data.min_password_length,
       enrollment_token_default_days: data.enrollment_token_default_days,
@@ -323,6 +324,18 @@ function OrganizationTab() {
             </p>
           </div>
           <Toggle on={!!form.require_admin_for_approval_tier} onChange={(v) => setForm({ ...form, require_admin_for_approval_tier: v })} />
+        </div>
+      </Panel>
+
+      <Panel title="Alerts" description="SAVIO raises an alert when a device turns unhealthy — or is about to, like a disk that will fill up within a week.">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Email admins about critical alerts</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+              Defender or firewall off, a disk nearly full or filling fast, cracked activation. Alerts always appear under Notifications; this adds an email.
+            </p>
+          </div>
+          <Toggle on={form.email_critical_alerts !== false} onChange={(v) => setForm({ ...form, email_critical_alerts: v })} />
         </div>
       </Panel>
 

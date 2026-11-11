@@ -216,6 +216,14 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
 - Done when: forcing the VM's disk to fill over simulated daily rollups raises "full in ~N
   days" once (not repeatedly); stopping Defender raises one alert and one "recovered" on
   restart; a flat disk never alerts.
+- As built (10 Nov): `app/services/alerts.py` + `alert_states` (migration 0076). Checks run
+  only when the push carries their data, so an inventory-less push can't "resolve" an
+  inventory alert. Disk alert has hysteresis (on below 10 %, off only above 12 %). Forecast
+  is least squares over ≤14 daily rollups, needs ≥5 points, ignores slopes under
+  0.05 %/day, and compares the ROUNDED day count ("about 7 days" warns — found a float
+  7.000000000001 miss in testing). Alerting runs in a savepoint after the ingest work and
+  can never lose telemetry; critical emails go out after the commit, best-effort.
+  Settings → Organization → Alerts toggles the email (default on).
 
 ### 1c — Actions
 

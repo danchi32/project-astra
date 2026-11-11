@@ -852,6 +852,8 @@ export interface Installer {
 export interface OrganizationSettings {
   org_name: string;
   auto_approve_automatic: boolean;
+  /** Email admins when a critical early-warning alert turns on (in-app alerts always happen). */
+  email_critical_alerts?: boolean;
   require_admin_for_approval_tier: boolean;
   min_password_length: number;
   enrollment_token_default_days: number;

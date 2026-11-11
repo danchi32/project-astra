@@ -13,6 +13,7 @@ class OrganizationSettingsRead(BaseModel):
 
     org_name: str
     auto_approve_automatic: bool
+    email_critical_alerts: bool = True
     require_admin_for_approval_tier: bool
     min_password_length: int
     enrollment_token_default_days: int
@@ -24,6 +25,7 @@ class OrganizationSettingsUpdate(BaseModel):
 
     org_name: str | None = Field(default=None, min_length=1, max_length=200)
     auto_approve_automatic: bool | None = None
+    email_critical_alerts: bool | None = None
     require_admin_for_approval_tier: bool | None = None
     min_password_length: int | None = Field(default=None, ge=PASSWORD_FLOOR, le=128)
     enrollment_token_default_days: int | None = Field(default=None, ge=1, le=90)

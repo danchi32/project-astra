@@ -1,3 +1,4 @@
+from app.models.alert_state import AlertState
 from app.models.asset import AcknowledgementStatus, Asset, AssetCategory, AssetStatus
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.assistant import Assistant, AssistantVersion, AssistantVersionStatus
@@ -83,6 +84,7 @@ from app.models.workforce import (
 
 __all__ = [
     "AcknowledgementStatus",
+    "AlertState",
     "Asset",
     "AssetCategory",
     "AssetEvent",
