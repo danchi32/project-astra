@@ -17,6 +17,7 @@ from app.schemas.devices import (
     InstallerRead,
 )
 from app.schemas.telemetry import (
+    DeviceLocalAccountRead,
     DeviceEventLogRead,
     DeviceInstalledAppRead,
     DeviceServiceRead,
@@ -277,6 +278,21 @@ async def get_device_events(
     device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
     rows = await TelemetryRepository(session).get_event_logs(device.id)
     return [DeviceEventLogRead.model_validate(r) for r in rows]
+
+
+@router.get(
+    "/{device_id}/local-accounts",
+    response_model=list[DeviceLocalAccountRead],
+    summary="Local Windows accounts on a device, with admin and enabled state",
+)
+async def get_device_local_accounts(
+    device_id: uuid.UUID,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> list[DeviceLocalAccountRead]:
+    device = await DeviceService(session).get_device(actor=actor, device_id=device_id)
+    rows = await TelemetryRepository(session).get_local_accounts(device.id)
+    return [DeviceLocalAccountRead.model_validate(r) for r in rows]
 
 
 @router.get(

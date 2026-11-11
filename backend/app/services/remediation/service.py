@@ -150,6 +150,25 @@ def _validate_username(value: Any) -> str:
     return name
 
 
+def _validate_new_username(value: Any) -> str:
+    """A name for a NEW local account. Stricter than _validate_username: Windows caps local
+    (SAM) account names at 20 characters, and a "DOMAIN\\name" here is a mistake to refuse,
+    not a prefix to strip — this creates a local account, never a domain one."""
+    raw = str(value or "").strip()
+    if "\\" in raw or len(raw) > 20:
+        raise RemediationError(
+            f"'{value}' can't be a local account name: up to 20 characters, no domain prefix."
+        )
+    return _validate_username(raw)
+
+
+def _validate_full_name(value: Any) -> str:
+    name = str(value or "").strip()
+    if len(name) > 100 or any(ord(c) < 32 for c in name) or any(c in name for c in '"<>'):
+        raise RemediationError("Full name must be up to 100 printable characters.")
+    return name
+
+
 def _validate_session_id(value: Any) -> str:
     """Windows' own session id, carried as a string like every other parameter.
 
@@ -630,7 +649,17 @@ class RemediationService:
         if "kb_article_id" in action.params and params.get("kb_article_id"):
             params["kb_article_id"] = _validate_kb_article_id(params["kb_article_id"])
         if "username" in action.params:
-            params["username"] = _validate_username(params.get("username"))
+            params["username"] = (_validate_new_username if action_id == "create_local_user"
+                                  else _validate_username)(params.get("username"))
+        if "full_name" in action.params:
+            params["full_name"] = _validate_full_name(params.get("full_name"))
+        if "make_admin" in action.params:
+            # The agent's params are a string->string map, so a JSON boolean would fail to
+            # deserialize there. Normalise to exactly "true"/"false" here.
+            flag = params.get("make_admin", False)
+            if flag not in (True, False, "true", "false", None):
+                raise RemediationError("make_admin must be true or false.")
+            params["make_admin"] = "true" if flag in (True, "true") else "false"
         if "session_id" in action.params:
             params["session_id"] = _validate_session_id(params.get("session_id"))
         if "message" in action.params:

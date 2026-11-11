@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import type {
   DeviceEventLog,
   DeviceInstalledApp,
+  DeviceLocalAccount,
   DeviceServiceRow,
   DeviceWindowsUpdate,
   TelemetrySnapshot,
@@ -23,3 +24,6 @@ export const getDeviceServices = (deviceId: string) =>
 
 export const getDeviceUpdates = (deviceId: string) =>
   apiClient.get<DeviceWindowsUpdate[]>(`/devices/${deviceId}/updates`).then((r) => r.data);
+
+export const getDeviceLocalAccounts = (deviceId: string) =>
+  apiClient.get<DeviceLocalAccount[]>(`/devices/${deviceId}/local-accounts`).then((r) => r.data);

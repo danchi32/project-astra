@@ -3,9 +3,9 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench, Check, Minus, Usb } from "lucide-react";
+import { ChevronLeft, Monitor, UserX, Trash2, DownloadCloud, Pencil, X, User, MapPin, Cpu, ShieldCheck, AlertTriangle, Wrench, Check, Minus, Usb, UserPlus } from "lucide-react";
 import { getDevice, deleteDevice } from "@/lib/api/devices";
-import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates } from "@/lib/api/device-detail";
+import { getDeviceTelemetry, getDeviceEvents, getDeviceApps, getDeviceServices, getDeviceUpdates, getDeviceLocalAccounts } from "@/lib/api/device-detail";
 import { getAssetForDevice, updateAsset, createAsset, getAssetPassport, resendAcknowledgement } from "@/lib/api/assets";
 import { getDeviceCompliance } from "@/lib/api/compliance";
 import { listDeviceSessions } from "@/lib/api/sessions";
@@ -140,13 +140,14 @@ function suggestFixes(sources: string[]): Fix[] {
   return FIXES.filter((f) => wanted.has(fixTag(f)));
 }
 
-type Tab = "overview" | "telemetry" | "events" | "compliance" | "sessions" | "software" | "services" | "updates" | "assignment" | "history";
+type Tab = "overview" | "telemetry" | "events" | "compliance" | "sessions" | "users" | "software" | "services" | "updates" | "assignment" | "history";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "telemetry", label: "Telemetry" },
   { key: "events", label: "Health" },
   { key: "compliance", label: "Compliance" },
   { key: "sessions", label: "Sessions" },
+  { key: "users", label: "Users" },
   { key: "software", label: "Software" },
   { key: "services", label: "Services" },
   { key: "updates", label: "Windows Updates" },
@@ -231,10 +232,17 @@ export default function DeviceDetailPage() {
   const [lockMsg, setLockMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [usbMsg, setUsbMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // New local user (A1). The agent generates the one-time password; the portal never sends one.
+  const [newUserOpen, setNewUserOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ username: "", full_name: "", make_admin: false });
+  const [newUserMsg, setNewUserMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [usersMsg, setUsersMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   const { data: device, isLoading } = useQuery({ queryKey: ["device", id], queryFn: () => getDevice(id) });
   const { data: telemetry } = useQuery({ queryKey: ["telemetry", id], queryFn: () => getDeviceTelemetry(id), refetchInterval: 30_000 });
   const { data: events } = useQuery({ queryKey: ["dev-events", id], queryFn: () => getDeviceEvents(id), enabled: tab === "events" });
   const { data: compliance } = useQuery({ queryKey: ["dev-compliance", id], queryFn: () => getDeviceCompliance(id), enabled: tab === "compliance" });
+  const { data: localAccounts } = useQuery({ queryKey: ["dev-local-accounts", id], queryFn: () => getDeviceLocalAccounts(id), enabled: tab === "users" });
   const { data: apps } = useQuery({ queryKey: ["dev-apps", id], queryFn: () => getDeviceApps(id), enabled: tab === "software" });
   // Who is signed in on THIS machine. Refetched while the tab is open, because unlike the
   // inventory tabs beside it this one is describing something that changes minute to minute.
@@ -474,6 +482,54 @@ export default function DeviceDetailPage() {
     } finally { setBusy(false); }
   }
 
+  async function runCreateUser() {
+    if (!device) return;
+    const username = newUser.username.trim();
+    if (!/^[A-Za-z0-9](?:[A-Za-z0-9 ._-]{0,18}[A-Za-z0-9.])?$/.test(username)) {
+      setNewUserMsg({ ok: false, text: "Up to 20 letters, digits, spaces, '.', '_' or '-' — no domain prefix." });
+      return;
+    }
+    setBusy(true); setNewUserMsg(null);
+    try {
+      await createRemediation({
+        device_id: device.id,
+        action_id: "create_local_user",
+        params: { username, full_name: newUser.full_name.trim(), make_admin: newUser.make_admin ? "true" : "false" },
+        reason: `Create local account "${username}"${newUser.make_admin ? " (Administrator)" : ""}`,
+        approve: true,   // the admin clicking IS the approver
+      });
+      setNewUserMsg({ ok: true, text:
+        `Creating "${username}" on ${device.hostname}. The one-time password appears in the task result `
+        + "under Self-Healing once the device runs it — share it once; they must change it at first sign-in." });
+    } catch (err) {
+      setNewUserMsg({ ok: false, text: apiErrorMessage(err, "Couldn't queue it. The device may be offline, or you may lack permission.") });
+    } finally { setBusy(false); }
+  }
+
+  // Users tab: enable/disable (existing offboarding actions) and admin <-> standard user.
+  async function runAccountAction(name: string, action: "enable" | "disable" | "admin" | "standard") {
+    if (!device) return;
+    const label = { enable: "Re-enable", disable: "Disable and sign out", admin: "Make administrator",
+                    standard: "Make standard user" }[action];
+    if (!confirm(`${label}: "${name}" on ${device.hostname}?`)) return;
+    setBusy(true); setUsersMsg(null);
+    try {
+      await createRemediation({
+        device_id: device.id,
+        action_id: action === "enable" ? "enable_local_account"
+          : action === "disable" ? "disable_local_account" : "set_local_admin",
+        params: action === "admin" || action === "standard"
+          ? { username: name, make_admin: action === "admin" ? "true" : "false" }
+          : { username: name },
+        reason: `${label} local account "${name}" (Users tab)`,
+        approve: true,   // the admin clicking IS the approver
+      });
+      setUsersMsg({ ok: true, text: `${label} "${name}" queued on ${device.hostname}. The list refreshes with the next hourly inventory; track it under Self-Healing.` });
+    } catch (err) {
+      setUsersMsg({ ok: false, text: apiErrorMessage(err, "Couldn't queue it. The device may be offline, or you may lack permission.") });
+    } finally { setBusy(false); }
+  }
+
   // USB mass storage: block or allow pen drives and portable disks on this device. Elevated
   // and admin-only, so it goes through the same create-and-approve path as offboarding.
   async function runUsb(block: boolean) {
@@ -556,6 +612,10 @@ export default function DeviceDetailPage() {
               <button onClick={() => runUsb(false)} disabled={busy} title="Allow USB storage again"
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}><Usb size={15} /> Allow USB</button>
+              <button onClick={() => { setNewUser({ username: "", full_name: "", make_admin: false }); setNewUserMsg(null); setNewUserOpen(true); }}
+                disabled={busy} title="Create a local Windows account on this device"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}><UserPlus size={15} /> New user</button>
               <button onClick={openLock} disabled={busy} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
                 style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "#d97706" }}><UserX size={15} /> Lock down</button>
               <button onClick={remove} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
@@ -920,6 +980,60 @@ export default function DeviceDetailPage() {
             </div>);
           })()}
 
+          {tab === "users" && (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  Local Windows accounts on this PC. Domain/Entra users are managed in AD/Entra.
+                  {isAdmin && " Changes are admin-only and audited."}
+                </p>
+                {isAdmin && (
+                  <button onClick={() => { setNewUser({ username: "", full_name: "", make_admin: false }); setNewUserMsg(null); setNewUserOpen(true); }}
+                    disabled={busy} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 shrink-0"
+                    style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                    <UserPlus size={12} /> New user
+                  </button>
+                )}
+              </div>
+              {usersMsg && <p className="text-xs" style={{ color: usersMsg.ok ? "#10b981" : "#ef4444" }}>{usersMsg.text}</p>}
+              <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                {["Account", "Role", "Status"].map((h) => <th key={h} className="text-left py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
+                {isAdmin && <th />}
+              </tr></thead><tbody>
+                {(localAccounts ?? []).map((a) => (
+                  <tr key={a.name} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td className="py-2" style={{ color: "var(--text-primary)" }}>
+                      {a.name}
+                      {a.full_name && a.full_name !== a.name && <span className="text-xs ml-1.5" style={{ color: "var(--text-secondary)" }}>{a.full_name}</span>}
+                      {a.built_in && <span className="text-xs ml-1.5" style={{ color: "var(--text-secondary)" }}>· built-in</span>}
+                    </td>
+                    <td className="py-2" style={{ color: a.is_admin ? "#d97706" : "var(--text-secondary)" }}>{a.is_admin ? "Administrator" : "Standard user"}</td>
+                    <td className="py-2" style={{ color: a.enabled ? "#10b981" : "var(--text-secondary)" }}>{a.enabled ? "Enabled" : "Disabled"}</td>
+                    {isAdmin && <td className="py-2 text-right whitespace-nowrap">
+                      {a.built_in ? (
+                        <span className="text-xs" title="Built-in Windows accounts are never changed by SAVIO" style={{ color: "var(--text-secondary)" }}>Protected</span>
+                      ) : (<>
+                        <button onClick={() => runAccountAction(a.name, a.is_admin ? "standard" : "admin")} disabled={busy}
+                          className="px-2 py-1 rounded-lg text-xs font-medium disabled:opacity-40 mr-1.5"
+                          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                          {a.is_admin ? "Make standard" : "Make admin"}
+                        </button>
+                        <button onClick={() => runAccountAction(a.name, a.enabled ? "disable" : "enable")} disabled={busy}
+                          className="px-2 py-1 rounded-lg text-xs font-medium disabled:opacity-40"
+                          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: a.enabled ? "#ef4444" : "var(--text-primary)" }}>
+                          {a.enabled ? "Disable" : "Enable"}
+                        </button>
+                      </>)}
+                    </td>}
+                  </tr>
+                ))}
+                {!localAccounts?.length && <tr><td colSpan={isAdmin ? 4 : 3} className="py-6 text-center" style={{ color: "var(--text-secondary)" }}>
+                  No accounts reported yet — this needs agent 0.14 or newer, and arrives with the hourly inventory.
+                </td></tr>}
+              </tbody></table>
+            </div>
+          )}
+
           {tab === "services" && (
             <table className="w-full text-sm"><thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
               {["Display name", "Status", "Startup"].map((h) => <th key={h} className="text-left py-2 text-xs uppercase" style={{ color: "var(--text-secondary)" }}>{h}</th>)}
@@ -1124,6 +1238,57 @@ export default function DeviceDetailPage() {
                 className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
                 style={{ background: "#dc2626" }}>
                 {busy ? "Working…" : "Disable & sign out"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New local user (A1) */}
+      {newUserOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => !busy && setNewUserOpen(false)}>
+          <div className="w-full max-w-md rounded-xl p-5" onClick={(e) => e.stopPropagation()}
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg" style={{ background: "rgba(37,99,235,0.12)", color: "#2563eb" }}><UserPlus size={18} /></div>
+                <div>
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>New local user — {device.hostname}</h2>
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>A Windows account on this PC, with a one-time password.</p>
+                </div>
+              </div>
+              <button onClick={() => !busy && setNewUserOpen(false)} style={{ color: "var(--text-secondary)" }}><X size={16} /></button>
+            </div>
+
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Username</label>
+            <input value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+              placeholder="e.g. asha.sharma" maxLength={20}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 mb-3"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Full name (optional)</label>
+            <input value={newUser.full_name} onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+              placeholder="e.g. Asha Sharma" maxLength={100}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500 mb-3"
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
+            <label className="flex items-center gap-2 text-sm mb-3" style={{ color: "var(--text-primary)" }}>
+              <input type="checkbox" checked={newUser.make_admin}
+                onChange={(e) => setNewUser({ ...newUser, make_admin: e.target.checked })} />
+              Make this user an Administrator on this PC
+            </label>
+
+            <div className="rounded-lg p-3 text-xs mb-3 space-y-1" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+              <p>SAVIO generates the password on the device — you never type one. It appears once in the task result, and the person must change it at first sign-in.</p>
+              <p>Local accounts only; domain/Entra users are created in AD/Entra. Refused if the name already exists.</p>
+            </div>
+
+            {newUserMsg && <p className="text-xs mb-3" style={{ color: newUserMsg.ok ? "#10b981" : "#ef4444" }}>{newUserMsg.text}</p>}
+
+            <div className="flex justify-end">
+              <button onClick={runCreateUser} disabled={busy || !newUser.username.trim()}
+                className="px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                style={{ background: "#2563eb" }}>
+                {busy ? "Working…" : "Create user"}
               </button>
             </div>
           </div>

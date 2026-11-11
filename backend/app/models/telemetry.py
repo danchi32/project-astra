@@ -207,3 +207,22 @@ class DeviceLicensing(TimestampMixin, Base):
     channel: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Retail, OEM_DM, Volume:GVLK…
     kms_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DeviceLocalAccount(TimestampMixin, Base):
+    """Local Windows accounts on a device (agent 0.14+, hourly): who can sign in, and who is a
+    local administrator. Replaced as a set on each report."""
+
+    __tablename__ = "device_local_accounts"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    enabled: Mapped[bool] = mapped_column(nullable=False)
+    is_admin: Mapped[bool] = mapped_column(nullable=False)
+    built_in: Mapped[bool] = mapped_column(nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

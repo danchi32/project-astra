@@ -157,7 +157,17 @@ public sealed record TelemetryPush(
     [property: JsonPropertyName("activity")] IReadOnlyList<TelemetryActivityEvent>? Activity = null,
     // Windows/Office activation, with the hourly inventory. Null on the pushes in between and
     // when SPP couldn't be read — the backend keeps what it has; older backends ignore it.
-    [property: JsonPropertyName("licensing")] IReadOnlyList<TelemetryLicensingProduct>? Licensing = null);
+    [property: JsonPropertyName("licensing")] IReadOnlyList<TelemetryLicensingProduct>? Licensing = null,
+    // Local Windows accounts, with the hourly inventory. Null between inventories and when WMI
+    // couldn't be read — the backend keeps what it has.
+    [property: JsonPropertyName("local_accounts")] IReadOnlyList<TelemetryLocalAccount>? LocalAccounts = null);
+
+public sealed record TelemetryLocalAccount(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("full_name")] string? FullName,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("is_admin")] bool IsAdmin,
+    [property: JsonPropertyName("built_in")] bool BuiltIn);
 
 public sealed record TelemetryLicensingProduct(
     [property: JsonPropertyName("kind")] string Kind,

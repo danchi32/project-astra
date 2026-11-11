@@ -14,6 +14,7 @@ from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
     DeviceLicensing,
+    DeviceLocalAccount,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetrySnapshot,
@@ -242,6 +243,14 @@ class TelemetryService:
                     for lic in data.licensing
                 ],
             )
+
+        if data.local_accounts is not None:
+            await self.repo.replace_local_accounts(device.id, [
+                DeviceLocalAccount(device_id=device.id, org_id=device.org_id, name=a.name,
+                                   full_name=a.full_name, enabled=a.enabled, is_admin=a.is_admin,
+                                   built_in=a.built_in, collected_at=now)
+                for a in data.local_accounts
+            ])
 
         # Sessions. `is not None` rather than a truthiness test, because an empty list is a
         # real answer here — "nobody is signed in" — and every other collection above uses

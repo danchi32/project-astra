@@ -121,6 +121,10 @@ public sealed class TelemetryWorker(
             Licensing: collectInventory
                 ? licensing.GetProducts()?.Select(l => new TelemetryLicensingProduct(
                     l.Kind, l.Name, l.Description, l.LicenseStatus, l.Channel, l.KmsHost)).ToList()
+                : null,
+            LocalAccounts: collectInventory
+                ? Remediation.LocalAccountManager.List()?.Select(a => new TelemetryLocalAccount(
+                    a.Name, a.FullName, a.Enabled, a.IsAdmin, a.BuiltIn)).ToList()
                 : null);
 
         var pushed = await api.PushTelemetryAsync(token, payload, ct);

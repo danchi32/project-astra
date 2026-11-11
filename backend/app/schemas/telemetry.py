@@ -73,6 +73,14 @@ class LicensingEntry(_SanitizedInput):
     kms_host: str | None = Field(default=None, max_length=255)
 
 
+class LocalAccountEntry(_SanitizedInput):
+    name: str = Field(max_length=100)
+    full_name: str | None = Field(default=None, max_length=200)
+    enabled: bool
+    is_admin: bool
+    built_in: bool = False
+
+
 class ServiceEntry(_SanitizedInput):
     name: str = Field(max_length=200)
     display_name: str = Field(max_length=300)
@@ -202,6 +210,10 @@ class TelemetryPush(_SanitizedInput):
     # push (or an agent older than 0.14): keep the stored rows. A list replaces them.
     licensing: list[LicensingEntry] | None = None
 
+    # Local Windows accounts, hourly. None = not collected on this push (or an older agent):
+    # keep the stored rows. A list replaces them.
+    local_accounts: list[LocalAccountEntry] | None = None
+
 
 class TelemetryPushResponse(BaseModel):
     status: str = "accepted"
@@ -296,3 +308,14 @@ class DashboardSummary(BaseModel):
     avg_ram_percent: float
     critical_event_count: int
     pending_update_count: int
+
+
+class DeviceLocalAccountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    full_name: str | None
+    enabled: bool
+    is_admin: bool
+    built_in: bool
+    collected_at: datetime

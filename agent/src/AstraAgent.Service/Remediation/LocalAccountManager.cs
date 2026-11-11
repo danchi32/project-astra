@@ -53,22 +53,21 @@ public static class LocalAccountManager
         if (!enable)
         {
             // Force the user out of any live session now (the disable alone only blocks the NEXT
-            // sign-in). Match the target first; if they can't be matched but exactly one real
-            // interactive user is signed in, log that session off too — on an offboarded endpoint
-            // that is the person being removed.
+            // sign-in). Sessions are matched by the account's SID, from each session's own token,
+            // so only THIS account's sessions are ever signed out.
+            //
+            // There used to be a fallback: if the target wasn't found in a session but exactly
+            // one other person was signed in, that person was signed out too ("on an offboarded
+            // endpoint that is the person being removed"). With the Users tab any account can be
+            // disabled — a spare or second account — and the fallback would then sign out
+            // whoever happened to be working at the machine. SID matching makes the guess
+            // unnecessary, so it is gone.
             var (loggedOff, sessions) = ForceLogoff(sid);
             string signedOut;
             if (loggedOff > 0)
                 signedOut = $"signed {name} out of {loggedOff} live session(s)";
-            else if (sessions.Count == 1)
-            {
-                signedOut = WTSLogoffSession(IntPtr.Zero, sessions[0].SessionId, false)
-                    ? $"signed out the active session ({sessions[0].User})"
-                    : "couldn't sign out the active session (a reboot will complete it)";
-            }
-            else if (sessions.Count > 1)
-                signedOut = $"{name} was not in an active session ({sessions.Count} other users are "
-                          + "signed in — left untouched; reboot to fully clear)";
+            else if (sessions.Count > 0)
+                signedOut = $"{name} was not signed in ({sessions.Count} other session(s) left untouched)";
             else
                 signedOut = "no one was signed in";
             return (true, $"Local account '{name}' disabled — {signedOut}. The password is unchanged; "
@@ -76,6 +75,95 @@ public static class LocalAccountManager
         }
         return (true, $"Local account '{name}' re-enabled — the user can sign in again with their "
                     + "existing password.");
+    }
+
+    /// <summary>One local account as the device page shows it.</summary>
+    public sealed record LocalAccountInfo(string Name, string? FullName, bool Enabled, bool IsAdmin, bool BuiltIn);
+
+    /// <summary>Every LOCAL account on this machine, with whether it is enabled and a direct
+    /// member of Administrators. Null when WMI can't be read — the backend then keeps what it
+    /// had rather than concluding the machine has no users.</summary>
+    public static IReadOnlyList<LocalAccountInfo>? List()
+    {
+        try
+        {
+            var admins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var group = AdminGroupName();
+            if (group is not null)
+            {
+                using var grp = new ManagementObject(
+                    $"Win32_Group.Domain='{Environment.MachineName}',Name='{group}'");
+                foreach (ManagementObject m in grp.GetRelated("Win32_UserAccount"))
+                    admins.Add((string)(m["SID"] ?? string.Empty));
+            }
+
+            var result = new List<LocalAccountInfo>();
+            using var s = new ManagementObjectSearcher(
+                "SELECT Name, FullName, Disabled, SID FROM Win32_UserAccount WHERE LocalAccount=True");
+            foreach (ManagementObject u in s.Get())
+            {
+                var sid = (string)(u["SID"] ?? string.Empty);
+                var rid = sid.Contains('-') ? sid[(sid.LastIndexOf('-') + 1)..] : string.Empty;
+                var full = ((string?)u["FullName"])?.Trim();
+                result.Add(new LocalAccountInfo(
+                    (string)(u["Name"] ?? string.Empty),
+                    string.IsNullOrEmpty(full) ? null : full,
+                    !(bool)(u["Disabled"] ?? false),
+                    admins.Contains(sid),
+                    ProtectedRids.Contains(rid)));
+            }
+            return result;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Makes a local account an administrator, or a standard user again.
+    ///
+    /// Same guardrails as <see cref="SetEnabled"/>: local accounts only, never a built-in one,
+    /// and never the change that would leave the machine with no enabled administrator.</summary>
+    public static (bool, string) SetAdmin(string? username, string? makeAdmin)
+    {
+        var name = (username ?? string.Empty).Trim();
+        if (!NameOk.IsMatch(name))
+            return (false, $"'{name}' is not a valid local account name.");
+        var promote = string.Equals(makeAdmin, "true", StringComparison.OrdinalIgnoreCase);
+
+        var target = FindLocalUser(name);
+        if (target is null)
+            return (false, $"'{name}' is not a local account on this machine. Domain/Entra accounts "
+                         + "get admin rights through AD / Intune, not the agent.");
+        var (sid, _) = target.Value;
+        var rid = sid.Contains('-') ? sid[(sid.LastIndexOf('-') + 1)..] : string.Empty;
+        if (ProtectedRids.Contains(rid))
+            return (false, $"'{name}' is a built-in Windows account and cannot be changed.");
+
+        if (!promote)
+        {
+            var refusal = LastAdminGuard(sid);
+            if (refusal is not null)
+                return (false, refusal.Replace("disabling it", "making it a standard user"));
+        }
+
+        var ok = promote
+            ? LocalAccountCreator.AddToGroup(LocalAccountCreator.AdministratorsSid, name)
+            : LocalAccountCreator.RemoveFromGroup(LocalAccountCreator.AdministratorsSid, name);
+        if (!ok)
+            return (false, $"Windows refused to {(promote ? "add" : "remove")} '{name}' "
+                         + $"{(promote ? "to" : "from")} Administrators.");
+        return (true, promote
+            ? $"'{name}' is now an administrator on this PC. It applies at their next sign-in."
+            : $"'{name}' is now a standard user on this PC. It applies at their next sign-in.");
+    }
+
+    private static string? AdminGroupName()
+    {
+        using var gs = new ManagementObjectSearcher(
+            "SELECT Name FROM Win32_Group WHERE LocalAccount=True AND SID='S-1-5-32-544'");
+        foreach (ManagementObject g in gs.Get()) return (string)g["Name"];
+        return null;
     }
 
     private static (string Sid, bool Disabled)? FindLocalUser(string name)

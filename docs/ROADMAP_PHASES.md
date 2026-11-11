@@ -238,6 +238,16 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
 - Portal: device page → "Create local user" form; shows the one-time password once.
 - Done when: user created on the VM, forced to change password, admin only when asked;
   duplicate name refused with a clear message; AI cannot propose it.
+- As built (11 Nov), extended on the user's request with a device **Users** tab: the agent
+  reports local accounts hourly (`device_local_accounts`, migration 0077) and a new
+  `set_local_admin` action (admin-only, elevated, withheld from AI) makes an account an
+  administrator or a standard user — refusing built-ins and the change that would leave no
+  enabled admin. Enable/disable reuse the existing actions. **Fixed in passing:** disabling an
+  account that wasn't signed in used to sign out whoever WAS (the single-session fallback);
+  with any account now disable-able from the tab that would log out the person at the desk,
+  so only the target's own sessions (matched by SID) are ever signed out.
+  Live-tested on a real Windows 11 laptop (elevated): create, duplicate refused, admin ⇄
+  standard, disable ⇄ enable, built-in refused, list — then the test account was deleted.
 
 **A2 · Software catalog (winget)** 🔒
 - Data: `software_catalog` (global, curated by us: winget ID, display name, publisher,

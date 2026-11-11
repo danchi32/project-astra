@@ -560,6 +560,16 @@ export interface DeviceInstalledApp {
   user_name: string | null;
 }
 
+/** A local Windows account on a device (agent 0.14+). */
+export interface DeviceLocalAccount {
+  name: string;
+  full_name: string | null;
+  enabled: boolean;
+  is_admin: boolean;
+  built_in: boolean;
+  collected_at: string;
+}
+
 export interface DeviceServiceRow {
   id: string;
   name: string;

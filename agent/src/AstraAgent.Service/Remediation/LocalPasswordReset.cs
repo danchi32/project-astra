@@ -128,7 +128,7 @@ public static class LocalPasswordReset
 
     private static char Pick(string set) => set[RandomNumberGenerator.GetInt32(set.Length)];
 
-    private static bool ForceChangeAtNextLogon(string name)
+    internal static bool ForceChangeAtNextLogon(string name)
     {
         try
         {

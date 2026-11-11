@@ -275,6 +275,25 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "keyboard to answer the prompt. Send a message first if anyone might be "
                       "there. Admin approval only.",
                       params=("session_id",), execution_context="system"),
+    # Provisioning, not repair: it makes a new way into the machine. Admin-only, elevated,
+    # and withheld from the AI — no telemetry can establish that a new account should exist.
+    # The agent generates the password (the portal never sends one) and the account must
+    # change it at first sign-in, exactly as reset_local_password does.
+    RemediationAction("create_local_user", "Create a local user", RemediationTier.ADMIN_ONLY,
+                      "Creates a new LOCAL Windows account on this machine with a one-time "
+                      "password the person must change at first sign-in. Optionally a member "
+                      "of Administrators. Refused on a domain controller, for an existing "
+                      "name, and for names Windows can't use. Admin approval only.",
+                      params=("username", "full_name", "make_admin"), execution_context="system",
+                      operator_only=True),
+    RemediationAction("set_local_admin", "Make administrator / standard user",
+                      RemediationTier.ADMIN_ONLY,
+                      "Adds a LOCAL account to this PC's Administrators group, or removes it so "
+                      "the person is a standard user. Takes effect at their next sign-in. "
+                      "Refused for built-in accounts, domain/Entra accounts, and for the change "
+                      "that would leave no enabled administrator. Admin approval only.",
+                      params=("username", "make_admin"), execution_context="system",
+                      operator_only=True),
     RemediationAction("reset_local_password", "Reset a local password",
                       RemediationTier.ADMIN_ONLY,
                       "Sets a new random password on a LOCAL Windows account and requires the "
