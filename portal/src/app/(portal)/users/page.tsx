@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Users as UsersIcon, Plus, Trash2, Upload } from "lucide-react";
+import { Users as UsersIcon, Plus, Trash2, Upload, FileLock2 } from "lucide-react";
+import { PersonalDataModal } from "@/components/personal-data-modal";
 import { listUsers, createUser, updateUser, deleteUser } from "@/lib/api/users";
 import { ScrollPanel, pageShell, stickyHeadCell } from "@/components/scroll-panel";
 import { Pagination } from "@/components/pagination";
@@ -84,6 +85,8 @@ export default function UsersPage() {
     await updateUser(id, { is_active });
     await queryClient.invalidateQueries({ queryKey: ["users"] });
   }
+
+  const [dataFor, setDataFor] = useState<string | null>(null);
 
   async function remove(id: string) {
     await deleteUser(id);
@@ -266,6 +269,10 @@ export default function UsersPage() {
                           style={{ background: "var(--bg)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
                           {u.is_active ? "Disable" : "Enable"}
                         </button>
+                        <button onClick={() => setDataFor(u.id)} title="Personal data — export or erase"
+                          className="p-1 rounded-lg" style={{ color: "var(--text-secondary)" }}>
+                          <FileLock2 size={14} />
+                        </button>
                         <button onClick={() => remove(u.id)} title="Delete"
                           className="p-1 rounded-lg hover:bg-red-500/10 hover:text-red-500" style={{ color: "var(--text-secondary)" }}>
                           <Trash2 size={14} />
@@ -278,6 +285,7 @@ export default function UsersPage() {
             </tbody>
           </table>
       </ScrollPanel>
+      {dataFor && <PersonalDataModal userId={dataFor} onClose={() => setDataFor(null)} />}
     </div>
   );
 }

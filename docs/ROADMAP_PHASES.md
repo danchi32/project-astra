@@ -343,7 +343,7 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   the day-7 email (needs the Phase 2.0 scheduler decision) and the website CTA.
 
 ### 1f — Release
-- 🔒 `security-reviewer` on A1, A2, B2 and E1 together before the tag.
+- 🔒 `security-reviewer` on A1, A2, B2, E1 and Z2 (erase deletes data) together before the tag.
 - QA pass on both VMs; release notes; bump to 0.14.0; tag `agent-v0.14.0`; rebuild installers.
 - Update help centre: Software page, Create user, Fix my internet, Support Access.
 
@@ -374,6 +374,21 @@ Also: list who at Technomate can reach the production database, and keep that ac
   `test_india_log_sink.py` pins region, retention floor and the catch-all filter. Not
   locked — waits for Z6. Neon and relay logs are outside this bucket (noted in the incident
   policy §7).
+- Z2 as built (11 Nov): what existed was only `DELETE /users/{id}` (hard delete, cascades
+  chats, writes the email into the audit log) — no export, no pseudonymisation. Added
+  `app/services/personal_data.py` and, admin only, `GET /users/{id}/personal-data` (dry-run
+  counts + suggested Windows usernames), `…/export` (JSON file, audited) and `POST …/erase`
+  (typed-email confirm; not yourself, not a platform operator). A person = the portal user
+  **plus the Windows usernames the admin ticks** — Tracker is keyed by `DOMAIN\user` and
+  nothing links that to a portal user. Erase deletes account, chats, tokens, team
+  memberships, escalations, Tracker/session/profile-app rows; unlinks assets, asset history,
+  support tickets, deployments; pseudonymises audit entries (email, name, usernames →
+  `erased-user-<hash>`, whole-token only); remediations / remote sessions keep the bare user
+  ID. Device-side Windows accounts are listed, not touched (remove them with A1). Portal:
+  Users → lock icon → "Personal data". Checked on Postgres through the UI with near-miss
+  usernames (`ashadeep`, `ganasha`) surviving. Caught on the way: Postgres `LIKE` treats `\`
+  as an escape, and the JSON text of an audit entry escapes it again — both handled and
+  tested. Old hard delete left as is; Z2 erase is the DPDP path.
 
 ---
 

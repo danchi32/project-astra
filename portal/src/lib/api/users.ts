@@ -26,3 +26,39 @@ export const updateUser = (
 ) => apiClient.patch<User>(`/users/${id}`, data).then((r) => r.data);
 
 export const deleteUser = (id: string) => apiClient.delete(`/users/${id}`).then((r) => r.data);
+
+// Z2 — one person's data. Repeated `windows_username=` params (FastAPI's list form), not
+// axios's default `windows_username[]=`.
+export interface PersonalDataSummary {
+  user: { id: string; email: string; full_name: string };
+  windows_usernames: string[];
+  windows_username_candidates: string[];
+  counts: Record<string, number>;
+  erase: { deleted: string[]; unlinked: string[]; pseudonymised: string[]; kept: string[] };
+  pseudonym: string;
+}
+
+const winParams = (names: string[]) => ({
+  params: { windows_username: names },
+  paramsSerializer: { indexes: null },
+});
+
+export const getPersonalData = (id: string, names: string[]) =>
+  apiClient.get<PersonalDataSummary>(`/users/${id}/personal-data`, winParams(names)).then((r) => r.data);
+
+export async function downloadPersonalData(id: string, names: string[]) {
+  const res = await apiClient.get<Blob>(`/users/${id}/personal-data/export`,
+    { ...winParams(names), responseType: "blob" });
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `personal-data-${id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export const erasePersonalData = (id: string, windows_usernames: string[], confirm_email: string) =>
+  apiClient.post<{ person: string; counts: Record<string, number> }>(
+    `/users/${id}/personal-data/erase`, { windows_usernames, confirm_email }).then((r) => r.data);
