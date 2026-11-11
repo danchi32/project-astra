@@ -389,6 +389,13 @@ Also: list who at Technomate can reach the production database, and keep that ac
   usernames (`ashadeep`, `ganasha`) surviving. Caught on the way: Postgres `LIKE` treats `\`
   as an escape, and the JSON text of an audit entry escapes it again — both handled and
   tested. Old hard delete left as is; Z2 erase is the DPDP path.
+- Z3 as built (11 Nov, draft): `docs/legal/RECORD_OF_PROCESSING.md`, written from the code and
+  production settings (secret names only), not from the published policies. Eleven
+  activities, where data lives, Technomate staff access, a founder checklist, and **ten gaps
+  (G1–G10)**. Biggest: the privacy policy doesn't describe Tracker and says the agent doesn't
+  monitor browsing (G1); deleting an organisation leaves nine tables behind (G3); the
+  sub-processor page misses n8n, Zoho Bigin and Telegram (G7). Founder review pending; no
+  gap fixed in this module.
 
 ---
 
