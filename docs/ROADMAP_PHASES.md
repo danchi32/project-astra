@@ -266,8 +266,9 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   Live test as SYSTEM on a real laptop: winget found in WindowsApps, run as SYSTEM, catalog
   lookup works ("couldn't find" for an unknown id) — but the 7-Zip download (GitHub
   releases) timed out, from the user's own session too: that network blocks GitHub
-  downloads. Error 0x80072EE2 now reads as a blocked download. A full successful install is
-  still to be shown (Chrome's dl.google.com is reachable there).
+  downloads. Error 0x80072EE2 now reads as a blocked download. Then a full install as
+  SYSTEM through the agent's own code: Google Chrome 157.0.8103.50 -> 157.0.8103.51 in 283 s,
+  "Installed Google.Chrome." (Chrome was already there, so winget upgraded it in place.)
 
 **A4 · Push to chosen devices + per-device status**
 - New `deployments` table (who, action, params, target summary, created_at) and
