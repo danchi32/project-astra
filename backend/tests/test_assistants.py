@@ -173,14 +173,16 @@ async def test_the_tool_catalogue_is_read_from_the_engine(client, user_headers):
     is also why `/tools` has to be declared before `/{assistant_id}`: otherwise FastAPI
     tries to parse "tools" as a UUID and answers 422.
     """
-    from app.services.ai import escalation_tools
+    from app.services.ai import escalation_tools, fleet_tools
     from app.services.ai.tools import TOOL_SCHEMAS
 
     response = await client.get("/api/v1/assistants/tools", headers=user_headers)
     assert response.status_code == 200, response.text
 
     names = [t["name"] for t in response.json()]
-    assert names == [t["name"] for t in (*TOOL_SCHEMAS, *escalation_tools.TOOL_SCHEMAS)]
+    assert names == [t["name"] for t in (
+        *TOOL_SCHEMAS, *fleet_tools.DEVICE_TOOL_SCHEMAS, *fleet_tools.FLEET_TOOL_SCHEMAS,
+        *escalation_tools.TOOL_SCHEMAS)]
     # Escalation is included even though the engine adds it per-org: a grant that omits it
     # silently turns escalation off, so whoever is choosing has to be able to see it.
     assert escalation_tools.OFFER in names

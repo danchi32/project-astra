@@ -100,6 +100,7 @@ class CognitiveEngine:
         device_hostname: str | None = None,
         acting_device_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        fleet_access: bool = False,
     ) -> EngineResult:
         """Run one assistant turn: reason, call evidence tools as needed, and reply.
 
@@ -121,7 +122,13 @@ class CognitiveEngine:
         # a model that cannot see it cannot promise a ticket nobody can raise.
         from app.services.ai import escalation_tools
 
-        tools = TOOL_SCHEMAS + await escalation_tools.available_for(
+        from app.services.ai import fleet_tools
+
+        # Fleet-wide evidence only for portal staff: a tool the model can't see is one an
+        # end user can't talk it into calling.
+        tools = TOOL_SCHEMAS + fleet_tools.DEVICE_TOOL_SCHEMAS + (
+            fleet_tools.FLEET_TOOL_SCHEMAS if fleet_access else []
+        ) + await escalation_tools.available_for(
             self.session, org_id=org_id, conversation_id=conversation_id,
             device_id=acting_device_id,
         )
@@ -203,7 +210,7 @@ class CognitiveEngine:
                     output = await dispatch_tool(
                         session=self.session, org_id=org_id, name=call.name,
                         tool_input=call.input, acting_device_id=acting_device_id,
-                        conversation_id=conversation_id,
+                        conversation_id=conversation_id, fleet_access=fleet_access,
                     )
                     trail.append({"tool": call.name, "input": call.input, "output": output})
                     tool_results.append(

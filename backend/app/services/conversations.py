@@ -17,6 +17,7 @@ from app.models import (
     Organization,
     RemediationTask,
     User,
+    UserRole,
 )
 from app.models.base import as_utc, utcnow
 from app.repositories.conversations import ConversationRepository, MessageRepository
@@ -116,6 +117,7 @@ class ConversationService:
         reply = await self._reply(
             org_id=actor.org_id, history=history, content=content,
             conversation_id=conversation.id,
+            fleet_access=actor.role in (UserRole.ADMIN, UserRole.TECHNICIAN),
         )
         assistant_message = await self.messages.add(
             Message(
@@ -272,6 +274,7 @@ class ConversationService:
         device_hostname: str | None = None,
         acting_device_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        fleet_access: bool = False,
     ) -> Reply:
         settings = get_settings()
 
@@ -365,7 +368,7 @@ class ConversationService:
         result = await CognitiveEngine(self.session, provider=provider, version=version).run(
             org_id=org_id, history=history, user_message=content,
             device_hostname=device_hostname, acting_device_id=acting_device_id,
-            conversation_id=conversation_id,
+            conversation_id=conversation_id, fleet_access=fleet_access,
         )
 
         # 4. Mark the fixes as the model's, so the result path can tell them from the ones

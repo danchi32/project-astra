@@ -161,6 +161,7 @@ async def dispatch_tool(
     tool_input: dict[str, Any],
     acting_device_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
+    fleet_access: bool = False,
 ) -> str:
     """Execute a tool call within the org's scope and return a JSON string result.
 
@@ -181,6 +182,15 @@ async def dispatch_tool(
     if escalated is not None:
         return escalated
 
+    from app.services.ai import fleet_tools
+
+    answered = await fleet_tools.dispatch(
+        session=session, org_id=org_id, name=name, tool_input=tool_input,
+        acting_device_id=acting_device_id, fleet_access=fleet_access,
+    )
+    if answered is not None:
+        return answered
+
     if name == "propose_remediation":
         return await _propose_remediation(
             session=session, org_id=org_id, acting_device_id=acting_device_id,
@@ -199,6 +209,9 @@ async def dispatch_tool(
 
     if name == "list_devices":
         rows = await devices.list_by_org(org_id)
+        # An employee's tray chat sees their own machine, not the whole fleet's hostnames.
+        if not fleet_access and acting_device_id is not None:
+            rows = [d for d in rows if d.id == acting_device_id]
         now = utcnow()
         return json.dumps(
             [

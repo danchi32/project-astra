@@ -187,6 +187,14 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
   into the system prompt (prompt-injection hygiene; C3 hardens this further).
 - Done when: "which PCs have Defender off?", "whose warranty ends this month?", "which apps
   are on fewer than 3 PCs?" answer correctly against seeded data (pytest with a fake model).
+- As built (10 Nov): `app/services/ai/fleet_tools.py`. Device tools (`get_installed_apps`,
+  `get_windows_updates`, `get_device_compliance` — licensing is inside compliance) answer in
+  the tray only for the caller's own PC. Fleet tools (`fleet_summary`, `find_assets`) are
+  advertised only to portal admins/technicians and refused for anyone else. Also tightened
+  an existing gap: `list_devices` in the tray used to return every hostname in the org; now
+  only the caller's own. **Tracker data was left out entirely** — no chat tool reads it.
+  Not verified against a live model locally (no API key in the dev env); the engine wiring
+  and every tool are covered by tests with a recording fake.
 
 **N1 · Early-warning alerts (on ingest, no scheduler)**
 - Today the portal shows problems only when someone opens it; nothing pushes, nothing

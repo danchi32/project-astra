@@ -15,6 +15,7 @@ from app.schemas.assistants import (
     AssistantVersionRead,
     ToolSummary,
 )
+from app.services.ai import fleet_tools
 from app.services.ai.tools import TOOL_SCHEMAS
 from app.services.assistants import AssistantService
 
@@ -59,7 +60,8 @@ async def list_tools(actor: User = Depends(get_current_user)) -> list[ToolSummar
 
     return [
         ToolSummary(name=t["name"], description=t["description"])
-        for t in (*TOOL_SCHEMAS, *escalation_tools.TOOL_SCHEMAS)
+        for t in (*TOOL_SCHEMAS, *fleet_tools.DEVICE_TOOL_SCHEMAS,
+                  *fleet_tools.FLEET_TOOL_SCHEMAS, *escalation_tools.TOOL_SCHEMAS)
     ]
 
 
