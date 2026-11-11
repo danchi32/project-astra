@@ -387,8 +387,17 @@ engine), Software & Provisioning add-on, "AnyDesk replacement" pitch (L4, market
     - Tray `get_installed_apps` shows other profiles' apps on shared PCs.
     - Org delete doesn't clean the relay group or billing customer.
     - Self-approval for approval-tier pushes kept by design.
-  - **Not yet live-checked:** the Tray↔service pipe owner check and the token-folder
-    hardening need one run as SYSTEM on a real PC before `agent-v0.14.0`.
+  - Live-checked 11 Nov on a real laptop. Hardening and the pipe server ran as SYSTEM
+    (scheduled task); the Tray side ran as the de-elevated user (`runas /trustlevel`).
+    - **Planted folder:** a user-owned folder with a Users-readable credential became owner
+      Administrators, ACL SYSTEM + Administrators only.
+    - **Junction:** refused.
+    - **State folder:** created SYSTEM/Admin-only, and the journal was written into it.
+    - **Reachability:** the HTTP probe through the proxy handler returned true.
+    - **Pipe:** the Tray accepted the SYSTEM-owned pipe and got the real reply.
+    - **Impostor pipe:** a user-owned pipe was refused ("Something other than SAVIO
+      answered"), and its fake message was never shown.
+    - **Read check:** the de-elevated user was denied reading the locked file.
 - QA pass on both VMs; release notes; bump to 0.14.0; tag `agent-v0.14.0`; rebuild installers.
 - Update help centre: Software page, Create user, Fix my internet, Support Access.
 
