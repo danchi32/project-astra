@@ -6,7 +6,7 @@ mutation is audited under the target org.
 import uuid
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -14,7 +14,16 @@ from app.core.security import create_view_as_token, generate_opaque_token, hash_
 from app.services.support_access import remaining_minutes, window_open
 from app.models import (
     OrganizationBillingProfile,
+    Asset,
+    AssetEvent,
+    Assistant,
+    AssistantVersion,
     AuditLog,
+    Deployment,
+    KnowledgeArticle,
+    LearnedAction,
+    Notification,
+    SemanticCacheEntry,
     Conversation,
     Device,
     Invoice,
@@ -28,6 +37,13 @@ from app.models import (
     UserRole,
 )
 from app.models.base import as_utc, utcnow
+
+#: Org-scoped tables that `organizations` does not cascade to, deleted by hand when an org is
+#: deleted. test_org_delete fails if a new org_id table is neither cascaded nor listed here.
+ORG_ROWS_WITHOUT_CASCADE = (
+    AssetEvent, Asset, Deployment, Notification, SemanticCacheEntry, KnowledgeArticle,
+    LearnedAction, Assistant, AuditLog,
+)
 from app.repositories.organizations import OrganizationRepository
 from app.repositories.users import UserRepository
 from app.schemas.devices import ONLINE_THRESHOLD
@@ -1105,6 +1121,15 @@ class PlatformService:
         if org is None:
             raise NotFoundError("Organization not found")
         name = org.name
+        # Tables keyed by org_id with no FK cascade from `organizations` would otherwise
+        # outlive the org with a dead id (Record of Processing, G3). Children first.
+        await self.session.execute(delete(AssistantVersion).where(
+            AssistantVersion.assistant_id.in_(select(Assistant.id).where(Assistant.org_id == org.id))))
+        for model in ORG_ROWS_WITHOUT_CASCADE:
+            await self.session.execute(delete(model).where(model.org_id == org.id))
+        await self.session.delete(org)
+        # Written after the org's own audit log is gone, so this one entry — the org's name
+        # and who deleted it, nothing about its people — is what remains.
         await self.audit.record(
             org_id=org.id,
             actor_id=actor.id,
@@ -1113,7 +1138,6 @@ class PlatformService:
             target_id=str(org.id),
             detail={"name": name},
         )
-        await self.session.delete(org)
         await self.session.commit()
 
     async def _count(self, model, org_id: uuid.UUID) -> int:

@@ -103,7 +103,7 @@ same device next reports; see gap G4.
 | Basis | Customer's instruction |
 | Stored | Neon (`conversations`, `messages`, `semantic_cache_entries`, `support_escalations`) |
 | Shared with | **Anthropic (United States)** via the commercial API. No training on API data; kept briefly for abuse monitoring. Freshservice, if the customer connected its own helpdesk (customer's system, not our sub-processor) |
-| Retention | Life of the account; chats and escalations are erasable per person (Z2). The cache has no expiry and is not linked to a person (gap G6) |
+| Retention | Life of the account; chats and escalations are erasable per person (Z2). Cache entries expire after 90 days: not served after that, and deleted on the org's next cache write (G6, fixed) |
 | Access | **Only the user who started a chat** can list or read it, admins included (`ConversationService._get_owned`). Escalations raised from a chat are visible to the org's staff |
 
 ### 3.6 Actions and accountability — *Processor*
@@ -113,7 +113,7 @@ same device next reports; see gap G4.
 | Purpose | Human-in-the-loop control, security, proving what was done |
 | Basis | Customer's instruction; security is a legitimate use |
 | Stored | Neon (`remediation_tasks`, `deployments`, `remote_sessions`, `audit_logs`) |
-| Retention | Life of the account. On Z2 erase, audit entries are pseudonymised, not deleted. **Audit logs and deployments outlive organisation deletion** (gap G3) |
+| Retention | Life of the account. On Z2 erase or plain user delete, the person's audit entries are pseudonymised, not deleted. On organisation deletion everything goes except one entry recording the deletion (org name, who deleted it) (G3, fixed) |
 | Access | Customer admins (audit log); admins and technicians (remediations, sessions) |
 
 ### 3.7 Remote support stream — *Processor*
@@ -131,7 +131,7 @@ same device next reports; see gap G4.
 | Data | Asset name, tag, serial, model, purchase and warranty dates, cost, location, who holds it, assignment history, acknowledgement emails |
 | Stored | Neon (`assets`, `asset_events`) |
 | Shared with | Resend (acknowledgement emails) |
-| Retention | Life of the account; unlinked from a person on Z2 erase. **Outlives organisation deletion** (gap G3) |
+| Retention | Life of the account; unlinked from a person on Z2 erase or user delete; deleted with the organisation (G3, fixed) |
 | Access | Customer admins and technicians |
 
 ### 3.9 Account holder, sign-up and billing — *Fiduciary*
@@ -189,11 +189,11 @@ Each item is a difference between what we publish and what the code does, or a c
 |---|---|---|---|
 | G1 | The privacy policy (§2.3) doesn't mention Tracker, and says the agent does not "monitor browsing history" | With Tracker on, the agent records the foreground app and **website domain** (path in path mode) per employee. A regulator or employee would read §2.3 as untrue | Add a Tracker section: what it records, that it is off unless the customer enables it, domain-only by default, retention |
 | G2 | Privacy policy §2.3 predates Phase 1 | Local Windows accounts, apps in a user's profile, activation status, serial/BIOS, offline self-heal journal are not listed | Update §2.3 before the Phase 1 merge goes live |
-| G3 | Deleting an organisation leaves `audit_logs`, `assets`, `asset_events`, `notifications`, `semantic_cache_entries`, `knowledge_articles`, `learned_actions`, `assistants` and `deployments` behind | These have `org_id` but no cascade, so the rows stay with a dead org ID. That contradicts "deleted from the live system" after closure | Delete them in `PlatformService.delete_organization`. Keep the audit log only if a retention period is written down |
+| G3 ✅ | Deleting an organisation leaves `audit_logs`, `assets`, `asset_events`, `notifications`, `semantic_cache_entries`, `knowledge_articles`, `learned_actions`, `assistants` and `deployments` behind | These have `org_id` but no cascade, so the rows stay with a dead org ID. That contradicts "deleted from the live system" after closure | **Fixed 11 Nov:** `delete_organization` deletes them (`ORG_ROWS_WITHOUT_CASCADE`), keeping one deletion record. `test_org_delete` fails if a future org table is neither cascaded nor listed. Checked on Postgres |
 | G4 | "Raw telemetry: 7 days" | Pruning runs only when that device next reports, and always keeps its newest 60. A device that goes silent keeps its last 60 snapshots indefinitely. Same pattern for Tracker raw samples (90 days) | Either word the policy accordingly, or add a periodic sweep (needs the Phase 2.0 scheduler) |
 | G5 | Tracker derived data (sessions, daily summaries, per-app minutes) is never deleted | It is employee-monitoring history kept for the life of the account | Pick a cap (e.g. 13 months) with the lawyer (Z6) |
-| G6 | AI answer cache has no expiry, and is not linked to a person, so Z2 erase can't find it | It stores question text, which can contain a name or problem detail | Expire entries (e.g. 90 days), or don't cache questions that mention a person |
+| G6 ✅ | AI answer cache has no expiry, and is not linked to a person, so Z2 erase can't find it | It stores question text, which can contain a name or problem detail | **Fixed 11 Nov:** `semantic_cache_retention_days = 90`; expired entries are not served and are deleted on the org's next write |
 | G7 | Public sub-processor list vs reality | Lists Razorpay and Paddle (no production keys exist, only PayPal). Doesn't list n8n Cloud, Zoho Bigin or Telegram, which receive lead data, yet privacy §3.2 says we share only with listed providers. Anthropic's row says "support conversations and telemetry" but it also gets Tracker app and site names, and lead messages. Doesn't show the India log bucket | Add a "marketing and sales tools" section; mark payment providers as "when enabled"; add Cloud Logging (India) |
 | G8 | `MIGRATE_SRC_URL` / `MIGRATE_DST_URL` still in Secret Manager | Database credentials left over from the Railway → Neon move. A standing credential to customer data nobody uses | Delete if unused |
 | G9 | Relay VM logs | MeshCentral keeps its own logs (who connected, when) on the VM, outside Cloud Logging and the India bucket. Retention unknown | Set MeshCentral log retention, or ship its logs to Cloud Logging |
-| G10 | Old "Delete user" writes the email into the audit log | The plain delete leaves the person identifiable in the audit trail; only Z2 erase pseudonymises | Point the Users page delete at Z2 erase, or pseudonymise in `delete_user` too |
+| G10 ✅ | Old "Delete user" writes the email into the audit log | The plain delete leaves the person identifiable in the audit trail; only Z2 erase pseudonymises | **Fixed 11 Nov:** plain delete now runs the account-side half of the Z2 erase (no Windows usernames): audit entries pseudonymised, assets unlinked, the email not written. Checked on Postgres |

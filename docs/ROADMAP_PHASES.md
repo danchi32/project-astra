@@ -396,6 +396,10 @@ Also: list who at Technomate can reach the production database, and keep that ac
   monitor browsing (G1); deleting an organisation leaves nine tables behind (G3); the
   sub-processor page misses n8n, Zoho Bigin and Telegram (G7). Founder review pending; no
   gap fixed in this module.
+  Then fixed the three code gaps (11 Nov): G3 org deletion now removes the nine
+  non-cascading tables (guard test for future tables), G6 AI answer cache expires after 90
+  days, G10 plain user delete pseudonymises like Z2. G1, G2, G4, G5, G7, G8 and G9 stay with
+  the founder / lawyer.
 
 ---
 

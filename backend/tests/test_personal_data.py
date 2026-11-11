@@ -130,3 +130,21 @@ async def test_guards(client, admin_headers, user_headers, admin_user, regular_u
     plain = f"/api/v1/users/{regular_user.id}/personal-data"
     assert (await client.get(plain, headers=user_headers)).status_code == 403
     assert (await client.get(plain + "/export", headers=user_headers)).status_code == 403
+
+
+async def test_plain_delete_no_longer_leaves_the_email_behind(client, admin_headers, admin_user, session_factory):
+    # G10: the Users page's Delete used to write {"email": ...} into the audit log and leave
+    # assets pointing at a dead id.
+    uid = await _seed(session_factory, admin_user.org_id, admin_user.id)
+    r = await client.delete(f"/api/v1/users/{uid}", headers=admin_headers)
+    assert r.status_code == 204, r.text
+    alias = pseudonym(uid)
+    async with session_factory() as s:
+        assert await s.get(User, uid) is None
+        assert (await s.execute(select(Asset))).scalar_one().assigned_to_user_id is None
+        audits = {a.action: a.detail for a in (await s.execute(select(AuditLog))).scalars()}
+        assert audits["user.delete"] == {"person": alias}
+        assert audits["user.update"]["email"] == alias
+        assert EMAIL not in str(audits)
+        # No Windows usernames given, so device-side data is untouched — that needs the full erase.
+        assert await s.scalar(select(func.count()).select_from(ActivitySample)) == 3

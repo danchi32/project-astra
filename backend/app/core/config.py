@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # Short by design: this is employee-monitoring data, so the raw trail is held no longer
     # than aggregation needs it (see docs/WORKFORCE_INSIGHTS_PLAN.md §6). 0 disables pruning.
     workforce_activity_retention_days: int = 90
+    # AI answer cache: entries older than this are not served and are deleted on the org's
+    # next cache write. The question text can name a person (Record of Processing, G6).
+    semantic_cache_retention_days: int = 90
     # No keyboard/mouse input for at least this many minutes counts the session as a break
     # rather than worked time. 0 disables idle-splitting (every signed-in minute is worked).
     workforce_idle_threshold_minutes: int = 5

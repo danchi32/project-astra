@@ -217,6 +217,16 @@ class PersonalDataService:
             raise ConflictError("Type the person's email exactly to confirm the erase")
         names = _clean(names)
         before = (await self.summary(actor, user_id, names))["counts"]
+        return await self._erase(actor, user, names, action="user.personal_data_erase",
+                                 detail={"windows_usernames": len(names), "counts": before})
+
+    async def delete_account(self, actor: User, user: User) -> str:
+        """The Users page's plain "Delete": the account-side half of an erase, with no Windows
+        usernames, so the audit trail stops naming the person too (Record of Processing, G10)."""
+        return (await self._erase(actor, user, [], action="user.delete", detail={}))["person"]
+
+    async def _erase(self, actor: User, user: User, names: list[str], *, action: str, detail: dict) -> dict:
+        before = detail.get("counts")
         alias = pseudonym(user.id)
         org, uid = user.org_id, user.id
 
@@ -260,9 +270,8 @@ class PersonalDataService:
         await self.session.delete(user)
         # The erase's own audit entry names the pseudonym, never the person.
         await AuditService(self.session).record(
-            org_id=actor.org_id, actor_id=actor.id, action="user.personal_data_erase",
-            target_type="user", target_id=str(uid),
-            detail={"person": alias, "windows_usernames": len(names), "counts": before})
+            org_id=actor.org_id, actor_id=actor.id, action=action,
+            target_type="user", target_id=str(uid), detail={"person": alias, **detail})
         await self.session.commit()
         return {"person": alias, "counts": before}
 
