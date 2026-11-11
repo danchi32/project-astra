@@ -366,6 +366,15 @@ website leads and marketing. Main DPDP obligations apply from ~13 May 2027.
 
 Also: list who at Technomate can reach the production database, and keep that access logged.
 
+- Z1 as built (11 Nov): before, every log was in `_Default` (location `global`, **30 days**);
+  only Google's admin-activity audit logs (`_Required`) were kept 400 days. Now
+  `infra/logging/india-log-sink.sh` keeps bucket `india-logs` in asia-south1 at 400 days and
+  a sink copying every entry (`severity>=DEFAULT`) into it; `_Default` untouched. Applied to
+  `astra-prod-503923`, re-run idempotently, entries confirmed landing in the bucket.
+  `test_india_log_sink.py` pins region, retention floor and the catch-all filter. Not
+  locked — waits for Z6. Neon and relay logs are outside this bucket (noted in the incident
+  policy §7).
+
 ---
 
 ## Phase 2 — Trust + Security Score + AI IT Manager (core)

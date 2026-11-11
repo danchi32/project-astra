@@ -144,8 +144,13 @@ comments publicly or on social media about an incident.
 
 - Keep the incident log, evidence and all notices for **at least 5 years**.
 - CERT-In requires ICT system logs to be kept for **180 days, within India**, and produced
-  on request. ASTRA's production logs are currently in Singapore — **open action: set up
-  an India-region log sink** before this is relied on.
+  on request. Since 11 Nov 2026 every log entry in the production Google Cloud project
+  (the API on Cloud Run, its jobs, builds, Google's audit logs) is copied to the log bucket
+  `india-logs` in **asia-south1 (Mumbai)** and kept **400 days** — also covering the DPDP
+  Rules' one year. Managed by `infra/logging/india-log-sink.sh`; read it with
+  `infra/logging/india-log-sink.sh --verify`. Not covered by that bucket: the database
+  provider's logs (Neon) and the remote-support relay's logs — ask the provider / pull from
+  the relay host if an incident needs them.
 - Every incident, including S4, is recorded in the incident register (date, severity,
   summary, affected customers, notices sent, closure date).
 
