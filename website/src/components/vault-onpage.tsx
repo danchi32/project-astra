@@ -93,9 +93,9 @@ export function OnPageSignIn() {
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.5, opacity: 0 }}
                         transition={{ type: "spring", stiffness: 260, damping: 16 }}
-                        className="ml-auto grid h-4 w-4 flex-none place-items-center rounded bg-brand-600 text-[8px] font-black text-white"
+                        className="ml-auto grid h-4 w-4 flex-none place-items-center"
                       >
-                        V
+                        <img src="/brand/vault-logo-128.png" alt="" className="h-4 w-4 object-contain" />
                       </motion.span>
                     )}
                   </AnimatePresence>

@@ -65,7 +65,7 @@ export function WayFromExtension() {
     <Panel title="Extension — toolbar" note="One click from the toolbar, on any tab, without opening the vault at all.">
       <div className="mx-auto w-full max-w-[15rem] rounded-xl border border-token bg-surface-2 p-2.5">
         <div className="mb-2 flex items-center gap-2 border-b border-token pb-2">
-          <span className="grid h-5 w-5 flex-none place-items-center rounded bg-brand-600 text-[9px] font-black text-white">V</span>
+          <img src="/brand/vault-logo-128.png" alt="" className="h-5 w-5 flex-none object-contain" />
           <span className="text-[10px] font-bold">Secure Vault</span>
           <Puzzle className="ml-auto h-3 w-3 text-muted-token" />
         </div>
@@ -106,9 +106,9 @@ export function WayOnThePage() {
             whileInView={{ scale: 1, opacity: 1 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2, type: "spring", stiffness: 240, damping: 15 }}
-            className="ml-auto grid h-5 w-5 flex-none place-items-center rounded bg-brand-600 text-[9px] font-black text-white"
+            className="ml-auto grid h-5 w-5 flex-none place-items-center"
           >
-            V
+            <img src="/brand/vault-logo-128.png" alt="" className="h-5 w-5 object-contain" />
           </motion.span>
         </div>
         <motion.div

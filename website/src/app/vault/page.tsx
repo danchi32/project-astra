@@ -50,6 +50,14 @@ export const metadata: Metadata = {
     "credential autofill extension",
   ],
   alternates: { canonical: "/vault/" },
+  // Secure Vault has its own mark; the rest of the site keeps the Technomate icon.
+  icons: {
+    icon: [
+      { url: "/brand/vault-favicon.ico", sizes: "16x16 32x32 48x48" },
+      { url: "/brand/vault-logo-256.png", type: "image/png", sizes: "256x256" },
+    ],
+    apple: [{ url: "/brand/vault-apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 /* One claim per row, each with the panel that shows it happening. */
