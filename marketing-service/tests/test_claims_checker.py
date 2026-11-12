@@ -175,7 +175,7 @@ def test_claimable_actions_matches_the_claim_file():
     # registry, so a count is the only tripwire available here. Bump it when claims.yaml
     # gains an action. The real guard — the one that compares the file against the live
     # registry in both directions — is backend/tests/test_marketing_claims.py.
-    assert sum(len(v) for v in actions.values()) == 33
+    assert sum(len(v) for v in actions.values()) == 36
 
 
 def test_signed_agent_updates_is_true_and_must_not_be_blocked():
