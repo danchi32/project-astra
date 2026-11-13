@@ -152,7 +152,7 @@ export function HomeContent() {
 
             {/* 3D SAVIO core, with the agent's live activity floating around it */}
             <Reveal delay={0.15} className="flex justify-center">
-              <div className="relative w-full max-w-[520px]">
+              <div data-guide="hero" className="relative w-full max-w-[520px]">
                 <Hero3D />
                 <AgentActivity />
               </div>
@@ -285,7 +285,9 @@ export function HomeContent() {
               </div>
             </Reveal>
             <Reveal delay={0.1} className="animate-float">
-              <DashboardMockup />
+              <div data-guide="dashboard">
+                <DashboardMockup />
+              </div>
             </Reveal>
           </div>
         </Container>
@@ -297,7 +299,9 @@ export function HomeContent() {
         <Container>
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <Reveal>
-              <AiConsole />
+              <div data-guide="console">
+                <AiConsole />
+              </div>
             </Reveal>
             <div>
               <Reveal>
@@ -364,7 +368,7 @@ export function HomeContent() {
             />
           </Reveal>
           <Reveal delay={0.1}>
-            <div className="mt-12">
+            <div data-guide="healing" className="mt-12">
               <SelfHealingFlow />
             </div>
           </Reveal>
@@ -375,7 +379,7 @@ export function HomeContent() {
       <Section className="pb-28">
         <Container>
           <Reveal>
-            <div className="grain relative isolate overflow-hidden rounded-3xl border border-token bg-gradient-to-br from-brand-600 via-blue-600 to-cyan-500 px-8 py-14 text-center sm:px-16">
+            <div data-guide="cta" className="grain relative isolate overflow-hidden rounded-3xl border border-token bg-gradient-to-br from-brand-600 via-blue-600 to-cyan-500 px-8 py-14 text-center sm:px-16">
               <div className="absolute inset-0 grid-bg opacity-20" />
               <TelemetryField className="opacity-70" />
               <div className="relative">
