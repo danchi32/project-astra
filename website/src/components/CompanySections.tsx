@@ -224,7 +224,7 @@ export function ServicesGrid() {
           </div>
         </Reveal>
 
-        <motion.div layout className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <motion.div layout data-guide="services" className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence mode="popLayout">
             {shown.map((s, i) => {
               const Icon = iconFor(s.title, i);
@@ -232,6 +232,7 @@ export function ServicesGrid() {
                 <motion.div
                   key={s.title}
                   layout
+                  data-perch
                   initial={{ opacity: 0, scale: 0.92, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.92 }}
@@ -323,7 +324,9 @@ export function DevSpotlight() {
             </div>
           </Reveal>
           <Reveal delay={0.1}>
-            <BuildingBrowser />
+            <div data-guide="dev">
+              <BuildingBrowser />
+            </div>
           </Reveal>
         </div>
 

@@ -9,6 +9,7 @@ import { CookieConsent } from "@/components/CookieConsent";
 import { ConversionTracker } from "@/components/ConversionTracker";
 import { SupportChat } from "@/components/SupportChat";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { SavioGuide } from "@/components/SavioGuide";
 import { LeadMagnetPopup } from "@/components/LeadMagnetPopup";
 import { site } from "@/lib/site";
 
@@ -99,6 +100,8 @@ export default function RootLayout({
               site, so it answers with what the pages already say. */}
           <SupportChat />
           <WhatsAppButton />
+          {/* SAVIO, the 3D robot guide, walks every page and ends at the contact form. */}
+          <SavioGuide />
           <LeadMagnetPopup />
         </ContentProvider>
         <Analytics />
