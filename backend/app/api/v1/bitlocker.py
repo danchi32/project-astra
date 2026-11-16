@@ -3,7 +3,7 @@ itself only comes from an explicit, audited reveal, which a view-as session cann
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,7 @@ from app.api.deps import deny_view_as, require_roles
 from app.core import crypto
 from app.core.database import get_db
 from app.models import User, UserRole
-from app.services.bitlocker_keys import BitLockerKeyService
+from app.services.bitlocker_keys import MAX_REVEALS_PER_HOUR, BitLockerKeyService, RevealLimitReached
 
 router = APIRouter(prefix="/devices", tags=["bitlocker"])
 
@@ -55,12 +55,18 @@ async def list_bitlocker_keys(
 async def reveal_bitlocker_key(
     device_id: uuid.UUID,
     key_id: uuid.UUID,
+    response: Response,
     actor: User = Depends(admin_required_for_keys),
     _: User = Depends(deny_view_as),
     session: AsyncSession = Depends(get_db),
 ) -> BitLockerKeyRevealed:
+    # A recovery password must not sit in a browser or proxy cache.
+    response.headers["Cache-Control"] = "no-store"
     try:
         data = await BitLockerKeyService(session).reveal(actor=actor, device_id=device_id, key_id=key_id)
+    except RevealLimitReached:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail=f"At most {MAX_REVEALS_PER_HOUR} recovery keys per hour. Try again later.")
     except crypto.CryptoUnavailable:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Key escrow is not configured on this server.")

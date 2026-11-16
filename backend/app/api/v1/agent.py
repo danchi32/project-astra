@@ -315,13 +315,16 @@ async def offline_events(
 
 
 class _BitLockerKey(BaseModel):
-    drive: str = Field(min_length=2, max_length=2)
-    protector_id: str = Field(min_length=36, max_length=40)
-    recovery_password: str = Field(min_length=55, max_length=55)
+    # Loose bounds on purpose: the exact formats are checked in the service, whose errors never
+    # quote the value. A tight Pydantic rule here would fail with a 422 that echoes the input,
+    # which for this field is a recovery password. The bounds only stop oversized bodies.
+    drive: str = Field(max_length=10)
+    protector_id: str = Field(max_length=80)
+    recovery_password: str = Field(max_length=80)
 
 
 class _BitLockerKeys(BaseModel):
-    keys: list[_BitLockerKey] = Field(max_length=10)
+    keys: list[_BitLockerKey]
 
 
 @router.post(

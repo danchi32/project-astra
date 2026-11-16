@@ -31,8 +31,13 @@ public static class DefenderRemediation
         if (ReadRealtime() == true)
             return (true, "Defender real-time protection was already on.");
 
-        var (setOk, setOut) = Run("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-            "Set-MpPreference -DisableRealtimeMonitoring $false");
+        // WMI first: no PowerShell process, no module search path. PowerShell (by full path) only
+        // if WMI refuses, since some builds expose the method differently.
+        var (setOk, setOut) = SetRealtimeOnViaWmi();
+        if (!setOk)
+            (setOk, setOut) = Run(
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+                "-NoProfile", "-NonInteractive", "-Command", "Set-MpPreference -DisableRealtimeMonitoring $false");
         var after = ReadRealtime();
         if (after == true)
             return (true, "Defender real-time protection is now on.");
@@ -45,7 +50,26 @@ public static class DefenderRemediation
     /// <summary>True only when at least one product is registered and every one of them is
     /// Defender. An empty list is not "Defender only": it means the check could not see anything.</summary>
     internal static bool IsDefenderSole(IReadOnlyList<string> displayNames) =>
-        displayNames.Count > 0 && displayNames.All(n => DefenderName.IsMatch(n.Trim()));
+        displayNames.Count > 0 && displayNames.All(IsDefenderName);
+
+    internal static bool IsDefenderName(string displayName) => DefenderName.IsMatch(displayName.Trim());
+
+    private static (bool Ok, string Output) SetRealtimeOnViaWmi()
+    {
+        try
+        {
+            using var cls = new ManagementClass(@"root\Microsoft\Windows\Defender", "MSFT_MpPreference", null);
+            var args = cls.GetMethodParameters("Set");
+            args["DisableRealtimeMonitoring"] = false;
+            var result = cls.InvokeMethod("Set", args, null);
+            var rv = result?["ReturnValue"];
+            return (rv is null || Convert.ToInt64(rv) == 0, $"MSFT_MpPreference.Set returned {rv ?? "nothing"}");
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.GetType().Name);
+        }
+    }
 
     /// <summary>Null when the list cannot be read at all.</summary>
     private static IReadOnlyList<string>? AntivirusProducts()

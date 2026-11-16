@@ -249,4 +249,6 @@ class DevicePosture(TimestampMixin, Base):
     firewall_private: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     firewall_public: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     bitlocker_os_drive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Another antivirus is registered with Security Center (Defender is off beside it by design).
+    third_party_antivirus: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

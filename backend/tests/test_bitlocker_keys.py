@@ -135,3 +135,85 @@ async def test_a_view_as_session_cannot_reveal(client, admin_user, admin_headers
     view = {"Authorization": f"Bearer {vt.json()['access_token']}"}
     r = await client.post(f"/api/v1/devices/{device_id}/bitlocker-keys/{key_id}/reveal", headers=view)
     assert r.status_code == 403
+
+
+# ── security review fixes ──────────────────────────────────────────────────────────
+
+
+async def test_a_replaced_platform_key_is_healed_by_the_next_report(
+        client, admin_headers, session_factory, monkeypatch):
+    token, device_id = await _enroll(client, admin_headers)
+    await _escrow(client, token, [KEY])
+    new_key = crypto.generate_key()
+    monkeypatch.setattr(get_settings(), "secrets_key", new_key, raising=False)
+    # The stored copy no longer decrypts; the next report re-escrows it under the new key.
+    assert (await _escrow(client, token, [KEY])).status_code == 204
+    async with session_factory() as s:
+        row = (await s.execute(select(DeviceBitLockerKey))).scalar_one()
+        assert crypto.decrypt(row.recovery_password_enc) == PASSWORD
+        assert (await s.execute(select(AuditLog).where(
+            AuditLog.action == "device.bitlocker_key_re_escrow"))).scalar_one() is not None
+
+
+async def test_a_different_password_for_a_known_key_is_kept_out_and_audited(
+        client, admin_headers, session_factory):
+    token, _ = await _enroll(client, admin_headers)
+    await _escrow(client, token, [KEY])
+    other = "999999-234567-345678-456789-567890-678901-789012-890123"
+    assert (await _escrow(client, token, [dict(KEY, recovery_password=other)])).status_code == 204
+    async with session_factory() as s:
+        row = (await s.execute(select(DeviceBitLockerKey))).scalar_one()
+        assert crypto.decrypt(row.recovery_password_enc) == PASSWORD          # first copy kept
+        conflict = (await s.execute(select(AuditLog).where(
+            AuditLog.action == "device.bitlocker_key_conflict"))).scalar_one()
+        assert other not in str(conflict.detail) and PASSWORD not in str(conflict.detail)
+
+
+async def test_a_device_cannot_escrow_more_than_the_cap(client, admin_headers, session_factory):
+    from app.services.bitlocker_keys import MAX_KEYS_PER_DEVICE
+    token, device_id = await _enroll(client, admin_headers)
+    async with session_factory() as s:
+        from app.models import Device
+        dev = await s.get(Device, device_id)
+        for i in range(MAX_KEYS_PER_DEVICE):
+            s.add(DeviceBitLockerKey(device_id=dev.id, org_id=dev.org_id, drive="D:",
+                                     protector_id=f"00000000-0000-0000-0000-{i:012d}",
+                                     recovery_password_enc="x", escrowed_at=utcnow()))
+        await s.commit()
+    assert (await _escrow(client, token, [KEY])).status_code == 409
+
+
+async def test_an_error_never_echoes_a_password(client, admin_headers):
+    token, _ = await _enroll(client, admin_headers)
+    bad = "12345a-234567-345678-456789-567890-678901-789012-890123"
+    r = await _escrow(client, token, [dict(KEY, recovery_password=bad)])
+    assert r.status_code in (400, 422) and bad not in r.text
+    r = await _escrow(client, token, [KEY] * 11)                    # too many in one report
+    assert r.status_code in (400, 422) and PASSWORD not in r.text
+
+
+async def test_reveal_is_limited_per_hour_and_never_cached(client, admin_headers, admin_user, session_factory):
+    from app.services.bitlocker_keys import MAX_REVEALS_PER_HOUR
+    token, device_id = await _enroll(client, admin_headers)
+    await _escrow(client, token, [KEY])
+    key_id = (await client.get(f"/api/v1/devices/{device_id}/bitlocker-keys", headers=admin_headers)).json()[0]["id"]
+    url = f"/api/v1/devices/{device_id}/bitlocker-keys/{key_id}/reveal"
+
+    r = await client.post(url, headers=admin_headers)
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+
+    async with session_factory() as s:
+        for _ in range(MAX_REVEALS_PER_HOUR):
+            s.add(AuditLog(org_id=admin_user.org_id, actor_id=admin_user.id,
+                           action="device.bitlocker_key_reveal", target_type="device", target_id=device_id))
+        await s.commit()
+    assert (await client.post(url, headers=admin_headers)).status_code == 429
+
+
+async def test_deleting_a_device_records_how_many_keys_went_with_it(client, admin_headers, session_factory):
+    token, device_id = await _enroll(client, admin_headers)
+    await _escrow(client, token, [KEY])
+    assert (await client.delete(f"/api/v1/devices/{device_id}", headers=admin_headers)).status_code == 204
+    async with session_factory() as s:
+        entry = (await s.execute(select(AuditLog).where(AuditLog.action == "device.delete"))).scalar_one()
+        assert entry.detail["bitlocker_keys_destroyed"] == 1

@@ -11,7 +11,10 @@ public sealed record PostureReport(
     bool? FirewallDomain,
     bool? FirewallPrivate,
     bool? FirewallPublic,
-    bool? BitLockerOsDrive);
+    bool? BitLockerOsDrive,
+    // Another antivirus is registered with Security Center. Defender's real-time protection is
+    // off by design beside it, which must not read as an unprotected PC. Null = not readable.
+    bool? ThirdPartyAntivirus = null);
 
 public interface IPostureCollector
 {
@@ -36,8 +39,9 @@ public sealed class PostureCollector(ILogger<PostureCollector> logger) : IPostur
         var (realtime, sigAge) = ReadDefender();
         var (domain, priv, pub) = ReadFirewall();
         var bitlocker = ReadBitLocker();
+        var thirdParty = ReadThirdPartyAntivirus();
 
-        var report = new PostureReport(realtime, sigAge, domain, priv, pub, bitlocker);
+        var report = new PostureReport(realtime, sigAge, domain, priv, pub, bitlocker, thirdParty);
         var anyKnown = realtime is not null || sigAge is not null || domain is not null
                        || priv is not null || pub is not null || bitlocker is not null;
         return anyKnown ? report : null;
@@ -64,28 +68,36 @@ public sealed class PostureCollector(ILogger<PostureCollector> logger) : IPostur
 
     private (bool? domain, bool? priv, bool? pub) ReadFirewall()
     {
-        bool? domain = null, priv = null, pub = null;
-        try
-        {
-            using var searcher = new ManagementObjectSearcher(
-                @"root\StandardCimv2", "SELECT Name, Enabled FROM MSFT_NetFirewallProfile");
-            foreach (var obj in searcher.Get())
-            {
-                var state = ParseGpoBool(obj["Enabled"]);
-                switch (obj["Name"]?.ToString())
-                {
-                    case "Domain": domain = state; break;
-                    case "Private": priv = state; break;
-                    case "Public": pub = state; break;
-                }
-            }
-        }
+        // The effective state after Group Policy, not the local settings (security review, 2a+).
+        try { return FirewallProfiles.ReadActive(); }
         catch (Exception ex)
         {
             logger.LogDebug(ex, "Firewall profiles not readable");
+            return (null, null, null);
         }
-        return (domain, priv, pub);
     }
+
+    private bool? ReadThirdPartyAntivirus()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(@"root\SecurityCenter2",
+                "SELECT displayName FROM AntiVirusProduct");
+            var names = searcher.Get().Cast<ManagementObject>()
+                .Select(o => o["displayName"]?.ToString() ?? "").Where(n => n.Length > 0).ToList();
+            return HasThirdPartyAntivirus(names);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Antivirus list not readable");
+            return null;
+        }
+    }
+
+    /// <summary>True when any registered antivirus is not Defender. An empty list is false:
+    /// nothing else registered.</summary>
+    internal static bool HasThirdPartyAntivirus(IReadOnlyList<string> displayNames) =>
+        displayNames.Any(n => !Remediation.DefenderRemediation.IsDefenderName(n));
 
     private bool? ReadBitLocker()
     {

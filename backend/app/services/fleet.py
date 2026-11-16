@@ -40,9 +40,9 @@ from app.services.remediation.service import (
 _CHECK_ISSUES: dict[str, tuple[str, str, str | None, str | None]] = {
     "disk": ("Low disk space", "medium", "clear_system_temp", None),
     "defender": (
-        "Microsoft Defender not running", "high", None,
-        "Starting a security service needs the elevated agent, which doesn't expose that "
-        "action yet. Start WinDefend on the device, or push it through Intune/GPO.",
+        "Microsoft Defender not running", "high", "enable_defender_realtime",
+        "Turn it on from the fix button (admin approval). It refuses when another antivirus "
+        "is registered, and never changes Tamper Protection.",
     ),
     "firewall": (
         "Windows Firewall not running", "high", "enable_firewall",

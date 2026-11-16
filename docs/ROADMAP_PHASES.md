@@ -568,8 +568,33 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   never logs it. Uploaded with the hourly inventory, in batches of 10, and only keys not yet
   escrowed in this run. 348 agent tests pass. Not live-checked: this laptop has no
   BitLocker-protected drive, so there is no key to read.
-  **Still to do:** the portal reveal button, the security-reviewer pass (it handles a
-  credential), a live check on a BitLocker-protected PC, and only then the turn-on action.
+  **Still to do:** the portal reveal button, a live check on a BitLocker-protected PC, and
+  only then the turn-on action.
+- **Security review (16 Nov, two parallel reviews):** no Critical. Fixed the same day:
+  - **Escrow, High:** a replaced platform key left every stored key undecryptable and never
+    re-escrowed. Now a re-sent key whose stored copy no longer decrypts is re-escrowed and
+    audited (`device.bitlocker_key_re_escrow`).
+  - **Escrow, Medium/Low:**
+    - A different password for a known key is kept out and audited as a conflict.
+    - At most 64 keys per device.
+    - The agent endpoint no longer returns 422 bodies that echo a password.
+    - Reveal is limited to 20 per admin per hour (429) and sent with `Cache-Control: no-store`.
+    - Device delete records how many keys went with it.
+    - The agent trims before sending, reads keys for drives whose protection is suspended,
+      isolates errors per volume, and re-sends after a re-enrollment.
+  - **Fix actions and posture:**
+    - Firewall state is read from the effective `ActiveStore` through WMI, so a Group Policy
+      that keeps it off is no longer reported as fixed, and non-English netsh text no longer
+      matters. Checked live: it reads OFF on this laptop, matching netsh.
+    - `enable_firewall` refuses beside another registered firewall.
+    - A firewall with only some profiles reported is `unknown`, not pass.
+    - Posture reports a third-party antivirus (migration `0081`), and the Defender check
+      passes in that case.
+    - `enable_defender_realtime` sets the preference through WMI, with PowerShell by full
+      path only as a fallback.
+    - Defender's Fleet Issue now links its fix.
+  - **Not fixed (by design or later):** a dedicated "read BitLocker keys" permission, and
+    notifying other admins on reveal.
 - Each action's chat lines live in `_TECHNICAL_OUTCOME` and `_ACK_SUBJECT`
   (`remediation/service.py`); `test_chat_progress_message.py` fails if one is missing.
 - Until these ship, the portal says "fix it in Intune or Group Policy" for these three checks.

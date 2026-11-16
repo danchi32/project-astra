@@ -172,7 +172,8 @@ public sealed record TelemetryPosture(
     [property: JsonPropertyName("firewall_domain")] bool? FirewallDomain,
     [property: JsonPropertyName("firewall_private")] bool? FirewallPrivate,
     [property: JsonPropertyName("firewall_public")] bool? FirewallPublic,
-    [property: JsonPropertyName("bitlocker_os_drive")] bool? BitLockerOsDrive);
+    [property: JsonPropertyName("bitlocker_os_drive")] bool? BitLockerOsDrive,
+    [property: JsonPropertyName("third_party_antivirus")] bool? ThirdPartyAntivirus = null);
 
 public sealed record TelemetryLocalAccount(
     [property: JsonPropertyName("name")] string Name,

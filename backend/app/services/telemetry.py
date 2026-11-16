@@ -253,6 +253,7 @@ class TelemetryService:
                 defender_signature_age_days=p.defender_signature_age_days,
                 firewall_domain=p.firewall_domain, firewall_private=p.firewall_private,
                 firewall_public=p.firewall_public, bitlocker_os_drive=p.bitlocker_os_drive,
+                third_party_antivirus=p.third_party_antivirus,
                 collected_at=now,
             ))
 

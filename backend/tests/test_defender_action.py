@@ -9,8 +9,11 @@ def test_it_is_admin_only_and_run_by_the_elevated_service():
     assert action.params == ()
 
 
-def test_it_is_not_withheld_from_the_ai_but_a_person_still_has_to_approve():
-    # admin_only: the AI may propose it, and only an admin can approve it. Not operator_only.
+def test_the_ai_cannot_request_it():
+    # admin_only actions are refused to the assistant by its tool (app/services/ai/tools.py);
+    # an admin starts it from the portal. It is not operator_only, which is a separate rule.
+    from app.services.ai.tools import _ACTION_IDS
+    assert "enable_defender_realtime" not in _ACTION_IDS
     assert not ACTIONS["enable_defender_realtime"].operator_only
 
 

@@ -178,6 +178,7 @@ class PosturePayload(_SanitizedInput):
     firewall_private: bool | None = None
     firewall_public: bool | None = None
     bitlocker_os_drive: bool | None = None
+    third_party_antivirus: bool | None = None
 
 
 class TelemetryPush(_SanitizedInput):

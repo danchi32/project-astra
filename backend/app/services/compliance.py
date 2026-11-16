@@ -48,7 +48,7 @@ from app.services.licensing import (
 CHECKS: list[tuple[str, str, str | None]] = [
     ("patch", "Windows updates installed", "windows_update_install"),
     ("disk", "Enough free disk space", "clear_system_temp"),
-    ("defender", "Microsoft Defender running", None),
+    ("defender", "Microsoft Defender running", "enable_defender_realtime"),
     ("firewall", "Windows Firewall running", "enable_firewall"),
     ("no_critical_events", "No critical system errors", None),
     ("agent_reporting", "Agent reporting in", None),
@@ -473,6 +473,9 @@ class ComplianceService:
     @classmethod
     def _defender_check(cls, p: DevicePosture) -> CheckResult:
         age = p.defender_signature_age_days
+        # Another antivirus owns real-time protection, and Defender is off beside it by design.
+        if p.third_party_antivirus and not p.defender_realtime:
+            return cls._chk("defender", "pass", "Another antivirus is protecting this PC")
         if p.defender_realtime is None and age is None:
             return cls._chk("defender", "unknown", "Not reported")
         if p.defender_realtime is False:
@@ -493,6 +496,9 @@ class ComplianceService:
         off = [k for k, v in known.items() if v is False]
         if off:
             return cls._chk("firewall", "fail", f"Off for {', '.join(off)} network")
+        # Pass only when every profile is known: one reported ON is not proof the others are.
+        if len(known) < len(profiles):
+            return cls._chk("firewall", "unknown", "Not every profile reported")
         return cls._chk("firewall", "pass", f"On ({', '.join(known)})")
 
     @classmethod

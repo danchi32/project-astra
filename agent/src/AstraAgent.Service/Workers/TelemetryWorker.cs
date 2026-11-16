@@ -37,6 +37,9 @@ public sealed class TelemetryWorker(
     // Keys escrowed in this run. A recovery password crosses the network once per service start,
     // not every hour; the backend ignores a key it already holds, so a restart only re-sends once.
     private readonly HashSet<string> _escrowed = [];
+    // The device token the set belongs to. A re-enrollment makes a new device row on the
+    // server, which holds none of the keys: send them all again.
+    private string? _escrowedFor;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -149,6 +152,11 @@ public sealed class TelemetryWorker(
 
     private async Task EscrowBitLockerKeysAsync(string token, CancellationToken ct)
     {
+        if (_escrowedFor != token)
+        {
+            _escrowed.Clear();
+            _escrowedFor = token;
+        }
         var fresh = BitLockerKeyCollector.NotYetEscrowed(bitlockerKeys.Collect(), _escrowed);
         foreach (var batch in fresh.Chunk(10))
         {
@@ -162,7 +170,7 @@ public sealed class TelemetryWorker(
     private static TelemetryPosture? ToPosture(PostureReport? r) => r is null
         ? null
         : new TelemetryPosture(r.DefenderRealtime, r.DefenderSignatureAgeDays,
-            r.FirewallDomain, r.FirewallPrivate, r.FirewallPublic, r.BitLockerOsDrive);
+            r.FirewallDomain, r.FirewallPrivate, r.FirewallPublic, r.BitLockerOsDrive, r.ThirdPartyAntivirus);
 
     private static TelemetryHardware ToHardware(HardwareInfo h) =>
         new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb,

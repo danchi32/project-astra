@@ -36,16 +36,24 @@ public sealed class BitLockerKeyCollector(ILogger<BitLockerKeyCollector> logger)
                 "SELECT * FROM Win32_EncryptableVolume");
             foreach (ManagementObject volume in searcher.Get())
             {
-                var drive = volume["DriveLetter"]?.ToString()?.ToUpperInvariant();
-                if (drive is null || !Drive.IsMatch(drive)) continue;
-                if (!int.TryParse(volume["ProtectionStatus"]?.ToString(), out var status) || status != 1) continue;
-
-                foreach (var id in ProtectorIds(volume))
+                // One volume that throws must not cost every other volume its key.
+                try
                 {
-                    var normalized = NormalizeProtectorId(id);
-                    var password = NumericalPassword(volume, id);
-                    if (normalized is null || password is null || !IsRecoveryPassword(password)) continue;
-                    keys.Add(new BitLockerRecoveryKey(drive, normalized, password));
+                    var drive = volume["DriveLetter"]?.ToString()?.ToUpperInvariant();
+                    if (drive is null || !Drive.IsMatch(drive)) continue;
+                    if (!ShouldReadKeys(AsInt(volume["ProtectionStatus"]), AsInt(volume["ConversionStatus"]))) continue;
+
+                    foreach (var id in ProtectorIds(volume))
+                    {
+                        var normalized = NormalizeProtectorId(id);
+                        var password = NumericalPassword(volume, id)?.Trim();
+                        if (normalized is null || password is null || !IsRecoveryPassword(password)) continue;
+                        keys.Add(new BitLockerRecoveryKey(drive, normalized, password));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug("One BitLocker volume not readable: {Type}", ex.GetType().Name);
                 }
             }
         }
@@ -73,7 +81,15 @@ public sealed class BitLockerKeyCollector(ILogger<BitLockerKeyCollector> logger)
         return result?["NumericalPassword"] as string;
     }
 
+    private static int? AsInt(object? v) => int.TryParse(v?.ToString(), out var n) ? n : null;
+
     // ── pure helpers (unit-tested) ──────────────────────────────────────────
+
+    /// <summary>Read a volume's keys when it is protected, or when it holds encrypted data even
+    /// though protection is suspended (Windows suspends it for updates, and mid-encryption).
+    /// A fully decrypted volume (ConversionStatus 0) has no key worth escrowing.</summary>
+    internal static bool ShouldReadKeys(int? protectionStatus, int? conversionStatus) =>
+        protectionStatus == 1 || (conversionStatus is not null && conversionStatus != 0);
 
     internal static bool IsRecoveryPassword(string value) => Recovery.IsMatch(value.Trim());
 

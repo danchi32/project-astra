@@ -35,3 +35,25 @@ def test_a_passing_firewall_check_offers_nothing():
     check = ComplianceService._firewall_check(row)
     assert check.status == "pass"
     assert check.fix_action_id is None
+
+
+# ── security review fixes ──────────────────────────────────────────────────────────
+
+
+def _posture(**kw):
+    base = dict(device_id=None, org_id=None, collected_at=datetime.now(UTC))
+    base.update(kw)
+    return DevicePosture(**base)
+
+
+def test_a_partly_reported_firewall_is_unknown_not_pass():
+    check = ComplianceService._firewall_check(_posture(firewall_domain=True))
+    assert check.status == "unknown"
+
+
+def test_a_pc_protected_by_another_antivirus_passes_the_defender_check():
+    check = ComplianceService._defender_check(_posture(defender_realtime=False, third_party_antivirus=True))
+    assert check.status == "pass"
+    # Without the other antivirus, real-time off is still a failure with the admin fix offered.
+    off = ComplianceService._defender_check(_posture(defender_realtime=False, third_party_antivirus=False))
+    assert off.status == "fail" and off.fix_action_id == "enable_defender_realtime"

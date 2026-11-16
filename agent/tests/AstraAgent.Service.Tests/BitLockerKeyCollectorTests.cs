@@ -36,4 +36,13 @@ public class BitLockerKeyCollectorTests
         var escrowed = new HashSet<string> { BitLockerKeyCollector.EscrowKey(c) };
         Assert.Equal([d], BitLockerKeyCollector.NotYetEscrowed([c, d], escrowed));
     }
+
+    [Theory]
+    [InlineData(1, 1, true)]       // protected
+    [InlineData(0, 1, true)]       // encrypted, protection suspended (updates)
+    [InlineData(0, 2, true)]       // encryption in progress
+    [InlineData(0, 0, false)]      // fully decrypted: no key worth escrowing
+    [InlineData(null, null, false)]
+    public void Keys_are_read_for_protected_or_encrypted_volumes(int? protection, int? conversion, bool expected)
+        => Assert.Equal(expected, BitLockerKeyCollector.ShouldReadKeys(protection, conversion));
 }
