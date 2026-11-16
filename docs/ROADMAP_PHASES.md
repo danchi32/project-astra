@@ -496,8 +496,15 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
   exactly as before. `security_score` is weighted by check (`compliance.WEIGHTS`), per device
   and as a fleet mean; the old `score` is unchanged. Tests: `test_security_posture.py` (8).
   Migration checked up / down / up on Postgres 16.
-  **Still to do for 2a:** the agent collector that sends `posture` (0.15.0, the C# side, which
-  also needs the real-state checks to be verified on a VM), and a portal display.
+  Agent side (15 Nov, not version-bumped; the bump happens at release): `PostureCollector`
+  reads Defender (`root\Microsoft\Windows\Defender`), the firewall profiles
+  (`root\StandardCimv2`) and BitLocker on the system drive (`root\CIMV2\Security\
+  MicrosoftVolumeEncryption`). Every read is independent, and a null is "unknown". It runs
+  on every push, so a Defender change reaches the backend within one cycle. The drive letter
+  is validated before it goes into the WQL. Checked: 331 agent tests pass; Defender values
+  match raw WMI on a real laptop; the firewall reads OFF on all three profiles, which
+  `netsh advfirewall` confirms. **Still to do for 2a:** BitLocker needs an elevated read, so
+  it is not verified yet (run as SYSTEM, the way the agent runs); and a portal display.
 
 **C3 · Hijack-proof AI** 🔒
 - Mark every tool result that carries free text from outside (event messages, KB articles,

@@ -17,6 +17,7 @@ public sealed class TelemetryWorker(
     IEventLogCollector events,
     IInstalledAppsCollector apps,
     ILicensingCollector licensing,
+    IPostureCollector posture,
     IServicesCollector services,
     IWindowsUpdateCollector updates,
     IHardwareCollector hardware,
@@ -125,7 +126,9 @@ public sealed class TelemetryWorker(
             LocalAccounts: collectInventory
                 ? Remediation.LocalAccountManager.List()?.Select(a => new TelemetryLocalAccount(
                     a.Name, a.FullName, a.Enabled, a.IsAdmin, a.BuiltIn)).ToList()
-                : null);
+                : null,
+            // Every cycle, like sessions: a Defender change must not wait for the hourly inventory.
+            Posture: ToPosture(posture.Collect()));
 
         var pushed = await api.PushTelemetryAsync(token, payload, ct);
         if (pushed && collectInventory)
@@ -136,6 +139,11 @@ public sealed class TelemetryWorker(
             cpuPct, mem.UsedMb, mem.TotalMb, diskList.Count, sessionList.Count);
         return pushed;
     }
+
+    private static TelemetryPosture? ToPosture(PostureReport? r) => r is null
+        ? null
+        : new TelemetryPosture(r.DefenderRealtime, r.DefenderSignatureAgeDays,
+            r.FirewallDomain, r.FirewallPrivate, r.FirewallPublic, r.BitLockerOsDrive);
 
     private static TelemetryHardware ToHardware(HardwareInfo h) =>
         new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb,

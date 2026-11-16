@@ -160,7 +160,19 @@ public sealed record TelemetryPush(
     [property: JsonPropertyName("licensing")] IReadOnlyList<TelemetryLicensingProduct>? Licensing = null,
     // Local Windows accounts, with the hourly inventory. Null between inventories and when WMI
     // couldn't be read — the backend keeps what it has.
-    [property: JsonPropertyName("local_accounts")] IReadOnlyList<TelemetryLocalAccount>? LocalAccounts = null);
+    [property: JsonPropertyName("local_accounts")] IReadOnlyList<TelemetryLocalAccount>? LocalAccounts = null,
+    // Security posture (2a), every push: a change to Defender or the firewall must reach the
+    // backend within one cycle. Null when nothing could be read; the backend keeps what it has.
+    [property: JsonPropertyName("posture")] TelemetryPosture? Posture = null);
+
+/// <summary>Security posture facts. A null field means "could not read", never "off".</summary>
+public sealed record TelemetryPosture(
+    [property: JsonPropertyName("defender_realtime")] bool? DefenderRealtime,
+    [property: JsonPropertyName("defender_signature_age_days")] int? DefenderSignatureAgeDays,
+    [property: JsonPropertyName("firewall_domain")] bool? FirewallDomain,
+    [property: JsonPropertyName("firewall_private")] bool? FirewallPrivate,
+    [property: JsonPropertyName("firewall_public")] bool? FirewallPublic,
+    [property: JsonPropertyName("bitlocker_os_drive")] bool? BitLockerOsDrive);
 
 public sealed record TelemetryLocalAccount(
     [property: JsonPropertyName("name")] string Name,
