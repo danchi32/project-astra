@@ -534,6 +534,26 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
     release workflow, which auto-updates every enrolled PC, so it waits until phase-2 is merged
     to main and the decision is made.
 
+**2a+ · Security fix actions** (follows F1; each action is its own change)
+Today the Security Score shows a failing check but offers no fix. These add the first fixes,
+one at a time, in this order. Every action needs: a backend registry entry, the same id in the
+agent's `SystemRemediationExecutor` allowlist, a tier, a test that keeps the two in step, and
+an update to `marketing-service/brand/claims.yaml` and the website action count.
+
+- **Firewall: turn a profile on** (first, lowest risk). Agent runs `Set-NetFirewallProfile`
+  for one named profile. Tier `approval_required`: turning it on can break a line-of-business
+  app, so a person approves. Done when: a profile that is off goes on after approval, and the
+  Security Score recovers in one cycle.
+- **Defender: turn real-time protection on.** Only when Defender is the sole antivirus (no
+  third-party AV registered, passive mode not in use). Tier `admin_only`. Done when it is
+  refused on a machine with a third-party AV, and works on one without. Tamper Protection
+  is never changed by SAVIO: if it is on, the action reports that and stops.
+- **BitLocker: turn on the system drive.** Last, and only after recovery-key escrow exists.
+  Needs TPM, a reboot, and the recovery key stored where an admin can get it (SAVIO or Entra
+  ID / AD) before encryption starts. Tier `admin_only`. Not one click. Done when a key is
+  escrowed, encryption completes, and the escrowed key opens the drive.
+- Until these ship, the portal says "fix it in Intune or Group Policy" for these three checks.
+
 **C3 · Hijack-proof AI** 🔒
 - Mark every tool result that carries free text from outside (event messages, KB articles,
   user chat) as untrusted. A proposal whose justification relies on untrusted text is raised
