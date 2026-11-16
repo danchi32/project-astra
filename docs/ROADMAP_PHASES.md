@@ -517,6 +517,12 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
     they missed it, and my earlier "up / down / up" check did not insert a row. Fixed, and a
     column comparison against the live table (Alembic `compare_metadata`) now shows no
     difference. Lesson for later modules: any migration check must also insert a row.
+  - Agent 0.15.0 built (15 Nov): version bumped on `phase-2` (commit `1adb7c2`), not
+    tagged. The build is in the scratchpad, outside the repo. 331 agent tests pass.
+    **Not yet:** the live VM check (no agent service is installed on this laptop, so the
+    check needs a real install and enrollment), and the tag. `agent-v0.15.0` triggers the
+    release workflow, which auto-updates every enrolled PC, so it waits until phase-2 is merged
+    to main and the decision is made.
 
 **C3 · Hijack-proof AI** 🔒
 - Mark every tool result that carries free text from outside (event messages, KB articles,
