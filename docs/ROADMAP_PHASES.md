@@ -477,6 +477,17 @@ Also: list who at Technomate can reach the production database, and keep that ac
 (a) Cloud Scheduler calling an authenticated internal endpoint per job; (b) compute lazily
 when a page/email is requested and cache it. Recommendation: (a) for J1 emails and C1's 7-day
 recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
+- **Decided (16 Nov): manual for now, scheduler when a client asks for it.**
+  - Nothing runs on a clock yet. Reports are generated when someone asks for them.
+  - J1 is built as an on-demand brief: view it, or e-mail it now with a button. It can be
+    put on a schedule later without rewriting it.
+  - N2's time-based alerts (a PC gone silent, warranty at 90/60/30 days, a stuck rollout)
+    wait for the scheduler. An on-demand view of the same list can come earlier.
+  - C1, C2 and J2 never needed a scheduler: they ride on agent pushes, or are computed when
+    read.
+  - When a client needs e-mails on a clock, option (a) is the plan: Cloud Scheduler calling
+    one authenticated internal endpoint, with idempotent jobs recorded in a `job_runs`
+    table.
 
 **F1 · Security Score**
 - Agent: BitLocker (`Win32_EncryptableVolume`), Defender real state (`MSFT_MpComputerStatus`:
