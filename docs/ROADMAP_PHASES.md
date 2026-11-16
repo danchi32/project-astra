@@ -562,9 +562,14 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   device comes from the token, never the body; 503 and nothing written without the platform
   key). `GET /devices/{id}/bitlocker-keys` lists drive and key ID only (admin).
   `POST .../reveal` (admin, not view-as) returns the password and audits it. 9 tests; migration
-  checked up / down / up on Postgres with a real insert. **Still to do:** the agent collector
-  that reads and uploads the recovery password, the portal reveal button, the
-  security-reviewer pass (it handles a credential), and only then the turn-on action.
+  checked up / down / up on Postgres with a real insert.
+- **BitLocker key escrow, agent (16 Nov):** `BitLockerKeyCollector` reads only the
+  numerical-password protector (type 3) of drives BitLocker protects, checks its format, and
+  never logs it. Uploaded with the hourly inventory, in batches of 10, and only keys not yet
+  escrowed in this run. 348 agent tests pass. Not live-checked: this laptop has no
+  BitLocker-protected drive, so there is no key to read.
+  **Still to do:** the portal reveal button, the security-reviewer pass (it handles a
+  credential), a live check on a BitLocker-protected PC, and only then the turn-on action.
 - Each action's chat lines live in `_TECHNICAL_OUTCOME` and `_ACK_SUBJECT`
   (`remediation/service.py`); `test_chat_progress_message.py` fails if one is missing.
 - Until these ship, the portal says "fix it in Intune or Group Policy" for these three checks.

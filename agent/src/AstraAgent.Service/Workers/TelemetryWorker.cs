@@ -18,6 +18,7 @@ public sealed class TelemetryWorker(
     IInstalledAppsCollector apps,
     ILicensingCollector licensing,
     IPostureCollector posture,
+    IBitLockerKeyCollector bitlockerKeys,
     IServicesCollector services,
     IWindowsUpdateCollector updates,
     IHardwareCollector hardware,
@@ -33,6 +34,9 @@ public sealed class TelemetryWorker(
     // ended) must not keep pushing every minute, which is a database lookup per push.
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(15);
     private DateTime _lastInventoryAt = DateTime.MinValue;
+    // Keys escrowed in this run. A recovery password crosses the network once per service start,
+    // not every hour; the backend ignores a key it already holds, so a restart only re-sends once.
+    private readonly HashSet<string> _escrowed = [];
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -132,12 +136,27 @@ public sealed class TelemetryWorker(
 
         var pushed = await api.PushTelemetryAsync(token, payload, ct);
         if (pushed && collectInventory)
+        {
             _lastInventoryAt = now.UtcDateTime;
+            await EscrowBitLockerKeysAsync(token, ct);
+        }
 
         logger.LogInformation(
             "Telemetry pushed — CPU {Cpu:F1}% RAM {Ram}/{Total}MB Disks:{Disks} Sessions:{Sessions}",
             cpuPct, mem.UsedMb, mem.TotalMb, diskList.Count, sessionList.Count);
         return pushed;
+    }
+
+    private async Task EscrowBitLockerKeysAsync(string token, CancellationToken ct)
+    {
+        var fresh = BitLockerKeyCollector.NotYetEscrowed(bitlockerKeys.Collect(), _escrowed);
+        foreach (var batch in fresh.Chunk(10))
+        {
+            if (!await api.EscrowBitLockerKeysAsync(token, batch, ct))
+                return;                                 // try again with the next inventory
+            foreach (var k in batch) _escrowed.Add(BitLockerKeyCollector.EscrowKey(k));
+            logger.LogInformation("Escrowed {Count} BitLocker recovery key(s)", batch.Length);
+        }
     }
 
     private static TelemetryPosture? ToPosture(PostureReport? r) => r is null

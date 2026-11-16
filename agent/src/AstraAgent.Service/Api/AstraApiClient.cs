@@ -38,6 +38,11 @@ public interface IAstraApiClient
     Task<bool> PushTelemetryAsync(string deviceToken, TelemetryPush payload, CancellationToken ct);
     Task<bool> PushOfflineEventsAsync(string deviceToken, IReadOnlyList<Net.JournalEntry> entries, CancellationToken ct);
 
+    /// <summary>Escrow BitLocker recovery passwords. False on any failure, including a server
+    /// without an encryption key (503): the caller keeps the keys and tries again next hour.</summary>
+    Task<bool> EscrowBitLockerKeysAsync(
+        string deviceToken, IReadOnlyList<Telemetry.Collectors.BitLockerRecoveryKey> keys, CancellationToken ct);
+
     /// <summary>Ask the backend for the current signed update manifest. Returns null on any
     /// transport error; an envelope with Available=false means no channel is configured.</summary>
     Task<UpdateEnvelope?> GetUpdateAsync(string deviceToken, CancellationToken ct);
@@ -95,6 +100,26 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
             {
                 at = e.At, trigger = e.Trigger, diagnosis = e.Diagnosis, step = e.Step,
                 step_ok = e.StepOk, output = e.Output, fixed_after = e.FixedAfter,
+            }) }),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException) { return false; }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested) { return false; }
+    }
+
+    public async Task<bool> EscrowBitLockerKeysAsync(
+        string deviceToken, IReadOnlyList<Telemetry.Collectors.BitLockerRecoveryKey> keys, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/bitlocker-keys")
+        {
+            Content = JsonContent.Create(new { keys = keys.Select(k => new
+            {
+                drive = k.Drive, protector_id = k.ProtectorId, recovery_password = k.RecoveryPassword,
             }) }),
         };
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
