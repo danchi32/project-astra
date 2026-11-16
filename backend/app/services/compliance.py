@@ -49,7 +49,7 @@ CHECKS: list[tuple[str, str, str | None]] = [
     ("patch", "Windows updates installed", "windows_update_install"),
     ("disk", "Enough free disk space", "clear_system_temp"),
     ("defender", "Microsoft Defender running", None),
-    ("firewall", "Windows Firewall running", None),
+    ("firewall", "Windows Firewall running", "enable_firewall"),
     ("no_critical_events", "No critical system errors", None),
     ("agent_reporting", "Agent reporting in", None),
     ("no_banned_software", "No restricted software", None),

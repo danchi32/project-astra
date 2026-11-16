@@ -552,6 +552,13 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   Needs TPM, a reboot, and the recovery key stored where an admin can get it (SAVIO or Entra
   ID / AD) before encryption starts. Tier `admin_only`. Not one click. Done when a key is
   escrowed, encryption completes, and the escrowed key opens the drive.
+- **Built (16 Nov):** `enable_firewall` (approval_required, system) reads the state back
+  and reports success only when all three profiles are on. Its failing firewall check and
+  Fleet Issue link to it. `enable_defender_realtime` (admin_only, system) runs only when
+  Defender is the sole registered antivirus, reads real-time back, and never touches Tamper
+  Protection. BitLocker is still not built (needs key escrow first).
+- Each action's chat lines live in `_TECHNICAL_OUTCOME` and `_ACK_SUBJECT`
+  (`remediation/service.py`); `test_chat_progress_message.py` fails if one is missing.
 - Until these ship, the portal says "fix it in Intune or Group Policy" for these three checks.
 
 **C3 · Hijack-proof AI** 🔒

@@ -313,6 +313,10 @@ _TECHNICAL_OUTCOME: dict[str, str] = {
     "network_reset":
         "Your network stack has been rebuilt — the TCP/IP stack and Winsock catalog were reset, "
         "clearing the corrupted configuration.",
+    "enable_firewall":
+        "Windows Firewall is on for every network profile, and the state was read back to confirm it.",
+    "enable_defender_realtime":
+        "Defender real-time protection is on. It was checked after the change, not assumed.",
     "windows_update_install":
         "The pending updates are installed through the Windows Update service.",
     "restart_audio":
@@ -366,6 +370,8 @@ _ACK_SUBJECT: dict[str, str] = {
     "create_outlook_rule": "your mailbox rules",
     "office_repair": "your Office installation",
     "network_reset": "your network stack",
+    "enable_firewall": "your firewall",
+    "enable_defender_realtime": "Defender",
     "windows_update_install": "Windows Update",
     "restart_audio": "your sound",
     "renew_ip_address": "your network address",

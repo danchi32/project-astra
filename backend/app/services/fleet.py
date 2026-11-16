@@ -45,9 +45,8 @@ _CHECK_ISSUES: dict[str, tuple[str, str, str | None, str | None]] = {
         "action yet. Start WinDefend on the device, or push it through Intune/GPO.",
     ),
     "firewall": (
-        "Windows Firewall not running", "high", None,
-        "Starting a security service needs the elevated agent, which doesn't expose that "
-        "action yet. Start MpsSvc on the device, or push it through Intune/GPO.",
+        "Windows Firewall not running", "high", "enable_firewall",
+        "Turn it on from the fix button. If Group Policy controls the firewall, change it there.",
     ),
     "bitlocker": (
         "BitLocker not on the system drive", "medium", None,

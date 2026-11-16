@@ -57,9 +57,11 @@ actions:
     - lock_session
     - message_session
     - install_package
+    - enable_firewall
 
   admin_only:          # only an admin may approve
     - reset_windows_update_components
+    - enable_defender_realtime
     - disable_local_account
     - enable_local_account
     - uninstall_application

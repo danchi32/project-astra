@@ -290,6 +290,17 @@ _ACTIONS: tuple[RemediationAction, ...] = (
     # (app/services/software_catalog.py) machine-wide with winget. Approval-required: it
     # changes what runs on the machine. Withheld from the AI — software appears on a PC
     # because a person decided it should.
+    RemediationAction("enable_firewall", "Turn on Windows Firewall", RemediationTier.APPROVAL_REQUIRED,
+                      "Turns on Windows Firewall for the domain, private and public profiles on this "
+                      "PC, then reads the state back to confirm. Needs IT approval: a firewall change "
+                      "can block an application's network traffic.",
+                      execution_context="system"),
+    RemediationAction("enable_defender_realtime", "Turn on Defender real-time protection",
+                      RemediationTier.ADMIN_ONLY,
+                      "Turns Microsoft Defender real-time protection on, but only when Defender is the "
+                      "only antivirus on this PC, then reads the state back. Refuses when another "
+                      "antivirus is registered. Never changes Tamper Protection. Needs an admin.",
+                      execution_context="system"),
     RemediationAction("install_package", "Install software", RemediationTier.APPROVAL_REQUIRED,
                       "Installs one application from SAVIO's software catalog for every user of "
                       "this PC (winget, machine-wide, silent). Only catalog packages are "
