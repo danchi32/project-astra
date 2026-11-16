@@ -723,6 +723,42 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
 - J1 Brief: daily (admin) and weekly (owner) summary email; business language; Hindi option.
 - J5 Value report: hours saved (auto-fixed tasks × configured minutes), incidents prevented,
   ₹ saved — every number traceable.
+- **As built, J2 + J5 (16 Nov, branch `phase-2`, not pushed):** migration `0084` adds the
+  `recommendations` table and two org settings: `minutes_per_fix` (default 15) and
+  `it_hourly_cost` in ₹ (unset by default, and 0 clears it).
+  - **No ₹ is ever estimated.** A rupee figure is the org's own hourly cost times a counted
+    amount of work. With no cost set, no rupee figure appears anywhere.
+  - **J2 Recommendations** (`app/services/recommendations.py`) are rebuilt from live data on
+    every read, so no scheduler is needed (option b). Sources:
+    - failing compliance checks (F1 security and L2 activation included), worded as in Fleet
+      Issues / the Health Check, with the fix action when one exists;
+    - disks forecast to fill;
+    - warranties ending within 90 days, or ended in the last 30;
+    - PCs older than 4 years.
+  - Each recommendation carries its evidence (the PCs, named), a risk, an effort (one click /
+    hands-on / purchase), and by-hand time (PCs × minutes per fix) with its working.
+  - **Lifecycle:** dismiss needs a reason and is audited; restore brings it back. A finding
+    that clears is marked resolved, and the dismissal ends with it. If it comes back, it
+    reopens.
+  - Portal: Operations → Recommendations (staff), with tabs for open, dismissed and resolved.
+  - **J5 Value report** (`GET /reports/value`, staff) counts fixes that succeeded with
+    **nobody approving them**. A fix a person approved is their time, not SAVIO's saving.
+    - Hours = fixes × minutes per fix. ₹ = hours × hourly cost.
+    - "Proven to work", "held 7 days" and "came back" are C1's own verdicts.
+    - Each card shows its basis, and every fix behind the numbers is listed.
+  - Portal: Reports → Value. Settings → "Value figures" holds the two numbers.
+  - **Checked:** `test_recommendations_value.py`, 3 tests:
+    - lifecycle: appear, rupees with the working, dismiss (403 / 422 / audit), resolve,
+      reopen;
+    - restore;
+    - value counting only unattended fixes in the window, and ₹ appearing and disappearing
+      with the setting.
+  - Migration checked up / down / up on Postgres with a write; no column differences on the
+    new table.
+  - On the local test backend, the real laptop's firewall-off shows as the top
+    recommendation. Both pages checked on screen.
+  - **J1 Brief waits for the 2.0 decision.** It sends e-mail on a clock, so it needs a
+    scheduler; J2 and J5 do not.
 
 **L5b · Warranty lookup**
 - **Official manufacturer APIs only — no website scraping** (CAPTCHAs, terms of use, breaks

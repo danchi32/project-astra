@@ -69,3 +69,22 @@ export interface AiSafetyReport {
 
 export const getAiSafetyReport = (days: number) =>
   apiClient.get<AiSafetyReport>("/reports/ai-safety", { params: { days } }).then((r) => r.data);
+
+// J5: what SAVIO's unattended fixes were worth. Every figure has its basis.
+export interface ValueReport {
+  generated_at: string;
+  period_days: number;
+  fixed_unattended: number;
+  minutes_per_fix: number;
+  hours_saved: number;
+  hourly_cost: number | null;
+  inr_saved: number | null;
+  proven_improved: number;
+  held_7_days: number;
+  came_back: number;
+  basis: Record<string, string>;
+  fixes: { task_id: string; action: string; device_hostname: string | null; completed_at: string | null; proof: string | null; held_7_days: boolean | null }[];
+}
+
+export const getValueReport = (days: number) =>
+  apiClient.get<ValueReport>("/reports/value", { params: { days } }).then((r) => r.data);

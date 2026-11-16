@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles, requires
 from app.core.database import get_db
 from app.models import User, UserRole
-from app.schemas.report import AiSafetyReport, AssetReport, FleetHealthReport, RemediationReport
+from app.schemas.report import (
+    AiSafetyReport,
+    AssetReport,
+    FleetHealthReport,
+    RemediationReport,
+    ValueReport,
+)
 from app.services.entitlements import AUDIT_EXPORT
 from app.services.reports import ReportService
 
@@ -92,6 +98,19 @@ async def ai_safety_report(
     session: AsyncSession = Depends(get_db),
 ) -> AiSafetyReport:
     return await ReportService(session).ai_safety_report(actor=actor, days=days)
+
+
+@router.get(
+    "/value",
+    response_model=ValueReport,
+    summary="Value report: unattended fixes, hours and rupees saved, each with its basis (staff)",
+)
+async def value_report(
+    days: int = Query(default=30, ge=1, le=365),
+    actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
+    session: AsyncSession = Depends(get_db),
+) -> ValueReport:
+    return await ReportService(session).value_report(actor=actor, days=days)
 
 
 @router.get("/remediation/export", summary="Remediation activity report (CSV)")

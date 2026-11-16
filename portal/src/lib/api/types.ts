@@ -877,6 +877,9 @@ export interface OrganizationSettings {
   require_admin_for_approval_tier: boolean;
   min_password_length: number;
   enrollment_token_default_days: number;
+  /** J2/J5: minutes a fix takes by hand, and ₹ per IT hour (null = no rupee figures). 0 clears. */
+  minutes_per_fix?: number;
+  it_hourly_cost?: number | null;
   updated_at: string;
 }
 

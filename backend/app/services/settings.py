@@ -78,11 +78,18 @@ class SettingsService:
             "require_admin_for_approval_tier",
             "min_password_length",
             "enrollment_token_default_days",
+            "minutes_per_fix",
         ):
             value = getattr(data, field)
             if value is not None and value != getattr(settings, field):
                 setattr(settings, field, value)
                 changes[field] = value
+        # 0 means "clear it": no hourly cost, so no rupee figures anywhere.
+        if data.it_hourly_cost is not None:
+            cost = data.it_hourly_cost or None
+            if cost != settings.it_hourly_cost:
+                settings.it_hourly_cost = cost
+                changes["it_hourly_cost"] = cost
 
         if changes:
             await self.audit.record(
@@ -157,5 +164,7 @@ class SettingsService:
             require_admin_for_approval_tier=settings.require_admin_for_approval_tier,
             min_password_length=settings.min_password_length,
             enrollment_token_default_days=settings.enrollment_token_default_days,
+            minutes_per_fix=settings.minutes_per_fix,
+            it_hourly_cost=settings.it_hourly_cost,
             updated_at=settings.updated_at,
         )

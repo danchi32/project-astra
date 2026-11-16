@@ -48,6 +48,14 @@ class OrganizationSettings(TimestampMixin, Base):
         Boolean, nullable=False, default=True, server_default="true"
     )
 
+    # J2 / J5: what the org says a fix is worth, so "time saved" and "₹ saved" are its own
+    # numbers, not ours. Minutes a technician would spend doing one fix by hand; the IT
+    # cost of an hour in rupees. No hourly cost set = no rupee figures shown at all.
+    minutes_per_fix: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=15, server_default="15"
+    )
+    it_hourly_cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )

@@ -1,6 +1,7 @@
 from app.models.alert_state import AlertState
 from app.models.asset import AcknowledgementStatus, Asset, AssetCategory, AssetStatus
 from app.models.deployment import Deployment
+from app.models.recommendation import Recommendation
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.assistant import Assistant, AssistantVersion, AssistantVersionStatus
 from app.models.audit_log import AuditLog
@@ -102,6 +103,7 @@ __all__ = [
     "Base",
     "Conversation",
     "Deployment",
+    "Recommendation",
     "Device",
     "DeviceEventLog",
     "DeviceGroup",
