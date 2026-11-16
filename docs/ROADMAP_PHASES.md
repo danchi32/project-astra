@@ -508,6 +508,15 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
   (ProtectionStatus 0, ConversionStatus 0). **Still to do for 2a:** the portal display, and
   the live check that a Defender change reaches the backend within one cycle, which needs
   the agent 0.15.0 built and running on a VM. The 2a tag waits for both.
+  - Portal (15 Nov): the compliance page shows a Security score ring beside Compliance, and
+    the "Needs attention" table has a Security column. Checked on screen against a seeded
+    Postgres fleet (one healthy PC, one with Defender, firewall and BitLocker off): fleet
+    Security 68%, the bad PC 36%, and its failing checks listed.
+  - Bug found on that check: migration 0079 had an `updated_at` column the model does not
+    have, so the first real insert failed on Postgres. Tests run on SQLite from the models, so
+    they missed it, and my earlier "up / down / up" check did not insert a row. Fixed, and a
+    column comparison against the live table (Alembic `compare_metadata`) now shows no
+    difference. Lesson for later modules: any migration check must also insert a row.
 
 **C3 · Hijack-proof AI** 🔒
 - Mark every tool result that carries free text from outside (event messages, KB articles,

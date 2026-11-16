@@ -33,7 +33,6 @@ def upgrade() -> None:
         sa.Column("bitlocker_os_drive", sa.Boolean(), nullable=True),
         sa.Column("collected_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_device_postures_org_id", "device_postures", ["org_id"])
 
