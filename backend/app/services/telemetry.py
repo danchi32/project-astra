@@ -338,6 +338,17 @@ class TelemetryService:
         if fired:
             await email_critical_alerts(self.session, device.org_id, fired)
 
+        # C2: a push from a device in a live rollout re-checks that rollout's gate (the soak
+        # period ends, or a Critical event arrives). Last, after the commit, and fenced like
+        # the result path: the telemetry and alert e-mails are done whatever happens here.
+        try:
+            from app.services.deployments import DeploymentService
+
+            await DeploymentService(self.session).advance_for_device(device.id)
+        except Exception:
+            log.exception("rollout gate failed for device %s", device.id)
+            await self.session.rollback()
+
     async def get_dashboard_summary(self, *, actor: User) -> DashboardSummary:
         org_devices = await self.devices.list_by_org(actor.org_id)
         now = utcnow()

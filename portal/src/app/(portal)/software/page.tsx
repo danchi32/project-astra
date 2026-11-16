@@ -5,7 +5,7 @@ import { PackagePlus, ChevronDown, ChevronRight } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import { listDevicesPaged } from "@/lib/api/devices";
 import { listDeviceGroups } from "@/lib/api/grouping";
-import { getSoftwareCatalog, pushInstall, listDeployments, getDeployment } from "@/lib/api/software";
+import { getSoftwareCatalog, pushInstall, listDeployments, getDeployment, haltDeployment, resumeDeployment, type DeploymentSummary } from "@/lib/api/software";
 import { apiErrorMessage } from "@/lib/utils";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -14,7 +14,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 const STATUS_LABEL: Record<string, string> = {
   approved: "Waiting for device", dispatched: "Installing", succeeded: "Installed",
-  failed: "Failed", pending_approval: "Needs approval", rejected: "Rejected",
+  failed: "Failed", pending_approval: "Needs approval", rejected: "Not run",
 };
 
 const card = { background: "var(--surface)", border: "1px solid var(--border)" };
@@ -34,6 +34,7 @@ export default function SoftwarePage() {
   const [groupIds, setGroupIds] = useState<Set<string>>(new Set());
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState("");
+  const [canary, setCanary] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -58,11 +59,12 @@ export default function SoftwarePage() {
     setBusy(true); setMsg(null);
     try {
       const r = await pushInstall({ package_id: pkg, device_ids: [...deviceIds], group_ids: [...groupIds],
-                                    exclude_device_ids: [...excluded], reason: reason.trim() });
+                                    exclude_device_ids: [...excluded], reason: reason.trim(), canary });
       const parts = [`${r.queued} queued`];
       if (r.already_running) parts.push(`${r.already_running} already in progress`);
       if (r.failed) parts.push(`${r.failed} failed`);
       if (r.not_attempted) parts.push(`${r.not_attempted} not attempted`);
+      if (r.waiting) parts.push(`${r.waiting} waiting for the health check between waves`);
       setMsg({ ok: !r.failed, text: `${r.title}: ${parts.join(", ")}.${r.error ? " " + r.error : ""} Offline PCs install when they next come online.` });
       setDeviceIds(new Set()); setGroupIds(new Set()); setExcluded(new Set()); setReason("");
       qc.invalidateQueries({ queryKey: ["deployments"] });
@@ -140,6 +142,17 @@ export default function SoftwarePage() {
             className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={input} />
         </div>
 
+        <label className="flex items-start gap-2 text-sm" style={{ color: "var(--text-primary)" }}>
+          <input type="checkbox" className="mt-1" checked={canary} onChange={(e) => setCanary(e.target.checked)} />
+          <span>
+            Roll out in waves
+            <span className="block text-xs" style={{ color: "var(--text-secondary)" }}>
+              One PC first, then 10%, then the rest. Each wave waits until the last one installed cleanly, with no
+              failures and no Critical events, for 10 minutes. A failure stops the rollout.
+            </span>
+          </span>
+        </label>
+
         {msg && <p className="text-xs" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}
         <div className="flex justify-end">
           <button onClick={push} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50" style={{ background: "#2563eb" }}>
@@ -163,6 +176,7 @@ export default function SoftwarePage() {
                 ))}
               </span>
             </button>
+            <RolloutBar d={d} />
             {open === d.id && <DeploymentRows id={d.id} />}
           </div>
         ))}
@@ -184,5 +198,59 @@ function DeploymentRows({ id }: { id: string }) {
         </tr>
       ))}
     </tbody></table>
+  );
+}
+
+// C2: where a rollout stands, and the controls for it. Undo is not offered: SAVIO has no
+// inverse of "install this package", so halting is what stops a bad one.
+function RolloutBar({ d }: { d: DeploymentSummary }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const queued = d.status_counts.approved ?? 0;
+  const live = !d.halted_at && (d.waiting > 0 || queued > 0);
+  if (!d.halted_at && !live && !d.waves_total) return null;
+
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true); setErr(null);
+    try { await fn(); qc.invalidateQueries({ queryKey: ["deployments"] }); qc.invalidateQueries({ queryKey: ["deployment", d.id] }); }
+    catch (e) { setErr(apiErrorMessage(e, "That didn't work.")); }
+    finally { setBusy(false); }
+  }
+  function halt() {
+    const why = prompt("Why stop this rollout? (goes in the audit log)");
+    if (why && why.trim().length >= 3) run(() => haltDeployment(d.id, why.trim()));
+  }
+
+  const muted = { color: "var(--text-secondary)" };
+  const btn = { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" };
+  return (
+    <div className="pl-6 pb-2 text-xs space-y-1">
+      {d.halted_at ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ background: "#ef44441a" }}>
+          <span style={{ color: "#ef4444" }}>
+            Halted{d.waves_total ? ` at wave ${d.current_wave} of ${d.waves_total}` : ""}: {d.halt_reason}
+            {d.waiting > 0 && <span style={muted}> · {d.waiting} PCs not started</span>}
+          </span>
+          {d.waiting > 0 && (
+            <button disabled={busy} onClick={() => confirm("Resume and release the next wave now?") && run(() => resumeDeployment(d.id))}
+              className="px-2.5 py-1 rounded-lg font-medium disabled:opacity-50" style={btn}>Resume</button>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-2">
+          <span style={muted}>
+            {d.waves_total
+              ? (d.waiting > 0 ? `Wave ${d.current_wave} of ${d.waves_total} · ${d.waiting} PCs wait for the health check` : `All ${d.waves_total} waves released`)
+              : "Pushed to every PC at once"}
+          </span>
+          {live && (
+            <button disabled={busy} onClick={halt} title="Stops further waves and cancels installs not yet started. Installs already done stay: there is no undo for an install."
+              className="px-2.5 py-1 rounded-lg font-medium disabled:opacity-50" style={btn}>Halt</button>
+          )}
+        </div>
+      )}
+      {err && <p style={{ color: "#ef4444" }}>{err}</p>}
+    </div>
   );
 }

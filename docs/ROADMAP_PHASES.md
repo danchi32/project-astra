@@ -680,6 +680,42 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   (task success + no new critical events), auto-halt on failure.
 - "Undo" only where an inverse action exists (block↔unblock USB, disable↔enable account);
   otherwise halt-only, and the UI says so.
+- **As built (16 Nov, branch `phase-2`, not pushed):** in `app/services/deployments.py`, plus
+  migration `0083` (adds `waves`, `current_wave`, `wave_started_at`, `halted_at` and
+  `halt_reason` to deployments).
+  - **Waves:** a push to more than one PC goes in waves by default (`canary: false` gives the
+    old all-at-once push). Wave 1 is one PC, an online one when there is one. Wave 2 is 10%,
+    at least one PC. Wave 3 is the rest.
+  - A wave's tasks are created only when it is released. A PC in a later wave has nothing
+    queued until the gate opens.
+  - **Gate:** the next wave opens only when all three hold:
+    - every task in the current wave has finished, and none failed;
+    - no PC in the wave has logged a **Critical** event since the wave started (Error-level
+      events are too routine on Windows to gate on);
+    - 10 minutes of soak time have passed since the last one finished.
+  - The gate is checked when a wave PC reports a result and on its telemetry pushes, so no
+    scheduler is needed.
+  - Each wave is approved in the creator's name, and `create_task` re-checks their authority.
+    If they have been demoted or deactivated since, the rollout halts.
+  - **Halt:** on a failure or a Critical event the rollout halts on its own. Installs queued
+    but not yet started are cancelled ("Not run"), and later waves are never created. There
+    is an audit row and a critical notification.
+  - Staff can halt by hand with a reason, and resume, which releases the next wave at once.
+    Both are audited.
+  - **Undo:** halt-only. SAVIO has no inverse of "install a package", and the portal says so
+    on the Halt button. Deployments still push installs only. When they can carry an action
+    with an inverse (USB block/unblock, account disable/enable), undo goes there.
+  - **Portal:** Software page:
+    - a "Roll out in waves" option, on by default;
+    - each push shows its wave ("Wave 1 of 3 · 11 PCs wait for the health check"), or a
+      red halted bar with the reason and a Resume button.
+  - **Checked:** `test_canary_rollout.py`, 6 tests: the wave plan, waves opening in order, a
+    failure halting, a Critical event halting and cancelling queued installs, halt and resume
+    by hand, and a one-PC push.
+  - The A4 test now asks for all-at-once explicitly.
+  - Migration checked up / down / up on Postgres.
+  - Live on the local test backend with 12 made-up PCs: one push held at wave 1 with 11
+    waiting; a failing canary halted the second. Both shown on screen.
 
 **J1 / J2 / J5 · AI IT Manager core**
 - J2 Recommendations: `recommendations` table (evidence, impact in ₹/risk/time, effort,

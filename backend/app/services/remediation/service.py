@@ -947,6 +947,18 @@ class RemediationService:
                 )
             )
         await self.session.commit()
+
+        # C2: one wave device reporting can open the gate to the next wave, or halt the
+        # rollout. After the commit: the result above is the record and must stand whatever
+        # happens to the rollout.
+        if task.deployment_id is not None:
+            from app.services.deployments import DeploymentService
+
+            try:
+                await DeploymentService(self.session).advance(task.deployment_id)
+            except Exception:
+                logger.exception("Rollout gate failed for deployment %s", task.deployment_id)
+                await self.session.rollback()
         return task
 
     async def _offer_escalation(self, task: RemediationTask, label: str) -> str | None:
