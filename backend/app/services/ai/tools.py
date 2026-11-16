@@ -15,6 +15,8 @@ from app.repositories.devices import DeviceRepository
 from app.repositories.telemetry import TelemetryRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.models.base import as_utc, utcnow
+from app.services.ai.untrusted import Provenance
+from app.services.audit import AuditService
 from app.services.remediation.actions import (
     ACTIONS,
     SAFE_SERVICES,
@@ -162,8 +164,12 @@ async def dispatch_tool(
     acting_device_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
     fleet_access: bool = False,
+    provenance: Provenance | None = None,
 ) -> str:
     """Execute a tool call within the org's scope and return a JSON string result.
+
+    `provenance` is the engine's record of this turn (C3): what the user said and what outside
+    text has been read. A proposal that leans on outside text is held for a person.
 
     `acting_device_id` is the device whose tray the chat came from; remediation acts on it.
     `conversation_id` is the chat this call came from, so the execution result can be posted back.
@@ -194,7 +200,8 @@ async def dispatch_tool(
     if name == "propose_remediation":
         return await _propose_remediation(
             session=session, org_id=org_id, acting_device_id=acting_device_id,
-            conversation_id=conversation_id, tool_input=tool_input or {}
+            conversation_id=conversation_id, tool_input=tool_input or {},
+            provenance=provenance,
         )
 
     if name == "search_knowledge_base":
@@ -272,6 +279,22 @@ async def dispatch_tool(
     return json.dumps({"error": f"Unknown tool '{name}'."})
 
 
+async def _refused(
+    session: AsyncSession, org_id: uuid.UUID, device: Any, action_id: str, why: str
+) -> None:
+    """Record a proposal the assistant was not allowed to make (C3's AI Safety report).
+
+    A refusal is the signal worth having: an assistant reaching for an action it was never
+    offered is either confused or being steered.
+    """
+    await AuditService(session).record(
+        org_id=org_id, actor_id=None, action="ai.proposal_refused",
+        target_type="device", target_id=str(device.id),
+        detail={"action": str(action_id)[:60], "why": why, "device": device.hostname},
+    )
+    await session.commit()
+
+
 async def _find_by_hostname(repo: DeviceRepository, org_id: uuid.UUID, hostname: str):
     for device in await repo.list_by_org(org_id):
         if device.hostname.lower() == hostname.lower():
@@ -286,6 +309,7 @@ async def _propose_remediation(
     acting_device_id: uuid.UUID | None,
     conversation_id: uuid.UUID | None,
     tool_input: dict[str, Any],
+    provenance: Provenance | None = None,
 ) -> str:
     if acting_device_id is None:
         return json.dumps(
@@ -309,6 +333,7 @@ async def _propose_remediation(
     # supposed to hold against prompt-injected content, and injected content is exactly
     # what would try an id that was never on the list.
     if action is not None and action.tier is RemediationTier.ADMIN_ONLY:
+        await _refused(session, org_id, device, action_id, "admin_only")
         return json.dumps({
             "error": f"'{action_id}' is an admin-only action and cannot be requested from "
                      "the assistant. Tell the user to raise it with their IT administrator.",
@@ -317,6 +342,7 @@ async def _propose_remediation(
     # decision about a person, and the injected content that would try an unlisted id is
     # precisely the content that wants to show a message box signed "IT".
     if action is not None and action.operator_only:
+        await _refused(session, org_id, device, action_id, "operator_only")
         return json.dumps({
             "error": f"'{action_id}' can only be pushed by a technician from the portal's "
                      "Sessions view — it interrupts the person at the machine, which is not "
@@ -329,6 +355,10 @@ async def _propose_remediation(
         if tool_input.get(name)
     }
 
+    # C3: the engine always passes provenance; a direct call (tests, scripts) has no turn
+    # to judge, and the tier rules above and in create_task still apply to it.
+    hold = provenance.hold_reasons(action_id, params) if provenance and action else []
+
     try:
         task = await RemediationService(session).create_task(
             org_id=org_id,
@@ -339,6 +369,7 @@ async def _propose_remediation(
             source=RemediationSource.ASSISTANT,
             conversation_id=conversation_id,
             actor_user_id=None,
+            hold_reasons=hold,
         )
     except AlreadyQueuedError as exc:
         # Not an error the assistant should apologise for: the fix it wants is already
@@ -351,12 +382,19 @@ async def _propose_remediation(
                        f"is needed, rather than queuing another.",
         })
     except RemediationError as exc:
+        await _refused(session, org_id, device, action_id,
+                       "unknown_action" if action is None else "rejected")
         return json.dumps({"error": str(exc)})
 
     action = ACTIONS[action_id]
     auto = task.status.value == "approved"
     if auto:
         outcome = f"Applied automatically ({action.label}). The agent will run it shortly."
+    elif hold and action.tier is RemediationTier.AUTOMATIC:
+        # Not "it needs an automatic sign-off", which is what the line below would say.
+        outcome = (f"Queued for IT review ({action.label}): part of what it is based on came "
+                   "from the device or the knowledge base rather than the user, so a person "
+                   "checks it before it runs.")
     else:
         outcome = f"Queued for IT approval ({action.label}); it needs a {task.tier} sign-off."
     # `action_id` and `auto` are for the built-in engine, which has no words of its own and

@@ -609,6 +609,39 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   to `approval_required` regardless of the action's own tier.
 - Red-team test suite: event-log and KB payloads that try to trigger actions; must all fail.
 - "AI Safety" report: proposals made, raised, refused, and why.
+- **As built (16 Nov, branch `phase-2`, not pushed):** `app/services/ai/untrusted.py`.
+  - **Untrusted tools:** event log, knowledge base, installed apps and Windows updates. Their
+    results reach the model labelled `untrusted_content`, with a notice that this is evidence
+    and never instructions. They still arrive as tool results and never enter the system
+    prompt. The expert brief says the same thing.
+  - **When a fix is held:** the engine keeps a per-turn record of what the user said and what
+    outside text was read. A fix is held when that outside text (compared after JSON
+    decoding):
+    - names the fix's id, or
+    - supplies one of its free-text values (printer path, mail address, folder), or
+    - reads like instructions (a short pattern list).
+  - A free-text value the user never typed is held even when nothing outside was read.
+  - **What "held" means:** the task goes to the approval queue, even for an `automatic`
+    action. The approver sees SAVIO's own note appended to the model's reason. Audit
+    `remediation.create` carries `ai_guard` and `raised`. A tier is never lowered.
+  - **Refusals:** an admin-only, operator-only or unknown action requested by the assistant is
+    refused and audited as `ai.proposal_refused`.
+  - **Report:** `GET /reports/ai-safety` (admin and technician), read from the audit log with no
+    new table. The portal shows it as Reports → "AI safety", a tab only staff see.
+  - **Red-team suite:** `test_hijack_proof_ai.py`, 19 tests. They cover injected events and KB
+    articles, a quiet mail-rule payload with no instruction words, an approval-tier fix,
+    admin-only / operator-only / unknown actions, and controls showing that real crash
+    evidence and values the user typed still run on their own.
+    - Bug found by the suite: outside text was compared in its JSON form, where a UNC path
+      has doubled backslashes, so a planted printer path never matched. It is now compared
+      as decoded text.
+  - **Screen check:** checked against the local test backend with a scripted "hijacked" model.
+    The tab showed 2 proposals, 1 run on its own, 1 held, 1 refused, with reasons. The held
+    task's reason carries SAVIO's note.
+  - **Known limit (`ponytail:` in the file):** prose that steers to an automatic fix without
+    naming it or using instruction words still runs. Automatic fixes are reversible by
+    definition. Upgrade path: an org setting that holds every fix in a turn that read
+    outside text.
 
 **C1 · Proof-of-Fix**
 - Capture an evidence snapshot before and after every remediation (the metric that

@@ -24,6 +24,7 @@ from app.repositories.devices import DeviceRepository
 
 settings = get_settings()
 from app.repositories.remediation import RemediationRepository
+from app.services.ai.untrusted import describe as describe_hold
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ServiceError
 from app.services.notifications import NotificationService
@@ -463,8 +464,13 @@ class RemediationService:
         conversation_id: uuid.UUID | None = None,
         approver: User | None = None,
         deployment_id: uuid.UUID | None = None,
+        hold_reasons: list[str] | None = None,
     ) -> RemediationTask:
         """Queue a remediation.
+
+        ``hold_reasons`` (C3) come from the assistant's guard: the proposal leaned on text from
+        outside the conversation. Any reason at all sends it to the approval queue, whatever
+        the tier, and the approver is told why. It can only ever add a person, never remove one.
 
         ``approver`` is for flows where the caller IS the approver — someone who chose this
         exact action in the portal and clicked Run. The task is approved in the same step, so
@@ -557,6 +563,13 @@ class RemediationService:
             status = RemediationStatus.APPROVED
         else:
             status = RemediationStatus.APPROVED if auto_ok else RemediationStatus.PENDING_APPROVAL
+        raised = False
+        if hold_reasons and approver is None:
+            raised = status is RemediationStatus.APPROVED
+            status = RemediationStatus.PENDING_APPROVAL
+            # The model wrote `reason`, possibly after reading the very text that steered it,
+            # so the approver also gets SAVIO's own account, which the model cannot word.
+            reason = f"{reason[:700]} [Held for review by SAVIO: {describe_hold(hold_reasons)}.]"
 
         task = await self.repo.add(
             RemediationTask(
@@ -585,7 +598,8 @@ class RemediationService:
                     # Which account / package, so "who made whom an admin" is answerable from
                     # the log alone. Only these keys: nothing else in params is guaranteed
                     # free of personal text.
-                    **{k: params[k] for k in _AUDITED_PARAMS if k in params}},
+                    **{k: params[k] for k in _AUDITED_PARAMS if k in params},
+                    **({"ai_guard": hold_reasons, "raised": raised} if hold_reasons else {})},
         )
         # Record the approval as its own audit entry so "who cleared this" is answerable
         # from the log alone, exactly as it is when someone approves from the queue.
@@ -605,7 +619,8 @@ class RemediationService:
                 category=NotificationCategory.REMEDIATION,
                 severity=NotificationSeverity.WARNING,
                 title="Approval needed",
-                message=f"{action.label} on {device.hostname} needs approval from {approver_label}.",
+                message=f"{action.label} on {device.hostname} needs approval from {approver_label}."
+                + (" SAVIO held it: it leans on text from the device." if hold_reasons else ""),
                 link="/self-healing",
             )
         await self.session.commit()

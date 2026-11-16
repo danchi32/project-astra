@@ -1,8 +1,9 @@
 from datetime import timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import RemediationStatus, User
+from app.models import AuditLog, RemediationStatus, User
 from app.models.base import as_utc, utcnow
 from app.models.telemetry import UPDATE_INSTALLED
 from app.repositories.devices import DeviceRepository
@@ -10,6 +11,8 @@ from app.repositories.remediation import RemediationRepository
 from app.repositories.telemetry import TelemetryRepository
 from app.schemas.devices import ONLINE_THRESHOLD
 from app.schemas.report import (
+    AiSafetyReport,
+    AiSafetyRow,
     AssetReport,
     FleetHealthDeviceRow,
     FleetHealthReport,
@@ -155,3 +158,49 @@ class ReportService:
         summary = await self.assets.summary(org_id=actor.org_id)
         assets = await self.assets.list_for_org(org_id=actor.org_id)
         return AssetReport(generated_at=utcnow(), summary=summary, assets=assets)
+
+    async def ai_safety_report(self, *, actor: User, days: int = 30) -> AiSafetyReport:
+        """C3's report, read from the audit log: every assistant proposal is a
+        `remediation.create` with source "assistant" (and `ai_guard` when the guard held it),
+        and every refusal is an `ai.proposal_refused`. Nothing new is stored to answer it."""
+        since = utcnow() - timedelta(days=days)
+        logs = (await self.session.execute(
+            select(AuditLog).where(
+                AuditLog.org_id == actor.org_id,
+                AuditLog.action.in_(("remediation.create", "ai.proposal_refused")),
+                AuditLog.created_at >= since,
+            ).order_by(AuditLog.created_at.desc())
+        )).scalars().all()
+
+        proposals = unattended = raised = flagged = refused = 0
+        by_reason: dict[str, int] = {}
+        events: list[AiSafetyRow] = []
+        for log in logs:
+            d = log.detail or {}
+            if log.action == "ai.proposal_refused":
+                refused += 1
+                reasons = [str(d.get("why", "refused"))]
+                kind = "refused"
+            else:
+                if d.get("source") != "assistant":
+                    continue
+                proposals += 1
+                reasons = list(d.get("ai_guard") or [])
+                if not reasons:
+                    unattended += d.get("status") == RemediationStatus.APPROVED.value
+                    continue
+                kind = "raised" if d.get("raised") else "flagged"
+                raised += kind == "raised"
+                flagged += kind == "flagged"
+            for r in reasons:
+                by_reason[r] = by_reason.get(r, 0) + 1
+            if len(events) < 50:
+                events.append(AiSafetyRow(
+                    at=log.created_at, kind=kind, action_id=str(d.get("action", "")),
+                    device_hostname=d.get("device"), reasons=reasons,
+                ))
+        return AiSafetyReport(
+            generated_at=utcnow(), period_days=days, proposals=proposals,
+            ran_unattended=unattended, raised=raised, flagged=flagged, refused=refused,
+            by_reason=by_reason, events=events,
+        )

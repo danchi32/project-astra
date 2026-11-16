@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, requires
+from app.api.deps import get_current_user, require_roles, requires
 from app.core.database import get_db
-from app.models import User
-from app.schemas.report import AssetReport, FleetHealthReport, RemediationReport
+from app.models import User, UserRole
+from app.schemas.report import AiSafetyReport, AssetReport, FleetHealthReport, RemediationReport
 from app.services.entitlements import AUDIT_EXPORT
 from app.services.reports import ReportService
 
@@ -77,6 +77,21 @@ async def remediation_report(
     session: AsyncSession = Depends(get_db),
 ) -> RemediationReport:
     return await ReportService(session).remediation_report(actor=actor, days=days)
+
+
+@router.get(
+    "/ai-safety",
+    response_model=AiSafetyReport,
+    summary="AI Safety: assistant proposals, and those SAVIO held or refused (staff)",
+)
+async def ai_safety_report(
+    days: int = Query(default=30, ge=1, le=365),
+    # Staff only: it names devices and what was attempted on them. The people who approve
+    # held fixes are the people who need to see why they were held.
+    actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
+    session: AsyncSession = Depends(get_db),
+) -> AiSafetyReport:
+    return await ReportService(session).ai_safety_report(actor=actor, days=days)
 
 
 @router.get("/remediation/export", summary="Remediation activity report (CSV)")

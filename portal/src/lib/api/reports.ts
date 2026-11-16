@@ -53,3 +53,19 @@ export interface HealthCheckReport {
 
 export const getHealthCheckReport = () =>
   apiClient.get<HealthCheckReport>("/reports/health-check").then((r) => r.data);
+
+// C3: what the assistant proposed, and where SAVIO held or refused it (staff only).
+export interface AiSafetyReport {
+  generated_at: string;
+  period_days: number;
+  proposals: number;
+  ran_unattended: number;
+  raised: number;
+  flagged: number;
+  refused: number;
+  by_reason: Record<string, number>;
+  events: { at: string; kind: "raised" | "flagged" | "refused"; action_id: string; device_hostname: string | null; reasons: string[] }[];
+}
+
+export const getAiSafetyReport = (days: number) =>
+  apiClient.get<AiSafetyReport>("/reports/ai-safety", { params: { days } }).then((r) => r.data);

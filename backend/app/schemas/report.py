@@ -59,3 +59,24 @@ class AssetReport(BaseModel):
     generated_at: datetime
     summary: AssetSummary
     assets: list[AssetRead]
+
+
+class AiSafetyRow(BaseModel):
+    at: datetime
+    kind: str  # raised | flagged | refused
+    action_id: str
+    device_hostname: str | None
+    reasons: list[str]
+
+
+class AiSafetyReport(BaseModel):
+    """C3: what the assistant proposed, and where SAVIO's guard stepped in."""
+    generated_at: datetime
+    period_days: int
+    proposals: int        # fixes the assistant queued
+    ran_unattended: int   # of those, approved without a person
+    raised: int           # would have run unattended; held because they leaned on outside text
+    flagged: int          # already needed approval; the approver was told about outside text
+    refused: int          # actions the assistant may not request at all
+    by_reason: dict[str, int]
+    events: list[AiSafetyRow]
