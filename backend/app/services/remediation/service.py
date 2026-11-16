@@ -30,6 +30,7 @@ from app.services.exceptions import ConflictError, NotFoundError, ServiceError
 from app.services.notifications import NotificationService
 from app.services.settings import SettingsService
 from app.services.entitlements import AI_ACT, LOCKDOWN
+from app.services.remediation import evidence
 from app.services.remediation.actions import (
     ACTIONS,
     SAFE_APP_PROCESSES,
@@ -822,6 +823,8 @@ class RemediationService:
                 continue
             task.status = RemediationStatus.DISPATCHED
             claimed.append(task)
+            # C1: the "before" reading, taken as close to the run as the server gets.
+            await evidence.capture_before(self.session, task)
 
             # Tell the user their fix has actually STARTED, if it came from a device chat.
             #

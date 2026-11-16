@@ -28,6 +28,7 @@ from app.models.base import as_utc, utcnow
 from app.services.exceptions import NotFoundError
 from app.services.alerts import AlertService, email_critical_alerts
 from app.services.hardware import clean_serial, clean_text
+from app.services.remediation import evidence as fix_evidence
 from app.services.workforce import WorkforceAggregator
 
 log = logging.getLogger(__name__)
@@ -310,6 +311,19 @@ class TelemetryService:
             await WorkforceAggregator(self.session).ingest_events(
                 device=device, events=data.activity
             )
+
+        # Proof-of-Fix (C1): any "after" or 7-day recheck this push can answer. Fenced off
+        # like alerting below: evidence is about a fix, and must never cost the telemetry.
+        sources = {"snapshot"}
+        sources |= {"posture"} if data.posture is not None else set()
+        sources |= {"updates"} if data.windows_updates else set()
+        sources |= {"services"} if data.services else set()
+        try:
+            async with self.session.begin_nested():
+                await fix_evidence.observe(self.session, device_id=device.id,
+                                           collected_at=now, sources=sources)
+        except Exception:
+            log.exception("fix evidence failed for device %s", device.id)
 
         # Early-warning alerts (N1). In a savepoint and fenced off: a bug in alerting must
         # never cost the device its telemetry.

@@ -647,6 +647,33 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
 - Capture an evidence snapshot before and after every remediation (the metric that
   triggered it); verify; schedule a 7-day recurrence check (per 2.0).
 - Evidence card on the task page; feeds J5.
+- **As built (16 Nov, branch `phase-2`, not pushed):** `app/services/remediation/evidence.py`,
+  migration `0082` (adds a JSON column `remediation_tasks.evidence`).
+  - **What is measured:** each measurable fix names the one number it was for:
+    - free space on C: for the three clean-ups,
+    - all three firewall profiles on, for `enable_firewall`,
+    - Defender real-time protection, for `enable_defender_realtime`,
+    - outstanding updates, for `windows_update_install`,
+    - the named service running, for `restart_service`.
+  - Fixes with nothing to measure (restart Outlook, flush DNS) carry no evidence. The portal
+    says "Nothing to measure" for them rather than implying a result.
+  - **Before** is read at dispatch. **After** comes from the first push collected after the
+    agent reported success that carries that kind of data. A push collected earlier and
+    delivered late from the offline queue is not used. Verdict: improved / no change / worse
+    / not measured. Free space has 0.1 GB of noise allowance.
+  - **7-day recheck** comes from the first such push a week on: does the fix still hold
+    against the "before"?
+  - **No scheduler needed.** All of it rides on the agent's own pushes, so C1 needs nothing
+    from the 2.0 decision. A PC that stays offline is not rechecked, which is accurate.
+  - **Portal:** the self-healing history has a "Proof" column ("6.2 GB → 9.3 GB Improved ·
+    held for 7 days").
+  - **Checked:** `test_proof_of_fix.py`, 7 tests, covering clean-up, firewall, late push,
+    the recheck catching a comeback, a fix with no metric, and no before reading.
+  - Migration checked up / down / up on Postgres, with a write and read-back and no column
+    differences.
+  - Run end to end over HTTP on the local test backend: 6.2 → 9.3 GB, improved, shown in
+    the portal.
+  - **Not done:** J5 does not read it yet (J5 is 2e).
 
 **C2 · Canary rollout** 🔒
 - On top of A4 deployments: waves (1 device → 10% → rest), a health gate between waves

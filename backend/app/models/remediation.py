@@ -67,4 +67,7 @@ class RemediationTask(TimestampMixin, Base):
     )
 
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # C1 Proof-of-Fix: the metric this fix was meant to move, read before it ran, after it
+    # reported success, and again at 7 days. See app/services/remediation/evidence.py.
+    evidence: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -779,6 +779,16 @@ export interface RemediationTask {
   reason: string;
   source: "assistant" | "user";
   result: { output?: string } | null;
+  // C1 Proof-of-Fix. Present only for fixes with a metric to measure.
+  evidence?: {
+    metric: string;
+    label: string;
+    unit: string;
+    before: number | boolean | null;
+    after?: number | boolean | null;
+    verdict?: "improved" | "unchanged" | "worse" | "unmeasured";
+    recheck?: { at: string; value: number | boolean | null; held: boolean | null };
+  } | null;
   created_at: string;
   completed_at: string | null;
 }
