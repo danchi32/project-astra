@@ -73,6 +73,16 @@ same device next reports; see gap G4.
 | Retention | Raw snapshots kept 7 days, pruned on ingest, never below a device's newest 60. Daily rollups kept for the life of the account. Inventory is replaced on each collection. All of it is deleted with the device |
 | Access | Customer admins and technicians. Plain users see only their own device through the tray |
 
+### 3.2a BitLocker recovery keys — *Processor* (2a+, phase-2 branch)
+| | |
+|---|---|
+| Data | The 48-digit BitLocker recovery password of each encrypted drive, with its drive letter and key ID |
+| Purpose | Let the customer's admin unlock a drive when a PC asks for its recovery key (the Intune escrow job) |
+| Basis | Customer's instruction |
+| Stored | Neon (`device_bitlocker_keys`), the password encrypted with the platform key (`ASTRA_SECRETS_KEY`). Without that key the server refuses to store anything |
+| Retention | While the device exists; deleted with the device or the organisation |
+| Access | Org admins only. A list shows drive and key ID, never the password. Each reveal is audited (who, device, drive, key ID), and a view-as session cannot reveal |
+
 ### 3.3 Signed-in identities on devices — *Processor*
 | | |
 |---|---|

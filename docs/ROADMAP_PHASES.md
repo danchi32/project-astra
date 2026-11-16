@@ -557,6 +557,14 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   Fleet Issue link to it. `enable_defender_realtime` (admin_only, system) runs only when
   Defender is the sole registered antivirus, reads real-time back, and never touches Tamper
   Protection. BitLocker is still not built (needs key escrow first).
+- **BitLocker key escrow, backend (16 Nov):** migration `0080` `device_bitlocker_keys`, the
+  password encrypted with `app.core.crypto`. `POST /agent/bitlocker-keys` (device token; the
+  device comes from the token, never the body; 503 and nothing written without the platform
+  key). `GET /devices/{id}/bitlocker-keys` lists drive and key ID only (admin).
+  `POST .../reveal` (admin, not view-as) returns the password and audits it. 9 tests; migration
+  checked up / down / up on Postgres with a real insert. **Still to do:** the agent collector
+  that reads and uploads the recovery password, the portal reveal button, the
+  security-reviewer pass (it handles a credential), and only then the turn-on action.
 - Each action's chat lines live in `_TECHNICAL_OUTCOME` and `_ACK_SUBJECT`
   (`remediation/service.py`); `test_chat_progress_message.py` fails if one is missing.
 - Until these ship, the portal says "fix it in Intune or Group Policy" for these three checks.
