@@ -519,8 +519,18 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
     difference. Lesson for later modules: any migration check must also insert a row.
   - Agent 0.15.0 built (15 Nov): version bumped on `phase-2` (commit `1adb7c2`), not
     tagged. The build is in the scratchpad, outside the repo. 331 agent tests pass.
-    **Not yet:** the live VM check (no agent service is installed on this laptop, so the
-    check needs a real install and enrollment), and the tag. `agent-v0.15.0` triggers the
+    - **Live install (16 Nov), on the dev laptop, pointed at a local test backend**
+      (127.0.0.1, never production): 0.15.0 installed as the `AstraAgent` service and
+      enrolled. Within one cycle the backend showed the real state: Defender pass (real-time
+      on, signatures current), firewall fail (off on all three profiles), BitLocker fail (not
+      encrypted). Security score 56%.
+    - **Not done:** the "Defender off → fails within one cycle" check. Tamper Protection is on,
+      and Set-MpPreference cannot turn real-time off with it on. Turning it off means changing
+      a security setting, so it was not done without your say-so. The backend path for a
+      real-time-off report is covered by `test_security_posture.py`.
+    - **Still to do:** uninstall the agent from this laptop (the user will do this), and the
+      tag. `agent-v0.15.0` triggers the release workflow, which auto-updates every enrolled PC,
+      so it waits until phase-2 is merged to main. `agent-v0.15.0` triggers the
     release workflow, which auto-updates every enrolled PC, so it waits until phase-2 is merged
     to main and the decision is made.
 
