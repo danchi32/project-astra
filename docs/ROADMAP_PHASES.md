@@ -568,8 +568,12 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   never logs it. Uploaded with the hourly inventory, in batches of 10, and only keys not yet
   escrowed in this run. 348 agent tests pass. Not live-checked: this laptop has no
   BitLocker-protected drive, so there is no key to read.
-  **Still to do:** the portal reveal button, a live check on a BitLocker-protected PC, and
-  only then the turn-on action.
+- **Portal (16 Nov):** device page, admin-only "Recovery keys" tab. It lists drive, the 8-char
+  Key ID the recovery screen shows, and when the key was escrowed. Reveal asks first ("this
+  is recorded in the audit log"), then shows the password with Copy. The password lives only in
+  the dialog's state. Checked on screen with a made-up key: list, confirm, reveal. The audit
+  rows (escrow, reveal "by" the admin) hold no password.
+  **Still to do:** a live check on a BitLocker-protected PC, and only then the turn-on action.
 - **Security review (16 Nov, two parallel reviews):** no Critical. Fixed the same day:
   - **Escrow, High:** a replaced platform key left every stored key undecryptable and never
     re-escrowed. Now a re-sent key whose stored copy no longer decrypts is re-escrowed and

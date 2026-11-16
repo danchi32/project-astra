@@ -12,6 +12,7 @@ import { listDeviceSessions } from "@/lib/api/sessions";
 import { listAllUsers } from "@/lib/api/users";
 import { listLocations } from "@/lib/api/locations";
 import { getMe } from "@/lib/api/auth";
+import { BitLockerKeys } from "@/components/bitlocker-keys";
 import { createRemediation, approveRemediation, listRemediationsForDevice } from "@/lib/api/remediation";
 import { DeviceStatusBadge } from "@/components/device-status-badge";
 import { SearchableSelect } from "@/components/searchable-select";
@@ -140,7 +141,7 @@ function suggestFixes(sources: string[]): Fix[] {
   return FIXES.filter((f) => wanted.has(fixTag(f)));
 }
 
-type Tab = "overview" | "telemetry" | "events" | "compliance" | "sessions" | "users" | "software" | "services" | "updates" | "assignment" | "history";
+type Tab = "overview" | "telemetry" | "events" | "compliance" | "sessions" | "users" | "software" | "services" | "updates" | "assignment" | "history" | "recovery";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "telemetry", label: "Telemetry" },
@@ -153,6 +154,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "updates", label: "Windows Updates" },
   { key: "assignment", label: "Assignment" },
   { key: "history", label: "History" },
+  { key: "recovery", label: "Recovery keys" },
 ];
 
 const LEVEL_COLOR: Record<string, string> = { Error: "#ef4444", Warning: "#f59e0b", Information: "#64748b" };
@@ -630,7 +632,7 @@ export default function DeviceDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: "var(--border)" }}>
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.key !== "recovery" || isAdmin).map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className="px-4 py-2.5 text-sm font-medium -mb-px border-b-2 whitespace-nowrap transition-colors"
             style={{ borderColor: tab === t.key ? "var(--accent)" : "transparent", color: tab === t.key ? "var(--accent)" : "var(--text-secondary)" }}>
@@ -979,6 +981,8 @@ export default function DeviceDetailPage() {
               </tbody></table>
             </div>);
           })()}
+
+          {tab === "recovery" && isAdmin && <BitLockerKeys deviceId={id} />}
 
           {tab === "users" && (
             <div className="rounded-xl p-4 space-y-3" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
