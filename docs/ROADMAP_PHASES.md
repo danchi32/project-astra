@@ -503,8 +503,11 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
   on every push, so a Defender change reaches the backend within one cycle. The drive letter
   is validated before it goes into the WQL. Checked: 331 agent tests pass; Defender values
   match raw WMI on a real laptop; the firewall reads OFF on all three profiles, which
-  `netsh advfirewall` confirms. **Still to do for 2a:** BitLocker needs an elevated read, so
-  it is not verified yet (run as SYSTEM, the way the agent runs); and a portal display.
+  `netsh advfirewall` confirms. BitLocker checked as SYSTEM (the way the agent runs): the
+  collector reads it as off, and raw `Win32_EncryptableVolume` agrees on C: and D:
+  (ProtectionStatus 0, ConversionStatus 0). **Still to do for 2a:** the portal display, and
+  the live check that a Defender change reaches the backend within one cycle, which needs
+  the agent 0.15.0 built and running on a VM. The 2a tag waits for both.
 
 **C3 · Hijack-proof AI** 🔒
 - Mark every tool result that carries free text from outside (event messages, KB articles,
