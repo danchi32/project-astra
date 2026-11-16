@@ -137,7 +137,7 @@ async def observe(session: AsyncSession, *, device_id, collected_at, sources: se
             RemediationTask.status == RemediationStatus.SUCCEEDED,
             RemediationTask.evidence.is_not(None),
             RemediationTask.completed_at >= now - GIVE_UP_AFTER,
-        ).limit(50)
+        ).order_by(RemediationTask.completed_at).limit(50)
     )).scalars().all()
     for task in tasks:
         ev = dict(task.evidence or {})
@@ -146,13 +146,19 @@ async def observe(session: AsyncSession, *, device_id, collected_at, sources: se
             continue
         if as_utc(collected_at) <= as_utc(task.completed_at):
             continue
-        value = await read(session, device_id, metric, task.params)
+        # Decide what this push is for before reading anything: a task between its "after"
+        # and its 7-day recheck needs nothing, and must not cost a query on every push.
         if "after" not in ev:
-            ev.update(after=value, after_at=now.isoformat(),
-                      verdict=verdict(metric, ev.get("before"), value))
+            step = "after"
         elif now - as_utc(task.completed_at) >= RECHECK_AFTER:
-            ev["recheck"] = {"at": now.isoformat(), "value": value,
-                             "held": held(metric, ev.get("before"), value)}
+            step = "recheck"
         else:
             continue
+        value = await read(session, device_id, metric, task.params)
+        if step == "after":
+            ev.update(after=value, after_at=now.isoformat(),
+                      verdict=verdict(metric, ev.get("before"), value))
+        else:
+            ev["recheck"] = {"at": now.isoformat(), "value": value,
+                             "held": held(metric, ev.get("before"), value)}
         task.evidence = ev  # a new dict, so the JSON column is seen as changed

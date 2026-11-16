@@ -27,7 +27,7 @@ import math
 import uuid
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -47,10 +47,12 @@ from app.schemas.devices import ONLINE_THRESHOLD
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.notifications import NotificationService
+from app.services.remediation.actions import ACTIONS
 from app.services.remediation.service import (
     AlreadyQueuedError,
     RemediationError,
     RemediationService,
+    RolloutHalted,
 )
 from app.services.software_catalog import CATALOG
 
@@ -156,6 +158,10 @@ class DeploymentService:
                 counts["queued"] += 1
             except AlreadyQueuedError:
                 counts["already_running"] += 1
+            except RolloutHalted:
+                # Halted while this wave was being queued: the rest is not created at all.
+                counts["not_attempted"] = len(devices) - i
+                break
             except RemediationError as exc:
                 counts["failed"] += 1
                 error = str(exc)
@@ -168,10 +174,8 @@ class DeploymentService:
 
     async def advance(self, deployment_id: uuid.UUID) -> None:
         """Release the next wave if the current one is healthy, or halt on a failure."""
-        dep = (await self.session.execute(
-            # Two results arriving together must not release the same wave twice.
-            select(Deployment).where(Deployment.id == deployment_id).with_for_update()
-        )).scalars().first()
+        # Two results arriving together must not release the same wave twice.
+        dep = await self._locked(deployment_id)
         if dep is None or not dep.waves or dep.halted_at is not None:
             return
         wave_ids = [uuid.UUID(i) for i in dep.waves[dep.current_wave]]
@@ -208,19 +212,30 @@ class DeploymentService:
             return
         await self._release_next(dep)
 
-    async def _release_next(self, dep: Deployment) -> None:
-        creator = (await self.session.get(User, dep.created_by_user_id)
-                   if dep.created_by_user_id else None)
-        if creator is None or not creator.is_active:
-            # Each wave is approved in the creator's name, so it needs them still to be here.
-            await self.halt(dep, "The person who started this push no longer has an active account.")
-            return
+    async def _locked(self, deployment_id: uuid.UUID) -> Deployment | None:
+        # populate_existing: with expire_on_commit off, a Deployment already in this session
+        # would otherwise come back with its old attributes even though the row is locked.
+        return (await self.session.execute(
+            select(Deployment).where(Deployment.id == deployment_id)
+            .with_for_update().execution_options(populate_existing=True)
+        )).scalars().first()
+
+    async def _release_next(self, dep: Deployment, approver: User | None = None) -> None:
+        """Queue the next wave, approved by `approver` (a person resuming) or else the creator."""
+        if approver is None:
+            approver = (await self.session.get(User, dep.created_by_user_id)
+                        if dep.created_by_user_id else None)
+            if approver is None or not approver.is_active:
+                # Each wave is approved in the creator's name, so it needs them still here.
+                await self.halt(dep, "The person who started this push no longer has an active account.")
+                return
         dep.current_wave += 1
         dep.wave_started_at = utcnow()
         await AuditService(self.session).record(
-            org_id=dep.org_id, actor_id=None, action="deployment.wave_released",
+            org_id=dep.org_id, actor_id=approver.id, action="deployment.wave_released",
             target_type="deployment", target_id=str(dep.id),
-            detail={"wave": dep.current_wave + 1, "devices": len(dep.waves[dep.current_wave])},
+            detail={"wave": dep.current_wave + 1, "devices": len(dep.waves[dep.current_wave]),
+                    "approved_by": approver.email},
         )
         await self.session.commit()
         ids = [uuid.UUID(i) for i in dep.waves[dep.current_wave]]
@@ -228,9 +243,18 @@ class DeploymentService:
             select(Device).where(Device.org_id == dep.org_id, Device.id.in_(ids),
                                  Device.is_active.is_(True))
         )).scalars())
-        # create_task re-checks the creator's authority for every device: a creator demoted
+        # create_task re-checks the approver's authority for every device: a creator demoted
         # since the push started cannot approve the next wave.
-        _, error = await self._queue(dep, devices, creator)
+        try:
+            _, error = await self._queue(dep, devices, approver)
+        except Exception:
+            # Not a refusal but a crash, part-way through the wave. Halt so it is visible
+            # rather than leaving the rest of the wave silently never created.
+            await self.session.rollback()
+            dep = await self._locked(dep.id)
+            if dep is not None and dep.halted_at is None:
+                await self.halt(dep, f"Wave {dep.current_wave + 1} stopped part-way: an internal error.")
+            raise
         if error:
             await self.halt(dep, f"Wave {dep.current_wave + 1} could not be queued: {error}"[:300])
 
@@ -238,19 +262,24 @@ class DeploymentService:
         """Stop the rollout: no further waves, and nothing queued-but-not-started runs."""
         dep.halted_at = utcnow()
         dep.halt_reason = reason[:300]
-        waiting = (await self.session.execute(
-            select(RemediationTask).where(RemediationTask.deployment_id == dep.id,
-                                          RemediationTask.status == RemediationStatus.APPROVED)
-        )).scalars().all()
-        for t in waiting:
-            t.status = RemediationStatus.REJECTED
-            t.result = {"output": "Not run: the rollout was halted."}
-            t.completed_at = utcnow()
+        # One conditional statement, not read-then-write: a task an agent claims at the same
+        # moment is either cancelled here or dispatched there, never both (the claim is
+        # conditional too). Tasks waiting for approval are cancelled as well, so nobody can
+        # approve one of a halted rollout from the queue.
+        cancelled = (await self.session.execute(
+            update(RemediationTask)
+            .where(RemediationTask.deployment_id == dep.id,
+                   RemediationTask.status.in_((RemediationStatus.APPROVED,
+                                               RemediationStatus.PENDING_APPROVAL)))
+            .values(status=RemediationStatus.REJECTED,
+                    result={"output": "Not run: the rollout was halted."}, completed_at=utcnow())
+            .execution_options(synchronize_session=False)
+        )).rowcount
         await AuditService(self.session).record(
             org_id=dep.org_id, actor_id=actor.id if actor else None, action="deployment.halt",
             target_type="deployment", target_id=str(dep.id),
             detail={"reason": dep.halt_reason, "wave": (dep.current_wave or 0) + 1,
-                    "cancelled": len(waiting), "automatic": actor is None},
+                    "cancelled": cancelled, "automatic": actor is None},
         )
         await NotificationService(self.session).notify(
             org_id=dep.org_id, category=NotificationCategory.REMEDIATION,
@@ -260,7 +289,8 @@ class DeploymentService:
         await self.session.commit()
 
     async def halt_by(self, *, actor: User, deployment_id: uuid.UUID, reason: str) -> Deployment:
-        dep = await self._own(actor, deployment_id)
+        await self._own(actor, deployment_id)
+        dep = await self._locked(deployment_id)   # waits for any create_task holding it
         if dep.halted_at is not None:
             raise ConflictError("This rollout is already halted.")
         await self.halt(dep, f"Halted by {actor.email}: {reason}", actor=actor)
@@ -271,9 +301,14 @@ class DeploymentService:
 
         Tasks cancelled by the halt are not re-queued; their devices can be pushed again.
         """
-        dep = await self._own(actor, deployment_id)
+        await self._own(actor, deployment_id)
+        dep = await self._locked(deployment_id)
         if dep.halted_at is None:
             raise ConflictError("This rollout is not halted.")
+        # The next wave is approved in the resumer's name, so they need the authority to
+        # approve this action themselves: a technician cannot resume an install the org says
+        # only an admin may approve, by borrowing the admin creator's authority.
+        await RemediationService(self.session)._assert_may_approve(actor, ACTIONS[dep.action_id].tier)
         await AuditService(self.session).record(
             org_id=dep.org_id, actor_id=actor.id, action="deployment.resume",
             target_type="deployment", target_id=str(dep.id),
@@ -283,7 +318,7 @@ class DeploymentService:
         dep.halt_reason = None
         await self.session.commit()
         if dep.waves and dep.current_wave + 1 < len(dep.waves):
-            await self._release_next(dep)
+            await self._release_next(dep, approver=actor)
         return dep
 
     async def advance_for_device(self, device_id: uuid.UUID) -> None:

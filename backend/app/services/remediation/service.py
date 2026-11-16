@@ -24,7 +24,6 @@ from app.repositories.devices import DeviceRepository
 
 settings = get_settings()
 from app.repositories.remediation import RemediationRepository
-from app.services.ai.untrusted import describe as describe_hold
 from app.services.audit import AuditService
 from app.services.exceptions import ConflictError, NotFoundError, ServiceError
 from app.services.notifications import NotificationService
@@ -74,6 +73,10 @@ def redact_result(task: Any, reader: Any | None) -> dict | None:
 
 class RemediationError(ServiceError):
     pass
+
+
+class RolloutHalted(RemediationError):
+    """The task belongs to a deployment (C2) that has been halted: never create it."""
 
 
 class AlreadyQueuedError(RemediationError):
@@ -492,6 +495,19 @@ class RemediationService:
         if source is RemediationSource.ASSISTANT and action.operator_only:
             raise RemediationError(f"'{action_id}' can only be started by a person.")
         params = self._validate_params(action_id, params)
+        # C2: a halted rollout queues nothing more. The deployment row is locked (Postgres) so
+        # a halt cannot commit between this check and the insert below; halt takes the same
+        # lock. The lock is held until this method commits.
+        if deployment_id is not None:
+            from sqlalchemy import select
+
+            from app.models import Deployment
+
+            halted = (await self.session.execute(
+                select(Deployment.halted_at).where(Deployment.id == deployment_id).with_for_update()
+            )).scalar_one_or_none()
+            if halted is not None:
+                raise RolloutHalted("This rollout has been halted.")
         # Checked here rather than in _validate_params because the answer depends on the
         # organization's own policy list, which is a database read, not a constant.
         if "app_name" in action.params:
@@ -568,10 +584,8 @@ class RemediationService:
         if hold_reasons and approver is None:
             raised = status is RemediationStatus.APPROVED
             status = RemediationStatus.PENDING_APPROVAL
-            # The model wrote `reason`, possibly after reading the very text that steered it,
-            # so the approver also gets SAVIO's own account, which the model cannot word.
-            reason = f"{reason[:700]} [Held for review by SAVIO: {describe_hold(hold_reasons)}.]"
-
+            # The reasons go in their own field, not appended to `reason`: the model writes
+            # `reason`, and could put a counterfeit "SAVIO: verified safe" note in it.
         task = await self.repo.add(
             RemediationTask(
                 org_id=org_id,
@@ -586,6 +600,7 @@ class RemediationService:
                 conversation_id=conversation_id,
                 approved_by_user_id=approver.id if approver is not None else None,
                 deployment_id=deployment_id,
+                ai_guard=hold_reasons or None,
             )
         )
         await self.audit.record(
@@ -821,10 +836,31 @@ class RemediationService:
             task_context = action.execution_context if action else "user"
             if task_context != context:
                 continue
+            # C2: claim only if it is still approved. Conditional in the database, so a halt
+            # that cancels it at the same moment and this claim cannot both win: the one
+            # that commits second finds the status already changed and does nothing.
+            from sqlalchemy import update
+
+            won = await self.session.execute(
+                update(RemediationTask)
+                .where(RemediationTask.id == task.id,
+                       RemediationTask.status == RemediationStatus.APPROVED)
+                .values(status=RemediationStatus.DISPATCHED)
+                .execution_options(synchronize_session=False)
+            )
+            if won.rowcount != 1:
+                await self.session.refresh(task)
+                continue
             task.status = RemediationStatus.DISPATCHED
             claimed.append(task)
-            # C1: the "before" reading, taken as close to the run as the server gets.
-            await evidence.capture_before(self.session, task)
+            # C1: the "before" reading, taken as close to the run as the server gets. Fenced:
+            # a failed reading costs the evidence, never the claim (and with it every fix,
+            # security ones included, this device would otherwise stop receiving).
+            try:
+                async with self.session.begin_nested():
+                    await evidence.capture_before(self.session, task)
+            except Exception:
+                logger.exception("Proof-of-Fix before-reading failed for task %s", task.id)
 
             # Tell the user their fix has actually STARTED, if it came from a device chat.
             #
@@ -899,10 +935,14 @@ class RemediationService:
         # ASSISTANT, and there is nothing to learn from those — the rule already knew the
         # answer, so writing a runbook for it would fill the knowledge base with things the
         # system could always do, and bury the hand-written ones under them.
+        # Never from a fix C3 held: it leaned on outside text, and a learned fix replays with
+        # no model call and no guard, so learning it would turn one held fix into many that
+        # run on their own.
         if (
             task.conversation_id is not None
             and task.source is RemediationSource.ASSISTANT
             and task.from_llm
+            and not task.ai_guard
         ):
             await self._learn_from(task, label, success)
 

@@ -89,6 +89,24 @@ async def test_restore_brings_a_dismissal_back(client, admin_headers, session_fa
     assert sorted(actions) == ["recommendation.dismiss", "recommendation.restore"]
 
 
+async def test_a_concurrent_refresh_does_not_fail_the_read(client, admin_headers, monkeypatch):
+    """L8: two staff load the page together; one insert loses the unique race. That read
+    still answers (with the winner's rows) instead of a 500."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services.recommendations import RecommendationService
+
+    _, h = await _enroll(client, admin_headers, "RACE-1")
+    await _push(client, h, firewall=False)
+    assert "check:firewall" in await _recs(client, admin_headers)   # the "other request" won
+
+    async def lost_race(self, org_id):
+        raise IntegrityError("insert", {}, Exception("uq_recommendations_org_key"))
+
+    monkeypatch.setattr(RecommendationService, "refresh", lost_race)
+    assert "check:firewall" in await _recs(client, admin_headers)
+
+
 async def test_value_report_counts_only_unattended_fixes(
         client, admin_headers, user_headers, session_factory, admin_user):
     device_id, _ = await _enroll(client, admin_headers, "VAL-1")

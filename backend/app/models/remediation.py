@@ -70,4 +70,8 @@ class RemediationTask(TimestampMixin, Base):
     # C1 Proof-of-Fix: the metric this fix was meant to move, read before it ran, after it
     # reported success, and again at 7 days. See app/services/remediation/evidence.py.
     evidence: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # C3: why SAVIO held this assistant proposal for a person (reason codes from
+    # app.services.ai.untrusted). Its own field, never text appended to the model-written
+    # `reason`, so the approver sees SAVIO's account and the model cannot counterfeit it.
+    ai_guard: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -160,6 +160,71 @@ async def test_halt_and_resume_by_hand(client, admin_headers, user_headers, sess
     assert len(await _tasks(session_factory, body["id"])) == 3   # wave 2 released by the person
 
 
+async def test_resume_needs_the_resumers_own_authority(client, admin_headers, session_factory, org):
+    """M3: with installs set to admin-only approval, a technician cannot resume a halted
+    push and so release the next wave in the admin creator's name."""
+    from app.models import UserRole
+    from tests.conftest import _create_user, auth_headers
+
+    await _create_user(session_factory, org.id, "tech@acme.com", "TechPassw0rd!2345", UserRole.TECHNICIAN)
+    tech = await auth_headers(client, "tech@acme.com", "TechPassw0rd!2345")
+    await client.patch("/api/v1/settings/organization", headers=admin_headers,
+                       json={"require_admin_for_approval_tier": True})
+    fleet = await _fleet(client, admin_headers, 12, prefix="AUTH")
+    body = await _push(client, admin_headers, [d for d, _ in fleet])
+    url = f"/api/v1/deployments/{body['id']}"
+    await client.post(f"{url}/halt", headers=admin_headers, json={"reason": "bad package"})
+
+    r = await client.post(f"{url}/resume", headers=tech)
+    assert r.status_code == 403, r.text
+    assert (await _dep(session_factory, body["id"])).halted_at is not None
+    assert len(await _tasks(session_factory, body["id"])) == 1
+
+    assert (await client.post(f"{url}/resume", headers=admin_headers)).status_code == 200
+    async with session_factory() as s:
+        released = (await s.execute(select(AuditLog).where(
+            AuditLog.action == "deployment.wave_released"))).scalars().one()
+    assert released.actor_id is not None and released.detail["approved_by"] == "admin@acme.com"
+
+
+async def test_a_halted_rollout_queues_and_dispatches_nothing(client, admin_headers, session_factory, admin_user):
+    """M4: nothing new is created for a halted rollout, nothing cancelled can be claimed,
+    and installs waiting for approval are cancelled too."""
+    from app.services.remediation.service import RemediationService, RolloutHalted
+
+    fleet = await _fleet(client, admin_headers, 12, prefix="STOP")
+    body = await _push(client, admin_headers, [d for d, _ in fleet])
+    [canary] = await _tasks(session_factory, body["id"])
+    # One more task of this rollout, waiting for approval (as when the breaker trips).
+    other_id = next(d for d, _ in fleet if d != str(canary.device_id))
+    async with session_factory() as s:
+        s.add(RemediationTask(org_id=admin_user.org_id, device_id=other_id, action_id="install_package",
+                              params={"package_id": "Google.Chrome"}, tier="approval_required",
+                              reason="x", source=canary.source, deployment_id=canary.deployment_id,
+                              status=RemediationStatus.PENDING_APPROVAL))
+        await s.commit()
+
+    r = await client.post(f"/api/v1/deployments/{body['id']}/halt", headers=admin_headers,
+                          json={"reason": "stop everything"})
+    assert r.status_code == 200
+    assert {t.status for t in await _tasks(session_factory, body["id"])} == {RemediationStatus.REJECTED}
+
+    h = dict(fleet)[str(canary.device_id)]
+    assert (await client.get("/api/v1/agent/tasks?context=system", headers=h)).json() == []
+
+    async with session_factory() as s:
+        device = await s.get(Device, other_id)
+        user = await s.get(type(admin_user), admin_user.id)
+        try:
+            await RemediationService(s).create_task(
+                org_id=admin_user.org_id, device=device, action_id="install_package",
+                params={"package_id": "Google.Chrome"}, reason="late", source=canary.source,
+                actor_user_id=user.id, approver=user, deployment_id=canary.deployment_id)
+            raise AssertionError("a task was created for a halted rollout")
+        except RolloutHalted:
+            pass
+
+
 async def test_one_device_push_is_one_wave(client, admin_headers, session_factory):
     fleet = await _fleet(client, admin_headers, 1, prefix="ONE")
     body = await _push(client, admin_headers, [fleet[0][0]])

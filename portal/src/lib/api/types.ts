@@ -779,6 +779,8 @@ export interface RemediationTask {
   reason: string;
   source: "assistant" | "user";
   result: { output?: string } | null;
+  // C3: reason codes SAVIO held this AI proposal for. Its own field, not the model's text.
+  ai_guard?: string[] | null;
   // C1 Proof-of-Fix. Present only for fixes with a metric to measure.
   evidence?: {
     metric: string;

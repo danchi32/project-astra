@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.api.deps import require_roles
 from app.core.database import get_db
 from app.models import User, UserRole
 from app.services.deployments import DeploymentService
+from app.services.remediation.service import RemediationError
 from app.services.software_catalog import CATALOG
 
 router = APIRouter(tags=["software"])
@@ -167,6 +168,10 @@ async def resume_deployment(
     actor: User = Depends(staff_required),
     session: AsyncSession = Depends(get_db),
 ) -> DeploymentSummary:
-    dep = await DeploymentService(session).resume(actor=actor, deployment_id=deployment_id)
+    try:
+        dep = await DeploymentService(session).resume(actor=actor, deployment_id=deployment_id)
+    except RemediationError as exc:
+        # The resumer may not approve this action themselves (org policy / tier).
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     return DeploymentSummary(id=dep.id, title=dep.title, reason=dep.reason,
                              created_at=dep.created_at, status_counts={}, **_waves(dep))

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Asset, Device, Recommendation, User
@@ -142,12 +143,18 @@ class RecommendationService:
         await self.session.commit()
 
     async def list(self, *, actor: User, status: str = "open") -> tuple[list[Recommendation], int | None]:
-        await self.refresh(actor.org_id)
+        org_id = actor.org_id   # read now: a rollback below expires `actor`
+        try:
+            await self.refresh(org_id)
+        except IntegrityError:
+            # Two people opened the page at once and both inserted the same new finding: the
+            # other request's rows are the same rows, so read those rather than fail.
+            await self.session.rollback()
         rows = list((await self.session.execute(
-            select(Recommendation).where(Recommendation.org_id == actor.org_id,
+            select(Recommendation).where(Recommendation.org_id == org_id,
                                          Recommendation.status == status))).scalars())
         rows.sort(key=lambda r: (_RISK_RANK.get(r.risk, 1), -(r.evidence or {}).get("count", 0), r.title))
-        cost = (await SettingsService(self.session).ensure(actor.org_id)).it_hourly_cost
+        cost = (await SettingsService(self.session).ensure(org_id)).it_hourly_cost
         return rows, cost
 
     async def dismiss(self, *, actor: User, rec_id: uuid.UUID, reason: str) -> Recommendation:

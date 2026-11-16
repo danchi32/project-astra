@@ -117,7 +117,16 @@ export default function SelfHealingPage() {
                     <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{t.action_label ?? t.action_id}</td>
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{t.device_hostname ?? "—"}</td>
                     <td className="px-4 py-3"><TierBadge tier={t.tier} /></td>
-                    <td className="px-4 py-3 max-w-[240px] truncate" style={{ color: "var(--text-secondary)" }} title={t.reason}>{t.reason}</td>
+                    <td className="px-4 py-3 max-w-[280px]" style={{ color: "var(--text-secondary)" }}>
+                      <div className="truncate" title={t.reason}>{t.reason}</div>
+                      {/* C3: SAVIO's own account, from its own field — never part of the AI-written reason. */}
+                      {t.ai_guard && t.ai_guard.length > 0 && (
+                        <div className="text-xs mt-1 whitespace-normal font-medium" style={{ color: "#f59e0b" }}
+                          title={t.ai_guard.map((r) => AI_GUARD_WORDS[r] ?? r).join("; ")}>
+                          ⚠ Held by SAVIO: {t.ai_guard.map((r) => AI_GUARD_WORDS[r] ?? r).join("; ")}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{t.source === "assistant" ? "AI" : "Staff"}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex gap-2 justify-end">
@@ -179,6 +188,14 @@ export default function SelfHealingPage() {
     </div>
   );
 }
+
+// C3: why SAVIO held an AI proposal. Wording matches the server's REASON_WORDS.
+const AI_GUARD_WORDS: Record<string, string> = {
+  outside_text_names_action: "text from the device or knowledge base named this fix",
+  outside_text_supplies_value: "a value in it also appears in text from the device or knowledge base",
+  outside_text_has_instructions: "text from the device or knowledge base contained instructions",
+  value_not_from_user: "a value in it was not given by the user",
+};
 
 // C1 Proof-of-Fix: the number the fix was for, before → after, and the 7-day recheck.
 // Only measurable fixes carry evidence; the rest say so rather than imply a result.

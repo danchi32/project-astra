@@ -42,6 +42,22 @@ export function BitLockerKeys({ deviceId }: { deviceId: string }) {
     setCopied(false);
   }
 
+  // A copied key would otherwise sit on the clipboard (and in Windows clipboard history or
+  // cloud sync) indefinitely. Clear it after a minute, but only if it still holds this key:
+  // never wipe something else the admin copied since.
+  async function copy(password: string) {
+    await navigator.clipboard.writeText(password);
+    setCopied(true);
+    setTimeout(async () => {
+      try {
+        if ((await navigator.clipboard.readText()) === password) await navigator.clipboard.writeText("");
+      } catch {
+        // Reading the clipboard needs permission; without it, overwrite only while this tab has focus.
+        if (document.hasFocus()) await navigator.clipboard.writeText("").catch(() => {});
+      }
+    }, 60_000);
+  }
+
   const muted = { color: "var(--text-secondary)" };
   const box = { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" };
 
@@ -121,8 +137,10 @@ export function BitLockerKeys({ deviceId }: { deviceId: string }) {
               {revealed.recovery_password}
             </p>
             <div className="flex items-center justify-between">
-              <span className="text-xs" style={muted}>Read it out or type it in; don&apos;t save it anywhere.</span>
-              <button onClick={async () => { await navigator.clipboard.writeText(revealed.recovery_password); setCopied(true); }}
+              <span className="text-xs" style={muted}>
+                Read it out or type it in; don&apos;t save it anywhere. A copy is cleared from the clipboard after a minute.
+              </span>
+              <button onClick={() => copy(revealed.recovery_password)}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs" style={box}>
                 <Copy size={12} /> {copied ? "Copied" : "Copy"}
               </button>

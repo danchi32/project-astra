@@ -760,6 +760,45 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
   - **J1 Brief waits for the 2.0 decision.** It sends e-mail on a clock, so it needs a
     scheduler; J2 and J5 do not.
 
+**Security review, second pass (16 Nov):** covered the BitLocker reveal tab, C3, C1, C2 and
+J2/J5. No Critical findings. Fixed the same day: four Medium and all nine Low (migration
+`0085`).
+- **C3:**
+  - **Tool coverage (M1).** The list is now of *trusted* tools: SAVIO's own
+    `propose_remediation` and the two ticket tools. Every other tool's result is outside
+    text, including compliance details, device and drive names, and any tool added later.
+  - **Earlier turns count (M2).** The guard now reads the untrusted outputs stored in the
+    chat's earlier tool trails. So "read a planted line, ask 'shall I?', user says yes" is
+    held.
+  - **Laundered values (M2).** A value that appears in outside text is held even after the
+    user types it.
+  - **Normalisation (L1).** Text is normalised before matching: NFKC, zero-width characters
+    dropped, and `_`, `-` and spaces treated alike.
+  - **Free-text parameters (L2).** Every parameter not on the allowlist (service, process,
+    time zone, KB) counts as free text.
+  - **Hold reasons (L3, L4).** They live in their own `remediation_tasks.ai_guard` column,
+    shown separately in the approval queue, not appended to the model's reason. A held fix
+    is never learned into a replayable fix.
+  - **Still not folded:** look-alike letters from other scripts (Cyrillic "а").
+- **C2:**
+  - **Resume (M3).** Resume needs the resumer's own authority to approve the action. The
+    next wave is approved and audited in their name.
+  - **Halt races (M4).** A halt is one conditional `UPDATE`, which also cancels tasks
+    waiting for approval. The agent's claim is conditional too, so halt and claim can never
+    both win. `create_task` locks the deployment row and refuses a task for a halted rollout,
+    so a wave queued during a halt stops where the halt landed.
+  - **Locking and crashes (L7).** The deployment lock re-reads the row. A crash part-way
+    through a wave halts the rollout instead of leaving it half-queued.
+- **C1:**
+  - **Claim fencing (L5).** A failed "before" reading no longer blocks the claim.
+  - **Reads (L6).** `observe` decides what a push is for before reading, and takes the
+    oldest tasks first.
+- **J2 (L8):** two staff loading Recommendations together no longer get a 500.
+- **BitLocker (L9):** a copied key is cleared from the clipboard after a minute, if it is
+  still there.
+- **Noted, not code:** Proof-of-Fix and "proven" are the device's own report, so wording
+  shown to customers must say so.
+
 **L5b · Warranty lookup**
 - **Official manufacturer APIs only — no website scraping** (CAPTCHAs, terms of use, breaks
   when the site changes). One connector per vendor behind a small interface:
