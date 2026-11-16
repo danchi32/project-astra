@@ -49,6 +49,11 @@ _CHECK_ISSUES: dict[str, tuple[str, str, str | None, str | None]] = {
         "Starting a security service needs the elevated agent, which doesn't expose that "
         "action yet. Start MpsSvc on the device, or push it through Intune/GPO.",
     ),
+    "bitlocker": (
+        "BitLocker not on the system drive", "medium", None,
+        "SAVIO can't turn on encryption safely from here. Enable BitLocker for the system drive "
+        "(Device encryption in Windows settings), or push it through Intune/GPO.",
+    ),
     "no_critical_events": (
         "Critical system errors", "high", None,
         "There's no single fix — the right action depends on what's failing. Open a device "

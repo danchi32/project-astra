@@ -486,6 +486,18 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
 - Backend: replace the service-running checks with real state; weighted score per device and
   fleet; each failed check maps to a fix action where one exists.
 - Done when: turning off real-time protection on the VM fails the check within one cycle.
+- As built, backend slice (15 Nov, branch `phase-2`, not pushed): migration `0079`
+  `device_postures` (one row per device, replaced on each report). Ingest takes an optional
+  `posture` block: Defender real-time and signature age, the three firewall profiles,
+  BitLocker on the OS drive. Each field may be null, and null means "not read", never "off".
+  Checks: Defender fails when real-time is off or signatures are older than 7 days; Firewall
+  names the profile that is off; BitLocker is a new check. A device with no posture row keeps
+  the service-based Defender and Firewall checks, so an agent that has not updated scores
+  exactly as before. `security_score` is weighted by check (`compliance.WEIGHTS`), per device
+  and as a fleet mean; the old `score` is unchanged. Tests: `test_security_posture.py` (8).
+  Migration checked up / down / up on Postgres 16.
+  **Still to do for 2a:** the agent collector that sends `posture` (0.15.0, the C# side, which
+  also needs the real-state checks to be verified on a VM), and a portal display.
 
 **C3 · Hijack-proof AI** 🔒
 - Mark every tool result that carries free text from outside (event messages, KB articles,

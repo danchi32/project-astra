@@ -39,6 +39,8 @@ class DeviceCompliance(BaseModel):
     checks: list[CheckResult]
     # The device's reported USB storage state; None until a reporting agent has beaten.
     usb_storage_blocked: bool | None = None
+    # 2a Security Score, weighted by check (compliance.WEIGHTS). None = nothing known.
+    security_score: int | None = None
 
 
 class CheckBreakdown(BaseModel):
@@ -59,6 +61,8 @@ class UsbPosture(BaseModel):
 
 class ComplianceSummary(BaseModel):
     total_devices: int
+    # Fleet mean of the device security scores. None until a device has a known check.
+    security_score: int | None = None
     compliant: int
     at_risk: int
     non_compliant: int

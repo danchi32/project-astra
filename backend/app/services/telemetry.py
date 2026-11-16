@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Asset, Device, User
+from app.models import DevicePosture, Asset, Device, User
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.device_session import DeviceSession
 from app.models.telemetry import (
@@ -243,6 +243,18 @@ class TelemetryService:
                     for lic in data.licensing
                 ],
             )
+
+        # Security posture (2a): one row per device, replaced when the agent reports it.
+        if data.posture is not None:
+            p = data.posture
+            await self.repo.replace_posture(device.id, DevicePosture(
+                device_id=device.id, org_id=device.org_id,
+                defender_realtime=p.defender_realtime,
+                defender_signature_age_days=p.defender_signature_age_days,
+                firewall_domain=p.firewall_domain, firewall_private=p.firewall_private,
+                firewall_public=p.firewall_public, bitlocker_os_drive=p.bitlocker_os_drive,
+                collected_at=now,
+            ))
 
         if data.local_accounts is not None:
             await self.repo.replace_local_accounts(device.id, [
