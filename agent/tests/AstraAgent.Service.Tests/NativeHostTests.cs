@@ -74,6 +74,17 @@ public class NativeHostTests
     }
 
     [Fact]
+    public async Task Redact_answers_with_the_text_findings_replaced()
+    {
+        var answer = (await Converse(JsonSerializer.Serialize(new
+        {
+            type = "redact", text = "PAN ABCPE1234F, mail a@b.in", keep = new[] { "Email", "NotAKind" },
+        }))).Single();
+        Assert.True(answer.GetProperty("ok").GetBoolean());
+        Assert.Equal("PAN [PAN], mail a@b.in", answer.GetProperty("redacted").GetString());
+    }
+
+    [Fact]
     public async Task A_closed_stdin_ends_quietly()
     {
         Assert.Empty(await Converse());

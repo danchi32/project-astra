@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import {
-  FINDING_KINDS, getGuardEventSummary, getGuardEvents, type FindingKind, type GuardEventRow,
+  FINDING_KINDS, REASONS, getGuardEventSummary, getGuardEvents, type FindingKind, type GuardEventRow, type Reason,
 } from "@/lib/api/guard";
 import { isUpgradeRequired } from "@/components/upgrade-required";
 import { apiErrorMessage } from "@/lib/utils";
@@ -19,8 +19,20 @@ const CHANNEL: Record<GuardEventRow["channel"], string> = {
 const RESULT: Record<GuardEventRow["action"], { label: string; color: string }> = {
   allow: { label: "Recorded", color: "var(--text-secondary)" },
   warn: { label: "Warned", color: "#f59e0b" },
+  justify: { label: "Asked for a reason", color: "#f59e0b" },
+  redact: { label: "Pasted with parts hidden", color: "#10b981" },
+  approve: { label: "Needed approval", color: "#f59e0b" },
   block: { label: "Blocked", color: "#ef4444" },
 };
+
+// D7: what the person did when asked.
+function answer(e: GuardEventRow) {
+  if (e.outcome === "cancelled") return "stopped";
+  if (e.outcome === "requested") return "asked IT for approval";
+  if (e.outcome === "proceeded" && e.action === "approve") return "went ahead with IT's approval";
+  if (e.outcome === "proceeded") return e.reason ? `went ahead: ${REASONS[e.reason] ?? e.reason}` : "went ahead";
+  return null;
+}
 
 const status = (e: unknown) => (e as { response?: { status?: number } } | null)?.response?.status;
 
@@ -87,8 +99,9 @@ export default function GuardEventsPage() {
 
       {s && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {([["Found", s.total, "var(--text-primary)"], ["Warned", s.warned, "#f59e0b"],
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {([["Found", s.total, "var(--text-primary)"], ["Warned or asked", s.warned + s.justified, "#f59e0b"],
+               ["Went ahead anyway", s.went_ahead, "#f59e0b"], ["Hidden on paste", s.redacted, "#10b981"],
                ["Blocked", s.blocked, "#ef4444"], ["Could not check", s.unknown, "var(--text-secondary)"]] as const)
               .map(([label, n, color]) => (
                 <div key={label} className="rounded-xl p-4" style={panel}>
@@ -107,6 +120,14 @@ export default function GuardEventsPage() {
               {s.contact_lists > 0 && <Row label="Contact lists" n={s.contact_lists} />}
               {s.keyword_events > 0 && <Row label="Restricted keywords" n={s.keyword_events} />}
               {!Object.keys(s.kinds).length && !s.contact_lists && !s.keyword_events && <Empty />}
+              {Object.keys(s.reasons).length > 0 && (
+                <>
+                  <h3 className="text-xs font-semibold pt-3" style={muted}>Reasons given for going ahead</h3>
+                  {(Object.entries(s.reasons) as [Reason, number][]).map(([r, n]) => (
+                    <Row key={r} label={REASONS[r] ?? r} n={n} />
+                  ))}
+                </>
+              )}
             </div>
             <div className="rounded-xl p-4 space-y-1.5" style={panel}>
               <h2 className="text-sm font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Where</h2>
@@ -137,7 +158,10 @@ export default function GuardEventsPage() {
                     <td className="px-4 py-2 font-mono text-xs">{e.site}</td>
                     <td className="px-4 py-2 text-xs">{CHANNEL[e.channel]}</td>
                     <td className="px-4 py-2 text-xs">{found(e)}</td>
-                    <td className="px-4 py-2 text-xs font-medium" style={{ color: RESULT[e.action].color }}>{RESULT[e.action].label}</td>
+                    <td className="px-4 py-2 text-xs">
+                      <span className="font-medium" style={{ color: RESULT[e.action].color }}>{RESULT[e.action].label}</span>
+                      {answer(e) && <span className="block" style={muted}>{answer(e)}</span>}
+                    </td>
                   </tr>
                 ))}
                 {events.data && !events.data.length && (

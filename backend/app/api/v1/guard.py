@@ -6,14 +6,14 @@ organization. Editing is admin-only and audited. Staff can read the status.
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles, requires
 from app.core.database import get_db
-from app.models import User, UserRole
-from app.services import browser_policy, guard_events
+from app.models import Device, User, UserRole
+from app.services import browser_policy, guard_approvals, guard_events
 from app.services.browser_policy import BrowserPolicyBody, BrowserResult
 from app.services.entitlements import AI_GUARD
 
@@ -85,8 +85,13 @@ class GuardEventSummary(BaseModel):
     total: int
     allowed: int
     warned: int
+    justified: int
+    redacted: int
     blocked: int
     unknown: int
+    went_ahead: int
+    stopped: int
+    reasons: dict[str, int]
     kinds: dict[str, int]
     contact_lists: int
     keyword_events: int
@@ -108,6 +113,8 @@ class GuardEventRead(BaseModel):
     contact_list: bool
     keyword_hits: int
     unknown: bool
+    outcome: str | None
+    reason: str | None
 
 
 @router.get("/events/summary", response_model=GuardEventSummary,
@@ -132,5 +139,75 @@ async def list_guard_events(
     return [GuardEventRead(id=e.id, occurred_at=e.occurred_at, device_id=e.device_id, hostname=host,
                            windows_user=e.windows_user, site=e.site, channel=e.channel, mode=e.mode,
                            action=e.action, counts=e.counts, contact_list=e.contact_list,
-                           keyword_hits=e.keyword_hits, unknown=e.unknown)
+                           keyword_hits=e.keyword_hits, unknown=e.unknown, outcome=e.outcome, reason=e.reason)
             for e, host in await guard_events.recent(session, actor.org_id, days, limit, offset)]
+
+
+# ── D7: approvals. Admin only; every decision is audited. ──────────────────────────────────
+
+class GuardApprovalRead(BaseModel):
+    id: uuid.UUID
+    device_id: uuid.UUID
+    hostname: str
+    windows_user: str
+    site: str
+    channel: str
+    counts: dict[str, int]
+    contact_list: bool
+    keyword_hits: int
+    status: str            # pending | approved | denied | expired | ended
+    requested_at: datetime
+    decided_at: datetime | None
+    valid_until: datetime | None
+
+
+class ApproveBody(BaseModel):
+    minutes: int = Field(guard_approvals.DEFAULT_MINUTES, ge=guard_approvals.MIN_MINUTES, le=guard_approvals.MAX_MINUTES)
+
+
+def _approval(a, host: str) -> GuardApprovalRead:
+    return GuardApprovalRead(id=a.id, device_id=a.device_id, hostname=host, windows_user=a.windows_user,
+                             site=a.site, channel=a.channel, counts=a.counts, contact_list=a.contact_list,
+                             keyword_hits=a.keyword_hits, status=guard_approvals.status_of(a),
+                             requested_at=a.requested_at, decided_at=a.decided_at, valid_until=a.valid_until)
+
+
+@router.get("/approvals", response_model=list[GuardApprovalRead],
+            summary="Requests to let a held paste or upload through, newest first (admin)")
+async def list_approvals(
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> list[GuardApprovalRead]:
+    return [_approval(a, host) for a, host in await guard_approvals.list_for_org(session, actor.org_id)]
+
+
+async def _decide(session, actor, approval_id, approve: bool, minutes: int) -> GuardApprovalRead:
+    try:
+        a = await guard_approvals.decide(session, actor=actor, approval_id=approval_id, approve=approve, minutes=minutes)
+    except guard_approvals.ApprovalNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such request.") from None
+    except guard_approvals.ApprovalClosed as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    host = (await session.get(Device, a.device_id)).hostname
+    return _approval(a, host)
+
+
+@router.post("/approvals/{approval_id}/approve", response_model=GuardApprovalRead,
+             summary="Let it through for that person, PC, site and channel, for a set time (admin; audited)")
+async def approve(
+    approval_id: uuid.UUID,
+    body: ApproveBody,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> GuardApprovalRead:
+    return await _decide(session, actor, approval_id, True, body.minutes)
+
+
+@router.post("/approvals/{approval_id}/deny", response_model=GuardApprovalRead,
+             summary="Refuse a request (admin; audited)")
+async def deny(
+    approval_id: uuid.UUID,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> GuardApprovalRead:
+    return await _decide(session, actor, approval_id, False, 0)

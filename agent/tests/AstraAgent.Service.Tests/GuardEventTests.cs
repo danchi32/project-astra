@@ -45,6 +45,15 @@ public class GuardEventTests
         Assert.Null(GuardEvent.Parse(new byte[GuardEvent.MaxBytes + 1]));
         Assert.NotNull(GuardEvent.Parse(B(Valid.Replace("chatgpt.com", "intranet"))));   // a name without a dot
 
+        // D7: an answer to a prompt, with a reason from the list only after "justify".
+        var justify = Valid.Replace("\"mode\":\"warn\",\"action\":\"warn\"", "\"mode\":\"justify\",\"action\":\"justify\"");
+        Assert.NotNull(GuardEvent.Parse(B(justify.Replace("\"unknown\":false", "\"unknown\":false,\"outcome\":\"proceeded\",\"reason\":\"approved\""))));
+        Assert.Null(GuardEvent.Parse(B(justify.Replace("\"unknown\":false", "\"unknown\":false,\"outcome\":\"proceeded\",\"reason\":\"because I said so\""))));
+        Assert.Null(GuardEvent.Parse(B(justify.Replace("\"unknown\":false", "\"unknown\":false,\"outcome\":\"proceeded\""))));
+        Assert.NotNull(GuardEvent.Parse(B(Valid.Replace("\"unknown\":false", "\"unknown\":false,\"outcome\":\"cancelled\""))));
+        Assert.Null(GuardEvent.Parse(B(Valid.Replace("\"unknown\":false", "\"unknown\":false,\"outcome\":\"cancelled\",\"reason\":\"approved\""))));
+        Assert.Null(GuardEvent.Parse(B(Valid.Replace("\"action\":\"warn\"", "\"action\":\"block\"").Replace("\"unknown\":false", "\"unknown\":false,\"outcome\":\"proceeded\""))));
+
         var nothing = GuardEvent.Parse(B("""{"site":"x.in","channel":"submit","mode":"log","action":"allow","counts":{},"contact_list":false,"keyword_hits":0,"unknown":false}"""));
         Assert.False(nothing!.Notable);
     }

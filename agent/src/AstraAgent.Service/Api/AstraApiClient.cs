@@ -74,6 +74,10 @@ public interface IAstraApiClient
     /// <summary>E3: a batch of extension events (counts only). True when the backend has them,
     /// or refused them for good, so the caller can drop the batch.</summary>
     Task<bool> SendGuardEventsAsync(string deviceToken, IReadOnlyList<Guard.QueuedGuardEvent> events, CancellationToken ct);
+
+    /// <summary>D7: the approvals in force on this PC. Null on any failure (keep what is stored;
+    /// each approval ends at its own time anyway).</summary>
+    Task<IReadOnlyList<AgentGuardApproval>?> GetGuardApprovalsAsync(string deviceToken, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -320,6 +324,7 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
                     site = q.Event.Site, channel = q.Event.Channel, mode = q.Event.Mode, action = q.Event.Action,
                     counts = q.Event.Counts, contact_list = q.Event.ContactList,
                     keyword_hits = q.Event.KeywordHits, unknown = q.Event.Unknown,
+                    outcome = q.Event.Outcome, reason = q.Event.Reason,
                 }),
             }),
         };
@@ -334,6 +339,23 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             logger.LogDebug(ex, "Guard events not sent");
             return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<AgentGuardApproval>?> GetGuardApprovalsAsync(string deviceToken, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, "/api/v1/agent/guard/approvals");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            return await response.Content.ReadFromJsonAsync<List<AgentGuardApproval>>(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            logger.LogDebug(ex, "Guard approvals not fetched");
+            return null;
         }
     }
 }

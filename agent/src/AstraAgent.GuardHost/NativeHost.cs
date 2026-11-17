@@ -12,7 +12,9 @@ namespace AstraAgent.GuardHost;
 /// Each message is a 4-byte little-endian length followed by that many bytes of UTF-8 JSON, in
 /// both directions (Chrome, Edge and Firefox all use this framing). A request is
 /// <c>{"type":"scan","text":"…","keywords":[…]}</c>. The answer is counts and flags only:
-/// what kind of thing was found and how much, never the text. The host keeps nothing. It
+/// what kind of thing was found and how much, never the text. A "redact" request (D7) gets the
+/// same text back with each finding replaced by a label; that goes only to the browser that
+/// sent it, and never into an event. The host keeps nothing. It
 /// writes nothing to disk and nothing to a log, so text pasted into a browser exists only in
 /// this process's memory for the length of one scan.
 /// </summary>
@@ -28,7 +30,27 @@ public static class NativeHost
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public sealed record Request(string? Type, string? Text, IReadOnlyList<string>? Keywords, JsonElement? Event = null);
+    public sealed record Request(string? Type, string? Text, IReadOnlyList<string>? Keywords, JsonElement? Event = null,
+                                 IReadOnlyList<string>? Keep = null, string? Site = null, string? Channel = null);
+
+    /// <summary>D7: this account's approvals, as the service wrote them. Tests replace it.</summary>
+    public static Func<IReadOnlyList<string>?> ReadApprovals { get; set; } = ApprovalsForThisAccount;
+
+    static IReadOnlyList<string>? ApprovalsForThisAccount()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        try
+        {
+            var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value;
+            if (sid is null) return null;
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"{GuardApprovals.KeyPath}\{sid}");
+            return key?.GetValue(GuardApprovals.ValueName) as string[];
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return null;
+        }
+    }
 
     public sealed record Response(
         bool Ok,
@@ -37,7 +59,9 @@ public static class NativeHost
         bool ContactList = false,
         IReadOnlyList<int>? KeywordHits = null,
         bool Truncated = false,
-        bool Incomplete = false);
+        bool Incomplete = false,
+        string? Redacted = null,
+        bool? Approved = null);
 
     /// <summary>Serve one connection until the browser closes stdin. <paramref name="forward"/>
     /// hands an event to the SAVIO service; tests replace it.</summary>
@@ -85,6 +109,21 @@ public static class NativeHost
 
     static Response Handle(Request? req)
     {
+        if (req?.Type == "approved")
+        {
+            // D7: has IT let this account through on this site, for this channel, right now?
+            if (string.IsNullOrEmpty(req.Site) || string.IsNullOrEmpty(req.Channel))
+                return new Response(false, "malformed request");
+            return new Response(true, Approved: GuardApprovals.Allows(ReadApprovals(), req.Site, req.Channel, DateTimeOffset.UtcNow));
+        }
+        if (req?.Type == "redact")
+        {
+            // D7: the same text back with findings replaced by labels, for this browser only.
+            var keep = (req.Keep ?? []).Select(k => Enum.TryParse<Finding>(k, out var f) ? f : (Finding?)null)
+                                       .OfType<Finding>().ToArray();
+            var redacted = PiiScanner.Redact(req.Text, req.Keywords, keep);
+            return redacted is null ? new Response(false, "could not redact") : new Response(true, Redacted: redacted);
+        }
         if (req?.Type != "scan")
             return new Response(false, "unknown request");
 

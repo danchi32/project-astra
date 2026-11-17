@@ -22,14 +22,21 @@ public sealed record GuardEvent(
     IReadOnlyDictionary<string, int> Counts,
     bool ContactList,
     int KeywordHits,
-    bool Unknown)
+    bool Unknown,
+    string? Outcome = null,
+    string? Reason = null)
 {
     /// <summary>Largest message accepted on the pipe. A real event is about 200 bytes.</summary>
     public const int MaxBytes = 2048;
 
     public static readonly string[] Channels = ["paste", "drop", "file", "submit"];
-    public static readonly string[] Modes = ["log", "warn", "block"];
-    public static readonly string[] Actions = ["allow", "warn", "block"];
+    public static readonly string[] Modes = ["log", "warn", "justify", "redact", "approve", "block"];
+    public static readonly string[] Actions = ["allow", "warn", "justify", "redact", "approve", "block"];
+    /// <summary>D7: what the person did after a prompt. "requested" asks IT for an approval;
+    /// "proceeded" after "approve" means an approval was in force.</summary>
+    public static readonly string[] Outcomes = ["proceeded", "cancelled", "requested"];
+    /// <summary>D7: why they went ahead after "justify". A fixed list, never typed text.</summary>
+    public static readonly string[] Reasons = ["client_request", "approved", "not_real", "own_data", "other"];
     public static readonly string[] Kinds = Enum.GetNames<Finding>();
 
     // Host names only: letters, digits, dots and hyphens. Intranet names without a dot allowed.
@@ -50,7 +57,19 @@ public sealed record GuardEvent(
         Channels.Contains(Channel) && Modes.Contains(Mode) && Actions.Contains(Action) &&
         Counts is not null && Counts.Count <= Kinds.Length &&
         Counts.All(kv => Kinds.Contains(kv.Key) && kv.Value is >= 0 and <= 1_000_000) &&
-        KeywordHits is >= 0 and <= 200;
+        KeywordHits is >= 0 and <= 200 &&
+        OutcomeFits();
+
+    /// <summary>An outcome only after a prompt; a reason only for going ahead after "justify".</summary>
+    bool OutcomeFits()
+    {
+        if (Outcome is null) return Reason is null;
+        if (!Outcomes.Contains(Outcome)) return false;
+        if (Action == "approve") return Reason is null;
+        if (Action is not ("warn" or "justify") || Outcome == "requested") return false;
+        var needsReason = Action == "justify" && Outcome == "proceeded";
+        return needsReason ? Reason is not null && Reasons.Contains(Reason) : Reason is null;
+    }
 
     /// <summary>The event in <paramref name="json"/>, or null if it is not exactly this shape.</summary>
     public static GuardEvent? Parse(ReadOnlySpan<byte> json)

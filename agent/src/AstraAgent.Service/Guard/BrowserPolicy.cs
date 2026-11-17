@@ -44,7 +44,7 @@ public sealed record BrowserPolicy
 
     public const int MaxSites = 500;
     public const int MaxKeywords = 200;
-    static readonly string[] Modes = ["log", "warn", "block"];
+    static readonly string[] Modes = ["log", "warn", "justify", "redact", "approve", "block"];
     /// <summary>AstraAgent.Guard's Finding names, which the extension sees in the host's counts.</summary>
     static readonly string[] Kinds = ["Aadhaar", "Pan", "Gstin", "PaymentCard", "IndianMobile", "Email", "BankAccount"];
     static readonly Regex Host = new(@"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$", RegexOptions.CultureInvariant);
@@ -69,7 +69,7 @@ public sealed record BrowserPolicy
         if (FirefoxExtensionUrl is { } u &&
             !(Uri.TryCreate(u, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && u.Length <= 500))
             problems.Add("Firefox extension URL must be https");
-        if (!Modes.Contains(GuardMode)) problems.Add($"guard mode '{Trim(GuardMode)}' is not log, warn or block");
+        if (!Modes.Contains(GuardMode)) problems.Add($"guard mode '{Trim(GuardMode)}' is not log, warn, justify, redact, approve or block");
         if (GuardWatchedSites.Count > MaxSites) problems.Add($"too many watched sites (max {MaxSites})");
         problems.AddRange(GuardWatchedSites.Where(h => !Host.IsMatch(h ?? "")).Select(h => $"watched site '{Trim(h)}' is not a host name"));
         problems.AddRange(GuardIgnoreKinds.Where(k => !Kinds.Contains(k)).Select(k => $"'{Trim(k)}' is not a kind of finding"));

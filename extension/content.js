@@ -2,29 +2,39 @@
 // submit. Listeners run in the capture phase on the document, before the site's own handlers.
 //
 // In "log" mode nothing is held up: the content is checked afterwards and only the counts are
-// recorded. In "warn" / "block" mode the action is held, checked by the local scanner (a few
-// milliseconds), then carried out, confirmed or refused. D7 replaces confirm() / alert() with
-// SAVIO's own dialogs.
+// recorded. In "warn" / "justify" / "block" mode the action is held, checked by the local
+// scanner (a few milliseconds), then carried out, confirmed or refused in SAVIO's own prompt
+// (dialog.js, D7). The answer to a warn or justify prompt goes back with the event.
 (() => {
   const MAX_FILE_BYTES = 5 * 1024 * 1024;
   const TEXT_FILE = /\.(txt|csv|tsv|json|md|xml|log|html?)$/i;
   let mode = "log";
   let resubmitting = false;
 
-  chrome.storage.managed.get("mode").then((m) => { if (m && ["log", "warn", "block"].includes(m.mode)) mode = m.mode; })
+  chrome.storage.managed.get("mode")
+    .then((m) => { if (m && ["log", "warn", "justify", "redact", "approve", "block"].includes(m.mode)) mode = m.mode; })
     .catch(() => {});
 
   const check = (kind, text) => chrome.runtime.sendMessage({ type: "check", kind, text })
-    .catch(() => ({ action: "warn", reason: "SAVIO could not check this content." }));
+    .catch(() => ({ action: "warn", unknown: true }));
 
-  // true = go ahead
-  async function allowed(kind, text) {
+  // The text to go ahead with (the original, or with the sensitive parts hidden), or null.
+  async function handled(kind, text) {
     const r = await check(kind, text);
-    if (r.action === "allow") return true;
-    if (r.action === "warn") return window.confirm(`SAVIO: ${r.reason}\n\nContinue anyway? This is recorded.`);
-    window.alert(`SAVIO blocked this: ${r.reason}`);
-    return false;
+    if (r.action === "allow") return text;
+    if (r.action === "redact" && typeof r.redacted === "string") {
+      globalThis.__savioGuardNotice("hidden", r.reason);
+      return r.redacted;
+    }
+    const answer = await globalThis.__savioGuardDialog(kind, r);
+    if (r.event) {
+      chrome.runtime.sendMessage({ type: "outcome", event: r.event, outcome: answer.outcome, reason: answer.reason })
+        .catch(() => {});
+    }
+    if (answer.outcome === "requested") globalThis.__savioGuardNotice("asked", null, kind);
+    return ["warn", "justify"].includes(r.action) && answer.outcome === "proceeded" ? text : null;
   }
+  const allowed = async (kind, text) => (await handled(kind, text)) !== null;
 
   function insert(target, text) {
     target?.focus?.();
@@ -38,7 +48,7 @@
     e.preventDefault();
     e.stopImmediatePropagation();
     const target = e.target;
-    allowed("paste", text).then((ok) => ok && insert(target, text));
+    handled("paste", text).then((out) => out !== null && insert(target, out));
   }, true);
 
   async function filesText(files) {

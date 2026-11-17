@@ -6,7 +6,7 @@
 // E3: when something was found (or could not be checked), the event (counts only, in the fixed
 // shape the agent accepts) goes back through the host to the SAVIO service, which sends it on
 // to the org's portal. A local copy of the last 200 is kept here as well.
-import { decide, fromHost, isWatched, readPolicy, toEvent } from "./decide.js";
+import { REASONS, decide, fromHost, isWatched, readPolicy, toEvent, withOutcome } from "./decide.js";
 
 const HOST = "com.savio.guard";
 const MAX_EVENTS = 200;
@@ -28,6 +28,24 @@ async function scan(text, keywords) {
   }
 }
 
+async function redact(text, keywords, keep) {
+  try {
+    const r = await chrome.runtime.sendNativeMessage(HOST, { type: "redact", text, keywords, keep });
+    return r?.ok === true && typeof r.redacted === "string" ? r.redacted : null;
+  } catch {
+    return null;
+  }
+}
+
+async function approved(site, channel) {
+  try {
+    const r = await chrome.runtime.sendNativeMessage(HOST, { type: "approved", site, channel });
+    return r?.ok === true && r.approved === true;
+  } catch {
+    return false;
+  }
+}
+
 async function record(event) {
   try {
     await chrome.runtime.sendNativeMessage(HOST, { type: "event", event });
@@ -44,15 +62,39 @@ async function record(event) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Only this extension's own content scripts can reach here; a web page cannot.
+  if (sender.id !== chrome.runtime.id) return false;
+
+  if (msg?.type === "outcome") {
+    // D7: the person answered a warn / justify prompt. Recorded once, with the answer.
+    const event = withOutcome(msg.event, msg.outcome, msg.reason);
+    if (event) record(event);
+    return false;
+  }
   if (msg?.type !== "check" || typeof msg.text !== "string") return false;
   (async () => {
     const p = await policy();
     const host = (() => { try { return new URL(sender.url ?? "").hostname; } catch { return ""; } })();
     if (!isWatched(p, host)) return sendResponse({ action: "allow", findings: [] });
     const scanned = await scan(msg.text, p.keywords);
-    const result = decide(p, scanned);
-    sendResponse(result);                       // the person is not kept waiting for the record
+    let result = decide(p, scanned, msg.kind);
+    if (result.action === "redact") {
+      // The same text back from the host with findings replaced; if it cannot vouch for the
+      // result, fall back to asking the person rather than pasting something unchecked.
+      const redacted = await redact(msg.text, p.keywords, p.ignoreKinds);
+      result = redacted === null ? { ...result, action: "warn" } : { ...result, redacted };
+    }
     const event = toEvent(p, host, msg.kind, scanned, result);
+    if (event && result.action === "approve" && await approved(host, msg.kind)) {
+      // IT approved this person, site and channel for now: through, and recorded as such.
+      sendResponse({ ...result, action: "allow" });
+      return record({ ...event, outcome: "proceeded" });
+    }
+    if (event && ["warn", "justify", "approve"].includes(result.action)) {
+      // Held until the person answers: the content script sends it back with the outcome.
+      return sendResponse({ ...result, event, reasons: result.action === "justify" ? REASONS : undefined });
+    }
+    sendResponse(result);                       // the person is not kept waiting for the record
     if (event) await record(event);
   })();
   return true; // the answer comes asynchronously

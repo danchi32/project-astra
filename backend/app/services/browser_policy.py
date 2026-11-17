@@ -55,7 +55,7 @@ class BrowserPolicyBody(BaseModel):
     firefox_extension_id: str | None = None
     firefox_extension_url: str | None = Field(default=None, max_length=500)
     # D3: the extension's own settings, handed to it as managed policy where it is forced in.
-    guard_mode: Literal["log", "warn", "block"] = "log"
+    guard_mode: Literal["log", "warn", "justify", "redact", "approve", "block"] = "log"
     guard_watched_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     guard_ignore_kinds: list[FindingKind] = Field(default_factory=lambda: ["Email"], max_length=len(FINDING_KINDS))
     guard_keywords: list[str] = Field(default_factory=list, max_length=MAX_KEYWORDS)

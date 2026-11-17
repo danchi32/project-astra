@@ -30,7 +30,11 @@ public sealed class BrowserPolicyWorker(
     /// <summary>The real writer. Tests replace it, so they never touch HKLM.</summary>
     internal Func<BrowserPolicy, IReadOnlyList<ApplyReport>> Apply { get; init; } = BrowserPolicyWriter.Apply;
 
+    /// <summary>D7: where approvals go for the native host. Tests replace it.</summary>
+    internal Action<IReadOnlyList<AgentGuardApproval>> StoreApprovals { get; init; } = GuardApprovalStore.WriteMachine;
+
     private AgentBrowserPolicy? _current;
+    private bool _approvalsMayBeStored = true;   // from a previous run, until the first cycle clears them
     private string? _currentFor;
     private DateTime _nextFetch = DateTime.MinValue;
     private string? _lastReported;
@@ -88,5 +92,35 @@ public sealed class BrowserPolicyWorker(
         foreach (var r in reports.Where(r => r.Repaired.Count > 0))
             logger.LogWarning("Browser policy for {Browser} was changed on this PC and put back: {Names}",
                               r.Browser, string.Join(", ", r.Repaired));
+
+        await SyncApprovalsAsync(token, _current.Policy.ToPolicy(), ct);
+    }
+
+    /// <summary>D7: only a PC whose org asks for approvals fetches them, every cycle, so an
+    /// approval reaches the person within a minute. Every other PC makes no extra call.</summary>
+    async Task SyncApprovalsAsync(string token, BrowserPolicy policy, CancellationToken ct)
+    {
+        var wanted = policy.GuardMode == "approve" &&
+                     (policy.ChromeExtensionId ?? policy.EdgeExtensionId ?? policy.FirefoxExtensionId) is not null;
+        try
+        {
+            if (wanted)
+            {
+                if (await api.GetGuardApprovalsAsync(token, ct) is { } approvals)
+                {
+                    StoreApprovals(approvals);
+                    _approvalsMayBeStored = true;
+                }
+            }
+            else if (_approvalsMayBeStored)
+            {
+                StoreApprovals([]);
+                _approvalsMayBeStored = false;
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            logger.LogWarning(ex, "Could not store browser guard approvals");
+        }
     }
 }

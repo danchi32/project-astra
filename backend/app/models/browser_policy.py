@@ -72,4 +72,38 @@ class GuardEvent(Base):
     contact_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     keyword_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unknown: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # D7: the person's answer to a warn / justify prompt, and the reason code they picked.
+    outcome: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class GuardApproval(Base):
+    """Phase 3 · D7: a person asked IT to let one thing through: one Windows account, one PC,
+    one site, one channel (paste / drop / file / submit). An admin approves it for a set time
+    or denies it. What was found is kept as counts, as on the event. Never the content.
+
+    status: pending → approved | denied. An approval stops counting at `valid_until`; a
+    pending request older than a day is shown as expired and cannot be approved."""
+
+    __tablename__ = "guard_approvals"
+    __table_args__ = (Index("ix_guard_approvals_org_status", "org_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    windows_user: Mapped[str] = mapped_column(String(256), nullable=False)
+    site: Mapped[str] = mapped_column(String(253), nullable=False)
+    channel: Mapped[str] = mapped_column(String(10), nullable=False)
+    counts: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    contact_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    keyword_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

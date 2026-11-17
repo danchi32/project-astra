@@ -58,6 +58,31 @@ public class PiiScannerTests
     }
 
     [Fact]
+    public void Redact_replaces_exactly_what_scan_finds()
+    {
+        var aadhaar = ValidAadhaar("23456789012");
+        var text = $"""
+            Your order 4111111111111111 shipped today, thank you for shopping with us.
+            Aadhaar: {Spaced(aadhaar)}  PAN: ABCPE1234F  GSTIN 27AAPFU0939F1ZV
+            Card 4111 1111 1111 1111 exp 12/28
+            Call +91 98765 43210 or asha.k@example.co.in about Project Falcon
+            Salary to HDFC0001234 a/c 50100123456789
+            """;
+        var r = PiiScanner.Redact(text, ["project falcon"], keep: [Finding.Email])!;
+        Assert.Contains("Aadhaar: [Aadhaar]  PAN: [PAN]  GSTIN [GSTIN]", r);
+        Assert.Contains("Card [card number] exp 12/28", r);
+        Assert.Contains("order 4111111111111111 shipped", r);          // no context word: as Scan, left alone
+        Assert.Equal(1, PiiScanner.Scan(text).Counts[Finding.PaymentCard]);
+        Assert.Contains("Call [mobile] or asha.k@example.co.in about [restricted]", r);   // e-mail kept by policy
+        Assert.Contains("HDFC0001234 a/c [account number]", r);
+        Assert.DoesNotContain("ABCPE1234F", r);
+        Assert.DoesNotContain(Spaced(aadhaar), r);
+
+        Assert.Equal("nothing here", PiiScanner.Redact("nothing here"));
+        Assert.Null(PiiScanner.Redact(new string('a', PiiScanner.MaxChars + 1)));   // cannot vouch for it: refused
+    }
+
+    [Fact]
     public void Bare_digit_runs_need_a_context_word()
     {
         // A Verhoeff-valid 12-digit number and a Luhn-valid 16-digit one, both unformatted:

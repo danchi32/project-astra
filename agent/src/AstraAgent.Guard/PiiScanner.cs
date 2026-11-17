@@ -103,6 +103,72 @@ public static class PiiScanner
         return new ScanResult(counts, contactList, keywordHits, truncated, incomplete);
     }
 
+    /// <summary>
+    /// D7 redact: <paramref name="text"/> with every finding (and admin keyword) replaced by a
+    /// label such as <c>[PAN]</c>, using exactly the checks <see cref="Scan"/> uses. Kinds in
+    /// <paramref name="keep"/> are left as they are (the policy's "count but never act on").
+    ///
+    /// Null when the text cannot be redacted with confidence: it was over
+    /// <see cref="MaxChars"/>, or a pattern timed out. The caller must then not pass the text on
+    /// as if it were clean. The result goes back only to the browser on this PC that sent the
+    /// text; it is never part of an event.
+    /// </summary>
+    public static string? Redact(string? text, IReadOnlyList<string>? keywords = null,
+                                 IReadOnlyCollection<Finding>? keep = null)
+    {
+        text ??= "";
+        if (text.Length > MaxChars) return null;
+        keep ??= Array.Empty<Finding>();
+        var spans = new List<(int Start, int Length, string Label)>();
+        void Add(Finding f, int start, int length, string label)
+        {
+            if (!keep.Contains(f)) spans.Add((start, length, label));
+        }
+        try
+        {
+            foreach (Match m in AadhaarRx.Matches(text))
+                if (IsAadhaar(m, text)) Add(Finding.Aadhaar, m.Groups["n"].Index, m.Groups["n"].Length, "[Aadhaar]");
+            foreach (Match m in PanRx.Matches(text)) Add(Finding.Pan, m.Index, m.Length, "[PAN]");
+            foreach (Match m in GstinRx.Matches(text))
+                if (GstinCheck(m.Value)) Add(Finding.Gstin, m.Index, m.Length, "[GSTIN]");
+            foreach (Match m in CardRx.Matches(text))
+                if (IsCard(m, text)) Add(Finding.PaymentCard, m.Index, m.Length, "[card number]");
+            foreach (Match m in MobileRx.Matches(text)) Add(Finding.IndianMobile, m.Index, m.Length, "[mobile]");
+            foreach (Match m in EmailRx.Matches(text)) Add(Finding.Email, m.Index, m.Length, "[e-mail]");
+            int offset = 0;
+            foreach (var line in text.Split('\n'))
+            {
+                if (line.Length <= 2000 && IfscRx.IsMatch(line))
+                    foreach (Match m in AccountRx.Matches(line)) Add(Finding.BankAccount, offset + m.Index, m.Length, "[account number]");
+                offset += line.Length + 1;
+            }
+            if (keywords is not null)
+                for (int i = 0; i < Math.Min(keywords.Count, MaxKeywords); i++)
+                {
+                    var k = keywords[i]?.Trim() ?? "";
+                    if (k.Length is 0 or > MaxKeywordLength) continue;
+                    var rx = new Regex($@"(?<![\p{{L}}\p{{N}}]){Regex.Escape(k)}(?![\p{{L}}\p{{N}}])",
+                                       RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, Timeout);
+                    foreach (Match m in rx.Matches(text)) spans.Add((m.Index, m.Length, "[restricted]"));
+                }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
+        }
+
+        // Earliest first; of two starting together, the longer. Overlaps go to the first.
+        var sb = new System.Text.StringBuilder(text.Length);
+        int pos = 0;
+        foreach (var (start, length, label) in spans.OrderBy(s => s.Start).ThenByDescending(s => s.Length))
+        {
+            if (start < pos) continue;
+            sb.Append(text, pos, start - pos).Append(label);
+            pos = start + length;
+        }
+        return sb.Append(text, pos, text.Length - pos).ToString();
+    }
+
     // ── detectors ────────────────────────────────────────────────────────────────────────────
 
     static bool IsAadhaar(Match m, string text)

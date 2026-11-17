@@ -38,6 +38,10 @@ public class BrowserPolicyWorkerTests
         { Reports.Add((v, r)); return Task.FromResult(true); }
         public Task<bool> SendGuardEventsAsync(string t, IReadOnlyList<QueuedGuardEvent> events, CancellationToken ct)
         { EventBatches.Add(events); return Task.FromResult(EventsAccepted); }
+        public IReadOnlyList<AgentGuardApproval>? Approvals = [];
+        public int ApprovalFetches;
+        public Task<IReadOnlyList<AgentGuardApproval>?> GetGuardApprovalsAsync(string t, CancellationToken ct)
+        { ApprovalFetches++; return Task.FromResult(Approvals); }
 
         public Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct) => throw new NotSupportedException();
         public Task<HeartbeatResult> HeartbeatAsync(string token, HeartbeatRequest request, CancellationToken ct) => throw new NotSupportedException();
@@ -58,11 +62,38 @@ public class BrowserPolicyWorkerTests
     readonly List<BrowserPolicy> _applied = [];
     Func<BrowserPolicy, IReadOnlyList<ApplyReport>> _result = _ => [Report(Browser.Chrome)];
 
+    readonly List<IReadOnlyList<AgentGuardApproval>> _stored = [];
+
     BrowserPolicyWorker Worker() => new(_enroll, _api, new SubscriptionState(),
         Options.Create(new AgentOptions()), NullLogger<BrowserPolicyWorker>.Instance)
     {
         Apply = p => { _applied.Add(p); return _result(p); },
+        StoreApprovals = a => _stored.Add(a),
     };
+
+    [Fact]
+    public async Task Approvals_are_fetched_only_where_the_org_asks_for_them()
+    {
+        var w = Worker();
+        var t0 = new DateTime(2026, 11, 17, 9, 0, 0, DateTimeKind.Utc);
+        _api.Next = Policy(1);                                            // log mode
+        await w.RunOnceAsync(t0, default);
+        await w.RunOnceAsync(t0.AddMinutes(1), default);
+        Assert.Equal(0, _api.ApprovalFetches);                            // no extra call on an ordinary PC
+        Assert.Empty(Assert.Single(_stored));                             // leftovers of an earlier run cleared once
+
+        var approve = new AgentBrowserPolicy(2, new AgentBrowserPolicyBody(GuardMode: "approve", ChromeExtensionId: "abcdefghijklmnopabcdefghijklmnop"));
+        _api.Next = approve;
+        _api.Approvals = [new(@"PC\asha", "chatgpt.com", "paste", DateTimeOffset.UtcNow.AddMinutes(30))];
+        await w.RunOnceAsync(t0.AddHours(1), default);
+        await w.RunOnceAsync(t0.AddHours(1).AddMinutes(1), default);
+        Assert.Equal(2, _api.ApprovalFetches);                            // every cycle while asked for
+        Assert.Equal("chatgpt.com", _stored[^1].Single().Site);
+
+        _api.Approvals = null;                                            // backend unreachable: keep what is stored
+        await w.RunOnceAsync(t0.AddHours(1).AddMinutes(2), default);
+        Assert.Equal(3, _stored.Count);
+    }
 
     static AgentBrowserPolicy Policy(int version, bool incognitoOff = true) =>
         new(version, new AgentBrowserPolicyBody(IncognitoOff: incognitoOff, BlockedSites: ["example.com"]));

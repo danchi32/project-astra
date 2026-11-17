@@ -209,6 +209,14 @@ public sealed record RemoteSupportPlan(
     // drift: it is the Windows service name AND the registry key the node id lives under.
     [property: JsonPropertyName("service_name")] string? ServiceName = null);
 
+/// <summary>Phase 3 · D7: an approval in force on this device: one Windows account, one site, one
+/// channel, until a time.</summary>
+public sealed record AgentGuardApproval(
+    [property: JsonPropertyName("windows_user")] string WindowsUser,
+    [property: JsonPropertyName("site")] string Site,
+    [property: JsonPropertyName("channel")] string Channel,
+    [property: JsonPropertyName("valid_until")] DateTimeOffset ValidUntil);
+
 /// <summary>Phase 3 · D10: the browser policy the backend serves this device. Version 0 with an
 /// empty policy means "none": the org has no AI Guard, or never set one, and the agent removes
 /// whatever it set before.</summary>

@@ -1211,7 +1211,72 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
     wiring it into the extension and native host (D3/E4).
 - **D5 Zero-config discovery:** low-priority scheduled file scan → sensitivity map by folder
   (counts only) → suggested policies for the admin to approve.
-- **D7 Coaching:** warn / justify / block dialogs in-page, Hindi + English.
+- **D7 Coaching:** warn / justify / block dialogs in-page, English only (no Hindi anywhere,
+  decided 17 Nov).
+  - **As built (17 Nov, branch `phase-3`):**
+    - **SAVIO's own prompts:** `extension/dialog.js` replaces `confirm()` / `alert()`. It
+      lives in a **closed** shadow root, so the page cannot see inside, restyle it or press its
+      buttons. Only real clicks and keys count. Checked in the browser: the page's own
+      synthetic Escape, Enter and click did nothing.
+    - **Safe by default:** the safe button has the focus, so Enter never sends. Escape
+      cancels. If a page removes the prompt, the held action simply never happens.
+    - **Looks:** light and dark; scrolls on a short window.
+    - **New mode "justify":** to go ahead, the person picks a reason from a fixed list
+      (client asked, manager approved, test data, own information, other work reason). It is
+      a list, not a text box, because the event schema has no free-text field (E4) and that
+      does not bend here. A scanner that could not check still only warns.
+    - **The answer is recorded:** a warn or justify event is held until the person answers,
+      then sent once with `outcome` (proceeded / cancelled) and the `reason` code. The rules
+      are checked in the extension, the agent and the backend: a reason only when going
+      ahead after justify, never otherwise.
+    - **Backend and portal:**
+      - migration 0089 adds `outcome` and `reason`;
+      - the summary counts "went ahead anyway", "stopped" and each reason;
+      - "What was found" shows them per event;
+      - the browser policy page offers "Ask for a reason".
+    - **Fixed on the way:** the extension's store description said nothing is sent to
+      SAVIO's servers. That stopped being true with E3; it now says what is sent (kind and
+      where, never the text).
+    - **English only:** no Hindi anywhere in the product (decided 17 Nov). Every string sits
+      in one table in `dialog.js`.
+  - **Redact (17 Nov):**
+    - **Mode "Hide the sensitive parts":** a paste goes in with each finding replaced by a
+      label (`[PAN]`, `[Aadhaar]`, `[card number]`, `[restricted]`, …), and a small notice
+      says so.
+    - **How:** the scanner's `Redact()` uses exactly the checks `Scan()` uses. A bare order
+      number with no context word stays as it is, in both. Kinds the policy ignores are kept.
+    - **Where it applies:** only a paste can be rewritten. A file, a drop or a form gets a
+      warning instead.
+    - **When it cannot redact** (over 5M characters, or a timeout), it warns rather than
+      pasting unchecked text.
+    - **The redacted text** goes back only to the browser on that PC, never into an event.
+  - **Approvals (17 Nov):**
+    - **Mode "Needs IT approval":** the prompt offers "Ask IT for approval" or "Don't". A
+      request is an event with `outcome: requested`. The backend turns it into a
+      `guard_approvals` row (migration 0090) and notifies the admins.
+    - **Deciding:** admins approve, for 15 minutes to 8 hours, or deny, under AI Guard →
+      Approvals. Every decision is audited. A request unanswered for a day expires.
+    - **What an approval covers:** that Windows account, that PC, that site, that channel,
+      until that time. Nothing wider.
+    - **How it reaches the PC:**
+      - only PCs whose policy is in approve mode fetch approvals, every cycle, so no other
+        PC makes an extra call;
+      - the service writes them to `HKLM\SOFTWARE\SAVIO\GuardApprovals\<SID>`, a key only
+        that account can read, with no inherited "Users: read";
+      - a standard user cannot write there, so cannot approve themselves;
+      - the host checks it, and the person tries again and goes through, recorded as
+        "went ahead with IT's approval".
+    - **Checked:**
+      - backend `test_guard_approvals` (3): dedupe, approve and serve, audit, other PC gets
+        nothing, deny, expiry, bounds, roles;
+      - agent: store per account, the key's ACL, the host's site / channel / time check, and
+        the worker fetching only in approve mode;
+      - migration 0090 up/down/up with no model drift;
+      - on screen: a request appeared under Approvals, was approved for 1 hour, and the
+        PC's endpoint served it. The prompt and both notices were checked on a test page.
+  - **Not yet:**
+    - a live run with the real service writing HKLM and the host reading it (needs the VM);
+    - redacting files and forms.
 - Actions available: log, warn, justify, redact (where supported), block. Default for a new
   org: **log-only for 14 days** (the pilot mode, E8).
 

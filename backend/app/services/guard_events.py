@@ -14,14 +14,16 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Device, GuardEvent
 from app.models.base import utcnow
+from app.services import guard_approvals
 from app.services.browser_policy import FindingKind, entitled
 
+Reason = Literal["client_request", "approved", "not_real", "own_data", "other"]
 RETENTION_DAYS = 180
 MAX_BATCH = 500
 _HOST = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
@@ -36,12 +38,33 @@ class GuardEventIn(BaseModel):
     windows_user: str = Field(min_length=1, max_length=256)
     site: str = Field(max_length=253)
     channel: Literal["paste", "drop", "file", "submit"]
-    mode: Literal["log", "warn", "block"]
-    action: Literal["allow", "warn", "block"]
+    mode: Literal["log", "warn", "justify", "redact", "approve", "block"]
+    action: Literal["allow", "warn", "justify", "redact", "approve", "block"]
     counts: dict[FindingKind, int] = Field(default_factory=dict, max_length=7)
     contact_list: bool = False
     keyword_hits: int = Field(default=0, ge=0, le=200)
     unknown: bool = False
+    # D7: the answer to a prompt, and why (a code from a fixed list, never text). "requested"
+    # is an approval asked for; "proceeded" after "approve" means an approval was in force.
+    outcome: Literal["proceeded", "cancelled", "requested"] | None = None
+    reason: Reason | None = None
+
+    @model_validator(mode="after")
+    def _outcome_fits(self) -> GuardEventIn:
+        if self.outcome is None:
+            if self.reason is not None:
+                raise ValueError("a reason needs an outcome")
+            return self
+        if self.action == "approve":
+            if self.reason is not None:
+                raise ValueError("an approval carries no reason")
+            return self
+        if self.action not in ("warn", "justify") or self.outcome == "requested":
+            raise ValueError("only a warn or justify prompt has an outcome")
+        needs_reason = self.action == "justify" and self.outcome == "proceeded"
+        if needs_reason != (self.reason is not None):
+            raise ValueError("a reason is given exactly when going ahead after justify")
+        return self
 
     @field_validator("at")
     @classmethod
@@ -87,10 +110,14 @@ async def ingest(session: AsyncSession, device: Device, batch: GuardEventBatch) 
     session.add_all(GuardEvent(
         org_id=device.org_id, device_id=device.id, occurred_at=e.at, windows_user=e.windows_user,
         site=e.site, channel=e.channel, mode=e.mode, action=e.action, counts=e.counts,
-        contact_list=e.contact_list, keyword_hits=e.keyword_hits, unknown=e.unknown, received_at=now,
+        contact_list=e.contact_list, keyword_hits=e.keyword_hits, unknown=e.unknown,
+        outcome=e.outcome, reason=e.reason, received_at=now,
     ) for e in kept)
     # Retention, pruned per device on ingest, as telemetry and workforce samples are.
     await session.execute(delete(GuardEvent).where(GuardEvent.device_id == device.id, GuardEvent.occurred_at < oldest))
+    for e in kept:
+        if e.action == "approve" and e.outcome == "requested":
+            await guard_approvals.request(session, device, e)
     await session.commit()
     return len(kept)
 
@@ -105,6 +132,12 @@ async def summary(session: AsyncSession, org_id, days: int) -> dict:
     by_action = dict((await session.execute(
         select(GuardEvent.action, func.count()).where(*where).group_by(GuardEvent.action))).all())
     unknown = (await session.execute(select(func.count()).where(*where, GuardEvent.unknown.is_(True)))).scalar_one()
+    outcomes = dict((await session.execute(
+        select(GuardEvent.outcome, func.count()).where(*where, GuardEvent.outcome.is_not(None))
+        .group_by(GuardEvent.outcome))).all())
+    reasons = dict((await session.execute(
+        select(GuardEvent.reason, func.count()).where(*where, GuardEvent.reason.is_not(None))
+        .group_by(GuardEvent.reason).order_by(func.count().desc()))).all())
 
     sites = (await session.execute(
         select(GuardEvent.site, func.count().label("n"))
@@ -129,8 +162,13 @@ async def summary(session: AsyncSession, org_id, days: int) -> dict:
         "total": sum(by_action.values()),
         "allowed": by_action.get("allow", 0),
         "warned": by_action.get("warn", 0),
+        "justified": by_action.get("justify", 0),
+        "redacted": by_action.get("redact", 0),
         "blocked": by_action.get("block", 0),
         "unknown": unknown,
+        "went_ahead": outcomes.get("proceeded", 0),
+        "stopped": outcomes.get("cancelled", 0),
+        "reasons": reasons,
         "kinds": dict(kinds.most_common()),
         "contact_lists": contact_lists,
         "keyword_events": keyword_events,

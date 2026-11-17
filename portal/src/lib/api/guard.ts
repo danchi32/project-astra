@@ -14,7 +14,7 @@ export interface BrowserPolicy {
   firefox_extension_id: string | null;
   firefox_extension_url: string | null;
   // D3: the extension's own settings, handed to it as managed policy.
-  guard_mode: "log" | "warn" | "block";
+  guard_mode: "log" | "warn" | "justify" | "redact" | "approve" | "block";
   guard_watched_sites: string[];
   guard_ignore_kinds: FindingKind[];
   guard_keywords: string[];
@@ -25,6 +25,13 @@ export const FINDING_KINDS = {
   IndianMobile: "Mobile numbers", Email: "E-mail addresses", BankAccount: "Bank account numbers",
 } as const;
 export type FindingKind = keyof typeof FINDING_KINDS;
+
+// D7: why someone went ahead after a "justify" prompt. Mirrors the extension's fixed list.
+export const REASONS = {
+  client_request: "The client asked for it", approved: "Manager approved", not_real: "Test or sample data",
+  own_data: "Their own information", other: "Another work reason",
+} as const;
+export type Reason = keyof typeof REASONS;
 
 export interface BrowserPolicyRead {
   version: number;
@@ -61,8 +68,13 @@ export interface GuardEventSummary {
   total: number;
   allowed: number;
   warned: number;
+  justified: number;
+  redacted: number;
   blocked: number;
   unknown: number;
+  went_ahead: number;
+  stopped: number;
+  reasons: Partial<Record<Reason, number>>;
   kinds: Partial<Record<FindingKind, number>>;
   contact_lists: number;
   keyword_events: number;
@@ -78,12 +90,14 @@ export interface GuardEventRow {
   windows_user: string;
   site: string;
   channel: "paste" | "drop" | "file" | "submit";
-  mode: "log" | "warn" | "block";
-  action: "allow" | "warn" | "block";
+  mode: "log" | "warn" | "justify" | "redact" | "approve" | "block";
+  action: "allow" | "warn" | "justify" | "redact" | "approve" | "block";
   counts: Partial<Record<FindingKind, number>>;
   contact_list: boolean;
   keyword_hits: number;
   unknown: boolean;
+  outcome: "proceeded" | "cancelled" | "requested" | null;
+  reason: Reason | null;
 }
 
 export const getGuardEventSummary = (days: number) =>
@@ -94,3 +108,29 @@ export const getGuardEvents = (days: number, offset = 0) =>
 
 export const getBrowserPolicyDevices = () =>
   apiClient.get<DeviceBrowserState[]>("/guard/browser-policy/devices").then((r) => r.data);
+
+// D7: requests to let one held paste / upload through. Admin only; decisions are audited.
+export interface GuardApproval {
+  id: string;
+  device_id: string;
+  hostname: string;
+  windows_user: string;
+  site: string;
+  channel: GuardEventRow["channel"];
+  counts: Partial<Record<FindingKind, number>>;
+  contact_list: boolean;
+  keyword_hits: number;
+  status: "pending" | "approved" | "denied" | "expired" | "ended";
+  requested_at: string;
+  decided_at: string | null;
+  valid_until: string | null;
+}
+
+export const getGuardApprovals = () =>
+  apiClient.get<GuardApproval[]>("/guard/approvals").then((r) => r.data);
+
+export const approveGuardApproval = (id: string, minutes: number) =>
+  apiClient.post<GuardApproval>(`/guard/approvals/${id}/approve`, { minutes }).then((r) => r.data);
+
+export const denyGuardApproval = (id: string) =>
+  apiClient.post<GuardApproval>(`/guard/approvals/${id}/deny`).then((r) => r.data);

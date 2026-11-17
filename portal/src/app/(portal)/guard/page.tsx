@@ -25,6 +25,9 @@ const lines = (s: string) => s.split(/[\n,]/).map((x) => x.trim()).filter(Boolea
 const MODES: { value: BrowserPolicy["guard_mode"]; label: string; help: string }[] = [
   { value: "log", label: "Record only", help: "Nothing is stopped. Start here for two weeks and see what turns up." },
   { value: "warn", label: "Warn", help: "The person is told what was found and can go ahead." },
+  { value: "justify", label: "Ask for a reason", help: "To go ahead, the person picks a work reason from a short list. You see which." },
+  { value: "redact", label: "Hide the sensitive parts", help: "A paste goes in with numbers replaced, e.g. [PAN]. Files and forms get a warning." },
+  { value: "approve", label: "Needs IT approval", help: "Held until an admin approves it under Approvals; then allowed on that site for a while." },
   { value: "block", label: "Block", help: "Paste, upload or send is refused. If the check itself fails, it warns instead." },
 ];
 
@@ -127,7 +130,7 @@ export default function GuardPage() {
                 the browser stores; until then these settings wait.
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {MODES.map((m) => (
                 <label key={m.value} className="flex items-start gap-2 text-sm rounded-lg p-3" style={{ ...panel, color: "var(--text-primary)" }}>
                   <input type="radio" name="guard_mode" className="mt-1" disabled={!isAdmin} checked={form.guard_mode === m.value}

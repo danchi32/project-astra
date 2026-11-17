@@ -4,8 +4,25 @@
 // The scanner answers with counts only ({counts:{Aadhaar:1}, contactList, keywordHits,
 // incomplete}); nothing here ever sees the text again.
 
+// redact: a paste goes in with the sensitive parts replaced by labels such as [PAN]. Only a
+// paste can be rewritten; a file, a drop or a form falls back to warn.
+// approve: held until IT approves; then the same channel on the same site goes through for a
+// while (the host checks the approvals the agent stored for this Windows account).
+export const MODES = ["log", "warn", "justify", "redact", "approve", "block"];
+export const REDACTABLE = ["paste"];
+
+// D7: why someone went ahead after a "justify" prompt. A fixed list, never typed text: the
+// event schema has no free-text field (E4), and that promise does not bend for this.
+export const REASONS = Object.freeze({
+  client_request: "The client asked for it",
+  approved: "My manager approved it",
+  not_real: "It is test or sample data",
+  own_data: "It is my own information",
+  other: "Another work reason",
+});
+
 export const DEFAULT_POLICY = Object.freeze({
-  mode: "log",            // log | warn | block. Pilot default: 14 days of log-only (E8)
+  mode: "log",            // log | warn | justify | redact | block. Pilot default: 14 days of log-only (E8)
   watchedSites: [],       // host names; empty = every site
   ignoreKinds: ["Email"], // e-mail addresses are in every signature; counted, never acted on
   keywords: [],           // admin keywords, matched whole-word by the scanner
@@ -45,6 +62,8 @@ export function toEvent(policy, site, channel, scan, result) {
     contact_list: !result.unknown && !!scan?.contactList,
     keyword_hits: result.unknown ? 0 : Math.min(scan?.keywordHits?.length ?? 0, 200),
     unknown: !!result.unknown,
+    outcome: null,   // D7: "proceeded" / "cancelled" once a warn or justify prompt is answered
+    reason: null,
   };
   const notable = event.unknown || event.contact_list || event.keyword_hits > 0 || Object.keys(counts).length > 0;
   return notable ? event : null;
@@ -54,7 +73,7 @@ export function toEvent(policy, site, channel, scan, result) {
 export function readPolicy(managed) {
   const p = { ...DEFAULT_POLICY };
   if (!managed || typeof managed !== "object") return p;
-  if (["log", "warn", "block"].includes(managed.mode)) p.mode = managed.mode;
+  if (MODES.includes(managed.mode)) p.mode = managed.mode;
   for (const key of ["watchedSites", "ignoreKinds", "keywords"]) {
     if (Array.isArray(managed[key])) p[key] = managed[key].filter((x) => typeof x === "string").slice(0, 500);
   }
@@ -85,12 +104,29 @@ export function sensitiveFindings(policy, scan) {
  * outright: a broken scanner must not stop a whole office pasting, so it warns instead and the
  * warning is logged.
  */
-export function decide(policy, scan) {
+export function decide(policy, scan, channel = "paste") {
   const unknown = scan === null || scan?.ok === false || scan?.incomplete === true;
   const findings = unknown ? [] : sensitiveFindings(policy, scan);
   if (policy.mode === "log") return { action: "allow", findings, unknown };
   if (unknown) return { action: "warn", findings, unknown, reason: "SAVIO could not check this content." };
   if (!findings.length) return { action: "allow", findings, unknown };
   const reason = `This contains ${findings.join(", ")}.`;
-  return { action: policy.mode === "block" ? "block" : "warn", findings, unknown, reason };
+  const action = policy.mode === "redact" && !REDACTABLE.includes(channel) ? "warn" : policy.mode;
+  return { action, findings, unknown, reason };
+}
+
+/**
+ * D7: the event once the person has answered a warn or justify prompt. Null if the answer
+ * does not fit: a reason only for "went ahead" after "justify", and only from REASONS.
+ */
+export function withOutcome(event, outcome, reason) {
+  if (event?.action === "approve") {
+    // From the prompt: asked IT, or gave up. "proceeded" comes only from the host's check.
+    return ["requested", "cancelled"].includes(outcome) && reason == null ? { ...event, outcome, reason: null } : null;
+  }
+  if (!event || !["warn", "justify"].includes(event.action)) return null;
+  if (!["proceeded", "cancelled"].includes(outcome)) return null;
+  const needsReason = event.action === "justify" && outcome === "proceeded";
+  if (needsReason !== Object.hasOwn(REASONS, reason ?? "")) return null;
+  return { ...event, outcome, reason: needsReason ? reason : null };
 }

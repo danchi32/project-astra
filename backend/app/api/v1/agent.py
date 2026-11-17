@@ -399,3 +399,16 @@ async def agent_guard_events(
     from app.services import guard_events
 
     await guard_events.ingest(session, device, body)
+
+
+@router.get(
+    "/guard/approvals",
+    summary="D7: approvals in force on this device now (agent only; empty without AI Guard)",
+)
+async def agent_guard_approvals(
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    from app.services import guard_approvals
+
+    return await guard_approvals.for_device(session, device)

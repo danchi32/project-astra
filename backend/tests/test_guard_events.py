@@ -50,6 +50,34 @@ async def test_the_schema_is_fixed(client, admin_headers, session_factory, admin
     assert r.status_code == 422
 
 
+async def test_answers_to_prompts(client, admin_headers, session_factory, admin_user):
+    """D7: whether the person went ahead after a warn / justify prompt, and why, as a code."""
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers)
+    j = {"mode": "justify", "action": "justify"}
+    ok = [_event(**j, outcome="proceeded", reason="client_request"), _event(**j, outcome="proceeded", reason="approved"),
+          _event(**j, outcome="cancelled"), _event(outcome="proceeded")]
+    assert (await client.post("/api/v1/agent/guard/events", headers=h, json={"events": ok})).status_code == 204
+
+    s = (await client.get("/api/v1/guard/events/summary", headers=admin_headers)).json()
+    assert (s["justified"], s["warned"], s["went_ahead"], s["stopped"]) == (3, 1, 3, 1)
+    assert s["reasons"] == {"client_request": 1, "approved": 1}
+    rows = (await client.get("/api/v1/guard/events", headers=admin_headers)).json()
+    assert {(r["outcome"], r["reason"]) for r in rows} >= {("proceeded", "client_request"), ("cancelled", None)}
+
+    r = {"mode": "redact", "action": "redact"}
+    assert (await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event(**r)]})).status_code == 204
+    assert (await client.get("/api/v1/guard/events/summary", headers=admin_headers)).json()["redacted"] == 1
+
+    for bad in (_event(**r, outcome="proceeded"),                         # a redacted paste has no answer
+                _event(**j, outcome="proceeded"),                         # justify needs a reason
+                _event(**j, outcome="proceeded", reason="I felt like it"),  # never free text
+                _event(outcome="cancelled", reason="approved"),
+                _event(action="block", mode="block", outcome="proceeded"),
+                _event(reason="approved")):
+        assert (await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [bad]})).status_code == 422, bad
+
+
 async def test_without_the_add_on_events_are_dropped(client, admin_headers, session_factory, admin_user):
     _, h = await _enroll(client, admin_headers)
     assert (await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event()]})).status_code == 204
