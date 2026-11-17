@@ -81,7 +81,9 @@ public sealed record BrowserPolicy
     static string Trim(string? s) => (s ?? "").Length > 60 ? s![..60] + "…" : s ?? "";
 }
 
-public enum Browser { Chrome, Edge, Firefox }
+/// <summary>Where a report comes from. <see cref="Scanner"/> is not a browser: it is E4's
+/// firewall block on the native host, reported beside the browsers it serves.</summary>
+public enum Browser { Chrome, Edge, Firefox, Scanner }
 
 /// <summary>
 /// A browser's own name for each setting. Chromium policies are registry values, or list

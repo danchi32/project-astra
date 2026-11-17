@@ -196,7 +196,11 @@ export default function GuardPage() {
                     <td className="px-4 py-2 font-medium">{d.hostname}</td>
                     <td className="px-4 py-2" style={{ color: behind ? "#f59e0b" : muted.color }}>{d.version}{behind ? " (older)" : ""}</td>
                     <td className="px-4 py-2 text-xs">
-                      {errors.map((r) => <div key={r.browser} style={{ color: "#ef4444" }}>{r.browser}: {r.error}</div>)}
+                      {errors.map((r) => (
+                        <div key={r.browser} style={{ color: "#ef4444" }}>
+                          {r.browser === "Scanner" ? "Scanner's network block" : r.browser}: {r.error}
+                        </div>
+                      ))}
                       {conflicts.length > 0 && <div style={{ color: "#f59e0b" }}>Set elsewhere, left alone: {conflicts.join(", ")}</div>}
                       {!errors.length && !conflicts.length && <span style={{ color: "#10b981" }}>Applied</span>}
                     </td>

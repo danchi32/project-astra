@@ -24,7 +24,7 @@ public static class FirewallRemediation
 
     public static (bool Success, string Output) EnableAllProfiles()
     {
-        var registered = FirewallProducts();
+        var registered = RegisteredFirewalls();
         if (registered is null)
             return (false, "Could not read the firewall list from Windows Security Center, so SAVIO "
                            + "can't confirm no other firewall is in charge. Nothing was changed.");
@@ -58,8 +58,9 @@ public static class FirewallRemediation
     internal static IReadOnlyList<string> OtherFirewalls(IEnumerable<string> displayNames) =>
         displayNames.Select(n => n.Trim()).Where(n => n.Length > 0 && !WindowsFirewall.IsMatch(n)).ToList();
 
-    /// <summary>Null when Security Center cannot be read (Server editions have none).</summary>
-    private static IReadOnlyList<string>? FirewallProducts()
+    /// <summary>Null when Security Center cannot be read (Server editions have none).
+    /// Also read by E4's ScannerFirewall to say who is in charge.</summary>
+    internal static IReadOnlyList<string>? RegisteredFirewalls()
     {
         try
         {

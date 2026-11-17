@@ -40,7 +40,7 @@ export interface BrowserPolicyRead {
 }
 
 export interface BrowserResult {
-  browser: "Chrome" | "Edge" | "Firefox";
+  browser: "Chrome" | "Edge" | "Firefox" | "Scanner";   // Scanner: E4's firewall block on the native host
   set: string[];
   repaired: string[];
   removed: string[];

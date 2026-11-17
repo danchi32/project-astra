@@ -68,7 +68,28 @@ public static class BrowserPolicyWriter
         if (fx.Count > 0) fx[0] = WithHost(fx[0], policy.FirefoxExtensionId);
         else WithHost(new ApplyReport(Browser.Firefox, [], [], [], [], null), null);
         reports.AddRange(fx);
+
+        // E4: while any browser is made to run the extension, its scanner has no network.
+        var exe = Path.Combine(AppContext.BaseDirectory, NativeHostRegistration.HostExe);
+        var forced = (policy.ChromeExtensionId ?? policy.EdgeExtensionId ?? policy.FirefoxExtensionId) is not null
+                     && File.Exists(exe);
+        var scanner = ScannerFirewallReport(forced ? exe : null);
+        if (forced || scanner.Changed || scanner.Error is not null) reports.Add(scanner);
         return reports;
+    }
+
+    static ApplyReport ScannerFirewallReport(string? hostExe)
+    {
+        try
+        {
+            return ScannerFirewall.Apply(new WindowsFirewallRules(), hostExe, ScannerFirewall.Enforcement);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException
+                                       or InvalidOperationException or Microsoft.CSharp.RuntimeBinder.RuntimeBinderException)
+        {
+            return new ApplyReport(Browser.Scanner, [], [], [], [],
+                hostExe is null ? null : $"Could not set the scanner's firewall rules: {ex.Message}");
+        }
     }
 
     /// <summary>D3: register the native host for the extension this browser is forced to run,

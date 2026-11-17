@@ -124,5 +124,11 @@ async def test_reports_are_kept_and_tampering_is_raised(client, admin_headers, s
     assert "TAMPER-PC" in note.message and audit.detail["repaired"] == ["Chrome: IncognitoModeAvailability"]
     assert len((await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()) == 1
 
+    # E4: the scanner's firewall block reports beside the browsers, and its problems show.
+    scanner = {"version": 1, "results": [{"browser": "Scanner", "error": "Windows Firewall is off for at least one profile"}]}
+    assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=scanner)).status_code == 204
+    states = (await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()
+    assert states[0]["results"][0]["browser"] == "Scanner"
+
     bogus = {"version": 1, "results": [{"browser": "Opera"}]}
     assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=bogus)).status_code == 422

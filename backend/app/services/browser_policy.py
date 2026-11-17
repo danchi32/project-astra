@@ -104,7 +104,8 @@ class BrowserPolicyBody(BaseModel):
 
 
 class BrowserResult(BaseModel):
-    browser: Literal["Chrome", "Edge", "Firefox"]
+    # "Scanner" is not a browser: it is E4's firewall block on the extension's native host.
+    browser: Literal["Chrome", "Edge", "Firefox", "Scanner"]
     set: list[str] = Field(default_factory=list, max_length=50)
     repaired: list[str] = Field(default_factory=list, max_length=50)
     removed: list[str] = Field(default_factory=list, max_length=50)

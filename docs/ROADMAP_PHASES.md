@@ -1108,6 +1108,32 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
 - **E4 Scanner isolation** 🔒: content analysis runs in a separate process with outbound
   network blocked by firewall rule; it talks to the agent over a fixed schema with **no
   free-text field** (category, counts, site, action, hashes of files only).
+  - **As built (17 Nov, branch `phase-3`):**
+    - **The fixed schema** is E3's `GuardEvent`: unknown fields are refused at the host, the
+      service and the backend.
+    - **The scanner process** is `savio-guard-host.exe`, started by the browser, with no
+      network code.
+    - **New, `ScannerFirewall`:**
+      - two Windows Firewall rules block that exe outbound and inbound, on every profile,
+        while any browser is made to run the extension;
+      - checked every cycle; a deleted or switched-off rule is put back and reported, and
+        every write is read back;
+      - when no extension is forced, only SAVIO's two rules are removed;
+      - set through Windows Firewall's own COM interface (HNetCfg.FwPolicy2), not netsh text.
+    - **SAVIO never turns the firewall on.** That is the organization's setting, as in
+      FirewallRemediation. When Windows Firewall is off, or another firewall is registered,
+      the rules are kept and the report says plainly that the block is not enforced (and
+      where to set it instead).
+    - **Reports:** reported as "Scanner" beside the browsers. The portal's per-PC status
+      shows "Scanner's network block: …".
+    - **Checked:**
+      - `ScannerFirewallTests` (4) against an in-memory rule list: both directions and all
+        profiles, idempotent, case-blind paths, repair of a deleted or disabled rule,
+        "did not stick", the not-enforced message, and only our rules removed;
+      - the COM property names were read (only read) on this laptop. Its firewall was not
+        changed.
+  - **Not yet:** a live run on the VM (the rules set by the real service, and a test that the
+    host really cannot connect).
 - **E3 Outbound Ledger:** readable local copy of everything the agent sends + portal page.
   - **As built, slice 1, the event path (17 Nov, branch `phase-3`):**
     - **What travels:** the extension → its native host → the service's pipe
