@@ -1,9 +1,11 @@
 import csv
 import io
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles, requires
@@ -111,6 +113,56 @@ async def value_report(
     session: AsyncSession = Depends(get_db),
 ) -> ValueReport:
     return await ReportService(session).value_report(actor=actor, days=days)
+
+
+class BriefSection(BaseModel):
+    key: str
+    title: str
+    lines: list[str]
+
+
+class BriefRead(BaseModel):
+    period: Literal["day", "week"]
+    since: datetime
+    generated_at: datetime
+    title: str
+    headline: str
+    sections: list[BriefSection]
+    footer: str
+
+
+class BriefEmailRequest(BaseModel):
+    period: Literal["day", "week"] = "day"
+
+
+class BriefEmailed(BaseModel):
+    sent: bool
+    to: str
+
+
+@router.get("/brief", response_model=BriefRead,
+            summary="J1 brief: the day or week in plain business language (staff)")
+async def get_brief(
+    period: Literal["day", "week"] = Query(default="day"),
+    actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
+    session: AsyncSession = Depends(get_db),
+) -> BriefRead:
+    from app.services import brief
+
+    return BriefRead(**await brief.build(session, actor=actor, period=period))
+
+
+@router.post("/brief/email", response_model=BriefEmailed,
+             summary="E-mail the J1 brief to yourself now (staff; audited; 5 an hour)")
+async def email_brief(
+    body: BriefEmailRequest,
+    actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
+    session: AsyncSession = Depends(get_db),
+) -> BriefEmailed:
+    from app.services import brief
+
+    sent, to = await brief.send(session, actor=actor, period=body.period)
+    return BriefEmailed(sent=sent, to=to)
 
 
 @router.get("/remediation/export", summary="Remediation activity report (CSV)")

@@ -86,5 +86,22 @@ export interface ValueReport {
   fixes: { task_id: string; action: string; device_hostname: string | null; completed_at: string | null; proof: string | null; held_7_days: boolean | null }[];
 }
 
+// J1: the day or week in plain language. On demand; "email" sends it to the caller only.
+export interface Brief {
+  period: "day" | "week";
+  since: string;
+  generated_at: string;
+  title: string;
+  headline: string;
+  sections: { key: string; title: string; lines: string[] }[];
+  footer: string;
+}
+
+export const getBrief = (period: "day" | "week") =>
+  apiClient.get<Brief>("/reports/brief", { params: { period } }).then((r) => r.data);
+
+export const emailBrief = (period: "day" | "week") =>
+  apiClient.post<{ sent: boolean; to: string }>("/reports/brief/email", { period }).then((r) => r.data);
+
 export const getValueReport = (days: number) =>
   apiClient.get<ValueReport>("/reports/value", { params: { days } }).then((r) => r.data);

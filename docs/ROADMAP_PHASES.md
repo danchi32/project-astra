@@ -770,6 +770,35 @@ an update to `marketing-service/brand/claims.yaml` and the website action count.
     recommendation. Both pages checked on screen.
   - **J1 Brief waits for the 2.0 decision.** It sends e-mail on a clock, so it needs a
     scheduler; J2 and J5 do not.
+- **As built, J1 (16 Nov, on demand per the 2.0 decision):** `app/services/brief.py`.
+  - **Endpoints:** `GET /reports/brief?period=day|week`, and
+    `POST /reports/brief/email` for staff. The e-mail goes to the person asking, and only
+    to them, never to a typed-in list. It is audited (`report.brief_emailed`) and limited
+    to 5 an hour.
+  - **Content:** plain business language, in English only. A Hindi version was built and
+    then removed at the user's request (16 Nov), so the roadmap's "Hindi option" is not in
+    J1. Every line is a count from SAVIO's own records:
+    - computers: how many, how many online, how many new;
+    - the security score (F1);
+    - fixes run with nobody involved, and the hours and ₹ they saved (J5);
+    - fixes that failed, or are waiting for approval;
+    - PCs silent for over a day;
+    - AI suggestions held or refused (C3);
+    - rollouts halted (C2);
+    - warranties ending within 30 days;
+    - the top three recommendations (J2).
+  - No sentence is written by a model. The e-mail HTML escapes every value.
+  - A scheduler can later call `build` and `send` unchanged.
+  - **Portal:** Reports → Brief, with Today / This week and "Email it to me".
+  - **Checked:** `test_brief.py`, 4 tests:
+    - the day's counts and wording;
+    - a just-enrolled PC is not counted as silent, and a PC quiet for two days is;
+    - week against day;
+    - an unknown period is refused;
+    - e-mail goes only to the asker, escaped, audited, with a 409 on the sixth, and 403 for
+      a plain user.
+  - On screen against the local test backend. "Email it to me" says plainly when e-mail is
+    not set up.
 
 **Security review, second pass (16 Nov):** covered the BitLocker reveal tab, C3, C1, C2 and
 J2/J5. No Critical findings. Fixed the same day: four Medium and all nine Low (migration
