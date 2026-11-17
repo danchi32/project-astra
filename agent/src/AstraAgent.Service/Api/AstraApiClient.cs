@@ -70,6 +70,10 @@ public interface IAstraApiClient
     /// <summary>D10: what applying it did, per browser.</summary>
     Task<bool> ReportBrowserPolicyAsync(
         string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports, CancellationToken ct);
+
+    /// <summary>E3: a batch of extension events (counts only). True when the backend has them,
+    /// or refused them for good, so the caller can drop the batch.</summary>
+    Task<bool> SendGuardEventsAsync(string deviceToken, IReadOnlyList<Guard.QueuedGuardEvent> events, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -299,6 +303,36 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             logger.LogDebug(ex, "Browser policy report not sent");
+            return false;
+        }
+    }
+
+    public async Task<bool> SendGuardEventsAsync(
+        string deviceToken, IReadOnlyList<Guard.QueuedGuardEvent> events, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/guard/events")
+        {
+            Content = JsonContent.Create(new
+            {
+                events = events.Select(q => new
+                {
+                    at = q.At, windows_user = q.WindowsUser,
+                    site = q.Event.Site, channel = q.Event.Channel, mode = q.Event.Mode, action = q.Event.Action,
+                    counts = q.Event.Counts, contact_list = q.Event.ContactList,
+                    keyword_hits = q.Event.KeywordHits, unknown = q.Event.Unknown,
+                }),
+            }),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            // A 422 will never succeed on retry: drop the batch rather than block every later event.
+            return response.IsSuccessStatusCode || (int)response.StatusCode == 422;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogDebug(ex, "Guard events not sent");
             return false;
         }
     }

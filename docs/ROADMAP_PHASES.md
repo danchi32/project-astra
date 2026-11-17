@@ -1109,6 +1109,44 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
   network blocked by firewall rule; it talks to the agent over a fixed schema with **no
   free-text field** (category, counts, site, action, hashes of files only).
 - **E3 Outbound Ledger:** readable local copy of everything the agent sends + portal page.
+  - **As built, slice 1, the event path (17 Nov, branch `phase-3`):**
+    - **What travels:** the extension → its native host → the service's pipe
+      `SAVIO.GuardEvents` → `POST /agent/guard/events` → AI Guard → "What was found".
+    - **Schema:** fixed, `AstraAgent.Guard.GuardEvent`. It holds a host name, channel, mode,
+      decision, counts per kind, a contact-list flag, a keyword-hit count and a could-not-check
+      flag. Unknown fields are refused at the host, the service and the backend, so text cannot
+      ride along under another name. The host builds the event from those fields, never from
+      the raw message.
+    - **Only notable events:** something found, or could not check. An ordinary paste is not
+      recorded at all.
+    - **Who:** the service takes the person from Windows. The host connects at Identification
+      level, and an anonymous client is refused. The host writes only to a pipe owned by
+      SYSTEM (same ACL as Fix-my-internet), so another user's squatting pipe gets nothing.
+    - **Bounds:**
+      - at most 120 events a minute and 5,000 queued;
+      - batches of up to 500, sent every minute;
+      - kept until the backend has them;
+      - a 422 is dropped rather than retried forever.
+    - **ponytail:** the queue is in memory, so a service restart loses what was not sent.
+      Upgrade path: an append-only file in the service's data folder.
+    - **Backend:** table `guard_events` (migration 0088); events kept 180 days, pruned per
+      device on ingest. Clock errors are dropped. An org without `ai_guard` has its events
+      accepted and dropped.
+    - **Who can read:** summary and list are **admin only**, because they name people.
+    - **Bug fixed on the way:** the host answers `contact_list` / `keyword_hits`, and the
+      extension was reading camelCase names. Contact lists and keywords never triggered a
+      warn or block. `fromHost()` now reads the host's shape, and a test covers it.
+    - **Checked:**
+      - `GuardEventTests` (5), including a real pipe: the user comes from Windows, an
+        anonymous client is refused, junk is dropped;
+      - extension tests (8);
+      - backend `test_guard_events` (5);
+      - migration 0088 up/down/up on Postgres with a real write, and no model drift;
+      - the page on screen, with sample events, against the local backend.
+  - **Not yet (slice 2):**
+    - the ledger itself: a readable local copy of everything the agent sends;
+    - the outcome after a warning (went ahead or not), which comes with D7;
+    - a persistent queue.
 - **D4 Detectors:** Aadhaar (Verhoeff), PAN, GSTIN, card (Luhn), +91 mobile, email,
   IFSC+account; bulk/structured "contact list" detection; admin keywords.
   - **As built (16 Nov, branch `phase-3`, not pushed):** new library

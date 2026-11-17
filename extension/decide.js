@@ -16,6 +16,40 @@ const LABELS = {
   IndianMobile: "mobile number", Email: "e-mail address", BankAccount: "bank account",
 };
 
+/** The host answers in snake_case (contact_list, keyword_hits); everything here reads this shape. */
+export function fromHost(r) {
+  if (!r || typeof r !== "object") return null;
+  return {
+    ok: r.ok === true,
+    counts: r.counts && typeof r.counts === "object" ? r.counts : {},
+    contactList: r.contact_list === true,
+    keywordHits: Array.isArray(r.keyword_hits) ? r.keyword_hits : [],
+    incomplete: r.incomplete === true,
+  };
+}
+
+const CHANNELS = ["paste", "drop", "file", "submit"];
+
+/**
+ * E3: what goes to the agent, in the fixed shape it accepts (AstraAgent.Guard.GuardEvent):
+ * a host name, the channel, the mode and the decision, counts and flags. Never the text.
+ * Null when there is nothing worth recording: an ordinary paste with nothing found.
+ */
+export function toEvent(policy, site, channel, scan, result) {
+  const host = String(site || "").toLowerCase();
+  if (!/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(host) || !CHANNELS.includes(channel)) return null;
+  const counts = {};
+  for (const [kind, n] of Object.entries(scan?.counts ?? {})) if (Number.isInteger(n) && n > 0) counts[kind] = n;
+  const event = {
+    site: host, channel, mode: policy.mode, action: result.action, counts,
+    contact_list: !result.unknown && !!scan?.contactList,
+    keyword_hits: result.unknown ? 0 : Math.min(scan?.keywordHits?.length ?? 0, 200),
+    unknown: !!result.unknown,
+  };
+  const notable = event.unknown || event.contact_list || event.keyword_hits > 0 || Object.keys(counts).length > 0;
+  return notable ? event : null;
+}
+
 /** Merge what the admin set (chrome.storage.managed) over the defaults, keeping only valid values. */
 export function readPolicy(managed) {
   const p = { ...DEFAULT_POLICY };

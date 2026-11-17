@@ -1,0 +1,83 @@
+"""Phase 3 · E3: browser extension events, counts only, from the agent to the admin."""
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import select
+
+from app.models import GuardEvent
+from tests.test_browser_policy import _enroll, _guard_on
+
+
+def _event(**over):
+    e = {"at": datetime.now(UTC).isoformat(), "windows_user": r"PC-1\asha", "site": "chatgpt.com",
+         "channel": "paste", "mode": "warn", "action": "warn", "counts": {"Pan": 2, "Email": 0},
+         "contact_list": False, "keyword_hits": 1, "unknown": False}
+    return {**e, **over}
+
+
+async def test_events_are_stored_and_summarised(client, admin_headers, session_factory, admin_user):
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers, "GUARD-PC")
+    batch = {"events": [
+        _event(),
+        _event(site="claude.ai", action="block", mode="block", counts={"Aadhaar": 1}, keyword_hits=0),
+        _event(windows_user=r"PC-1\ravi", counts={}, keyword_hits=0, contact_list=True),
+        _event(unknown=True, counts={}, keyword_hits=0),
+        _event(at=(datetime.now(UTC) + timedelta(days=2)).isoformat()),          # clock error: dropped
+    ]}
+    assert (await client.post("/api/v1/agent/guard/events", headers=h, json=batch)).status_code == 204
+
+    s = (await client.get("/api/v1/guard/events/summary?days=7", headers=admin_headers)).json()
+    assert (s["total"], s["warned"], s["blocked"], s["unknown"]) == (4, 3, 1, 1)
+    assert s["kinds"] == {"Pan": 1, "Aadhaar": 1}            # events with each kind; zero counts dropped
+    assert s["contact_lists"] == 1 and s["keyword_events"] == 1
+    assert s["top_sites"][0] == {"site": "chatgpt.com", "events": 3}
+    assert s["top_people"][0] == {"windows_user": r"PC-1\asha", "events": 3}
+
+    rows = (await client.get("/api/v1/guard/events?limit=2", headers=admin_headers)).json()
+    assert len(rows) == 2 and rows[0]["hostname"] == "GUARD-PC"
+
+
+async def test_the_schema_is_fixed(client, admin_headers, session_factory, admin_user):
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers)
+    for bad in (_event(text="ABCPE1234F"),                       # no free text, however named
+                _event(site="chatgpt.com/c/123"), _event(site="My notes"),
+                _event(channel="print"), _event(counts={"Password": 1}),
+                _event(windows_user="a\nb"), _event(keyword_hits=999)):
+        r = await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [bad]})
+        assert r.status_code == 422, bad
+    r = await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event()] * 501})
+    assert r.status_code == 422
+
+
+async def test_without_the_add_on_events_are_dropped(client, admin_headers, session_factory, admin_user):
+    _, h = await _enroll(client, admin_headers)
+    assert (await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event()]})).status_code == 204
+    async with session_factory() as s:
+        assert (await s.execute(select(GuardEvent))).scalars().first() is None
+    assert (await client.get("/api/v1/guard/events/summary", headers=admin_headers)).status_code == 402
+
+
+async def test_only_admins_read_events(client, admin_headers, session_factory, admin_user, org):
+    from app.models import UserRole
+    from tests.conftest import _create_user, auth_headers
+
+    await _guard_on(session_factory, admin_user.org_id)
+    await _create_user(session_factory, org.id, "tech@acme.com", "TechPassw0rd!2345", UserRole.TECHNICIAN)
+    tech = await auth_headers(client, "tech@acme.com", "TechPassw0rd!2345")
+    assert (await client.get("/api/v1/guard/events", headers=tech)).status_code == 403
+    assert (await client.get("/api/v1/guard/events/summary", headers=tech)).status_code == 403
+
+
+async def test_old_events_are_pruned(client, admin_headers, session_factory, admin_user):
+    await _guard_on(session_factory, admin_user.org_id)
+    device_id, h = await _enroll(client, admin_headers)
+    async with session_factory() as s:
+        s.add(GuardEvent(org_id=admin_user.org_id, device_id=device_id, windows_user="x", site="a.in",
+                         channel="paste", mode="log", action="allow", counts={"Pan": 1},
+                         occurred_at=datetime.now(UTC) - timedelta(days=200)))
+        await s.commit()
+    await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event()]})
+    async with session_factory() as s:
+        sites = [e.site for e in (await s.execute(select(GuardEvent))).scalars()]
+    assert sites == ["chatgpt.com"]

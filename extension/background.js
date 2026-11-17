@@ -2,9 +2,11 @@
 // about to paste, drop, upload or submit. It asks the local SAVIO host to scan it, decides
 // per the org's policy, and answers allow / warn / block.
 //
-// The text goes only to the native host on this PC (com.savio.guard), never to a server. What
-// is kept is counts only: the last 200 decisions, for the E3 ledger the agent will read.
-import { decide, isWatched, readPolicy } from "./decide.js";
+// The text goes only to the native host on this PC (com.savio.guard), never to a server.
+// E3: when something was found (or could not be checked), the event (counts only, in the fixed
+// shape the agent accepts) goes back through the host to the SAVIO service, which sends it on
+// to the org's portal. A local copy of the last 200 is kept here as well.
+import { decide, fromHost, isWatched, readPolicy, toEvent } from "./decide.js";
 
 const HOST = "com.savio.guard";
 const MAX_EVENTS = 200;
@@ -20,7 +22,7 @@ async function policy() {
 
 async function scan(text, keywords) {
   try {
-    return await chrome.runtime.sendNativeMessage(HOST, { type: "scan", text, keywords });
+    return fromHost(await chrome.runtime.sendNativeMessage(HOST, { type: "scan", text, keywords }));
   } catch {
     return null; // host not installed or not running: decide() treats this as "could not check"
   }
@@ -28,11 +30,16 @@ async function scan(text, keywords) {
 
 async function record(event) {
   try {
+    await chrome.runtime.sendNativeMessage(HOST, { type: "event", event });
+  } catch {
+    // The service is not reachable; the local copy below still has it.
+  }
+  try {
     const { events = [] } = await chrome.storage.local.get("events");
-    events.push(event);
+    events.push({ at: new Date().toISOString(), ...event });
     await chrome.storage.local.set({ events: events.slice(-MAX_EVENTS) });
   } catch {
-    // The ledger is best-effort; the decision already stands.
+    // Best-effort; the decision already stands.
   }
 }
 
@@ -42,10 +49,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const p = await policy();
     const host = (() => { try { return new URL(sender.url ?? "").hostname; } catch { return ""; } })();
     if (!isWatched(p, host)) return sendResponse({ action: "allow", findings: [] });
-    const result = decide(p, await scan(msg.text, p.keywords));
-    await record({ at: new Date().toISOString(), site: host, kind: msg.kind, mode: p.mode,
-                   action: result.action, findings: result.findings, unknown: result.unknown });
-    sendResponse(result);
+    const scanned = await scan(msg.text, p.keywords);
+    const result = decide(p, scanned);
+    sendResponse(result);                       // the person is not kept waiting for the record
+    const event = toEvent(p, host, msg.kind, scanned, result);
+    if (event) await record(event);
   })();
   return true; // the answer comes asynchronously
 });

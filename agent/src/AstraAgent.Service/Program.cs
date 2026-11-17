@@ -64,6 +64,10 @@ builder.Services.AddSingleton<AstraAgent.Service.Remediation.ISystemTaskRunner,
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
 builder.Services.AddHostedService<AstraAgent.Service.Guard.BrowserPolicyWorker>();
+// E3: events from the browser extension, via the native host, to the backend (counts only).
+builder.Services.AddSingleton<AstraAgent.Service.Guard.GuardEventQueue>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventPipeServer>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventUploader>();
 builder.Services.AddHostedService<UpdateWorker>();
 // Offline self-heal (B1) and the Tray's "Fix my internet" (B2) share one doctor, so the
 // two can never run network fixes at the same time.

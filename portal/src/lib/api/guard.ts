@@ -55,5 +55,42 @@ export const getBrowserPolicy = () =>
 export const putBrowserPolicy = (policy: BrowserPolicy) =>
   apiClient.put<BrowserPolicyRead>("/guard/browser-policy", policy).then((r) => r.data);
 
+// E3: what the extension found. Counts only; never the content. Admin only.
+export interface GuardEventSummary {
+  days: number;
+  total: number;
+  allowed: number;
+  warned: number;
+  blocked: number;
+  unknown: number;
+  kinds: Partial<Record<FindingKind, number>>;
+  contact_lists: number;
+  keyword_events: number;
+  top_sites: { site: string; events: number }[];
+  top_people: { windows_user: string; events: number }[];
+}
+
+export interface GuardEventRow {
+  id: string;
+  occurred_at: string;
+  device_id: string;
+  hostname: string;
+  windows_user: string;
+  site: string;
+  channel: "paste" | "drop" | "file" | "submit";
+  mode: "log" | "warn" | "block";
+  action: "allow" | "warn" | "block";
+  counts: Partial<Record<FindingKind, number>>;
+  contact_list: boolean;
+  keyword_hits: number;
+  unknown: boolean;
+}
+
+export const getGuardEventSummary = (days: number) =>
+  apiClient.get<GuardEventSummary>("/guard/events/summary", { params: { days } }).then((r) => r.data);
+
+export const getGuardEvents = (days: number, offset = 0) =>
+  apiClient.get<GuardEventRow[]>("/guard/events", { params: { days, limit: 100, offset } }).then((r) => r.data);
+
 export const getBrowserPolicyDevices = () =>
   apiClient.get<DeviceBrowserState[]>("/guard/browser-policy/devices").then((r) => r.data);

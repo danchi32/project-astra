@@ -16,23 +16,28 @@ namespace AstraAgent.Service.Tests;
 /// </summary>
 public class BrowserPolicyWorkerTests
 {
-    sealed class Enrollment : IEnrollmentService
+    internal sealed class Enrollment : IEnrollmentService
     {
-        public string Token = "tok-1";
-        public Task<string?> GetDeviceTokenAsync(CancellationToken ct) => Task.FromResult<string?>(Token);
-        public Task<string?> ReEnrollAsync(CancellationToken ct) => Task.FromResult<string?>(Token);
+        public string? Token = "tok-1";
+        public Task<string?> GetDeviceTokenAsync(CancellationToken ct) => Task.FromResult(Token);
+        public Task<string?> ReEnrollAsync(CancellationToken ct) => Task.FromResult(Token);
     }
 
-    /// <summary>Only the two D10 calls matter; the rest of the interface is never reached.</summary>
-    sealed class Api : IAstraApiClient
+    /// <summary>Only the AI Guard calls matter; the rest of the interface is never reached.
+    /// Shared with <see cref="GuardEventTests"/>.</summary>
+    internal sealed class Api : IAstraApiClient
     {
         public AgentBrowserPolicy? Next;
         public int Fetches;
         public readonly List<(int Version, IReadOnlyList<ApplyReport> Reports)> Reports = [];
+        public readonly List<IReadOnlyList<QueuedGuardEvent>> EventBatches = [];
+        public bool EventsAccepted = true;
 
         public Task<AgentBrowserPolicy?> GetBrowserPolicyAsync(string t, CancellationToken ct) { Fetches++; return Task.FromResult(Next); }
         public Task<bool> ReportBrowserPolicyAsync(string t, int v, IReadOnlyList<ApplyReport> r, CancellationToken ct)
         { Reports.Add((v, r)); return Task.FromResult(true); }
+        public Task<bool> SendGuardEventsAsync(string t, IReadOnlyList<QueuedGuardEvent> events, CancellationToken ct)
+        { EventBatches.Add(events); return Task.FromResult(EventsAccepted); }
 
         public Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct) => throw new NotSupportedException();
         public Task<HeartbeatResult> HeartbeatAsync(string token, HeartbeatRequest request, CancellationToken ct) => throw new NotSupportedException();

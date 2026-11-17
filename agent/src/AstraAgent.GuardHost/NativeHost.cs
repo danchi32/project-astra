@@ -28,7 +28,7 @@ public static class NativeHost
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public sealed record Request(string? Type, string? Text, IReadOnlyList<string>? Keywords);
+    public sealed record Request(string? Type, string? Text, IReadOnlyList<string>? Keywords, JsonElement? Event = null);
 
     public sealed record Response(
         bool Ok,
@@ -39,16 +39,40 @@ public static class NativeHost
         bool Truncated = false,
         bool Incomplete = false);
 
-    /// <summary>Serve one connection until the browser closes stdin.</summary>
-    public static async Task RunAsync(Stream input, Stream output, CancellationToken ct = default)
+    /// <summary>Serve one connection until the browser closes stdin. <paramref name="forward"/>
+    /// hands an event to the SAVIO service; tests replace it.</summary>
+    public static async Task RunAsync(Stream input, Stream output, CancellationToken ct = default,
+                                      Func<GuardEvent, CancellationToken, Task<bool>>? forward = null)
     {
+        forward ??= EventPipe.SendAsync;
         while (!ct.IsCancellationRequested)
         {
             var frame = await ReadFrameAsync(input, ct);
             if (frame is null)
                 return;                                   // the browser disconnected
-            await WriteFrameAsync(output, Handle(frame), ct);
+            await WriteFrameAsync(output, await HandleAsync(frame, forward, ct), ct);
         }
+    }
+
+    /// <summary>
+    /// Two requests: "scan" (text in, counts out) and "event" (E3: what the extension decided,
+    /// passed on to the service). An event is parsed into the fixed <see cref="GuardEvent"/>
+    /// shape and re-serialized from it, so whatever else the extension put in the message
+    /// is dropped here and never reaches the pipe.
+    /// </summary>
+    public static async Task<Response> HandleAsync(byte[] frame, Func<GuardEvent, CancellationToken, Task<bool>> forward,
+                                                   CancellationToken ct)
+    {
+        Request? req;
+        try { req = JsonSerializer.Deserialize<Request>(frame, Json); }
+        catch (JsonException) { return new Response(false, "malformed request"); }
+        if (req?.Type == "event")
+        {
+            var e = req.Event is { ValueKind: JsonValueKind.Object } el ? GuardEvent.Parse(JsonSerializer.SerializeToUtf8Bytes(el)) : null;
+            if (e is null) return new Response(false, "malformed event");
+            return await forward(e, ct) ? new Response(true) : new Response(false, "not delivered");
+        }
+        return Handle(req);
     }
 
     public static Response Handle(byte[] frame)
@@ -56,6 +80,11 @@ public static class NativeHost
         Request? req;
         try { req = JsonSerializer.Deserialize<Request>(frame, Json); }
         catch (JsonException) { return new Response(false, "malformed request"); }
+        return Handle(req);
+    }
+
+    static Response Handle(Request? req)
+    {
         if (req?.Type != "scan")
             return new Response(false, "unknown request");
 

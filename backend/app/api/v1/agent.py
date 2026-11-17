@@ -10,6 +10,7 @@ import uuid
 
 from app.api.deps import get_rate_limited_device, get_rate_limited_device_any_status
 from app.services.browser_policy import BrowserPolicyReport
+from app.services.guard_events import GuardEventBatch
 from app.core.database import get_db
 from app.models import Device
 from app.schemas.conversations import (
@@ -381,3 +382,20 @@ async def agent_browser_policy_report(
     from app.services import browser_policy
 
     await browser_policy.record_report(session, device, body)
+
+
+@router.post(
+    "/guard/events",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="E3: what the browser extension saw on this device, counts only (agent only)",
+)
+async def agent_guard_events(
+    body: GuardEventBatch,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Fixed schema, no free text; unknown fields are refused. Dropped (but accepted) when the
+    org does not have AI Guard, so the agent does not keep retrying."""
+    from app.services import guard_events
+
+    await guard_events.ingest(session, device, body)
