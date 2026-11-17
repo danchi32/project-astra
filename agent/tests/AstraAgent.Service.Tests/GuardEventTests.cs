@@ -126,6 +126,28 @@ public class GuardEventTests
     }
 
     [Fact]
+    public void The_queue_survives_a_restart()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "savio-guard-q-" + Guid.NewGuid().ToString("N") + ".jsonl");
+        try
+        {
+            var t = new DateTime(2026, 11, 17, 10, 0, 0, DateTimeKind.Utc);
+            var q = new GuardEventQueue(file);
+            for (var i = 0; i < 3; i++) q.TryAdd(At(t.AddMinutes(i)));
+            q.Remove(1);
+            File.AppendAllText(file, "{\"torn line\n" + """{"at":"2026-11-17T10:09:00Z","windows_user":"x","event":{"site":"x.in","text":"secret"}}""" + "\n");
+
+            var again = new GuardEventQueue(file);                     // the service restarted
+            Assert.Equal(2, again.Count);
+            Assert.Equal(t.AddMinutes(1), again.Peek(1)[0].At);
+            Assert.Equal(@"PC\asha", again.Peek(1)[0].WindowsUser);
+            again.Remove(2);
+            Assert.Equal(0, new GuardEventQueue(file).Count);
+        }
+        finally { File.Delete(file); }
+    }
+
+    [Fact]
     public async Task The_uploader_drops_a_batch_only_once_the_backend_has_it()
     {
         var q = new GuardEventQueue();

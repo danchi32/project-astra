@@ -1143,10 +1143,33 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       - backend `test_guard_events` (5);
       - migration 0088 up/down/up on Postgres with a real write, and no model drift;
       - the page on screen, with sample events, against the local backend.
-  - **Not yet (slice 2):**
-    - the ledger itself: a readable local copy of everything the agent sends;
+  - **As built, slice 2, the ledger (17 Nov):**
+    - **Outbound Ledger:** a handler on the agent's API client writes one JSON line per
+      request (time, method, path, status, bytes, body). The bytes recorded are the bytes
+      sent: the body is buffered once.
+    - **Where it lives:** `state\ledger\ledger-YYYY-MM-DD.jsonl` beside the install folder,
+      readable by SYSTEM and Administrators only, kept 14 days. Bodies stop after 20 MB a
+      day; lines carry on.
+    - **Never written:**
+      - headers, so never the device token;
+      - the BitLocker escrow body: the line records the call and its size only;
+      - any property named like a password, token or secret;
+      - any string shaped like a recovery password, wherever it sits.
+    - **Robustness:** a failed request is still written down (status empty). The ledger fails
+      closed on a folder it cannot lock down and never blocks a request.
+    - **Persistent event queue:** `state\guard-events.jsonl` is appended as events arrive,
+      rewritten when the backend takes a batch, and read back and re-checked line by line on
+      start. A torn or edited line is skipped. This replaces slice 1's in-memory ponytail.
+    - **Checked:**
+      - `OutboundLedgerTests` (4): bytes match, the escrow body and secrets never reach disk,
+        a failure is recorded, pruning;
+      - a queue restart test;
+      - all 408 agent tests.
+  - **Not yet:**
     - the outcome after a warning (went ahead or not), which comes with D7;
-    - a persistent queue.
+    - a portal view of what each PC sent;
+    - the remote-support (MeshCentral) traffic and update downloads, which do not go through
+      the API client and so are not in the ledger.
 - **D4 Detectors:** Aadhaar (Verhoeff), PAN, GSTIN, card (Luhn), +91 mobile, email,
   IFSC+account; bulk/structured "contact list" detection; admin keywords.
   - **As built (16 Nov, branch `phase-3`, not pushed):** new library

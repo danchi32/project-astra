@@ -34,7 +34,11 @@ builder.Services.AddHttpClient<IAstraApiClient, AstraApiClient>((provider, http)
 // ProxyUrl) so the LocalSystem service works on locked-down networks — globally, all orgs.
 .ConfigurePrimaryHttpMessageHandler(provider =>
     AstraAgent.Service.Net.ProxyHttp.CreateHandler(
-        provider.GetRequiredService<IOptions<AgentOptions>>().Value.ProxyUrl));
+        provider.GetRequiredService<IOptions<AgentOptions>>().Value.ProxyUrl))
+// E3: the Outbound Ledger, a readable local copy of every request (secrets left out).
+.AddHttpMessageHandler<OutboundLedgerHandler>();
+builder.Services.AddSingleton(_ => new OutboundLedger());
+builder.Services.AddTransient<OutboundLedgerHandler>();
 
 builder.Services.AddSingleton<ICpuCollector, CpuCollector>();
 builder.Services.AddSingleton<IMemoryCollector, MemoryCollector>();
@@ -65,7 +69,7 @@ builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
 builder.Services.AddHostedService<AstraAgent.Service.Guard.BrowserPolicyWorker>();
 // E3: events from the browser extension, via the native host, to the backend (counts only).
-builder.Services.AddSingleton<AstraAgent.Service.Guard.GuardEventQueue>();
+builder.Services.AddSingleton(_ => AstraAgent.Service.Guard.GuardEventQueue.OnDisk());
 builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventPipeServer>();
 builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventUploader>();
 builder.Services.AddHostedService<UpdateWorker>();

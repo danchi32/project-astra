@@ -14,9 +14,11 @@ public sealed record QueuedGuardEvent(DateTime At, string WindowsUser, GuardEven
 /// <summary>
 /// Phase 3 · E3: events waiting to go to the backend.
 ///
-/// ponytail: held in memory. A restart of the service loses what was not yet sent (at most a
-/// minute's worth while online, more on a laptop that has been offline). Upgrade path: an
-/// append-only file in the service's data folder, read back on start.
+/// Kept on disk as well as in memory (<c>state\guard-events.jsonl</c>, SYSTEM and
+/// Administrators only), so a restart or a reboot on a laptop that has been offline does not
+/// lose them. Appended as they come, rewritten when the backend has taken a batch, read back
+/// (and checked line by line) on start. If the folder cannot be locked down or the file cannot
+/// be written, the queue carries on in memory.
 ///
 /// Bounded twice. At most <see cref="Capacity"/> are held; past that the newest are dropped,
 /// so a long offline spell keeps its first hours rather than its last. At most
@@ -30,8 +32,40 @@ public sealed class GuardEventQueue
 
     readonly object _gate = new();
     readonly List<QueuedGuardEvent> _items = [];
+    readonly string? _file;
     DateTime _window = DateTime.MinValue;
     int _inWindow;
+
+    /// <param name="file">Where to keep the queue; null for memory only (tests).</param>
+    public GuardEventQueue(string? file = null)
+    {
+        _file = file;
+        if (_file is null) return;
+        try
+        {
+            if (!File.Exists(_file)) return;
+            foreach (var line in File.ReadLines(_file))
+            {
+                if (_items.Count >= Capacity) break;
+                if (Parse(line) is { } e) _items.Add(e);   // a torn or edited line is skipped, not fatal
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>The real queue, in the hardened state folder. Memory only if that folder cannot be secured.</summary>
+    public static GuardEventQueue OnDisk()
+    {
+        var dir = Security.SecureDirectory.StateRoot;
+        try
+        {
+            Security.SecureDirectory.Ensure(dir);
+            var file = Path.Combine(dir, "guard-events.jsonl");
+            Security.SecureDirectory.EnsureFile(file);
+            return new GuardEventQueue(file);
+        }
+        catch (Exception) { return new GuardEventQueue(); }
+    }
 
     public int Dropped { get; private set; }
 
@@ -46,6 +80,7 @@ public sealed class GuardEventQueue
             if (_inWindow >= PerMinute || _items.Count >= Capacity) { Dropped++; return false; }
             _inWindow++;
             _items.Add(e);
+            Persist(() => File.AppendAllText(_file!, Line(e) + "\n"));
             return true;
         }
     }
@@ -58,7 +93,40 @@ public sealed class GuardEventQueue
     /// <summary>Forget the first <paramref name="count"/> events, once the backend has them.</summary>
     public void Remove(int count)
     {
-        lock (_gate) _items.RemoveRange(0, Math.Min(count, _items.Count));
+        lock (_gate)
+        {
+            _items.RemoveRange(0, Math.Min(count, _items.Count));
+            Persist(() =>
+            {
+                var tmp = _file + ".tmp";
+                File.WriteAllLines(tmp, _items.Select(Line));
+                File.Move(tmp, _file!, overwrite: true);
+            });
+        }
+    }
+
+    void Persist(Action write)
+    {
+        if (_file is null) return;
+        try { write(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    sealed record Stored(DateTime At, string WindowsUser, GuardEvent Event);
+
+    static string Line(QueuedGuardEvent e) =>
+        System.Text.Json.JsonSerializer.Serialize(new Stored(e.At, e.WindowsUser, e.Event), GuardEvent.Json);
+
+    static QueuedGuardEvent? Parse(string line)
+    {
+        try
+        {
+            var s = System.Text.Json.JsonSerializer.Deserialize<Stored>(line, GuardEvent.Json);
+            return s is { WindowsUser.Length: > 0 and <= 256, Event: not null } && s.Event.IsValid()
+                ? new QueuedGuardEvent(DateTime.SpecifyKind(s.At, DateTimeKind.Utc), s.WindowsUser, s.Event)
+                : null;
+        }
+        catch (System.Text.Json.JsonException) { return null; }
     }
 }
 
