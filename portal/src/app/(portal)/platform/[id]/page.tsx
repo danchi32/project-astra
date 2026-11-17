@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone, Clock } from "lucide-react";
+import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone, Clock, ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken, requestSupportAccess,
@@ -103,9 +103,15 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
   // map, so other overrides survive. Enabling is the operator's deliberate act after the
   // customer attests notice/DPIA (this is employee monitoring).
   async function toggleWorkforce() {
+    await toggleAddon("workforce_insights");
+  }
+
+  // Same per-org switch for AI Guard (Phase 3): it changes how employees' browsers behave, so
+  // it is turned on deliberately for one customer, never bundled into a plan.
+  async function toggleAddon(key: "workforce_insights" | "ai_guard") {
     if (!org) return;
-    const on = org.entitlements.includes("workforce_insights");
-    const overrides = { ...(org.entitlement_overrides ?? {}), workforce_insights: !on };
+    const on = org.entitlements.includes(key);
+    const overrides = { ...(org.entitlement_overrides ?? {}), [key]: !on };
     const next = await updateOrganization(id, { entitlement_overrides: overrides });
     queryClient.setQueryData(["platform-org", id], next);
     queryClient.invalidateQueries({ queryKey: ["platform-orgs"] });
@@ -346,6 +352,43 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
                   ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
                   : { background: "var(--accent)", color: "#fff" }}>
                 <Clock size={15} /> {trackerOn ? "Disable" : "Enable"}
+              </button>
+            </div>
+          );
+        })()}
+        {/* AI Guard (Phase 3) — a per-org add-on like the Tracker. It locks employees' browsers
+            (incognito, developer mode, blocked sites), so it is switched on per customer. */}
+        {org && (() => {
+          const guardOn = org.entitlements.includes("ai_guard");
+          return (
+            <div className="rounded-xl p-5 flex items-start justify-between gap-4" style={card}>
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg shrink-0" style={{ background: guardOn ? "rgba(37,99,235,0.12)" : "rgba(100,116,139,0.12)", color: guardOn ? "var(--accent)" : "var(--text-secondary)" }}>
+                  <ShieldAlert size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>AI Guard</h2>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      style={guardOn
+                        ? { color: "var(--accent)", background: "rgba(37,99,235,0.12)" }
+                        : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
+                      {guardOn ? "Enabled" : "Off"}
+                    </span>
+                  </div>
+                  <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-secondary)" }}>
+                    {guardOn
+                      ? "This org can set a browser policy for its PCs. Turning it off makes their PCs remove every browser setting SAVIO made."
+                      : "Off by default. Enabling it lets the customer lock their employees' browsers (incognito, developer mode, blocked sites)."}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => toggleAddon("ai_guard")}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+                style={guardOn
+                  ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
+                  : { background: "var(--accent)", color: "#fff" }}>
+                <ShieldAlert size={15} /> {guardOn ? "Disable" : "Enable"}
               </button>
             </div>
           );

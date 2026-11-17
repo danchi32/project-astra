@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 
 from app.api.deps import get_rate_limited_device, get_rate_limited_device_any_status
+from app.services.browser_policy import BrowserPolicyReport
 from app.core.database import get_db
 from app.models import Device
 from app.schemas.conversations import (
@@ -352,3 +353,31 @@ async def bitlocker_keys(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Key escrow is not configured on this server; try again later.")
 
+
+@router.get(
+    "/browser-policy",
+    summary="The browser policy this device should apply (agent only; empty without AI Guard)",
+)
+async def agent_browser_policy(
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.services import browser_policy
+
+    return await browser_policy.for_device(session, device)
+
+
+@router.post(
+    "/browser-policy/report",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Report what applying the browser policy did on this device (agent only)",
+)
+async def agent_browser_policy_report(
+    body: BrowserPolicyReport,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """The device reports only for itself: the device comes from its token, never the body."""
+    from app.services import browser_policy
+
+    await browser_policy.record_report(session, device, body)

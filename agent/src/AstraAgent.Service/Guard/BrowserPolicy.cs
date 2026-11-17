@@ -33,7 +33,20 @@ public sealed record BrowserPolicy
     public string? FirefoxExtensionId { get; init; }
     public string? FirefoxExtensionUrl { get; init; }
 
+    /// <summary>D3: the extension's own settings, handed to it as managed policy wherever it is
+    /// forced in. log = record only; warn = ask first; block = refuse.</summary>
+    public string GuardMode { get; init; } = "log";
+    /// <summary>Hosts the extension watches (subdomains included). Empty = every site.</summary>
+    public IReadOnlyList<string> GuardWatchedSites { get; init; } = Array.Empty<string>();
+    /// <summary>Finding kinds recorded but never acted on. E-mail addresses by default: they are everywhere.</summary>
+    public IReadOnlyList<string> GuardIgnoreKinds { get; init; } = ["Email"];
+    public IReadOnlyList<string> GuardKeywords { get; init; } = Array.Empty<string>();
+
     public const int MaxSites = 500;
+    public const int MaxKeywords = 200;
+    static readonly string[] Modes = ["log", "warn", "block"];
+    /// <summary>AstraAgent.Guard's Finding names, which the extension sees in the host's counts.</summary>
+    static readonly string[] Kinds = ["Aadhaar", "Pan", "Gstin", "PaymentCard", "IndianMobile", "Email", "BankAccount"];
     static readonly Regex Host = new(@"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$", RegexOptions.CultureInvariant);
     static readonly Regex ChromiumId = new("^[a-p]{32}$", RegexOptions.CultureInvariant);
     static readonly Regex FirefoxId = new(@"^(\{[0-9a-fA-F-]{36}\}|[A-Za-z0-9._-]{1,80}@[A-Za-z0-9.-]{1,80})$", RegexOptions.CultureInvariant);
@@ -56,6 +69,12 @@ public sealed record BrowserPolicy
         if (FirefoxExtensionUrl is { } u &&
             !(Uri.TryCreate(u, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && u.Length <= 500))
             problems.Add("Firefox extension URL must be https");
+        if (!Modes.Contains(GuardMode)) problems.Add($"guard mode '{Trim(GuardMode)}' is not log, warn or block");
+        if (GuardWatchedSites.Count > MaxSites) problems.Add($"too many watched sites (max {MaxSites})");
+        problems.AddRange(GuardWatchedSites.Where(h => !Host.IsMatch(h ?? "")).Select(h => $"watched site '{Trim(h)}' is not a host name"));
+        problems.AddRange(GuardIgnoreKinds.Where(k => !Kinds.Contains(k)).Select(k => $"'{Trim(k)}' is not a kind of finding"));
+        if (GuardKeywords.Count > MaxKeywords) problems.Add($"too many keywords (max {MaxKeywords})");
+        if (GuardKeywords.Any(k => string.IsNullOrWhiteSpace(k) || k.Length > 100)) problems.Add("keywords must be 1–100 characters");
         return problems;
     }
 
@@ -92,9 +111,22 @@ public static class BrowserPolicyMap
         if (p.AllowedSites.Count > 0) v["URLAllowlist"] = p.AllowedSites.ToArray();
         if (p.GoogleAllowedDomains.Count > 0) v["AllowedDomainsForApps"] = string.Join(",", p.GoogleAllowedDomains);
         var id = edge ? p.EdgeExtensionId : p.ChromeExtensionId;
-        if (id is not null) v["ExtensionInstallForcelist"] = new[] { $"{id};{(edge ? EdgeStore : ChromeStore)}" };
+        if (id is not null)
+        {
+            v["ExtensionInstallForcelist"] = new[] { $"{id};{(edge ? EdgeStore : ChromeStore)}" };
+            v[$@"3rdparty\extensions\{id}\policy"] = GuardSettings(p);
+        }
         return v;
     }
+
+    /// <summary>D3: the extension's managed settings, named as in extension/managed_schema.json.</summary>
+    static Dictionary<string, object> GuardSettings(BrowserPolicy p) => new()
+    {
+        ["mode"] = p.GuardMode,
+        ["watchedSites"] = p.GuardWatchedSites.ToArray(),
+        ["ignoreKinds"] = p.GuardIgnoreKinds.ToArray(),
+        ["keywords"] = p.GuardKeywords.ToArray(),
+    };
 
     /// <summary>Firefox: top-level keys of the "policies" object in policies.json.</summary>
     public static IReadOnlyDictionary<string, object> Firefox(BrowserPolicy p)
@@ -111,6 +143,7 @@ public static class BrowserPolicyMap
             };
         if (p.GoogleAllowedDomains.Count > 0) v["AllowedDomainsForApps"] = string.Join(",", p.GoogleAllowedDomains);
         if (p.FirefoxExtensionId is not null && p.FirefoxExtensionUrl is not null)
+        {
             v["ExtensionSettings"] = new Dictionary<string, object>
             {
                 [p.FirefoxExtensionId] = new Dictionary<string, object>
@@ -119,6 +152,8 @@ public static class BrowserPolicyMap
                     ["install_url"] = p.FirefoxExtensionUrl,
                 },
             };
+            v[$@"3rdparty\Extensions\{p.FirefoxExtensionId}"] = GuardSettings(p);
+        }
         return v;
     }
 

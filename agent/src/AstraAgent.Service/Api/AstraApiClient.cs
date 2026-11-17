@@ -62,6 +62,14 @@ public interface IAstraApiClient
     /// <summary>Report the outcome of a remediation task back to the backend.</summary>
     Task<bool> ReportTaskResultAsync(
         string deviceToken, Guid taskId, AgentRemediationResult result, CancellationToken ct);
+
+    /// <summary>D10: the browser policy to apply. Null on any failure, which the caller reads
+    /// as "keep what you have", never as "remove everything".</summary>
+    Task<AgentBrowserPolicy?> GetBrowserPolicyAsync(string deviceToken, CancellationToken ct);
+
+    /// <summary>D10: what applying it did, per browser.</summary>
+    Task<bool> ReportBrowserPolicyAsync(
+        string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -244,6 +252,54 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             logger.LogWarning(ex, "Heartbeat succeeded but its body could not be parsed");
             return HeartbeatResult.From(HeartbeatStatus.Ok);
+        }
+    }
+
+    public async Task<AgentBrowserPolicy?> GetBrowserPolicyAsync(string deviceToken, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, "/api/v1/agent/browser-policy");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            // An older backend answers 404: null, so nothing already applied is taken away.
+            if (!response.IsSuccessStatusCode)
+                return null;
+            return await response.Content.ReadFromJsonAsync<AgentBrowserPolicy>(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> ReportBrowserPolicyAsync(
+        string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/browser-policy/report")
+        {
+            Content = JsonContent.Create(new
+            {
+                version,
+                results = reports.Take(10).Select(r => new
+                {
+                    browser = r.Browser.ToString(),
+                    set = r.Set.Take(50), repaired = r.Repaired.Take(50),
+                    removed = r.Removed.Take(50), conflicts = r.Conflicts.Take(50),
+                    error = r.Error is { Length: > 500 } e ? e[..500] : r.Error,
+                }),
+            }),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogDebug(ex, "Browser policy report not sent");
+            return false;
         }
     }
 }

@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Users, Radar, Boxes,
   BookOpen, Zap, BarChart3, Shield, ShieldCheck,
-  CreditCard, Building2, ScrollText, LifeBuoy, Bot, Clock, Lock,
+  CreditCard, Building2, ScrollText, LifeBuoy, Bot, Clock, Lock, ShieldAlert,
   ChevronRight, ChevronDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
@@ -69,6 +69,8 @@ const ORG_NAV: NavEntry[] = [
   ] },
   { group: "Tracker", icon: Clock, feature: "workforce_insights", lockedHref: "/tracker",
     children: TRACKER_SUBNAV },
+  { group: "AI Guard", icon: ShieldAlert, feature: "ai_guard", lockedHref: "/guard",
+    children: [{ href: "/guard", label: "Browser policy" }] },
   // The rest of the common pages.
   { href: "/reports", icon: BarChart3, label: "Reports" },
   { href: "/audit", icon: Shield, label: "Audit Logs" },

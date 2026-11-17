@@ -63,6 +63,7 @@ builder.Services.AddSingleton<AstraAgent.Service.Remediation.ISystemTaskRunner,
                               AstraAgent.Service.Remediation.SystemTaskRunner>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.BrowserPolicyWorker>();
 builder.Services.AddHostedService<UpdateWorker>();
 // Offline self-heal (B1) and the Tray's "Fix my internet" (B2) share one doctor, so the
 // two can never run network fixes at the same time.

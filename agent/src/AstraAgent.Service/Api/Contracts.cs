@@ -208,3 +208,41 @@ public sealed record RemoteSupportPlan(
     // Sent rather than hardcoded so the agent and the relay's agentCustomization cannot
     // drift: it is the Windows service name AND the registry key the node id lives under.
     [property: JsonPropertyName("service_name")] string? ServiceName = null);
+
+/// <summary>Phase 3 · D10: the browser policy the backend serves this device. Version 0 with an
+/// empty policy means "none": the org has no AI Guard, or never set one, and the agent removes
+/// whatever it set before.</summary>
+public sealed record AgentBrowserPolicy(
+    [property: JsonPropertyName("version")] int Version,
+    [property: JsonPropertyName("policy")] AgentBrowserPolicyBody Policy);
+
+public sealed record AgentBrowserPolicyBody(
+    [property: JsonPropertyName("incognito_off")] bool IncognitoOff = false,
+    [property: JsonPropertyName("extension_developer_mode_off")] bool ExtensionDeveloperModeOff = false,
+    [property: JsonPropertyName("dev_tools_off")] bool DevToolsOff = false,
+    [property: JsonPropertyName("new_profiles_off")] bool NewProfilesOff = false,
+    [property: JsonPropertyName("blocked_sites")] IReadOnlyList<string>? BlockedSites = null,
+    [property: JsonPropertyName("allowed_sites")] IReadOnlyList<string>? AllowedSites = null,
+    [property: JsonPropertyName("google_allowed_domains")] IReadOnlyList<string>? GoogleAllowedDomains = null,
+    [property: JsonPropertyName("chrome_extension_id")] string? ChromeExtensionId = null,
+    [property: JsonPropertyName("edge_extension_id")] string? EdgeExtensionId = null,
+    [property: JsonPropertyName("firefox_extension_id")] string? FirefoxExtensionId = null,
+    [property: JsonPropertyName("firefox_extension_url")] string? FirefoxExtensionUrl = null,
+    [property: JsonPropertyName("guard_mode")] string? GuardMode = null,
+    [property: JsonPropertyName("guard_watched_sites")] IReadOnlyList<string>? GuardWatchedSites = null,
+    [property: JsonPropertyName("guard_ignore_kinds")] IReadOnlyList<string>? GuardIgnoreKinds = null,
+    [property: JsonPropertyName("guard_keywords")] IReadOnlyList<string>? GuardKeywords = null)
+{
+    // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
+    public Guard.BrowserPolicy ToPolicy() => new()
+    {
+        IncognitoOff = IncognitoOff, ExtensionDeveloperModeOff = ExtensionDeveloperModeOff,
+        DevToolsOff = DevToolsOff, NewProfilesOff = NewProfilesOff,
+        BlockedSites = BlockedSites ?? [], AllowedSites = AllowedSites ?? [],
+        GoogleAllowedDomains = GoogleAllowedDomains ?? [],
+        ChromeExtensionId = ChromeExtensionId, EdgeExtensionId = EdgeExtensionId,
+        FirefoxExtensionId = FirefoxExtensionId, FirefoxExtensionUrl = FirefoxExtensionUrl,
+        GuardMode = GuardMode ?? "log", GuardWatchedSites = GuardWatchedSites ?? [],
+        GuardIgnoreKinds = GuardIgnoreKinds ?? ["Email"], GuardKeywords = GuardKeywords ?? [],
+    };
+}

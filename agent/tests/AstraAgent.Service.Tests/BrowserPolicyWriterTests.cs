@@ -115,7 +115,8 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     {
         Chrome(Full);
         var r = Chrome(Full with { BlockedSites = [], ChromeExtensionId = null });
-        Assert.Equal(["ExtensionInstallForcelist", "URLBlocklist"], r.Removed.OrderBy(x => x));
+        Assert.Equal([@"3rdparty\extensions\abcdefghijklmnopabcdefghijklmnop\policy", "ExtensionInstallForcelist", "URLBlocklist"],
+                     r.Removed.OrderBy(x => x, StringComparer.Ordinal));
         using var pol = Policy(Browser.Chrome);
         Assert.Null(pol.OpenSubKey("URLBlocklist"));
         Assert.Equal(1, pol.GetValue("IncognitoModeAvailability"));
@@ -133,6 +134,134 @@ public sealed class BrowserPolicyWriterTests : IDisposable
         Assert.False(map.ContainsKey("IncognitoModeAvailability"));
         Assert.EndsWith("edge.microsoft.com/extensionwebstorebase/v1/crx", ((string[])map["ExtensionInstallForcelist"])[0]);
         Assert.Null(BrowserPolicyWriter.ApplyChromium(_root, Browser.Edge, map).Error);
+    }
+
+    // ── D3: the extension's managed settings (3rdparty) ───────────────────────────────────
+
+    const string ChromeId = "abcdefghijklmnopabcdefghijklmnop";
+    static readonly BrowserPolicy Guarded = Full with
+    {
+        GuardMode = "warn", GuardWatchedSites = ["chatgpt.com"], GuardKeywords = ["project falcon"],
+    };
+
+    [Fact]
+    public void Extension_settings_go_under_3rdparty_beside_other_extensions()
+    {
+        using (var other = _root.CreateSubKey($@"{BrowserPolicyWriter.ChromiumPolicyPath(Browser.Chrome)}\3rdparty\extensions\zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\policy", true))
+            other.SetValue("theirs", 1, RegistryValueKind.DWord);   // another vendor's extension policy
+
+        var r = Chrome(Guarded);
+        Assert.Null(r.Error);
+        Assert.Contains($@"3rdparty\extensions\{ChromeId}\policy", r.Set);
+        using (var ours = Policy(Browser.Chrome).OpenSubKey($@"3rdparty\extensions\{ChromeId}\policy")!)
+        {
+            Assert.Equal("warn", ours.GetValue("mode"));
+            using var sites = ours.OpenSubKey("watchedSites")!;
+            Assert.Equal("chatgpt.com", sites.GetValue("1"));
+            using var kinds = ours.OpenSubKey("ignoreKinds")!;
+            Assert.Equal("Email", kinds.GetValue("1"));
+        }
+        Assert.False(Chrome(Guarded).Changed);
+
+        // A user edits the mode back to "log": put back, reported as drift.
+        using (var ours = _root.OpenSubKey($@"{BrowserPolicyWriter.ChromiumPolicyPath(Browser.Chrome)}\3rdparty\extensions\{ChromeId}\policy", true)!)
+            ours.SetValue("mode", "log");
+        Assert.Contains($@"3rdparty\extensions\{ChromeId}\policy", Chrome(Guarded).Repaired);
+
+        // Dropping the extension removes our branch and prunes our ID's key, never theirs.
+        Chrome(new BrowserPolicy());
+        using var pol = Policy(Browser.Chrome);
+        Assert.Null(pol.OpenSubKey($@"3rdparty\extensions\{ChromeId}"));
+        using var kept = pol.OpenSubKey(@"3rdparty\extensions\zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\policy")!;
+        Assert.Equal(1, kept.GetValue("theirs"));
+    }
+
+    [Fact]
+    public void Someone_elses_settings_for_our_extension_are_a_conflict()
+    {
+        using (var gpo = _root.CreateSubKey($@"{BrowserPolicyWriter.ChromiumPolicyPath(Browser.Chrome)}\3rdparty\extensions\{ChromeId}\policy", true))
+            gpo.SetValue("mode", "block");
+        var r = Chrome(Guarded);
+        Assert.Contains($@"3rdparty\extensions\{ChromeId}\policy", r.Conflicts);
+        using var kept = Policy(Browser.Chrome).OpenSubKey($@"3rdparty\extensions\{ChromeId}\policy")!;
+        Assert.Equal("block", kept.GetValue("mode"));
+        Assert.Null(kept.GetValue("keywords"));
+    }
+
+    [Fact]
+    public void Firefox_extension_settings_share_3rdparty_with_others()
+    {
+        Directory.CreateDirectory(_ffDir);
+        File.WriteAllText(Path.Combine(_ffDir, "policies.json"),
+            """{"policies": {"3rdparty": {"Extensions": {"other@vendor.com": {"x": 1}}}}}""");
+        var p = Guarded with { FirefoxExtensionId = "guard@savio.app", FirefoxExtensionUrl = "https://savio.app/ext/guard.xpi" };
+        var r = Firefox(p);
+        Assert.Null(r.Error);
+        Assert.Contains(@"3rdparty\Extensions\guard@savio.app", r.Set);
+        var ext = Policies()["3rdparty"]!["Extensions"]!;
+        Assert.Equal("warn", ext["guard@savio.app"]!["mode"]!.GetValue<string>());
+        Assert.Equal("project falcon", ext["guard@savio.app"]!["keywords"]![0]!.GetValue<string>());
+        Assert.Equal(1, ext["other@vendor.com"]!["x"]!.GetValue<int>());
+        Assert.False(Firefox(p).Changed);
+
+        Firefox(new BrowserPolicy());
+        ext = Policies()["3rdparty"]!["Extensions"]!;
+        Assert.Null(ext["guard@savio.app"]);
+        Assert.NotNull(ext["other@vendor.com"]);
+
+        // With nobody else there, the emptied objects go too.
+        File.WriteAllText(Path.Combine(_ffDir, "policies.json"), """{"policies": {}}""");
+        Firefox(p);
+        Firefox(new BrowserPolicy());
+        Assert.Null(Policies()["3rdparty"]);
+    }
+
+    [Theory]
+    [InlineData("shout")]
+    [InlineData("")]
+    public void A_bad_guard_mode_is_refused(string mode) => Assert.NotEmpty((Full with { GuardMode = mode }).Validate());
+
+    [Fact]
+    public void Bad_guard_settings_are_refused()
+    {
+        Assert.NotEmpty((Full with { GuardIgnoreKinds = ["Passwords"] }).Validate());
+        Assert.NotEmpty((Full with { GuardWatchedSites = ["https://chatgpt.com"] }).Validate());
+        Assert.NotEmpty((Full with { GuardKeywords = [" "] }).Validate());
+        Assert.NotEmpty((Full with { GuardKeywords = Enumerable.Range(0, 201).Select(i => $"k{i}").ToArray() }).Validate());
+        Assert.Empty(Guarded.Validate());
+    }
+
+    // ── D3: native messaging host registration ────────────────────────────────────────────
+
+    [Fact]
+    public void Native_host_is_registered_for_the_forced_extension_only()
+    {
+        Directory.CreateDirectory(_ffDir);
+        var exe = Path.Combine(_ffDir, NativeHostRegistration.HostExe);
+        Assert.Equal(HostChange.Registered, NativeHostRegistration.Apply(_root, Browser.Chrome, ChromeId, exe, _ffDir));
+        Assert.Equal(HostChange.Registered, NativeHostRegistration.Apply(_root, Browser.Firefox, "guard@savio.app", exe, _ffDir));
+        Assert.Equal(HostChange.None, NativeHostRegistration.Apply(_root, Browser.Chrome, ChromeId, exe, _ffDir));
+
+        string manifestPath;
+        using (var k = _root.OpenSubKey(NativeHostRegistration.RegistryPath(Browser.Chrome))!)
+            manifestPath = (string)k.GetValue("")!;
+        var m = JsonNode.Parse(File.ReadAllText(manifestPath))!;
+        Assert.Equal("com.savio.guard", m["name"]!.GetValue<string>());
+        Assert.Equal(exe, m["path"]!.GetValue<string>());
+        Assert.Equal("stdio", m["type"]!.GetValue<string>());
+        Assert.Equal($"chrome-extension://{ChromeId}/", m["allowed_origins"]![0]!.GetValue<string>());
+        using (var k = _root.OpenSubKey(NativeHostRegistration.RegistryPath(Browser.Firefox))!)
+            Assert.Equal("guard@savio.app", JsonNode.Parse(File.ReadAllText((string)k.GetValue("")!))!["allowed_extensions"]![0]!.GetValue<string>());
+
+        // Someone repoints the host at another program: put back.
+        using (var k = _root.OpenSubKey(NativeHostRegistration.RegistryPath(Browser.Chrome), true)!)
+            k.SetValue("", @"C:\Users\Public\evil.json");
+        Assert.Equal(HostChange.Registered, NativeHostRegistration.Apply(_root, Browser.Chrome, ChromeId, exe, _ffDir));
+
+        Assert.Equal(HostChange.Unregistered, NativeHostRegistration.Apply(_root, Browser.Chrome, null, exe, _ffDir));
+        Assert.Null(_root.OpenSubKey(NativeHostRegistration.RegistryPath(Browser.Chrome)));
+        Assert.False(File.Exists(manifestPath));
+        Assert.Equal(HostChange.None, NativeHostRegistration.Apply(_root, Browser.Chrome, null, exe, _ffDir));
     }
 
     [Theory]

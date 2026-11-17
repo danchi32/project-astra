@@ -57,16 +57,52 @@ public static class BrowserPolicyWriter
 
         var reports = new List<ApplyReport>
         {
-            ApplyChromium(Registry.LocalMachine, Browser.Chrome, BrowserPolicyMap.Chromium(policy, Browser.Chrome)),
-            ApplyChromium(Registry.LocalMachine, Browser.Edge, BrowserPolicyMap.Chromium(policy, Browser.Edge)),
+            WithHost(ApplyChromium(Registry.LocalMachine, Browser.Chrome, BrowserPolicyMap.Chromium(policy, Browser.Chrome)),
+                     policy.ChromeExtensionId),
+            WithHost(ApplyChromium(Registry.LocalMachine, Browser.Edge, BrowserPolicyMap.Chromium(policy, Browser.Edge)),
+                     policy.EdgeExtensionId),
         };
         var firefox = BrowserPolicyMap.Firefox(policy);
-        reports.AddRange(FirefoxDistributionDirs().Select(dir => ApplyFirefox(dir, firefox)));
+        var fx = FirefoxDistributionDirs().Select(dir => ApplyFirefox(dir, firefox)).ToList();
+        // One registration per browser, however many Firefox installs: it goes on the first report.
+        if (fx.Count > 0) fx[0] = WithHost(fx[0], policy.FirefoxExtensionId);
+        else WithHost(new ApplyReport(Browser.Firefox, [], [], [], [], null), null);
+        reports.AddRange(fx);
         return reports;
+    }
+
+    /// <summary>D3: register the native host for the extension this browser is forced to run,
+    /// or remove the registration when none is, and fold what happened into the report.</summary>
+    static ApplyReport WithHost(ApplyReport r, string? extensionId)
+    {
+        var exe = Path.Combine(AppContext.BaseDirectory, NativeHostRegistration.HostExe);
+        var missing = extensionId is not null && !File.Exists(exe);
+        try
+        {
+            var change = NativeHostRegistration.Apply(Registry.LocalMachine, r.Browser, missing ? null : extensionId,
+                                                      exe, AppContext.BaseDirectory);
+            r = change switch
+            {
+                HostChange.Registered => r with { Set = [.. r.Set, NativeHostRegistration.HostName] },
+                HostChange.Unregistered => r with { Removed = [.. r.Removed, NativeHostRegistration.HostName] },
+                _ => r,
+            };
+            return missing ? r with { Error = r.Error ?? $"{NativeHostRegistration.HostExe} is missing beside the agent; the extension cannot scan" } : r;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            return r with { Error = r.Error ?? $"Could not register the native host: {ex.Message}" };
+        }
     }
 
     // ── Chrome and Edge: registry ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// A policy name may be a path, such as <c>3rdparty\extensions\&lt;id&gt;\policy</c> (an
+    /// extension's managed settings). The leaf is what SAVIO owns; the keys above it are shared.
+    /// Other extensions' 3rdparty policies sit beside it and are never touched, and a parent
+    /// left empty by a removal is pruned.
+    /// </summary>
     public static ApplyReport ApplyChromium(RegistryKey root, Browser browser, IReadOnlyDictionary<string, object> desired)
     {
         List<string> set = [], repaired = [], removed = [], conflicts = [];
@@ -74,11 +110,10 @@ public static class BrowserPolicyWriter
         {
             var owned = ReadOwned(root, browser);
             using var pol = root.CreateSubKey(ChromiumPolicyPath(browser), writable: true);
-            var present = new HashSet<string>(pol.GetValueNames().Concat(pol.GetSubKeyNames()), StringComparer.OrdinalIgnoreCase);
 
             foreach (var (name, value) in desired)
             {
-                if (present.Contains(name) && !owned.Contains(name)) { conflicts.Add(name); continue; }
+                if (Exists(pol, name) && !owned.Contains(name)) { conflicts.Add(name); continue; }
                 if (Holds(pol, name, value)) { owned.Add(name); continue; }
                 Write(pol, name, value);
                 (owned.Contains(name) ? repaired : set).Add(name);
@@ -102,43 +137,89 @@ public static class BrowserPolicyWriter
         }
     }
 
-    static bool Holds(RegistryKey pol, string name, object value)
+    /// <summary>Runs <paramref name="f"/> on the key that holds a (possibly nested) policy name,
+    /// and on its leaf. Without <paramref name="create"/> a missing parent gives null.</summary>
+    static T At<T>(RegistryKey pol, string name, bool create, Func<RegistryKey?, string, T> f)
     {
-        if (value is string[] list)
+        var i = name.LastIndexOf('\\');
+        if (i < 0) return f(pol, name);
+        using var parent = create ? pol.CreateSubKey(name[..i], writable: true) : pol.OpenSubKey(name[..i], writable: true);
+        return f(parent, name[(i + 1)..]);
+    }
+
+    static bool Has(RegistryKey k, string leaf) =>
+        k.GetValueNames().Contains(leaf, StringComparer.OrdinalIgnoreCase) ||
+        k.GetSubKeyNames().Contains(leaf, StringComparer.OrdinalIgnoreCase);
+
+    static bool Exists(RegistryKey pol, string name) => At(pol, name, false, (k, leaf) => k is not null && Has(k, leaf));
+
+    static bool Holds(RegistryKey pol, string name, object value) =>
+        At(pol, name, false, (k, leaf) => k is not null && HoldsAt(k, leaf, value));
+
+    static void Write(RegistryKey pol, string name, object value) =>
+        At(pol, name, true, (k, leaf) => { WriteAt(k!, leaf, value); return 0; });
+
+    static void Delete(RegistryKey pol, string name)
+    {
+        At(pol, name, false, (k, leaf) => { if (k is not null) DeleteAt(k, leaf); return 0; });
+        // Prune the parents this left empty (3rdparty\extensions\<id>), never one holding anything else.
+        for (var i = name.LastIndexOf('\\'); i > 0; i = name.LastIndexOf('\\', i - 1))
         {
-            using var sub = pol.OpenSubKey(name);
-            if (sub is null || sub.ValueCount != list.Length) return false;
-            return list.Select((item, i) => sub.GetValue((i + 1).ToString()) as string == item).All(x => x);
+            var path = name[..i];
+            using (var k = pol.OpenSubKey(path))
+                if (k is null || k.ValueCount + k.SubKeyCount > 0) return;
+            pol.DeleteSubKey(path, false);
         }
-        if (pol.GetSubKeyNames().Contains(name, StringComparer.OrdinalIgnoreCase)) return false;
-        var current = pol.GetValue(name);
+    }
+
+    /// <summary>Lists are subkeys with values "1".."n"; maps (an extension's managed settings)
+    /// are subkeys holding each entry. Both are how Chrome and Edge read policy from the registry.</summary>
+    static bool HoldsAt(RegistryKey k, string name, object value)
+    {
+        if (value is string[] or IReadOnlyDictionary<string, object>)
+        {
+            if (k.GetValueNames().Contains(name, StringComparer.OrdinalIgnoreCase)) return false;
+            using var sub = k.OpenSubKey(name);
+            if (sub is null) return false;
+            if (value is string[] list)
+                return sub.SubKeyCount == 0 && sub.ValueCount == list.Length &&
+                       list.Select((item, i) => sub.GetValue((i + 1).ToString()) as string == item).All(x => x);
+            var map = (IReadOnlyDictionary<string, object>)value;
+            return sub.ValueCount + sub.SubKeyCount == map.Count && map.All(e => HoldsAt(sub, e.Key, e.Value));
+        }
+        if (k.GetSubKeyNames().Contains(name, StringComparer.OrdinalIgnoreCase)) return false;
+        var current = k.GetValue(name);
         return value switch
         {
-            int i => current is int c && c == i && pol.GetValueKind(name) == RegistryValueKind.DWord,
+            int i => current is int c && c == i && k.GetValueKind(name) == RegistryValueKind.DWord,
             string s => current is string c && c == s,
             _ => false,
         };
     }
 
-    static void Write(RegistryKey pol, string name, object value)
+    static void WriteAt(RegistryKey k, string name, object value)
     {
-        Delete(pol, name);
+        DeleteAt(k, name);
         switch (value)
         {
             case string[] list:
-                using (var sub = pol.CreateSubKey(name, writable: true))
+                using (var sub = k.CreateSubKey(name, writable: true))
                     for (int i = 0; i < list.Length; i++) sub.SetValue((i + 1).ToString(), list[i], RegistryValueKind.String);
                 break;
-            case int i: pol.SetValue(name, i, RegistryValueKind.DWord); break;
-            case string s: pol.SetValue(name, s, RegistryValueKind.String); break;
+            case IReadOnlyDictionary<string, object> map:
+                using (var sub = k.CreateSubKey(name, writable: true))
+                    foreach (var (n, v) in map) WriteAt(sub, n, v);
+                break;
+            case int i: k.SetValue(name, i, RegistryValueKind.DWord); break;
+            case string s: k.SetValue(name, s, RegistryValueKind.String); break;
             default: throw new ArgumentException($"unsupported value for {name}");
         }
     }
 
-    static void Delete(RegistryKey pol, string name)
+    static void DeleteAt(RegistryKey k, string name)
     {
-        if (pol.GetSubKeyNames().Contains(name, StringComparer.OrdinalIgnoreCase)) pol.DeleteSubKeyTree(name, false);
-        if (pol.GetValueNames().Contains(name, StringComparer.OrdinalIgnoreCase)) pol.DeleteValue(name, false);
+        if (k.GetSubKeyNames().Contains(name, StringComparer.OrdinalIgnoreCase)) k.DeleteSubKeyTree(name, false);
+        if (k.GetValueNames().Contains(name, StringComparer.OrdinalIgnoreCase)) k.DeleteValue(name, false);
     }
 
     static HashSet<string> ReadOwned(RegistryKey root, Browser b)
@@ -184,15 +265,15 @@ public static class BrowserPolicyWriter
             foreach (var (name, value) in desired)
             {
                 var node = JsonSerializer.SerializeToNode(value);
-                if (policies.ContainsKey(name) && !owned.Contains(name)) { conflicts.Add(name); continue; }
-                if (JsonNode.DeepEquals(policies[name], node)) { owned.Add(name); continue; }
-                policies[name] = node;
+                if (FxExists(policies, name) && !owned.Contains(name)) { conflicts.Add(name); continue; }
+                if (JsonNode.DeepEquals(FxGet(policies, name), node)) { owned.Add(name); continue; }
+                FxSet(policies, name, node);
                 (owned.Contains(name) ? repaired : set).Add(name);
                 owned.Add(name);
             }
             foreach (var name in owned.Where(n => !desired.ContainsKey(n)).ToList())
             {
-                policies.Remove(name);
+                FxRemove(policies, name);
                 owned.Remove(name);
                 removed.Add(name);
             }
@@ -210,6 +291,54 @@ public static class BrowserPolicyWriter
         {
             return new ApplyReport(Browser.Firefox, set, repaired, removed, conflicts, $"Could not write Firefox policy: {ex.Message}");
         }
+    }
+
+    // A Firefox policy name may be a path too: 3rdparty\Extensions\<id> is one extension's
+    // managed settings inside the shared "3rdparty" object.
+
+    /// <summary>Present, or blocked by someone else's non-object value on the way down.</summary>
+    static bool FxExists(JsonObject policies, string name)
+    {
+        JsonNode? node = policies;
+        foreach (var part in name.Split('\\'))
+        {
+            if (node is not JsonObject o) return true;
+            if (!o.TryGetPropertyValue(part, out node)) return false;
+        }
+        return true;
+    }
+
+    static JsonNode? FxGet(JsonObject policies, string name)
+    {
+        JsonNode? node = policies;
+        foreach (var part in name.Split('\\'))
+            if (node is not JsonObject o || !o.TryGetPropertyValue(part, out node)) return null;
+        return node;
+    }
+
+    static void FxSet(JsonObject policies, string name, JsonNode? value)
+    {
+        var parts = name.Split('\\');
+        var o = policies;
+        foreach (var part in parts[..^1])
+        {
+            if (o[part] is not JsonObject next) { next = new JsonObject(); o[part] = next; }
+            o = next;
+        }
+        o[parts[^1]] = value;
+    }
+
+    static void FxRemove(JsonObject policies, string name)
+    {
+        var parts = name.Split('\\');
+        var chain = new List<JsonObject> { policies };
+        foreach (var part in parts[..^1])
+        {
+            if (chain[^1][part] is not JsonObject next) return;
+            chain.Add(next);
+        }
+        chain[^1].Remove(parts[^1]);
+        for (var i = chain.Count - 1; i > 0 && chain[i].Count == 0; i--) chain[i - 1].Remove(parts[i - 1]);
     }
 
     /// <summary>Write to a temp file then swap it in, so Firefox never reads half a file.</summary>

@@ -1023,16 +1023,88 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
     - Firefox merge;
     - broken Firefox file left alone.
   - All 382 agent tests pass, and the real browser keys were untouched.
-  - **Next, slice 2:**
-    - per-org policy in the backend, behind the `ai_guard` entitlement and off by default;
-    - an admin page and audit;
-    - the agent fetches the policy, applies it each cycle, and reports conflicts and drift
-      (N1 alert "browser policy tampered").
+  - **As built, slice 2, end to end (17 Nov):**
+    - **Backend:** new entitlement `ai_guard` (in no plan; an operator switches it on per
+      org) and migration `0087`, with two tables:
+      - `org_browser_policies`: one per org, with a version that goes up on each change;
+      - `device_browser_policy_states`: each PC's last report.
+    - **Admin endpoints:**
+      - `GET`/`PUT /guard/browser-policy`. Editing is admin-only, staff can read, and
+        changes are audited with the fields that changed.
+      - `GET /guard/browser-policy/devices`.
+      - Validation matches the agent's, and sites are normalised and de-duplicated.
+    - **Agent endpoints:**
+      - `GET /agent/browser-policy`. An org without `ai_guard` gets version 0 and an empty
+        policy, so its PCs remove what SAVIO set.
+      - `POST /agent/browser-policy/report`. The device comes from its token. A *repaired*
+        entry (tamper) is audited and raises a "Browser policy tampered" notification.
+    - **Agent:** `BrowserPolicyWorker`.
+      - It fetches hourly and applies every heartbeat cycle, so a removed lock is back
+        within a minute.
+      - It reports when something changed, or when the version, conflicts or errors
+        differ.
+      - A failed fetch **keeps** the last policy and retries in 5 minutes. Only the
+        backend's explicit "version 0, empty" removes it.
+    - **Portal:**
+      - AI Guard → Browser policy: the switches, blocked / allowed sites and Google
+        domains, plus a per-PC table showing the version (with an "older" marker),
+        errors, and conflicts ("set elsewhere, left alone").
+      - An AI Guard toggle on the operator's org page.
+    - **Checked:**
+      - `test_browser_policy.py` (5): 402 without the add-on, version and audit,
+        validation, roles, reports and tamper notification.
+      - `BrowserPolicyWorkerTests` (4): cadence, unreachable backend, add-on off,
+        re-enrolment.
+      - All 386 agent tests pass. Migration checked up / down / up on Postgres with a
+        write.
+      - Checked on screen against the local backend, with a made-up device report: the
+        policy is saved, version 2 comes from the portal, and the PC row shows "older", the
+        Firefox error and the conflict.
+    - **The agent was not run against this laptop's browsers:** it would change your Chrome
+      and Edge. That is the VM test.
   - **Then a live VM test (Spike 2):** which of these policies Chrome and Edge honour on a
     PC not joined to a domain.
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
   drag-and-drop, form submit on watched sites; talks only to the local agent via native
   messaging (policy offline, device identity).
+  - **As built, slice 1 (16 Nov, branch `phase-3`):**
+    - **Native host:** `agent/src/AstraAgent.GuardHost`, an exe called
+      `savio-guard-host.exe` that speaks Chrome/Firefox native messaging (4-byte length + JSON,
+      16 MiB cap) and wraps the D4 scanner. It answers with counts, the contact-list flag and
+      keyword *indexes* only, never the text. Anything other than a scan request is refused;
+      a malformed or oversized frame ends the connection.
+    - **Extension:** `extension/`, MV3, one codebase for Chrome, Edge and Firefox. The
+      content script catches paste, drop, file choice and form submit (capture phase); the
+      service worker asks the host; `decide.js` turns the answer into allow / warn / block. It
+      keeps the last 200 events, counts only, in local storage.
+    - **Safe defaults:** log-only unless the admin chooses otherwise; e-mail addresses are
+      counted but never acted on; a scanner that cannot be reached or timed out is never
+      "clean", and warns rather than blocks.
+  - **As built, slice 2 (16 Nov):**
+    - **Shipped with the agent:** a `PublishGuardHost` target in the service project
+      publishes the host into the same folder, so the release workflow, the installer build and
+      `-BuildFromSource` all carry it without a script change. Checked with a publish to a
+      temp folder.
+    - **Settings from the portal:** mode, sites to check, restricted keywords and
+      count-but-ignore kinds are part of the browser policy (`guard_*` fields), validated in
+      the backend and again on the PC. The audit records which fields changed, never the
+      keywords.
+    - **Handed to the extension as managed policy:** Chrome and Edge under
+      `3rdparty\extensions\<id>\policy`, Firefox under `3rdparty.Extensions.<id>` in
+      policies.json. The writer now handles nested policy names: it owns only our extension's
+      branch, leaves other extensions' 3rdparty settings alone, prunes what it emptied, and
+      treats settings someone else wrote for our ID as a conflict.
+    - **Host registration:** while the policy forces the extension in, the agent registers
+      `com.savio.guard` for that browser (HKLM NativeMessagingHosts → a manifest naming the
+      exe and the one extension allowed to start it). The manifests sit in the install folder,
+      where only administrators can write. Removed when the extension no longer is; repointed
+      if someone changes it; an error if the exe is missing.
+    - **Checked:** writer tests for 3rdparty (beside another vendor's, drift, conflict,
+      pruning, Firefox), guard-setting validation, host registration (manifest contents,
+      repoint repaired, removal), backend validation and audit. Nothing was written to this
+      laptop's HKLM or real browsers.
+  - **Not yet:** store listing (extension IDs), a live browser test on the VM, sending the
+    extension's events to the backend (E3), and the D7 dialogs.
 - **E4 Scanner isolation** 🔒: content analysis runs in a separate process with outbound
   network blocked by firewall rule; it talks to the agent over a fixed schema with **no
   free-text field** (category, counts, site, action, hashes of files only).
