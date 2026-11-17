@@ -852,6 +852,9 @@ class StubProvider:
                 data = json.loads(raw)
             except (json.JSONDecodeError, TypeError):
                 continue
+            # C3 wraps a list result from outside as {"untrusted_content": ..., "items": [...]}.
+            if isinstance(data, dict) and "untrusted_content" in data and "items" in data:
+                data = data["items"]
             if isinstance(data, dict) and ("outcome" in data or "task_id" in data):
                 # A queued fix is not a finished one. "Done — Applied automatically (Clear
                 # temporary files). The agent will run it shortly." said both at once, in

@@ -29,6 +29,7 @@ from app.services.exceptions import ConflictError, NotFoundError, ServiceError
 from app.services.notifications import NotificationService
 from app.services.settings import SettingsService
 from app.services.entitlements import AI_ACT, LOCKDOWN
+from app.services.remediation import evidence
 from app.services.remediation.actions import (
     ACTIONS,
     SAFE_APP_PROCESSES,
@@ -72,6 +73,10 @@ def redact_result(task: Any, reader: Any | None) -> dict | None:
 
 class RemediationError(ServiceError):
     pass
+
+
+class RolloutHalted(RemediationError):
+    """The task belongs to a deployment (C2) that has been halted: never create it."""
 
 
 class AlreadyQueuedError(RemediationError):
@@ -313,6 +318,10 @@ _TECHNICAL_OUTCOME: dict[str, str] = {
     "network_reset":
         "Your network stack has been rebuilt — the TCP/IP stack and Winsock catalog were reset, "
         "clearing the corrupted configuration.",
+    "enable_firewall":
+        "Windows Firewall is on for every network profile, and the state was read back to confirm it.",
+    "enable_defender_realtime":
+        "Defender real-time protection is on. It was checked after the change, not assumed.",
     "windows_update_install":
         "The pending updates are installed through the Windows Update service.",
     "restart_audio":
@@ -366,6 +375,8 @@ _ACK_SUBJECT: dict[str, str] = {
     "create_outlook_rule": "your mailbox rules",
     "office_repair": "your Office installation",
     "network_reset": "your network stack",
+    "enable_firewall": "your firewall",
+    "enable_defender_realtime": "Defender",
     "windows_update_install": "Windows Update",
     "restart_audio": "your sound",
     "renew_ip_address": "your network address",
@@ -457,8 +468,13 @@ class RemediationService:
         conversation_id: uuid.UUID | None = None,
         approver: User | None = None,
         deployment_id: uuid.UUID | None = None,
+        hold_reasons: list[str] | None = None,
     ) -> RemediationTask:
         """Queue a remediation.
+
+        ``hold_reasons`` (C3) come from the assistant's guard: the proposal leaned on text from
+        outside the conversation. Any reason at all sends it to the approval queue, whatever
+        the tier, and the approver is told why. It can only ever add a person, never remove one.
 
         ``approver`` is for flows where the caller IS the approver — someone who chose this
         exact action in the portal and clicked Run. The task is approved in the same step, so
@@ -479,6 +495,19 @@ class RemediationService:
         if source is RemediationSource.ASSISTANT and action.operator_only:
             raise RemediationError(f"'{action_id}' can only be started by a person.")
         params = self._validate_params(action_id, params)
+        # C2: a halted rollout queues nothing more. The deployment row is locked (Postgres) so
+        # a halt cannot commit between this check and the insert below; halt takes the same
+        # lock. The lock is held until this method commits.
+        if deployment_id is not None:
+            from sqlalchemy import select
+
+            from app.models import Deployment
+
+            halted = (await self.session.execute(
+                select(Deployment.halted_at).where(Deployment.id == deployment_id).with_for_update()
+            )).scalar_one_or_none()
+            if halted is not None:
+                raise RolloutHalted("This rollout has been halted.")
         # Checked here rather than in _validate_params because the answer depends on the
         # organization's own policy list, which is a database read, not a constant.
         if "app_name" in action.params:
@@ -551,7 +580,12 @@ class RemediationService:
             status = RemediationStatus.APPROVED
         else:
             status = RemediationStatus.APPROVED if auto_ok else RemediationStatus.PENDING_APPROVAL
-
+        raised = False
+        if hold_reasons and approver is None:
+            raised = status is RemediationStatus.APPROVED
+            status = RemediationStatus.PENDING_APPROVAL
+            # The reasons go in their own field, not appended to `reason`: the model writes
+            # `reason`, and could put a counterfeit "SAVIO: verified safe" note in it.
         task = await self.repo.add(
             RemediationTask(
                 org_id=org_id,
@@ -566,6 +600,7 @@ class RemediationService:
                 conversation_id=conversation_id,
                 approved_by_user_id=approver.id if approver is not None else None,
                 deployment_id=deployment_id,
+                ai_guard=hold_reasons or None,
             )
         )
         await self.audit.record(
@@ -579,7 +614,8 @@ class RemediationService:
                     # Which account / package, so "who made whom an admin" is answerable from
                     # the log alone. Only these keys: nothing else in params is guaranteed
                     # free of personal text.
-                    **{k: params[k] for k in _AUDITED_PARAMS if k in params}},
+                    **{k: params[k] for k in _AUDITED_PARAMS if k in params},
+                    **({"ai_guard": hold_reasons, "raised": raised} if hold_reasons else {})},
         )
         # Record the approval as its own audit entry so "who cleared this" is answerable
         # from the log alone, exactly as it is when someone approves from the queue.
@@ -599,7 +635,8 @@ class RemediationService:
                 category=NotificationCategory.REMEDIATION,
                 severity=NotificationSeverity.WARNING,
                 title="Approval needed",
-                message=f"{action.label} on {device.hostname} needs approval from {approver_label}.",
+                message=f"{action.label} on {device.hostname} needs approval from {approver_label}."
+                + (" SAVIO held it: it leans on text from the device." if hold_reasons else ""),
                 link="/self-healing",
             )
         await self.session.commit()
@@ -799,8 +836,31 @@ class RemediationService:
             task_context = action.execution_context if action else "user"
             if task_context != context:
                 continue
+            # C2: claim only if it is still approved. Conditional in the database, so a halt
+            # that cancels it at the same moment and this claim cannot both win: the one
+            # that commits second finds the status already changed and does nothing.
+            from sqlalchemy import update
+
+            won = await self.session.execute(
+                update(RemediationTask)
+                .where(RemediationTask.id == task.id,
+                       RemediationTask.status == RemediationStatus.APPROVED)
+                .values(status=RemediationStatus.DISPATCHED)
+                .execution_options(synchronize_session=False)
+            )
+            if won.rowcount != 1:
+                await self.session.refresh(task)
+                continue
             task.status = RemediationStatus.DISPATCHED
             claimed.append(task)
+            # C1: the "before" reading, taken as close to the run as the server gets. Fenced:
+            # a failed reading costs the evidence, never the claim (and with it every fix,
+            # security ones included, this device would otherwise stop receiving).
+            try:
+                async with self.session.begin_nested():
+                    await evidence.capture_before(self.session, task)
+            except Exception:
+                logger.exception("Proof-of-Fix before-reading failed for task %s", task.id)
 
             # Tell the user their fix has actually STARTED, if it came from a device chat.
             #
@@ -875,10 +935,14 @@ class RemediationService:
         # ASSISTANT, and there is nothing to learn from those — the rule already knew the
         # answer, so writing a runbook for it would fill the knowledge base with things the
         # system could always do, and bury the hand-written ones under them.
+        # Never from a fix C3 held: it leaned on outside text, and a learned fix replays with
+        # no model call and no guard, so learning it would turn one held fix into many that
+        # run on their own.
         if (
             task.conversation_id is not None
             and task.source is RemediationSource.ASSISTANT
             and task.from_llm
+            and not task.ai_guard
         ):
             await self._learn_from(task, label, success)
 
@@ -923,6 +987,18 @@ class RemediationService:
                 )
             )
         await self.session.commit()
+
+        # C2: one wave device reporting can open the gate to the next wave, or halt the
+        # rollout. After the commit: the result above is the record and must stand whatever
+        # happens to the rollout.
+        if task.deployment_id is not None:
+            from app.services.deployments import DeploymentService
+
+            try:
+                await DeploymentService(self.session).advance(task.deployment_id)
+            except Exception:
+                logger.exception("Rollout gate failed for deployment %s", task.deployment_id)
+                await self.session.rollback()
         return task
 
     async def _offer_escalation(self, task: RemediationTask, label: str) -> str | None:

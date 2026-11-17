@@ -1,6 +1,9 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    bitlocker,
+    recommendations,
+    watchlist,
     health_check,
     deployments,
     agent,
@@ -62,3 +65,6 @@ api_router.include_router(downloads.router)
 api_router.include_router(platform.router)
 api_router.include_router(billing.router)
 api_router.include_router(workforce.router)
+api_router.include_router(bitlocker.router)
+api_router.include_router(recommendations.router)
+api_router.include_router(watchlist.router)

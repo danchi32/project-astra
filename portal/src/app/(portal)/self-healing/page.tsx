@@ -117,7 +117,16 @@ export default function SelfHealingPage() {
                     <td className="px-4 py-3 font-medium" style={{ color: "var(--text-primary)" }}>{t.action_label ?? t.action_id}</td>
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{t.device_hostname ?? "—"}</td>
                     <td className="px-4 py-3"><TierBadge tier={t.tier} /></td>
-                    <td className="px-4 py-3 max-w-[240px] truncate" style={{ color: "var(--text-secondary)" }} title={t.reason}>{t.reason}</td>
+                    <td className="px-4 py-3 max-w-[280px]" style={{ color: "var(--text-secondary)" }}>
+                      <div className="truncate" title={t.reason}>{t.reason}</div>
+                      {/* C3: SAVIO's own account, from its own field — never part of the AI-written reason. */}
+                      {t.ai_guard && t.ai_guard.length > 0 && (
+                        <div className="text-xs mt-1 whitespace-normal font-medium" style={{ color: "#f59e0b" }}
+                          title={t.ai_guard.map((r) => AI_GUARD_WORDS[r] ?? r).join("; ")}>
+                          ⚠ Held by SAVIO: {t.ai_guard.map((r) => AI_GUARD_WORDS[r] ?? r).join("; ")}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{t.source === "assistant" ? "AI" : "Staff"}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex gap-2 justify-end">
@@ -148,7 +157,7 @@ export default function SelfHealingPage() {
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
                 <tr>
-                  {["Fix", "Device", "Tier", "Status", "Result", "When"].map((h) => (
+                  {["Fix", "Device", "Tier", "Status", "Result", "Proof", "When"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide"
                       style={stickyHeadCell}>{h}</th>
                   ))}
@@ -156,10 +165,10 @@ export default function SelfHealingPage() {
               </thead>
               <tbody>
                 {isLoading && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>Loading…</td></tr>
                 )}
                 {!isLoading && history.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>No remediations yet.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center" style={{ color: "var(--text-secondary)" }}>No remediations yet.</td></tr>
                 )}
                 {history.map((t) => (
                   <tr key={t.id} style={{ borderBottom: "1px solid var(--border)" }}>
@@ -168,6 +177,7 @@ export default function SelfHealingPage() {
                     <td className="px-4 py-3"><TierBadge tier={t.tier} /></td>
                     <td className="px-4 py-3"><StatusBadge status={t.status} /></td>
                     <td className="px-4 py-3 max-w-[280px] truncate" style={{ color: "var(--text-secondary)" }} title={t.result?.output ?? ""}>{t.result?.output ?? "—"}</td>
+                    <td className="px-4 py-3"><ProofCell task={t} /></td>
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{new Date(t.created_at).toLocaleString()}</td>
                   </tr>
                 ))}
@@ -176,6 +186,52 @@ export default function SelfHealingPage() {
         </ScrollPanel>
       </div>
     </div>
+  );
+}
+
+// C3: why SAVIO held an AI proposal. Wording matches the server's REASON_WORDS.
+const AI_GUARD_WORDS: Record<string, string> = {
+  outside_text_names_action: "text from the device or knowledge base named this fix",
+  outside_text_supplies_value: "a value in it also appears in text from the device or knowledge base",
+  outside_text_has_instructions: "text from the device or knowledge base contained instructions",
+  value_not_from_user: "a value in it was not given by the user",
+};
+
+// C1 Proof-of-Fix: the number the fix was for, before → after, and the 7-day recheck.
+// Only measurable fixes carry evidence; the rest say so rather than imply a result.
+const VERDICT: Record<string, { label: string; color: string }> = {
+  improved: { label: "Improved", color: "#10b981" },
+  unchanged: { label: "No change", color: "var(--text-secondary)" },
+  worse: { label: "Worse", color: "#ef4444" },
+  unmeasured: { label: "Not measured", color: "var(--text-secondary)" },
+};
+
+function proofValue(v: unknown, unit: string) {
+  if (v === null || v === undefined) return "?";
+  if (typeof v === "boolean") return v ? "On" : "Off";
+  return `${v}${unit ? ` ${unit}` : ""}`;
+}
+
+function ProofCell({ task }: { task: RemediationTask }) {
+  const ev = task.evidence;
+  const muted = { color: "var(--text-secondary)" };
+  if (!ev) return <span className="text-xs" style={muted}>{task.status === "succeeded" ? "Nothing to measure" : "—"}</span>;
+  if (ev.after === undefined) {
+    return <span className="text-xs" style={muted} title={ev.label}>
+      {task.status === "succeeded" ? "Waiting for the next reading" : `Before: ${proofValue(ev.before, ev.unit)}`}
+    </span>;
+  }
+  const v = VERDICT[ev.verdict ?? "unmeasured"];
+  return (
+    <span className="text-xs" title={ev.label}>
+      <span style={{ color: "var(--text-primary)" }}>{proofValue(ev.before, ev.unit)} → {proofValue(ev.after, ev.unit)}</span>{" "}
+      <span className="font-medium" style={{ color: v.color }}>{v.label}</span>
+      {ev.recheck && (
+        <span style={{ color: ev.recheck.held === false ? "#ef4444" : muted.color }}>
+          {" · "}{ev.recheck.held === false ? `came back in 7 days (${proofValue(ev.recheck.value, ev.unit)})` : ev.recheck.held ? "held for 7 days" : "7-day check unclear"}
+        </span>
+      )}
+    </span>
   );
 }
 

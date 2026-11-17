@@ -17,6 +17,7 @@ from app.models import (
     DeviceEventLog,
     DeviceInstalledApp,
     DeviceLicensing,
+    DevicePosture,
     DeviceService,
     DeviceWindowsUpdate,
     TelemetrySnapshot,
@@ -47,14 +48,25 @@ from app.services.licensing import (
 CHECKS: list[tuple[str, str, str | None]] = [
     ("patch", "Windows updates installed", "windows_update_install"),
     ("disk", "Enough free disk space", "clear_system_temp"),
-    ("defender", "Microsoft Defender running", None),
-    ("firewall", "Windows Firewall running", None),
+    ("defender", "Microsoft Defender running", "enable_defender_realtime"),
+    ("firewall", "Windows Firewall running", "enable_firewall"),
     ("no_critical_events", "No critical system errors", None),
     ("agent_reporting", "Agent reporting in", None),
     ("no_banned_software", "No restricted software", None),
     ("genuine_windows", "Windows activated", None),
     ("no_activation_tools", "No cracked activation", None),
+    ("bitlocker", "BitLocker on the system drive", None),
 ]
+
+# 2a Security Score. Weights say how much a failed check hurts the device's score: the things
+# that let an attacker in or leave data readable count more than a full disk. Unlisted = 1.
+WEIGHTS: dict[str, int] = {
+    "patch": 3, "defender": 3, "no_activation_tools": 3,
+    "firewall": 2, "bitlocker": 2, "no_critical_events": 2, "no_banned_software": 2,
+    "disk": 1, "agent_reporting": 1, "genuine_windows": 1,
+}
+# Defender signatures older than this are out of date, whatever real-time protection says.
+DEFENDER_SIG_MAX_DAYS = 7
 CHECK_LABELS = {key: label for key, label, _ in CHECKS}
 CHECK_FIX = {key: fix for key, _, fix in CHECKS}
 
@@ -149,6 +161,12 @@ class ComplianceService:
         devices = list((await self.session.execute(stmt)).scalars().all())
         if not devices:
             return [], total
+
+        # Security posture as the agent reads it (2a). A device without a row has an older
+        # agent, and keeps the service-based Defender and Firewall checks.
+        posture: dict[uuid.UUID, DevicePosture] = {p.device_id: p for p in (await self.session.execute(
+            select(DevicePosture).where(DevicePosture.org_id == org_id)
+        )).scalars().all()}
 
         # Updates still to install, split by why. These are not the same finding: a device
         # that installed its updates and needs a reboot is nearly patched and the fix is a
@@ -284,9 +302,17 @@ class ComplianceService:
                     checks.append(self._chk("disk", "pass" if free >= DISK_FREE_MIN_PCT else "fail",
                                             f"{free:.0f}% free"))
 
-            # defender / firewall (from current service status)
-            checks.append(self._svc_check("defender", "windefend", d.id, services, have_services))
-            checks.append(self._svc_check("firewall", "mpssvc", d.id, services, have_services))
+            # defender / firewall / bitlocker. Real state when the agent reports it; the service
+            # status only for devices that have not reported posture yet.
+            pst = posture.get(d.id)
+            if pst is None:
+                checks.append(self._svc_check("defender", "windefend", d.id, services, have_services))
+                checks.append(self._svc_check("firewall", "mpssvc", d.id, services, have_services))
+                checks.append(self._chk("bitlocker", "unknown", "Not reported yet"))
+            else:
+                checks.append(self._defender_check(pst))
+                checks.append(self._firewall_check(pst))
+                checks.append(self._bitlocker_check(pst))
 
             # critical events (absence = healthy)
             c = critical.get(d.id, 0)
@@ -324,6 +350,9 @@ class ComplianceService:
             failed = sum(1 for c in checks if c.status == "fail")
             known = passed + failed
             score = round(passed / known * 100) if known else 0
+            known_w = sum(WEIGHTS.get(c.key, 1) for c in checks if c.status in ("pass", "fail"))
+            passed_w = sum(WEIGHTS.get(c.key, 1) for c in checks if c.status == "pass")
+            security_score = round(passed_w / known_w * 100) if known_w else None
             if known == 0:
                 dstatus = "unknown"
             elif failed == 0:
@@ -336,7 +365,7 @@ class ComplianceService:
             results.append(DeviceCompliance(
                 device_id=d.id, hostname=d.hostname, status=dstatus,
                 score=score, passed=passed, failed=failed, checks=checks,
-                usb_storage_blocked=d.usb_storage_blocked,
+                usb_storage_blocked=d.usb_storage_blocked, security_score=security_score,
             ))
         return results, total
 
@@ -426,10 +455,12 @@ class ComplianceService:
         )
 
         score = round(compliant / total * 100) if total else 100
+        scored = [r.security_score for r in rows if r.security_score is not None]
+        security_score = round(sum(scored) / len(scored)) if scored else None
         return ComplianceSummary(
             total_devices=total, compliant=compliant, at_risk=at_risk,
             non_compliant=non_compliant, unknown=unknown, score=score, checks=breakdown,
-            usb=usb,
+            usb=usb, security_score=security_score,
         )
 
     # ── helpers ────────────────────────────────────────────────────────────────
@@ -438,6 +469,45 @@ class ComplianceService:
     def _chk(key: str, status: str, detail: str) -> CheckResult:
         return CheckResult(key=key, label=CHECK_LABELS[key], status=status,  # type: ignore[arg-type]
                            detail=detail, fix_action_id=CHECK_FIX[key] if status == "fail" else None)
+
+    @classmethod
+    def _defender_check(cls, p: DevicePosture) -> CheckResult:
+        age = p.defender_signature_age_days
+        # Another antivirus owns real-time protection, and Defender is off beside it by design.
+        if p.third_party_antivirus and not p.defender_realtime:
+            return cls._chk("defender", "pass", "Another antivirus is protecting this PC")
+        if p.defender_realtime is None and age is None:
+            return cls._chk("defender", "unknown", "Not reported")
+        if p.defender_realtime is False:
+            return cls._chk("defender", "fail", "Real-time protection is off")
+        if age is not None and age > DEFENDER_SIG_MAX_DAYS:
+            return cls._chk("defender", "fail", f"Signatures are {age} days old")
+        if p.defender_realtime is None:
+            return cls._chk("defender", "unknown", "Real-time state not reported")
+        detail = "Real-time on" + (f", signatures {age} day(s) old" if age is not None else "")
+        return cls._chk("defender", "pass", detail)
+
+    @classmethod
+    def _firewall_check(cls, p: DevicePosture) -> CheckResult:
+        profiles = {"domain": p.firewall_domain, "private": p.firewall_private, "public": p.firewall_public}
+        known = {k: v for k, v in profiles.items() if v is not None}
+        if not known:
+            return cls._chk("firewall", "unknown", "Not reported")
+        off = [k for k, v in known.items() if v is False]
+        if off:
+            return cls._chk("firewall", "fail", f"Off for {', '.join(off)} network")
+        # Pass only when every profile is known: one reported ON is not proof the others are.
+        if len(known) < len(profiles):
+            return cls._chk("firewall", "unknown", "Not every profile reported")
+        return cls._chk("firewall", "pass", f"On ({', '.join(known)})")
+
+    @classmethod
+    def _bitlocker_check(cls, p: DevicePosture) -> CheckResult:
+        if p.bitlocker_os_drive is None:
+            return cls._chk("bitlocker", "unknown", "Not reported")
+        if p.bitlocker_os_drive:
+            return cls._chk("bitlocker", "pass", "System drive encrypted")
+        return cls._chk("bitlocker", "fail", "System drive not encrypted")
 
     def _svc_check(self, key: str, svc: str, device_id, services, have_services) -> CheckResult:
         state = services.get(device_id, {})

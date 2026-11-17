@@ -3,6 +3,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -225,4 +226,29 @@ class DeviceLocalAccount(TimestampMixin, Base):
     enabled: Mapped[bool] = mapped_column(nullable=False)
     is_admin: Mapped[bool] = mapped_column(nullable=False)
     built_in: Mapped[bool] = mapped_column(nullable=False)
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DevicePosture(TimestampMixin, Base):
+    """Security posture facts from the agent (2a, agent 0.15+), one row per device, replaced on
+    every report that carries them. Facts only: app.services.compliance decides pass / fail, so
+    thresholds can change without a migration or an agent release. Every field is nullable:
+    NULL means the agent could not read it, which is never the same as "off"."""
+
+    __tablename__ = "device_postures"
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+
+    defender_realtime: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    defender_signature_age_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    firewall_domain: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    firewall_private: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    firewall_public: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    bitlocker_os_drive: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Another antivirus is registered with Security Center (Defender is off beside it by design).
+    third_party_antivirus: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

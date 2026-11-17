@@ -473,10 +473,40 @@ Also: list who at Technomate can reach the production database, and keep that ac
 | 2f | L5b Warranty lookup |
 | 2g | N2 Scheduled alerts — device gone silent (no heartbeat for N hours), warranty expiring 90/60/30 days, agent rollout stuck; uses the 2.0 scheduler; same edge-triggered `alert_states` as N1 |
 
+**N2 as built (16 Nov, on demand per the 2.0 decision):** `app/services/watchlist.py`,
+`GET /watchlist` (staff), portal Operations → Watchlist. The same four lists the scheduled
+alerts will use, shown when someone looks:
+- **PCs gone quiet:** silent for over N hours (default 6, up to 30 days), counted from last
+  seen, or from enrolment if never seen.
+- **Warranties:** ending within 90 days or ended in the last 30, bucketed ended / 30 / 60 /
+  90 days.
+- **Stuck work:** queued over a day and never collected (likely off), or collected and never
+  finished, named with its rollout.
+- **Agents behind:** PCs older than the current signed release, compared only when an update
+  channel is configured.
+
+`test_watchlist.py`, 2 tests, covering each list, another org's PCs, the threshold, and
+403. Checked on screen.
+
+**Not built:** e-mails and notifications for new entries. When a scheduler exists, it calls
+`watchlist.build` and fires on new entries through the N1 `AlertState` table, edge-triggered,
+so an entry fires once and not every run.
+
 **2.0 Decision — how time-based work runs.** The backend has no scheduler on purpose. Options:
 (a) Cloud Scheduler calling an authenticated internal endpoint per job; (b) compute lazily
 when a page/email is requested and cache it. Recommendation: (a) for J1 emails and C1's 7-day
 recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
+- **Decided (16 Nov): manual for now, scheduler when a client asks for it.**
+  - Nothing runs on a clock yet. Reports are generated when someone asks for them.
+  - J1 is built as an on-demand brief: view it, or e-mail it now with a button. It can be
+    put on a schedule later without rewriting it.
+  - N2's time-based alerts (a PC gone silent, warranty at 90/60/30 days, a stuck rollout)
+    wait for the scheduler. An on-demand view of the same list can come earlier.
+  - C1, C2 and J2 never needed a scheduler: they ride on agent pushes, or are computed when
+    read.
+  - When a client needs e-mails on a clock, option (a) is the plan: Cloud Scheduler calling
+    one authenticated internal endpoint, with idempotent jobs recorded in a `job_runs`
+    table.
 
 **F1 · Security Score**
 - Agent: BitLocker (`Win32_EncryptableVolume`), Defender real state (`MSFT_MpComputerStatus`:
@@ -486,6 +516,122 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
 - Backend: replace the service-running checks with real state; weighted score per device and
   fleet; each failed check maps to a fix action where one exists.
 - Done when: turning off real-time protection on the VM fails the check within one cycle.
+- As built, backend slice (15 Nov, branch `phase-2`, not pushed): migration `0079`
+  `device_postures` (one row per device, replaced on each report). Ingest takes an optional
+  `posture` block: Defender real-time and signature age, the three firewall profiles,
+  BitLocker on the OS drive. Each field may be null, and null means "not read", never "off".
+  Checks: Defender fails when real-time is off or signatures are older than 7 days; Firewall
+  names the profile that is off; BitLocker is a new check. A device with no posture row keeps
+  the service-based Defender and Firewall checks, so an agent that has not updated scores
+  exactly as before. `security_score` is weighted by check (`compliance.WEIGHTS`), per device
+  and as a fleet mean; the old `score` is unchanged. Tests: `test_security_posture.py` (8).
+  Migration checked up / down / up on Postgres 16.
+  Agent side (15 Nov, not version-bumped; the bump happens at release): `PostureCollector`
+  reads Defender (`root\Microsoft\Windows\Defender`), the firewall profiles
+  (`root\StandardCimv2`) and BitLocker on the system drive (`root\CIMV2\Security\
+  MicrosoftVolumeEncryption`). Every read is independent, and a null is "unknown". It runs
+  on every push, so a Defender change reaches the backend within one cycle. The drive letter
+  is validated before it goes into the WQL. Checked: 331 agent tests pass; Defender values
+  match raw WMI on a real laptop; the firewall reads OFF on all three profiles, which
+  `netsh advfirewall` confirms. BitLocker checked as SYSTEM (the way the agent runs): the
+  collector reads it as off, and raw `Win32_EncryptableVolume` agrees on C: and D:
+  (ProtectionStatus 0, ConversionStatus 0). **Still to do for 2a:** the portal display, and
+  the live check that a Defender change reaches the backend within one cycle, which needs
+  the agent 0.15.0 built and running on a VM. The 2a tag waits for both.
+  - Portal (15 Nov): the compliance page shows a Security score ring beside Compliance, and
+    the "Needs attention" table has a Security column. Checked on screen against a seeded
+    Postgres fleet (one healthy PC, one with Defender, firewall and BitLocker off): fleet
+    Security 68%, the bad PC 36%, and its failing checks listed.
+  - Bug found on that check: migration 0079 had an `updated_at` column the model does not
+    have, so the first real insert failed on Postgres. Tests run on SQLite from the models, so
+    they missed it, and my earlier "up / down / up" check did not insert a row. Fixed, and a
+    column comparison against the live table (Alembic `compare_metadata`) now shows no
+    difference. Lesson for later modules: any migration check must also insert a row.
+  - Agent 0.15.0 built (15 Nov): version bumped on `phase-2` (commit `1adb7c2`), not
+    tagged. The build is in the scratchpad, outside the repo. 331 agent tests pass.
+    - **Live install (16 Nov), on the dev laptop, pointed at a local test backend**
+      (127.0.0.1, never production): 0.15.0 installed as the `AstraAgent` service and
+      enrolled. Within one cycle the backend showed the real state: Defender pass (real-time
+      on, signatures current), firewall fail (off on all three profiles), BitLocker fail (not
+      encrypted). Security score 56%.
+    - **Not done:** the "Defender off → fails within one cycle" check. Tamper Protection is on,
+      and Set-MpPreference cannot turn real-time off with it on. Turning it off means changing
+      a security setting, so it was not done without your say-so. The backend path for a
+      real-time-off report is covered by `test_security_posture.py`.
+    - **Still to do:** uninstall the agent from this laptop (the user will do this), and the
+      tag. `agent-v0.15.0` triggers the release workflow, which auto-updates every enrolled PC,
+      so it waits until phase-2 is merged to main. `agent-v0.15.0` triggers the
+    release workflow, which auto-updates every enrolled PC, so it waits until phase-2 is merged
+    to main and the decision is made.
+
+**2a+ · Security fix actions** (follows F1; each action is its own change)
+Today the Security Score shows a failing check but offers no fix. These add the first fixes,
+one at a time, in this order. Every action needs: a backend registry entry, the same id in the
+agent's `SystemRemediationExecutor` allowlist, a tier, a test that keeps the two in step, and
+an update to `marketing-service/brand/claims.yaml` and the website action count.
+
+- **Firewall: turn a profile on** (first, lowest risk). Agent runs `Set-NetFirewallProfile`
+  for one named profile. Tier `approval_required`: turning it on can break a line-of-business
+  app, so a person approves. Done when: a profile that is off goes on after approval, and the
+  Security Score recovers in one cycle.
+- **Defender: turn real-time protection on.** Only when Defender is the sole antivirus (no
+  third-party AV registered, passive mode not in use). Tier `admin_only`. Done when it is
+  refused on a machine with a third-party AV, and works on one without. Tamper Protection
+  is never changed by SAVIO: if it is on, the action reports that and stops.
+- **BitLocker: turn on the system drive.** Last, and only after recovery-key escrow exists.
+  Needs TPM, a reboot, and the recovery key stored where an admin can get it (SAVIO or Entra
+  ID / AD) before encryption starts. Tier `admin_only`. Not one click. Done when a key is
+  escrowed, encryption completes, and the escrowed key opens the drive.
+- **Built (16 Nov):** `enable_firewall` (approval_required, system) reads the state back
+  and reports success only when all three profiles are on. Its failing firewall check and
+  Fleet Issue link to it. `enable_defender_realtime` (admin_only, system) runs only when
+  Defender is the sole registered antivirus, reads real-time back, and never touches Tamper
+  Protection. BitLocker is still not built (needs key escrow first).
+- **BitLocker key escrow, backend (16 Nov):** migration `0080` `device_bitlocker_keys`, the
+  password encrypted with `app.core.crypto`. `POST /agent/bitlocker-keys` (device token; the
+  device comes from the token, never the body; 503 and nothing written without the platform
+  key). `GET /devices/{id}/bitlocker-keys` lists drive and key ID only (admin).
+  `POST .../reveal` (admin, not view-as) returns the password and audits it. 9 tests; migration
+  checked up / down / up on Postgres with a real insert.
+- **BitLocker key escrow, agent (16 Nov):** `BitLockerKeyCollector` reads only the
+  numerical-password protector (type 3) of drives BitLocker protects, checks its format, and
+  never logs it. Uploaded with the hourly inventory, in batches of 10, and only keys not yet
+  escrowed in this run. 348 agent tests pass. Not live-checked: this laptop has no
+  BitLocker-protected drive, so there is no key to read.
+- **Portal (16 Nov):** device page, admin-only "Recovery keys" tab. It lists drive, the 8-char
+  Key ID the recovery screen shows, and when the key was escrowed. Reveal asks first ("this
+  is recorded in the audit log"), then shows the password with Copy. The password lives only in
+  the dialog's state. Checked on screen with a made-up key: list, confirm, reveal. The audit
+  rows (escrow, reveal "by" the admin) hold no password.
+  **Still to do:** a live check on a BitLocker-protected PC, and only then the turn-on action.
+- **Security review (16 Nov, two parallel reviews):** no Critical. Fixed the same day:
+  - **Escrow, High:** a replaced platform key left every stored key undecryptable and never
+    re-escrowed. Now a re-sent key whose stored copy no longer decrypts is re-escrowed and
+    audited (`device.bitlocker_key_re_escrow`).
+  - **Escrow, Medium/Low:**
+    - A different password for a known key is kept out and audited as a conflict.
+    - At most 64 keys per device.
+    - The agent endpoint no longer returns 422 bodies that echo a password.
+    - Reveal is limited to 20 per admin per hour (429) and sent with `Cache-Control: no-store`.
+    - Device delete records how many keys went with it.
+    - The agent trims before sending, reads keys for drives whose protection is suspended,
+      isolates errors per volume, and re-sends after a re-enrollment.
+  - **Fix actions and posture:**
+    - Firewall state is read from the effective `ActiveStore` through WMI, so a Group Policy
+      that keeps it off is no longer reported as fixed, and non-English netsh text no longer
+      matters. Checked live: it reads OFF on this laptop, matching netsh.
+    - `enable_firewall` refuses beside another registered firewall.
+    - A firewall with only some profiles reported is `unknown`, not pass.
+    - Posture reports a third-party antivirus (migration `0081`), and the Defender check
+      passes in that case.
+    - `enable_defender_realtime` sets the preference through WMI, with PowerShell by full
+      path only as a fallback.
+    - Defender's Fleet Issue now links its fix.
+  - **Not fixed (by design or later):** a dedicated "read BitLocker keys" permission, and
+    notifying other admins on reveal.
+- Each action's chat lines live in `_TECHNICAL_OUTCOME` and `_ACK_SUBJECT`
+  (`remediation/service.py`); `test_chat_progress_message.py` fails if one is missing.
+- Until these ship, the portal says "fix it in Intune or Group Policy" for these three checks.
 
 **C3 · Hijack-proof AI** 🔒
 - Mark every tool result that carries free text from outside (event messages, KB articles,
@@ -493,17 +639,113 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
   to `approval_required` regardless of the action's own tier.
 - Red-team test suite: event-log and KB payloads that try to trigger actions; must all fail.
 - "AI Safety" report: proposals made, raised, refused, and why.
+- **As built (16 Nov, branch `phase-2`, not pushed):** `app/services/ai/untrusted.py`.
+  - **Untrusted tools:** event log, knowledge base, installed apps and Windows updates. Their
+    results reach the model labelled `untrusted_content`, with a notice that this is evidence
+    and never instructions. They still arrive as tool results and never enter the system
+    prompt. The expert brief says the same thing.
+  - **When a fix is held:** the engine keeps a per-turn record of what the user said and what
+    outside text was read. A fix is held when that outside text (compared after JSON
+    decoding):
+    - names the fix's id, or
+    - supplies one of its free-text values (printer path, mail address, folder), or
+    - reads like instructions (a short pattern list).
+  - A free-text value the user never typed is held even when nothing outside was read.
+  - **What "held" means:** the task goes to the approval queue, even for an `automatic`
+    action. The approver sees SAVIO's own note appended to the model's reason. Audit
+    `remediation.create` carries `ai_guard` and `raised`. A tier is never lowered.
+  - **Refusals:** an admin-only, operator-only or unknown action requested by the assistant is
+    refused and audited as `ai.proposal_refused`.
+  - **Report:** `GET /reports/ai-safety` (admin and technician), read from the audit log with no
+    new table. The portal shows it as Reports → "AI safety", a tab only staff see.
+  - **Red-team suite:** `test_hijack_proof_ai.py`, 19 tests. They cover injected events and KB
+    articles, a quiet mail-rule payload with no instruction words, an approval-tier fix,
+    admin-only / operator-only / unknown actions, and controls showing that real crash
+    evidence and values the user typed still run on their own.
+    - Bug found by the suite: outside text was compared in its JSON form, where a UNC path
+      has doubled backslashes, so a planted printer path never matched. It is now compared
+      as decoded text.
+  - **Screen check:** checked against the local test backend with a scripted "hijacked" model.
+    The tab showed 2 proposals, 1 run on its own, 1 held, 1 refused, with reasons. The held
+    task's reason carries SAVIO's note.
+  - **Known limit (`ponytail:` in the file):** prose that steers to an automatic fix without
+    naming it or using instruction words still runs. Automatic fixes are reversible by
+    definition. Upgrade path: an org setting that holds every fix in a turn that read
+    outside text.
 
 **C1 · Proof-of-Fix**
 - Capture an evidence snapshot before and after every remediation (the metric that
   triggered it); verify; schedule a 7-day recurrence check (per 2.0).
 - Evidence card on the task page; feeds J5.
+- **As built (16 Nov, branch `phase-2`, not pushed):** `app/services/remediation/evidence.py`,
+  migration `0082` (adds a JSON column `remediation_tasks.evidence`).
+  - **What is measured:** each measurable fix names the one number it was for:
+    - free space on C: for the three clean-ups,
+    - all three firewall profiles on, for `enable_firewall`,
+    - Defender real-time protection, for `enable_defender_realtime`,
+    - outstanding updates, for `windows_update_install`,
+    - the named service running, for `restart_service`.
+  - Fixes with nothing to measure (restart Outlook, flush DNS) carry no evidence. The portal
+    says "Nothing to measure" for them rather than implying a result.
+  - **Before** is read at dispatch. **After** comes from the first push collected after the
+    agent reported success that carries that kind of data. A push collected earlier and
+    delivered late from the offline queue is not used. Verdict: improved / no change / worse
+    / not measured. Free space has 0.1 GB of noise allowance.
+  - **7-day recheck** comes from the first such push a week on: does the fix still hold
+    against the "before"?
+  - **No scheduler needed.** All of it rides on the agent's own pushes, so C1 needs nothing
+    from the 2.0 decision. A PC that stays offline is not rechecked, which is accurate.
+  - **Portal:** the self-healing history has a "Proof" column ("6.2 GB → 9.3 GB Improved ·
+    held for 7 days").
+  - **Checked:** `test_proof_of_fix.py`, 7 tests, covering clean-up, firewall, late push,
+    the recheck catching a comeback, a fix with no metric, and no before reading.
+  - Migration checked up / down / up on Postgres, with a write and read-back and no column
+    differences.
+  - Run end to end over HTTP on the local test backend: 6.2 → 9.3 GB, improved, shown in
+    the portal.
+  - **Not done:** J5 does not read it yet (J5 is 2e).
 
 **C2 · Canary rollout** 🔒
 - On top of A4 deployments: waves (1 device → 10% → rest), a health gate between waves
   (task success + no new critical events), auto-halt on failure.
 - "Undo" only where an inverse action exists (block↔unblock USB, disable↔enable account);
   otherwise halt-only, and the UI says so.
+- **As built (16 Nov, branch `phase-2`, not pushed):** in `app/services/deployments.py`, plus
+  migration `0083` (adds `waves`, `current_wave`, `wave_started_at`, `halted_at` and
+  `halt_reason` to deployments).
+  - **Waves:** a push to more than one PC goes in waves by default (`canary: false` gives the
+    old all-at-once push). Wave 1 is one PC, an online one when there is one. Wave 2 is 10%,
+    at least one PC. Wave 3 is the rest.
+  - A wave's tasks are created only when it is released. A PC in a later wave has nothing
+    queued until the gate opens.
+  - **Gate:** the next wave opens only when all three hold:
+    - every task in the current wave has finished, and none failed;
+    - no PC in the wave has logged a **Critical** event since the wave started (Error-level
+      events are too routine on Windows to gate on);
+    - 10 minutes of soak time have passed since the last one finished.
+  - The gate is checked when a wave PC reports a result and on its telemetry pushes, so no
+    scheduler is needed.
+  - Each wave is approved in the creator's name, and `create_task` re-checks their authority.
+    If they have been demoted or deactivated since, the rollout halts.
+  - **Halt:** on a failure or a Critical event the rollout halts on its own. Installs queued
+    but not yet started are cancelled ("Not run"), and later waves are never created. There
+    is an audit row and a critical notification.
+  - Staff can halt by hand with a reason, and resume, which releases the next wave at once.
+    Both are audited.
+  - **Undo:** halt-only. SAVIO has no inverse of "install a package", and the portal says so
+    on the Halt button. Deployments still push installs only. When they can carry an action
+    with an inverse (USB block/unblock, account disable/enable), undo goes there.
+  - **Portal:** Software page:
+    - a "Roll out in waves" option, on by default;
+    - each push shows its wave ("Wave 1 of 3 · 11 PCs wait for the health check"), or a
+      red halted bar with the reason and a Resume button.
+  - **Checked:** `test_canary_rollout.py`, 6 tests: the wave plan, waves opening in order, a
+    failure halting, a Critical event halting and cancelling queued installs, halt and resume
+    by hand, and a one-PC push.
+  - The A4 test now asks for all-at-once explicitly.
+  - Migration checked up / down / up on Postgres.
+  - Live on the local test backend with 12 made-up PCs: one push held at wave 1 with 11
+    waiting; a failing canary halted the second. Both shown on screen.
 
 **J1 / J2 / J5 · AI IT Manager core**
 - J2 Recommendations: `recommendations` table (evidence, impact in ₹/risk/time, effort,
@@ -511,6 +753,110 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
 - J1 Brief: daily (admin) and weekly (owner) summary email; business language; Hindi option.
 - J5 Value report: hours saved (auto-fixed tasks × configured minutes), incidents prevented,
   ₹ saved — every number traceable.
+- **As built, J2 + J5 (16 Nov, branch `phase-2`, not pushed):** migration `0084` adds the
+  `recommendations` table and two org settings: `minutes_per_fix` (default 15) and
+  `it_hourly_cost` in ₹ (unset by default, and 0 clears it).
+  - **No ₹ is ever estimated.** A rupee figure is the org's own hourly cost times a counted
+    amount of work. With no cost set, no rupee figure appears anywhere.
+  - **J2 Recommendations** (`app/services/recommendations.py`) are rebuilt from live data on
+    every read, so no scheduler is needed (option b). Sources:
+    - failing compliance checks (F1 security and L2 activation included), worded as in Fleet
+      Issues / the Health Check, with the fix action when one exists;
+    - disks forecast to fill;
+    - warranties ending within 90 days, or ended in the last 30;
+    - PCs older than 4 years.
+  - Each recommendation carries its evidence (the PCs, named), a risk, an effort (one click /
+    hands-on / purchase), and by-hand time (PCs × minutes per fix) with its working.
+  - **Lifecycle:** dismiss needs a reason and is audited; restore brings it back. A finding
+    that clears is marked resolved, and the dismissal ends with it. If it comes back, it
+    reopens.
+  - Portal: Operations → Recommendations (staff), with tabs for open, dismissed and resolved.
+  - **J5 Value report** (`GET /reports/value`, staff) counts fixes that succeeded with
+    **nobody approving them**. A fix a person approved is their time, not SAVIO's saving.
+    - Hours = fixes × minutes per fix. ₹ = hours × hourly cost.
+    - "Proven to work", "held 7 days" and "came back" are C1's own verdicts.
+    - Each card shows its basis, and every fix behind the numbers is listed.
+  - Portal: Reports → Value. Settings → "Value figures" holds the two numbers.
+  - **Checked:** `test_recommendations_value.py`, 3 tests:
+    - lifecycle: appear, rupees with the working, dismiss (403 / 422 / audit), resolve,
+      reopen;
+    - restore;
+    - value counting only unattended fixes in the window, and ₹ appearing and disappearing
+      with the setting.
+  - Migration checked up / down / up on Postgres with a write; no column differences on the
+    new table.
+  - On the local test backend, the real laptop's firewall-off shows as the top
+    recommendation. Both pages checked on screen.
+  - **J1 Brief waits for the 2.0 decision.** It sends e-mail on a clock, so it needs a
+    scheduler; J2 and J5 do not.
+- **As built, J1 (16 Nov, on demand per the 2.0 decision):** `app/services/brief.py`.
+  - **Endpoints:** `GET /reports/brief?period=day|week`, and
+    `POST /reports/brief/email` for staff. The e-mail goes to the person asking, and only
+    to them, never to a typed-in list. It is audited (`report.brief_emailed`) and limited
+    to 5 an hour.
+  - **Content:** plain business language, in English only. A Hindi version was built and
+    then removed at the user's request (16 Nov), so the roadmap's "Hindi option" is not in
+    J1. Every line is a count from SAVIO's own records:
+    - computers: how many, how many online, how many new;
+    - the security score (F1);
+    - fixes run with nobody involved, and the hours and ₹ they saved (J5);
+    - fixes that failed, or are waiting for approval;
+    - PCs silent for over a day;
+    - AI suggestions held or refused (C3);
+    - rollouts halted (C2);
+    - warranties ending within 30 days;
+    - the top three recommendations (J2).
+  - No sentence is written by a model. The e-mail HTML escapes every value.
+  - A scheduler can later call `build` and `send` unchanged.
+  - **Portal:** Reports → Brief, with Today / This week and "Email it to me".
+  - **Checked:** `test_brief.py`, 4 tests:
+    - the day's counts and wording;
+    - a just-enrolled PC is not counted as silent, and a PC quiet for two days is;
+    - week against day;
+    - an unknown period is refused;
+    - e-mail goes only to the asker, escaped, audited, with a 409 on the sixth, and 403 for
+      a plain user.
+  - On screen against the local test backend. "Email it to me" says plainly when e-mail is
+    not set up.
+
+**Security review, second pass (16 Nov):** covered the BitLocker reveal tab, C3, C1, C2 and
+J2/J5. No Critical findings. Fixed the same day: four Medium and all nine Low (migration
+`0085`).
+- **C3:**
+  - **Tool coverage (M1).** The list is now of *trusted* tools: SAVIO's own
+    `propose_remediation` and the two ticket tools. Every other tool's result is outside
+    text, including compliance details, device and drive names, and any tool added later.
+  - **Earlier turns count (M2).** The guard now reads the untrusted outputs stored in the
+    chat's earlier tool trails. So "read a planted line, ask 'shall I?', user says yes" is
+    held.
+  - **Laundered values (M2).** A value that appears in outside text is held even after the
+    user types it.
+  - **Normalisation (L1).** Text is normalised before matching: NFKC, zero-width characters
+    dropped, and `_`, `-` and spaces treated alike.
+  - **Free-text parameters (L2).** Every parameter not on the allowlist (service, process,
+    time zone, KB) counts as free text.
+  - **Hold reasons (L3, L4).** They live in their own `remediation_tasks.ai_guard` column,
+    shown separately in the approval queue, not appended to the model's reason. A held fix
+    is never learned into a replayable fix.
+  - **Still not folded:** look-alike letters from other scripts (Cyrillic "а").
+- **C2:**
+  - **Resume (M3).** Resume needs the resumer's own authority to approve the action. The
+    next wave is approved and audited in their name.
+  - **Halt races (M4).** A halt is one conditional `UPDATE`, which also cancels tasks
+    waiting for approval. The agent's claim is conditional too, so halt and claim can never
+    both win. `create_task` locks the deployment row and refuses a task for a halted rollout,
+    so a wave queued during a halt stops where the halt landed.
+  - **Locking and crashes (L7).** The deployment lock re-reads the row. A crash part-way
+    through a wave halts the rollout instead of leaving it half-queued.
+- **C1:**
+  - **Claim fencing (L5).** A failed "before" reading no longer blocks the claim.
+  - **Reads (L6).** `observe` decides what a push is for before reading, and takes the
+    oldest tasks first.
+- **J2 (L8):** two staff loading Recommendations together no longer get a 500.
+- **BitLocker (L9):** a copied key is cleared from the clipboard after a minute, if it is
+  still there.
+- **Noted, not code:** Proof-of-Fix and "proven" are the device's own report, so wording
+  shown to customers must say so.
 
 **L5b · Warranty lookup**
 - **Official manufacturer APIs only — no website scraping** (CAPTCHAs, terms of use, breaks
@@ -531,6 +877,91 @@ recheck, kept to a handful of idempotent jobs. Decide before 2c/2e.
 - Feeds: expiry alerts at 90/60/30 days (J2), the Health Check (L1), the refresh planner (L5).
 - Done when: a real Dell/HP/Lenovo serial resolves to the vendor's date; an invoice PDF fills
   an Acer asset; a manual date is never replaced without the admin choosing.
+- **As built, first slice (16 Nov):** `app/services/warranty.py`, migration `0086`.
+  - **New asset fields:** `warranty_source`, `warranty_checked_at`, and a `warranty_found`
+    date with its source, held while it waits for a choice.
+  - **One rule for every source:** `apply_found` fills a blank date, or updates one that an
+    earlier import or lookup set. A date a person entered is never replaced. That covers
+    `manual`, and also an old date with no source, which a person typed before sources
+    existed. A different date is held beside it, and the admin presses "Use it" or "Keep
+    mine". Both choices are audited and written to the asset passport.
+  - **Typing a date by hand** marks it `manual` and settles any date waiting for a choice.
+  - **CSV import** (`POST /assets/warranty/import`, staff):
+    - columns `serial_number` (or `serial`) or `asset_tag`, plus `warranty_expiry` (or
+      `warranty_end`);
+    - dates as YYYY-MM-DD or day-first DD/MM/YYYY;
+    - matched within the org only and case-insensitive, and a serial matching two assets
+      is skipped;
+    - at most 1 MB and 5000 rows, audited.
+  - **Portal:** Assets → "Import warranty CSV". The Warranty column shows the source and,
+    when one is waiting, "CSV says …" with "Use it" / "Keep mine".
+  - **Checked:** `test_warranty.py`, 4 tests. Migration checked up / down / up on Postgres
+    with a write. Checked on screen: a day-first CSV date filled one asset; a different date
+    for a hand-entered one waited; "Use it" took it.
+  - **Not built yet:**
+    - **Vendor connectors.** Dell TechDirect, the HP developer portal and Lenovo need
+      approved API access, and **you have to apply for it**. Each will call
+      `apply_found(asset, date, "dell_api")`, and nothing else changes.
+    - **Invoice upload → AI extraction:** built since, below. Only the live model check is
+      still to do.
+    - **"Refresh warranty" and the weekly refresh.** They wait for a connector to refresh
+      from, and for the scheduler.
+- **As built, invoice reading (16 Nov):** `app/services/invoice_reader.py`, and
+  `POST /assets/{id}/warranty/invoice` (staff).
+  - **Upload:** a PDF, JPG or PNG up to 10 MB is read in the browser and sent as base64. It
+    is never stored, and only the fields read go into the audit log.
+  - **The call:** one Claude call (`invoice_ai_model`, default `claude-opus-5-5`) with the
+    file as a document or image block. A JSON schema fixes the answer to these fields:
+    vendor, invoice date, warranty end or months, total, serials. The server-side refusal
+    fallback is on.
+  - **The warranty date** is the end date the invoice states, or its date plus the months it
+    states (capped at 120). It goes through `apply_found`, so a date typed by hand is never
+    replaced. Purchase date and cost are filled only where the asset has none.
+  - **Guard:** if the invoice lists serial numbers and the asset has one, it must be among
+    them, otherwise the request is refused. Wrong invoice, right asset is the likely
+    mistake.
+  - **Portal:** an invoice button on each asset row.
+  - **Checked:** in `test_warranty.py`, 5 more tests (9 in all):
+    - a blank asset filled;
+    - a hand-entered date kept as a conflict;
+    - a serial mismatch refused;
+    - "not stated";
+    - no AI key gives 503;
+    - a wrong file type gives 422;
+    - a plain user gives 403;
+    - the exact request sent to Claude (document block, schema, fallback);
+    - a refusal reported, not parsed;
+    - month arithmetic.
+  - **Not done:** a live model run on a real invoice. It needs a dev Anthropic key in
+    `backend/.env`.
+
+**Security review, third pass (16 Nov):** covered J1, L5b (CSV and invoice) and N2. No
+Critical findings. Everything was fixed the same day:
+- **H1 (cost).** Invoice reads are paid calls, so they are now limited to 20 per person per
+  hour and 100 per org per day. Every attempt is recorded before the call, so one that
+  fails still counts. The client allows one retry and 60 s; `max_tokens` is 8000.
+- **H2 (database pool).** The database connection is released while the model reads,
+  instead of being held for the whole call.
+- **M1 (provenance).** Saving an asset's other fields no longer relabels its warranty date
+  "by hand" or drops a pending choice. Only a changed date counts as a person's.
+- **M2 (bad dates).** Asset dates are validated on create and edit; day-first input is
+  normalised. A malformed legacy date is skipped by the Watchlist instead of failing it.
+- **Lows:**
+  - The model's answer is validated with Pydantic: finite cost under 1e9, no extra fields,
+    capped lengths.
+  - An invoice never replaces *any* existing date, a CSV one included. It only fills a
+    blank or raises a conflict.
+  - Every SDK error is caught. The minimum SDK is pinned to 2.3.0, and a test sends the real
+    request through the installed SDK with a mocked transport.
+  - CSV handling: a malformed file gives a 400; rows are counted before any query; a
+    serial twice in one file is refused instead of the last row winning; echoes are
+    truncated.
+  - A held conflict, or a dropped found date, writes a passport note.
+  - The brief's rate limit counts the request before the slow send, so parallel requests
+    can't slip past it.
+  - The Watchlist fetches the agent manifest before opening a database transaction.
+- **Not changed:** the invoice model stays `claude-opus-5-5`. Cost is now capped by the
+  limits, and `invoice_ai_model` can be changed in config.
 
 ---
 
@@ -659,8 +1090,8 @@ Existing customers keep everything their plan grants today.
 
 | Phase | Status |
 |---|---|
-| 1 | Not started — starts 9 Nov 2026 |
-| 2 | Not started |
+| 1 | Done: merged to main (PR #57) |
+| 2 | Built on branch `phase-2`, draft PR #63. Left: vendor warranty connectors (needs API access), invoice → AI, scheduled e-mails/alerts (waits for a scheduler), and the live checks (BitLocker escrow, Defender tamper, L3 model) |
 | 3 | Not started (spikes first) |
 | 4 | Not started |
 | 5 | Not started |

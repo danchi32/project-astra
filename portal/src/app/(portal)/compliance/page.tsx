@@ -272,7 +272,20 @@ export default function CompliancePage() {
 
       {/* Hero: score + status counts */}
       <div className="rounded-2xl p-5 flex items-center gap-6 flex-wrap" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-        <ScoreRing score={summary?.score ?? 100} />
+        <div className="flex items-start gap-6">
+          <div className="flex flex-col items-center gap-1">
+            <ScoreRing score={summary?.score ?? 100} />
+            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Compliance</span>
+          </div>
+          <div className="flex flex-col items-center gap-1" title="Weighted: Defender, firewall, BitLocker, updates and activation count most.">
+            {summary?.security_score != null ? (
+              <ScoreRing score={summary.security_score} />
+            ) : (
+              <div className="w-[120px] h-[120px] flex items-center justify-center text-sm" style={{ color: "var(--text-secondary)" }}>No data yet</div>
+            )}
+            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Security score</span>
+          </div>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-1 min-w-[280px]">
           {([
             ["compliant", summary?.compliant], ["at_risk", summary?.at_risk],
@@ -364,7 +377,7 @@ export default function CompliancePage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["Device", "Status", "Score", "Failing checks", "Action"].map((h) => (
+                {["Device", "Status", "Compliance", "Security", "Failing checks", "Action"].map((h) => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>{h}</th>
                 ))}
               </tr>
@@ -380,6 +393,7 @@ export default function CompliancePage() {
                       style={{ color: STATUS_STYLE[d.status].color, background: `${STATUS_STYLE[d.status].color}1a` }}>{STATUS_STYLE[d.status].label}</span>
                   </td>
                   <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{d.score}%</td>
+                  <td className="px-5 py-3 tabular-nums" style={{ color: "var(--text-secondary)" }}>{d.security_score != null ? `${d.security_score}%` : "—"}</td>
                   <td className="px-5 py-3">
                     <div className="flex flex-wrap gap-1.5">
                       {d.checks.filter((c) => c.status === "fail").map((c) => (

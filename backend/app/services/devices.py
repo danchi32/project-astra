@@ -382,8 +382,13 @@ class DeviceService:
         return device
 
     async def delete_device(self, *, actor: User, device_id: uuid.UUID) -> None:
+        from app.services.bitlocker_keys import BitLockerKeyService
+
         device = await self.get_device(actor=actor, device_id=device_id)
         hostname = device.hostname
+        # Deleting a device deletes its escrowed recovery keys with it (FK cascade). Say so in
+        # the audit entry: it is the one record of when those keys stopped existing.
+        keys = await BitLockerKeyService(self.session).count_for_device(device.id)
         await self.devices.delete(device)
         await self.audit.record(
             org_id=actor.org_id,
@@ -391,7 +396,7 @@ class DeviceService:
             action="device.delete",
             target_type="device",
             target_id=str(device_id),
-            detail={"hostname": hostname},
+            detail={"hostname": hostname, "bitlocker_keys_destroyed": keys},
         )
         await self.session.commit()
 

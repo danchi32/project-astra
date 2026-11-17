@@ -9,6 +9,7 @@ from app.models.base import as_utc, utcnow
 from app.models.device_session import DeviceSession
 from app.models.telemetry import (
     UPDATE_INSTALLED,
+    DevicePosture,
     DeviceEventLog,
     DeviceInstalledApp,
     DeviceLicensing,
@@ -183,6 +184,19 @@ class TelemetryRepository:
         )
         self.session.add_all(entries)
         await self.session.flush()
+
+    # ── Security posture ───────────────────────────────────────────────────
+
+    async def replace_posture(self, device_id: uuid.UUID, row: DevicePosture) -> None:
+        await self.session.execute(
+            delete(DevicePosture).where(DevicePosture.device_id == device_id))
+        self.session.add(row)
+        await self.session.flush()
+
+    async def postures_for_org(self, org_id: uuid.UUID) -> dict[uuid.UUID, DevicePosture]:
+        result = await self.session.execute(
+            select(DevicePosture).where(DevicePosture.org_id == org_id))
+        return {p.device_id: p for p in result.scalars().all()}
 
     # ── Local accounts ─────────────────────────────────────────────────────
 

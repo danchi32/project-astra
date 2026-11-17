@@ -24,6 +24,7 @@ public sealed class SystemRemediationExecutor
             "uninstall_application", "set_timezone",
             "block_usb_storage", "unblock_usb_storage",
             "restart_service", "restart_network_adapter", "network_reset",
+            "enable_firewall", "enable_defender_realtime",
             "reset_windows_update_components",
             // First-line diagnostics: sound, DHCP, a hardware rescan, a system file check.
             "restart_audio", "renew_ip_address", "rescan_devices", "repair_system_files",
@@ -63,6 +64,10 @@ public sealed class SystemRemediationExecutor
                 "restart_service" => ServiceRestarter.Restart(GetParam(parameters, "service_name")),
                 "restart_network_adapter" => NetworkRemediation.RestartAdapter(),
                 "network_reset" => NetworkRemediation.ResetNetworkStack(),
+                // No parameters: the command is fixed, and the result is read back.
+                "enable_firewall" => FirewallRemediation.EnableAllProfiles(),
+                // Refuses when another antivirus is registered; never touches Tamper Protection.
+                "enable_defender_realtime" => DefenderRemediation.EnableRealtime(),
                 "reset_windows_update_components" => WindowsUpdateComponents.Reset(),
                 // No parameters on any of these four: the target is fixed by the action id,
                 // so there is nothing a caller could point somewhere else.

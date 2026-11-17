@@ -171,6 +171,16 @@ class HardwareInfo(_SanitizedInput):
     bios_release_date: str | None = Field(default=None, max_length=10)
 
 
+class PosturePayload(_SanitizedInput):
+    defender_realtime: bool | None = None
+    defender_signature_age_days: int | None = Field(default=None, ge=0, le=3650)
+    firewall_domain: bool | None = None
+    firewall_private: bool | None = None
+    firewall_public: bool | None = None
+    bitlocker_os_drive: bool | None = None
+    third_party_antivirus: bool | None = None
+
+
 class TelemetryPush(_SanitizedInput):
     """Single payload the agent sends each cycle."""
 
@@ -209,6 +219,11 @@ class TelemetryPush(_SanitizedInput):
     # Windows/Office activation, sent with the hourly inventory. None = not collected on this
     # push (or an agent older than 0.14): keep the stored rows. A list replaces them.
     licensing: list[LicensingEntry] | None = None
+
+    # Security posture (2a), with the hourly inventory. None = not collected on this push (or an
+    # older agent): keep the stored row. A value replaces it. Each field may be null when the
+    # agent could not read it.
+    posture: PosturePayload | None = None
 
     # Local Windows accounts, hourly. None = not collected on this push (or an older agent):
     # keep the stored rows. A list replaces them.

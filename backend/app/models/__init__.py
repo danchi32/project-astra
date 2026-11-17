@@ -1,10 +1,12 @@
 from app.models.alert_state import AlertState
 from app.models.asset import AcknowledgementStatus, Asset, AssetCategory, AssetStatus
 from app.models.deployment import Deployment
+from app.models.recommendation import Recommendation
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.assistant import Assistant, AssistantVersion, AssistantVersionStatus
 from app.models.audit_log import AuditLog
 from app.models.banned_software import BannedSoftware
+from app.models.bitlocker_key import DeviceBitLockerKey
 from app.models.webhook_event import WebhookEvent
 from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
@@ -55,6 +57,7 @@ from app.models.telemetry import (
     DeviceEventLog,
     DeviceInstalledApp,
     DeviceLicensing,
+    DevicePosture,
     DeviceLocalAccount,
     DeviceService,
     DeviceWindowsUpdate,
@@ -100,12 +103,15 @@ __all__ = [
     "Base",
     "Conversation",
     "Deployment",
+    "Recommendation",
     "Device",
     "DeviceEventLog",
     "DeviceGroup",
     "DeviceGroupMember",
     "DeviceInstalledApp",
     "DeviceLicensing",
+    "DevicePosture",
+    "DeviceBitLockerKey",
     "DeviceLocalAccount",
     "DeviceService",
     "DeviceSession",

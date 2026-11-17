@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin
@@ -29,3 +30,13 @@ class Deployment(TimestampMixin, Base):
     # What was asked for (device / group / exclusion ids), kept for the record — the tasks
     # are what actually ran.
     targets: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # C2 canary rollout. `waves` is the plan made at creation: device ids per wave, the first
+    # a single device, then 10%, then the rest. NULL means an all-at-once push (the A4 shape).
+    # A wave's tasks are created only when it is released, so a device in a later wave has
+    # nothing queued until the gate opens.
+    waves: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    current_wave: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wave_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    halted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    halt_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)

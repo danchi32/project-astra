@@ -13,6 +13,12 @@ export interface DeploymentSummary {
   reason: string;
   created_at: string;
   status_counts: Record<string, number>;
+  // C2 canary rollout. waves_total null = pushed all at once. current_wave is 1-based.
+  waves_total: number | null;
+  current_wave: number | null;
+  waiting: number;
+  halted_at: string | null;
+  halt_reason: string | null;
 }
 
 export interface DeploymentCreated extends DeploymentSummary {
@@ -32,7 +38,7 @@ export const getSoftwareCatalog = () =>
 
 export const pushInstall = (body: {
   package_id: string; device_ids: string[]; group_ids: string[];
-  exclude_device_ids: string[]; reason: string;
+  exclude_device_ids: string[]; reason: string; canary: boolean;
 }) => apiClient.post<DeploymentCreated>("/deployments/install", body).then((r) => r.data);
 
 export const listDeployments = () =>
@@ -40,3 +46,9 @@ export const listDeployments = () =>
 
 export const getDeployment = (id: string) =>
   apiClient.get<DeploymentDetail>(`/deployments/${id}`).then((r) => r.data);
+
+export const haltDeployment = (id: string, reason: string) =>
+  apiClient.post<DeploymentSummary>(`/deployments/${id}/halt`, { reason }).then((r) => r.data);
+
+export const resumeDeployment = (id: string) =>
+  apiClient.post<DeploymentSummary>(`/deployments/${id}/resume`).then((r) => r.data);

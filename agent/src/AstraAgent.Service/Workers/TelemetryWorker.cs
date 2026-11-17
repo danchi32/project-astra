@@ -17,6 +17,8 @@ public sealed class TelemetryWorker(
     IEventLogCollector events,
     IInstalledAppsCollector apps,
     ILicensingCollector licensing,
+    IPostureCollector posture,
+    IBitLockerKeyCollector bitlockerKeys,
     IServicesCollector services,
     IWindowsUpdateCollector updates,
     IHardwareCollector hardware,
@@ -32,6 +34,12 @@ public sealed class TelemetryWorker(
     // ended) must not keep pushing every minute, which is a database lookup per push.
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(15);
     private DateTime _lastInventoryAt = DateTime.MinValue;
+    // Keys escrowed in this run. A recovery password crosses the network once per service start,
+    // not every hour; the backend ignores a key it already holds, so a restart only re-sends once.
+    private readonly HashSet<string> _escrowed = [];
+    // The device token the set belongs to. A re-enrollment makes a new device row on the
+    // server, which holds none of the keys: send them all again.
+    private string? _escrowedFor;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -125,17 +133,44 @@ public sealed class TelemetryWorker(
             LocalAccounts: collectInventory
                 ? Remediation.LocalAccountManager.List()?.Select(a => new TelemetryLocalAccount(
                     a.Name, a.FullName, a.Enabled, a.IsAdmin, a.BuiltIn)).ToList()
-                : null);
+                : null,
+            // Every cycle, like sessions: a Defender change must not wait for the hourly inventory.
+            Posture: ToPosture(posture.Collect()));
 
         var pushed = await api.PushTelemetryAsync(token, payload, ct);
         if (pushed && collectInventory)
+        {
             _lastInventoryAt = now.UtcDateTime;
+            await EscrowBitLockerKeysAsync(token, ct);
+        }
 
         logger.LogInformation(
             "Telemetry pushed — CPU {Cpu:F1}% RAM {Ram}/{Total}MB Disks:{Disks} Sessions:{Sessions}",
             cpuPct, mem.UsedMb, mem.TotalMb, diskList.Count, sessionList.Count);
         return pushed;
     }
+
+    private async Task EscrowBitLockerKeysAsync(string token, CancellationToken ct)
+    {
+        if (_escrowedFor != token)
+        {
+            _escrowed.Clear();
+            _escrowedFor = token;
+        }
+        var fresh = BitLockerKeyCollector.NotYetEscrowed(bitlockerKeys.Collect(), _escrowed);
+        foreach (var batch in fresh.Chunk(10))
+        {
+            if (!await api.EscrowBitLockerKeysAsync(token, batch, ct))
+                return;                                 // try again with the next inventory
+            foreach (var k in batch) _escrowed.Add(BitLockerKeyCollector.EscrowKey(k));
+            logger.LogInformation("Escrowed {Count} BitLocker recovery key(s)", batch.Length);
+        }
+    }
+
+    private static TelemetryPosture? ToPosture(PostureReport? r) => r is null
+        ? null
+        : new TelemetryPosture(r.DefenderRealtime, r.DefenderSignatureAgeDays,
+            r.FirewallDomain, r.FirewallPrivate, r.FirewallPublic, r.BitLockerOsDrive, r.ThirdPartyAntivirus);
 
     private static TelemetryHardware ToHardware(HardwareInfo h) =>
         new(h.Manufacturer, h.Model, h.CpuName, h.TotalRamMb, h.TotalStorageGb,

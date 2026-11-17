@@ -20,6 +20,8 @@ export interface DeviceCompliance {
   passed: number;
   failed: number;
   checks: CheckResult[];
+  // 2a Security Score, weighted by check. null = no check is known yet.
+  security_score: number | null;
 }
 
 export interface CheckBreakdown {
@@ -43,6 +45,7 @@ export interface ComplianceSummary {
   non_compliant: number;
   unknown: number;
   score: number;
+  security_score: number | null;
   checks: CheckBreakdown[];
   usb: UsbPosture;
 }

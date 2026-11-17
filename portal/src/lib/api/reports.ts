@@ -53,3 +53,55 @@ export interface HealthCheckReport {
 
 export const getHealthCheckReport = () =>
   apiClient.get<HealthCheckReport>("/reports/health-check").then((r) => r.data);
+
+// C3: what the assistant proposed, and where SAVIO held or refused it (staff only).
+export interface AiSafetyReport {
+  generated_at: string;
+  period_days: number;
+  proposals: number;
+  ran_unattended: number;
+  raised: number;
+  flagged: number;
+  refused: number;
+  by_reason: Record<string, number>;
+  events: { at: string; kind: "raised" | "flagged" | "refused"; action_id: string; device_hostname: string | null; reasons: string[] }[];
+}
+
+export const getAiSafetyReport = (days: number) =>
+  apiClient.get<AiSafetyReport>("/reports/ai-safety", { params: { days } }).then((r) => r.data);
+
+// J5: what SAVIO's unattended fixes were worth. Every figure has its basis.
+export interface ValueReport {
+  generated_at: string;
+  period_days: number;
+  fixed_unattended: number;
+  minutes_per_fix: number;
+  hours_saved: number;
+  hourly_cost: number | null;
+  inr_saved: number | null;
+  proven_improved: number;
+  held_7_days: number;
+  came_back: number;
+  basis: Record<string, string>;
+  fixes: { task_id: string; action: string; device_hostname: string | null; completed_at: string | null; proof: string | null; held_7_days: boolean | null }[];
+}
+
+// J1: the day or week in plain language. On demand; "email" sends it to the caller only.
+export interface Brief {
+  period: "day" | "week";
+  since: string;
+  generated_at: string;
+  title: string;
+  headline: string;
+  sections: { key: string; title: string; lines: string[] }[];
+  footer: string;
+}
+
+export const getBrief = (period: "day" | "week") =>
+  apiClient.get<Brief>("/reports/brief", { params: { period } }).then((r) => r.data);
+
+export const emailBrief = (period: "day" | "week") =>
+  apiClient.post<{ sent: boolean; to: string }>("/reports/brief/email", { period }).then((r) => r.data);
+
+export const getValueReport = (days: number) =>
+  apiClient.get<ValueReport>("/reports/value", { params: { days } }).then((r) => r.data);

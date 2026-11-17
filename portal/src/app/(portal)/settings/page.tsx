@@ -277,6 +277,8 @@ function OrganizationTab() {
       require_admin_for_approval_tier: data.require_admin_for_approval_tier,
       min_password_length: data.min_password_length,
       enrollment_token_default_days: data.enrollment_token_default_days,
+      minutes_per_fix: data.minutes_per_fix ?? 15,
+      it_hourly_cost: data.it_hourly_cost ?? 0,
     });
   }, [data]);
 
@@ -355,6 +357,21 @@ function OrganizationTab() {
         <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
           Password length has an enforced floor of 8 characters; you can only raise it.
         </p>
+      </Panel>
+
+      <Panel title="Value figures" description="Your own numbers behind Recommendations and the Value report. SAVIO never guesses a rupee figure: with no hourly cost set, none is shown.">
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Minutes a fix takes by hand">
+            <input type="number" min={1} max={480} value={form.minutes_per_fix ?? 15}
+              onChange={(e) => setForm({ ...form, minutes_per_fix: Number(e.target.value) })}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+          </Field>
+          <Field label="IT cost per hour (₹, 0 = not set)">
+            <input type="number" min={0} max={100000} value={form.it_hourly_cost ?? 0}
+              onChange={(e) => setForm({ ...form, it_hourly_cost: Number(e.target.value) })}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={inputStyle} />
+          </Field>
+        </div>
       </Panel>
 
       <SupportAccessPanel />

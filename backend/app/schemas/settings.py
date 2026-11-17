@@ -17,6 +17,8 @@ class OrganizationSettingsRead(BaseModel):
     require_admin_for_approval_tier: bool
     min_password_length: int
     enrollment_token_default_days: int
+    minutes_per_fix: int = 15
+    it_hourly_cost: int | None = None
     updated_at: datetime
 
 
@@ -29,6 +31,9 @@ class OrganizationSettingsUpdate(BaseModel):
     require_admin_for_approval_tier: bool | None = None
     min_password_length: int | None = Field(default=None, ge=PASSWORD_FLOOR, le=128)
     enrollment_token_default_days: int | None = Field(default=None, ge=1, le=90)
+    minutes_per_fix: int | None = Field(default=None, ge=1, le=480)
+    # ₹ per hour. 0 clears it (no rupee figures); the API stores that as "not set".
+    it_hourly_cost: int | None = Field(default=None, ge=0, le=100_000)
 
 
 class ProfileUpdate(BaseModel):

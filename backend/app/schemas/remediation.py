@@ -31,6 +31,8 @@ class RemediationTaskRead(BaseModel):
     requested_by_user_id: uuid.UUID | None
     approved_by_user_id: uuid.UUID | None
     result: dict[str, Any] | None
+    evidence: dict[str, Any] | None = None
+    ai_guard: list[str] | None = None
     created_at: datetime
     completed_at: datetime | None
 

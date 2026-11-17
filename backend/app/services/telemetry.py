@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Asset, Device, User
+from app.models import DevicePosture, Asset, Device, User
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.device_session import DeviceSession
 from app.models.telemetry import (
@@ -28,6 +28,7 @@ from app.models.base import as_utc, utcnow
 from app.services.exceptions import NotFoundError
 from app.services.alerts import AlertService, email_critical_alerts
 from app.services.hardware import clean_serial, clean_text
+from app.services.remediation import evidence as fix_evidence
 from app.services.workforce import WorkforceAggregator
 
 log = logging.getLogger(__name__)
@@ -244,6 +245,19 @@ class TelemetryService:
                 ],
             )
 
+        # Security posture (2a): one row per device, replaced when the agent reports it.
+        if data.posture is not None:
+            p = data.posture
+            await self.repo.replace_posture(device.id, DevicePosture(
+                device_id=device.id, org_id=device.org_id,
+                defender_realtime=p.defender_realtime,
+                defender_signature_age_days=p.defender_signature_age_days,
+                firewall_domain=p.firewall_domain, firewall_private=p.firewall_private,
+                firewall_public=p.firewall_public, bitlocker_os_drive=p.bitlocker_os_drive,
+                third_party_antivirus=p.third_party_antivirus,
+                collected_at=now,
+            ))
+
         if data.local_accounts is not None:
             await self.repo.replace_local_accounts(device.id, [
                 DeviceLocalAccount(device_id=device.id, org_id=device.org_id, name=a.name,
@@ -298,6 +312,19 @@ class TelemetryService:
                 device=device, events=data.activity
             )
 
+        # Proof-of-Fix (C1): any "after" or 7-day recheck this push can answer. Fenced off
+        # like alerting below: evidence is about a fix, and must never cost the telemetry.
+        sources = {"snapshot"}
+        sources |= {"posture"} if data.posture is not None else set()
+        sources |= {"updates"} if data.windows_updates else set()
+        sources |= {"services"} if data.services else set()
+        try:
+            async with self.session.begin_nested():
+                await fix_evidence.observe(self.session, device_id=device.id,
+                                           collected_at=now, sources=sources)
+        except Exception:
+            log.exception("fix evidence failed for device %s", device.id)
+
         # Early-warning alerts (N1). In a savepoint and fenced off: a bug in alerting must
         # never cost the device its telemetry.
         fired = []
@@ -310,6 +337,17 @@ class TelemetryService:
         await self.session.commit()
         if fired:
             await email_critical_alerts(self.session, device.org_id, fired)
+
+        # C2: a push from a device in a live rollout re-checks that rollout's gate (the soak
+        # period ends, or a Critical event arrives). Last, after the commit, and fenced like
+        # the result path: the telemetry and alert e-mails are done whatever happens here.
+        try:
+            from app.services.deployments import DeploymentService
+
+            await DeploymentService(self.session).advance_for_device(device.id)
+        except Exception:
+            log.exception("rollout gate failed for device %s", device.id)
+            await self.session.rollback()
 
     async def get_dashboard_summary(self, *, actor: User) -> DashboardSummary:
         org_devices = await self.devices.list_by_org(actor.org_id)

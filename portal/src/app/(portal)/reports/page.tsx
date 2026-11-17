@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { BarChart3, Download, HardDrive, Wrench, Package, X, ShieldCheck } from "lucide-react";
+import { BarChart3, Bot, Download, IndianRupee, HardDrive, Newspaper, Wrench, Package, X, ShieldCheck } from "lucide-react";
 import {
   getFleetHealthReport, getRemediationReport, getAssetReport,
   exportFleetHealthCsv, exportRemediationCsv, exportAssetsCsv,
@@ -24,13 +24,20 @@ import {
 } from "@/lib/asset-filters";
 import type { Asset } from "@/lib/api/types";
 import { UpgradeRequired, isUpgradeRequired, requiredFeature } from "@/components/upgrade-required";
+import { AiSafetyReport } from "@/components/ai-safety-report";
+import { ValueReport } from "@/components/value-report";
+import { BriefReport } from "@/components/brief-report";
+import { getMe } from "@/lib/api/auth";
 
-type Tab = "fleet" | "remediation" | "assets";
+type Tab = "brief" | "fleet" | "remediation" | "assets" | "value" | "ai-safety";
 
 const TABS: { key: Tab; label: string; icon: typeof HardDrive }[] = [
   { key: "fleet", label: "Fleet health", icon: HardDrive },
   { key: "remediation", label: "Remediation", icon: Wrench },
   { key: "assets", label: "Assets", icon: Package },
+  { key: "value", label: "Value", icon: IndianRupee },
+  { key: "brief", label: "Brief", icon: Newspaper },
+  { key: "ai-safety", label: "AI safety", icon: Bot },
 ];
 
 // Assets-by-location × status matrix — the BI centerpiece. Rows are sites (busiest first),
@@ -508,6 +515,9 @@ function HealthCheckLink() {
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>("fleet");
+  // The AI Safety report names devices and what was attempted on them: staff only, as the API says.
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const isStaff = me?.role === "admin" || me?.role === "technician";
 
   // The whole /reports router is gated, so one probe answers for every tab — checking per
   // tab would show the upgrade panel three times over as the user clicked around.
@@ -540,7 +550,7 @@ export default function ReportsPage() {
       <HealthCheckLink />
 
       <div className="flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {TABS.filter((t) => !["ai-safety", "value", "brief"].includes(t.key) || isStaff).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px"
             style={tab === key
@@ -554,6 +564,9 @@ export default function ReportsPage() {
       {tab === "fleet" && <FleetHealthTab />}
       {tab === "remediation" && <RemediationTab />}
       {tab === "assets" && <AssetsTab />}
+      {tab === "value" && isStaff && <ValueReport />}
+      {tab === "brief" && isStaff && <BriefReport />}
+      {tab === "ai-safety" && isStaff && <AiSafetyReport />}
     </div>
   );
 }

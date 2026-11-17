@@ -286,6 +286,18 @@ _ACTIONS: tuple[RemediationAction, ...] = (
                       "name, and for names Windows can't use. Admin approval only.",
                       params=("username", "full_name", "make_admin"), execution_context="system",
                       operator_only=True),
+    # Security fixes (2a+): each reads its result back before reporting success.
+    RemediationAction("enable_firewall", "Turn on Windows Firewall", RemediationTier.APPROVAL_REQUIRED,
+                      "Turns on Windows Firewall for the domain, private and public profiles on this "
+                      "PC, then reads the state back to confirm. Needs IT approval: a firewall change "
+                      "can block an application's network traffic.",
+                      execution_context="system"),
+    RemediationAction("enable_defender_realtime", "Turn on Defender real-time protection",
+                      RemediationTier.ADMIN_ONLY,
+                      "Turns Microsoft Defender real-time protection on, but only when Defender is the "
+                      "only antivirus on this PC, then reads the state back. Refuses when another "
+                      "antivirus is registered. Never changes Tamper Protection. Needs an admin.",
+                      execution_context="system"),
     # Software push (A2). Installs one package from the server-side catalog
     # (app/services/software_catalog.py) machine-wide with winget. Approval-required: it
     # changes what runs on the machine. Withheld from the AI — software appears on a PC

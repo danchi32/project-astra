@@ -54,7 +54,8 @@ async def test_push_to_group_minus_one_device(client, admin_headers, session_fac
 
     r = await client.post("/api/v1/deployments/install", headers=admin_headers, json={
         "package_id": "Google.Chrome", "group_ids": [g["id"]], "device_ids": [other],
-        "exclude_device_ids": [c], "reason": "Standard browser"})
+        "exclude_device_ids": [c], "reason": "Standard browser",
+        "canary": False})  # all at once, the A4 shape; waves are in test_canary_rollout.py
     assert r.status_code == 201, r.text
     body = r.json()
     assert (body["queued"], body["failed"], body["title"]) == (3, 0, "Install Google Chrome")

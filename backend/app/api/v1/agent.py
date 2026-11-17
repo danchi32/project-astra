@@ -309,3 +309,46 @@ async def offline_events(
                     "fixed_after": e.fixed_after, "hostname": device.hostname},
         )
     await session.commit()
+
+
+# ── BitLocker recovery key escrow (2a+) ──────────────────────────────────────────
+
+
+class _BitLockerKey(BaseModel):
+    # Loose bounds on purpose: the exact formats are checked in the service, whose errors never
+    # quote the value. A tight Pydantic rule here would fail with a 422 that echoes the input,
+    # which for this field is a recovery password. The bounds only stop oversized bodies.
+    drive: str = Field(max_length=10)
+    protector_id: str = Field(max_length=80)
+    recovery_password: str = Field(max_length=80)
+
+
+class _BitLockerKeys(BaseModel):
+    keys: list[_BitLockerKey]
+
+
+@router.post(
+    "/bitlocker-keys",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Escrow BitLocker recovery passwords from this device (agent only; stored encrypted)",
+)
+async def bitlocker_keys(
+    body: _BitLockerKeys,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """The device can only escrow keys for itself: the device comes from its token, never from
+    the body. A server without an encryption key refuses (503) and the agent retries later,
+    so no recovery password is ever written in clear."""
+    from fastapi import HTTPException
+
+    from app.core import crypto
+    from app.services.bitlocker_keys import BitLockerKeyService
+
+    try:
+        await BitLockerKeyService(session).store(
+            device, [(k.drive, k.protector_id, k.recovery_password) for k in body.keys])
+    except crypto.CryptoUnavailable:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Key escrow is not configured on this server; try again later.")
+

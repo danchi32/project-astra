@@ -2,10 +2,10 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import Link from "next/link";
-import { Package, Plus, Archive, Pencil, X, MailCheck, Mail, Clock, History } from "lucide-react";
+import { Package, Plus, Archive, Pencil, X, MailCheck, Mail, Clock, History, Upload, FileText } from "lucide-react";
 import {
   listAssets, getAssetSummary, getAssetLocations, createAsset, updateAsset, archiveAsset,
-  resendAcknowledgement,
+  resendAcknowledgement, importWarrantyCsv, resolveWarranty, readInvoice,
 } from "@/lib/api/assets";
 import { AssetPassportDrawer } from "@/components/asset-passport-drawer";
 import { Pagination } from "@/components/pagination";
@@ -31,6 +31,11 @@ const STATUS_STYLE: Record<AssetStatus, { label: string; color: string }> = {
 };
 
 const EMPTY: AssetInput = { name: "", category: "laptop", status: "in_use" };
+
+// L5b: where a warranty date came from. A date "by hand" is never replaced by an import.
+const WARRANTY_SOURCE: Record<string, string> = {
+  manual: "by hand", csv: "CSV", invoice_ai: "invoice", dell_api: "Dell", hp_api: "HP", lenovo_api: "Lenovo",
+};
 
 const money = (n: number) =>
   n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -163,6 +168,47 @@ export default function AssetsPage() {
     background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)",
   } as const;
 
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function importCsv(file: File | undefined) {
+    if (!file) return;
+    setImportMsg(null);
+    try {
+      const r = await importWarrantyCsv(await file.text());
+      const parts = [`${r.updated} updated`, `${r.unchanged} unchanged`];
+      if (r.conflicts) parts.push(`${r.conflicts} differ from a date entered by hand (choose in the Warranty column)`);
+      if (r.unmatched.length) parts.push(`${r.unmatched.length} not found: ${r.unmatched.slice(0, 5).join(", ")}`);
+      if (r.invalid.length) parts.push(`${r.invalid.length} skipped: ${r.invalid.slice(0, 3).join("; ")}`);
+      setImportMsg({ ok: !r.invalid.length, text: `Warranty import, ${r.rows} rows: ${parts.join(" · ")}.` });
+      await refresh();
+    } catch (e) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setImportMsg({ ok: false, text: typeof detail === "string" ? detail : "Couldn't import that file." });
+    }
+  }
+  async function readInvoiceFor(a: Asset, file: File | undefined) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { setImportMsg({ ok: false, text: "That invoice is over 10 MB." }); return; }
+    setImportMsg({ ok: true, text: `Reading the invoice for ${a.name}…` });
+    try {
+      const r = await readInvoice(a.id, file);
+      const what = {
+        set: `warranty set to ${r.warranty_found}`, same: `warranty ${r.warranty_found} confirmed`,
+        conflict: `the invoice says ${r.warranty_found}, which differs from the date entered by hand (choose in the Warranty column)`,
+        not_stated: "the invoice does not state a warranty",
+      }[r.result];
+      const filled = r.filled.length ? `; filled ${r.filled.join(" and ")}` : "";
+      setImportMsg({ ok: r.result !== "not_stated", text: `${a.name}: ${what}${filled}.` });
+      await refresh();
+    } catch (e) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setImportMsg({ ok: false, text: typeof detail === "string" ? detail : "Couldn't read that invoice." });
+    }
+  }
+  async function pickWarranty(a: Asset, keep: "current" | "found") {
+    await resolveWarranty(a.id, keep);
+    await refresh();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -184,6 +230,15 @@ export default function AssetsPage() {
             <Archive size={15} /> Archived
           </Link>
           {isStaff && (
+            <label title="CSV with serial_number (or asset_tag) and warranty_expiry columns. Dates entered by hand are never overwritten."
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+              <Upload size={15} /> Import warranty CSV
+              <input type="file" accept=".csv,text/csv" className="hidden"
+                onChange={(e) => { importCsv(e.target.files?.[0]); e.target.value = ""; }} />
+            </label>
+          )}
+          {isStaff && (
             <button onClick={openNew}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white"
               style={{ background: "var(--accent)" }}>
@@ -192,6 +247,8 @@ export default function AssetsPage() {
           )}
         </div>
       </div>
+
+      {importMsg && <p className="text-xs" style={{ color: importMsg.ok ? "#10b981" : "#f59e0b" }}>{importMsg.text}</p>}
 
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -273,7 +330,27 @@ export default function AssetsPage() {
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.device_hostname ?? "—"}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.serial_number ?? "—"}</td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.purchase_cost != null ? money(a.purchase_cost) : "—"}</td>
-                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{a.warranty_expiry ?? "—"}</td>
+                  <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
+                    {a.warranty_expiry ?? "—"}
+                    {a.warranty_expiry && a.warranty_source && (
+                      <span className="ml-1 text-xs opacity-75"
+                        title={a.warranty_checked_at ? `Last checked ${new Date(a.warranty_checked_at).toLocaleString()}` : undefined}>
+                        · {WARRANTY_SOURCE[a.warranty_source] ?? a.warranty_source}
+                      </span>
+                    )}
+                    {a.warranty_found && (
+                      <div className="text-xs mt-1 whitespace-normal" style={{ color: "#f59e0b" }}>
+                        {WARRANTY_SOURCE[a.warranty_found_source ?? ""] ?? a.warranty_found_source} says {a.warranty_found}
+                        {isStaff && (
+                          <span className="ml-1">
+                            <button onClick={() => pickWarranty(a, "found")} className="underline">Use it</button>
+                            {" · "}
+                            <button onClick={() => pickWarranty(a, "current")} className="underline">Keep mine</button>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => setPassportFor(a)} title="Device passport (full history)"
@@ -288,6 +365,12 @@ export default function AssetsPage() {
                               <Mail size={14} />
                             </button>
                           )}
+                          <label title="Read an invoice (PDF, JPG or PNG) for the warranty and purchase details. A date entered by hand is never replaced."
+                            className="p-1 rounded-lg hover:bg-brand-500/10 hover:text-brand-500 cursor-pointer" style={{ color: "var(--text-secondary)" }}>
+                            <FileText size={14} />
+                            <input type="file" accept="application/pdf,image/jpeg,image/png" className="hidden"
+                              onChange={(e) => { readInvoiceFor(a, e.target.files?.[0]); e.target.value = ""; }} />
+                          </label>
                           <button onClick={() => openEdit(a)} title="Edit"
                             className="p-1 rounded-lg hover:bg-brand-500/10 hover:text-brand-500" style={{ color: "var(--text-secondary)" }}>
                             <Pencil size={14} />

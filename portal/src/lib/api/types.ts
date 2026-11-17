@@ -630,6 +630,11 @@ export interface Asset {
   location: string | null;
   purchase_date: string | null;
   warranty_expiry: string | null;
+  // L5b: where the warranty date came from, and a found date waiting for an admin's choice.
+  warranty_source?: "manual" | "csv" | "invoice_ai" | "dell_api" | "hp_api" | "lenovo_api" | null;
+  warranty_checked_at?: string | null;
+  warranty_found?: string | null;
+  warranty_found_source?: string | null;
   purchase_cost: number | null;
   notes: string | null;
   acknowledgement_status: AcknowledgementStatus;
@@ -779,6 +784,18 @@ export interface RemediationTask {
   reason: string;
   source: "assistant" | "user";
   result: { output?: string } | null;
+  // C3: reason codes SAVIO held this AI proposal for. Its own field, not the model's text.
+  ai_guard?: string[] | null;
+  // C1 Proof-of-Fix. Present only for fixes with a metric to measure.
+  evidence?: {
+    metric: string;
+    label: string;
+    unit: string;
+    before: number | boolean | null;
+    after?: number | boolean | null;
+    verdict?: "improved" | "unchanged" | "worse" | "unmeasured";
+    recheck?: { at: string; value: number | boolean | null; held: boolean | null };
+  } | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -867,6 +884,9 @@ export interface OrganizationSettings {
   require_admin_for_approval_tier: boolean;
   min_password_length: number;
   enrollment_token_default_days: number;
+  /** J2/J5: minutes a fix takes by hand, and ₹ per IT hour (null = no rupee figures). 0 clears. */
+  minutes_per_fix?: number;
+  it_hourly_cost?: number | null;
   updated_at: string;
 }
 

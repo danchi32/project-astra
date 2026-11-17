@@ -59,3 +59,49 @@ class AssetReport(BaseModel):
     generated_at: datetime
     summary: AssetSummary
     assets: list[AssetRead]
+
+
+class ValueRow(BaseModel):
+    task_id: uuid.UUID
+    action: str
+    device_hostname: str | None
+    completed_at: datetime | None
+    proof: str | None          # C1 verdict: improved | unchanged | worse | unmeasured
+    held_7_days: bool | None
+
+
+class ValueReport(BaseModel):
+    """J5: what SAVIO's unattended fixes were worth, every number with its basis."""
+    generated_at: datetime
+    period_days: int
+    fixed_unattended: int        # succeeded with no person approving them
+    minutes_per_fix: int         # the org's own setting
+    hours_saved: float
+    hourly_cost: int | None      # ₹/hour, the org's own setting; None = not set
+    inr_saved: int | None
+    proven_improved: int         # C1 proof says the number moved the right way
+    held_7_days: int             # ...and was still right at the 7-day recheck
+    came_back: int               # ...and was wrong again at the recheck
+    basis: dict[str, str]
+    fixes: list[ValueRow]
+
+
+class AiSafetyRow(BaseModel):
+    at: datetime
+    kind: str  # raised | flagged | refused
+    action_id: str
+    device_hostname: str | None
+    reasons: list[str]
+
+
+class AiSafetyReport(BaseModel):
+    """C3: what the assistant proposed, and where SAVIO's guard stepped in."""
+    generated_at: datetime
+    period_days: int
+    proposals: int        # fixes the assistant queued
+    ran_unattended: int   # of those, approved without a person
+    raised: int           # would have run unattended; held because they leaned on outside text
+    flagged: int          # already needed approval; the approver was told about outside text
+    refused: int          # actions the assistant may not request at all
+    by_reason: dict[str, int]
+    events: list[AiSafetyRow]
