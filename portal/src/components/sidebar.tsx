@@ -57,6 +57,7 @@ const ORG_NAV: NavEntry[] = [
   ] },
   { group: "Operations", icon: Radar, children: [
     { href: "/recommendations", label: "Recommendations" },
+    { href: "/watchlist", label: "Watchlist" },
     { href: "/fleet", label: "Fleet Issues" },
     { href: "/self-healing", label: "Self Healing" },
     { href: "/software", label: "Software" },
