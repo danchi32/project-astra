@@ -78,6 +78,9 @@ public interface IAstraApiClient
     /// <summary>D7: the approvals in force on this PC. Null on any failure (keep what is stored;
     /// each approval ends at its own time anyway).</summary>
     Task<IReadOnlyList<AgentGuardApproval>?> GetGuardApprovalsAsync(string deviceToken, CancellationToken ct);
+
+    /// <summary>D5: this PC's map of where sensitive files are (folder counts only).</summary>
+    Task<bool> SendDiscoveryAsync(string deviceToken, DateTime scannedAtUtc, DiscoveryReport report, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -356,6 +359,29 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             logger.LogDebug(ex, "Guard approvals not fetched");
             return null;
+        }
+    }
+
+    public async Task<bool> SendDiscoveryAsync(string deviceToken, DateTime scannedAtUtc, DiscoveryReport report, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/guard/discovery")
+        {
+            Content = JsonContent.Create(new
+            {
+                scanned_at = scannedAtUtc, files_scanned = report.FilesScanned, files_skipped = report.FilesSkipped,
+                truncated = report.Truncated, folders = report.Folders,
+            }),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogDebug(ex, "Discovery map not sent");
+            return false;
         }
     }
 }

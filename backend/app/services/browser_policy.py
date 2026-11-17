@@ -59,6 +59,9 @@ class BrowserPolicyBody(BaseModel):
     guard_watched_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     guard_ignore_kinds: list[FindingKind] = Field(default_factory=lambda: ["Email"], max_length=len(FINDING_KINDS))
     guard_keywords: list[str] = Field(default_factory=list, max_length=MAX_KEYWORDS)
+    # D5: weekly scan of each person's Desktop / Documents / Downloads / OneDrive, on the PC, for
+    # a map of which folders hold sensitive files (counts only). Off until an admin turns it on.
+    discovery_enabled: bool = False
 
     @field_validator("guard_ignore_kinds")
     @classmethod

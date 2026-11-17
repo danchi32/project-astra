@@ -7,7 +7,13 @@ from app.models.assistant import Assistant, AssistantVersion, AssistantVersionSt
 from app.models.audit_log import AuditLog
 from app.models.banned_software import BannedSoftware
 from app.models.bitlocker_key import DeviceBitLockerKey
-from app.models.browser_policy import DeviceBrowserPolicyState, GuardApproval, GuardEvent, OrgBrowserPolicy
+from app.models.browser_policy import (
+    DeviceBrowserPolicyState,
+    GuardApproval,
+    GuardDiscovery,
+    GuardEvent,
+    OrgBrowserPolicy,
+)
 from app.models.webhook_event import WebhookEvent
 from app.models.base import Base
 from app.models.conversation import Conversation, Message, MessageRole
@@ -115,6 +121,7 @@ __all__ = [
     "DeviceBitLockerKey",
     "DeviceBrowserPolicyState",
     "GuardApproval",
+    "GuardDiscovery",
     "GuardEvent",
     "OrgBrowserPolicy",
     "DeviceLocalAccount",

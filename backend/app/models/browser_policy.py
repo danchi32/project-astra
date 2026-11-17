@@ -78,6 +78,26 @@ class GuardEvent(Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
+class GuardDiscovery(Base):
+    """Phase 3 · D5: a PC's latest map of where sensitive files are, by folder, in counts.
+    One row per device, replaced by each weekly scan. `folders` holds only folders where
+    something was found: path, files read, files with findings, counts per kind, contact
+    lists. No file names, no content."""
+
+    __tablename__ = "guard_discoveries"
+
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), primary_key=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+    scanned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    files_scanned: Mapped[int] = mapped_column(Integer, nullable=False)
+    files_skipped: Mapped[int] = mapped_column(Integer, nullable=False)
+    truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    folders: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+
 class GuardApproval(Base):
     """Phase 3 · D7: a person asked IT to let one thing through: one Windows account, one PC,
     one site, one channel (paste / drop / file / submit). An admin approves it for a set time

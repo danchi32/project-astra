@@ -1237,6 +1237,42 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
     wiring it into the extension and native host (D3/E4).
 - **D5 Zero-config discovery:** low-priority scheduled file scan → sensitivity map by folder
   (counts only) → suggested policies for the admin to approve.
+  - **As built, slice 1, the map (17 Nov, branch `phase-3`):**
+    - **Switch:** "Find where sensitive files are kept" on the Browser policy page
+      (`discovery_enabled`). Off until an admin turns it on; AI Guard only.
+    - **Where the scan runs:** `savio-guard-host.exe --discover <folders>`, started by the
+      service at idle priority. This is the process E4 keeps off the network, and E4's
+      firewall rules now also apply whenever discovery is on. File contents are read only
+      there.
+    - **What it reads:** text-like files and Word / Excel (`.docx` / `.xlsx`, unzipped with
+      the standard library), up to 20 MB each, at most 50,000 files a run.
+    - **What it skips:**
+      - cloud-only OneDrive placeholders (reading one would download it);
+      - hidden, system and linked entries;
+      - AppData, dot-folders and dependency folders;
+      - a zip entry larger than its limit, by its declared size.
+    - **Where it looks:** each real account's Desktop, Documents, Downloads and OneDrive
+      folders, taken from the registry's ProfileList.
+    - **What leaves:** one line per folder where something was found (path, files read,
+      files with findings, counts per kind, contact lists). No file names, no text. The
+      service checks every path lies inside a folder it asked about, and every kind is known.
+    - **When:** weekly, remembered across restarts; a failed run is tried again 30 minutes
+      later.
+    - **Backend:** `guard_discoveries` (migration 0091), one row per PC, replaced by each
+      scan. Fixed schema, unknown fields refused. Admin only, because folder paths name people.
+    - **Portal:** AI Guard → Where data lives: totals, a filter by PC, and folders sorted by
+      files with findings.
+    - **Checked:**
+      - `DiscoveryTests` (4) on a temp tree: CSV, Word and Excel found; hidden, cloud-only,
+        AppData, `.git`, `node_modules` and a fake .docx skipped; no file name or text in
+        the output; size cap; weekly, off when switched off, retried on failure; a path
+        outside the asked folders or an unknown kind refused;
+      - the built host's `--discover` run on a temp folder gave the expected JSON;
+      - backend `test_guard_discovery` (3);
+      - migration 0091 up/down/up with no model drift;
+      - on screen with two sample PCs.
+  - **Not yet (slice 2):** suggested policies from the map for the admin to approve; PDF text;
+    a live run on the VM.
 - **D7 Coaching:** warn / justify / block dialogs in-page, English only (no Hindi anywhere,
   decided 17 Nov).
   - **As built (17 Nov, branch `phase-3`):**

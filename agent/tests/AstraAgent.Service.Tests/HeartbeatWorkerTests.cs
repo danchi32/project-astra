@@ -60,6 +60,7 @@ public class HeartbeatWorkerTests
         public Task<bool> ReportBrowserPolicyAsync(string deviceToken, int version, IReadOnlyList<AstraAgent.Service.Guard.ApplyReport> reports, CancellationToken ct) => Task.FromResult(true);
         public Task<bool> SendGuardEventsAsync(string deviceToken, IReadOnlyList<AstraAgent.Service.Guard.QueuedGuardEvent> events, CancellationToken ct) => Task.FromResult(true);
         public Task<IReadOnlyList<AgentGuardApproval>?> GetGuardApprovalsAsync(string deviceToken, CancellationToken ct) => Task.FromResult<IReadOnlyList<AgentGuardApproval>?>([]);
+        public Task<bool> SendDiscoveryAsync(string deviceToken, DateTime at, DiscoveryReport report, CancellationToken ct) => Task.FromResult(true);
         public Task<bool> EscrowBitLockerKeysAsync(string deviceToken, IReadOnlyList<AstraAgent.Service.Telemetry.Collectors.BitLockerRecoveryKey> keys, CancellationToken ct) => Task.FromResult(true);
         public Task<bool> PushOfflineEventsAsync(string token, IReadOnlyList<AstraAgent.Service.Net.JournalEntry> entries, CancellationToken ct)
             => Task.FromResult(true);

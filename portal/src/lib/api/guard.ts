@@ -18,6 +18,8 @@ export interface BrowserPolicy {
   guard_watched_sites: string[];
   guard_ignore_kinds: FindingKind[];
   guard_keywords: string[];
+  // D5: weekly scan of each person's Desktop / Documents / Downloads / OneDrive, on the PC.
+  discovery_enabled: boolean;
 }
 
 export const FINDING_KINDS = {
@@ -134,3 +136,31 @@ export const approveGuardApproval = (id: string, minutes: number) =>
 
 export const denyGuardApproval = (id: string) =>
   apiClient.post<GuardApproval>(`/guard/approvals/${id}/deny`).then((r) => r.data);
+// D5: where sensitive files are on the org's PCs, by folder, counts only. Admin only.
+export interface DiscoveryFolder {
+  path: string;
+  files: number;
+  files_with_findings: number;
+  counts: Partial<Record<FindingKind, number>>;
+  contact_lists: number;
+}
+
+export interface DiscoveryDevice {
+  device_id: string;
+  hostname: string;
+  scanned_at: string;
+  files_scanned: number;
+  files_skipped: number;
+  truncated: boolean;
+  folders: DiscoveryFolder[];
+}
+
+export interface Discovery {
+  pcs: number;
+  files_with_findings: number;
+  contact_lists: number;
+  kinds: Partial<Record<FindingKind, number>>;
+  devices: DiscoveryDevice[];
+}
+
+export const getDiscovery = () => apiClient.get<Discovery>("/guard/discovery").then((r) => r.data);

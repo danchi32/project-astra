@@ -69,9 +69,11 @@ public static class BrowserPolicyWriter
         else WithHost(new ApplyReport(Browser.Firefox, [], [], [], [], null), null);
         reports.AddRange(fx);
 
-        // E4: while any browser is made to run the extension, its scanner has no network.
+        // E4: while the scanner reads anything (a browser runs the extension, or D5's file scan
+        // is on), it has no network.
         var exe = Path.Combine(AppContext.BaseDirectory, NativeHostRegistration.HostExe);
-        var forced = (policy.ChromeExtensionId ?? policy.EdgeExtensionId ?? policy.FirefoxExtensionId) is not null
+        var forced = ((policy.ChromeExtensionId ?? policy.EdgeExtensionId ?? policy.FirefoxExtensionId) is not null
+                      || policy.DiscoveryEnabled)
                      && File.Exists(exe);
         var scanner = ScannerFirewallReport(forced ? exe : null);
         if (forced || scanner.Changed || scanner.Error is not null) reports.Add(scanner);

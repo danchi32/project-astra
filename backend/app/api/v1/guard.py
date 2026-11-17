@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles, requires
 from app.core.database import get_db
 from app.models import Device, User, UserRole
-from app.services import browser_policy, guard_approvals, guard_events
+from app.services import browser_policy, guard_approvals, guard_discovery, guard_events
 from app.services.browser_policy import BrowserPolicyBody, BrowserResult
 from app.services.entitlements import AI_GUARD
 
@@ -141,6 +141,43 @@ async def list_guard_events(
                            action=e.action, counts=e.counts, contact_list=e.contact_list,
                            keyword_hits=e.keyword_hits, unknown=e.unknown, outcome=e.outcome, reason=e.reason)
             for e, host in await guard_events.recent(session, actor.org_id, days, limit, offset)]
+
+
+# ── D5: where sensitive files are. Folder paths name people, so admins only. ───────────────
+
+class DiscoveryFolderRead(BaseModel):
+    path: str
+    files: int
+    files_with_findings: int
+    counts: dict[str, int]
+    contact_lists: int
+
+
+class DiscoveryDeviceRead(BaseModel):
+    device_id: uuid.UUID
+    hostname: str
+    scanned_at: datetime
+    files_scanned: int
+    files_skipped: int
+    truncated: bool
+    folders: list[DiscoveryFolderRead]
+
+
+class DiscoveryRead(BaseModel):
+    pcs: int
+    files_with_findings: int
+    contact_lists: int
+    kinds: dict[str, int]
+    devices: list[DiscoveryDeviceRead]
+
+
+@router.get("/discovery", response_model=DiscoveryRead,
+            summary="Where sensitive files are on the organization's PCs, by folder, counts only (admin)")
+async def discovery(
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> DiscoveryRead:
+    return DiscoveryRead(**await guard_discovery.for_org(session, actor.org_id))
 
 
 # ── D7: approvals. Admin only; every decision is audited. ──────────────────────────────────

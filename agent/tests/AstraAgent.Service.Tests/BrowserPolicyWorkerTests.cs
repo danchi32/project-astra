@@ -42,6 +42,10 @@ public class BrowserPolicyWorkerTests
         public int ApprovalFetches;
         public Task<IReadOnlyList<AgentGuardApproval>?> GetGuardApprovalsAsync(string t, CancellationToken ct)
         { ApprovalFetches++; return Task.FromResult(Approvals); }
+        public readonly List<DiscoveryReport> Discoveries = [];
+        public bool DiscoveryAccepted = true;
+        public Task<bool> SendDiscoveryAsync(string t, DateTime at, DiscoveryReport r, CancellationToken ct)
+        { Discoveries.Add(r); return Task.FromResult(DiscoveryAccepted); }
 
         public Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct) => throw new NotSupportedException();
         public Task<HeartbeatResult> HeartbeatAsync(string token, HeartbeatRequest request, CancellationToken ct) => throw new NotSupportedException();

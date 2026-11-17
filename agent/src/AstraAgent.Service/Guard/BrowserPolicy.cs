@@ -41,6 +41,8 @@ public sealed record BrowserPolicy
     /// <summary>Finding kinds recorded but never acted on. E-mail addresses by default: they are everywhere.</summary>
     public IReadOnlyList<string> GuardIgnoreKinds { get; init; } = ["Email"];
     public IReadOnlyList<string> GuardKeywords { get; init; } = Array.Empty<string>();
+    /// <summary>D5: once a week, map where sensitive files are on this PC (folder counts only).</summary>
+    public bool DiscoveryEnabled { get; init; }
 
     public const int MaxSites = 500;
     public const int MaxKeywords = 200;

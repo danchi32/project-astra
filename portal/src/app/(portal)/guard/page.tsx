@@ -121,6 +121,17 @@ export default function GuardPage() {
               </label>
             ))}
           </div>
+          <label className="flex items-start gap-3 text-sm pt-4" style={{ color: "var(--text-primary)", borderTop: "1px solid var(--border)" }}>
+            <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={form.discovery_enabled}
+              onChange={(e) => setForm({ ...form, discovery_enabled: e.target.checked })} />
+            <span>Find where sensitive files are kept
+              <span className="block text-xs" style={muted}>
+                Once a week, on each PC, SAVIO checks the text, Word and Excel files in people&apos;s Desktop, Documents,
+                Downloads and OneDrive folders. You see which folders hold Aadhaar, PAN, card or bank numbers and how many,
+                never the files&apos; names or contents. Results under AI Guard → Where data lives.
+              </span>
+            </span>
+          </label>
           <div className="pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
             <div>
               <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Sensitive data in the browser</h2>

@@ -1,4 +1,20 @@
+using System.Diagnostics;
+using System.Text.Json;
 using AstraAgent.GuardHost;
+
+// D5: started by the SAVIO service with "--discover <root>…" to map where sensitive files are.
+// Browsers start this exe with an extension origin or a manifest path as the first argument,
+// never "--discover". The result (folder paths and counts, no file names, no text) is one JSON
+// document on stdout. This process has no network (E4's firewall rules).
+if (args.Length > 0 && args[0] == "--discover")
+{
+    try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle; } catch { /* best effort */ }
+    var result = Discovery.Run(args[1..], TimeSpan.FromMilliseconds(5));
+    await using var stdout = Console.OpenStandardOutput();
+    await JsonSerializer.SerializeAsync(stdout, result,
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+    return 0;
+}
 
 // Started by Chrome / Edge / Firefox when the SAVIO extension connects. stdin/stdout carry the
 // native messaging frames; nothing else may be written to stdout, or the browser drops the

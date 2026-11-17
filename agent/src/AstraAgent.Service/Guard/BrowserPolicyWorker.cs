@@ -34,6 +34,11 @@ public sealed class BrowserPolicyWorker(
     internal Action<IReadOnlyList<AgentGuardApproval>> StoreApprovals { get; init; } = GuardApprovalStore.WriteMachine;
 
     private AgentBrowserPolicy? _current;
+
+    /// <summary>The policy last fetched, for the other AI Guard workers (D5). Null until the
+    /// backend has answered once.</summary>
+    public BrowserPolicy? Current => _current?.Policy.ToPolicy();
+
     private bool _approvalsMayBeStored = true;   // from a previous run, until the first cycle clears them
     private string? _currentFor;
     private DateTime _nextFetch = DateTime.MinValue;

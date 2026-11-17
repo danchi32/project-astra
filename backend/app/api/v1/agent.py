@@ -10,6 +10,7 @@ import uuid
 
 from app.api.deps import get_rate_limited_device, get_rate_limited_device_any_status
 from app.services.browser_policy import BrowserPolicyReport
+from app.services.guard_discovery import DiscoveryIn
 from app.services.guard_events import GuardEventBatch
 from app.core.database import get_db
 from app.models import Device
@@ -399,6 +400,21 @@ async def agent_guard_events(
     from app.services import guard_events
 
     await guard_events.ingest(session, device, body)
+
+
+@router.post(
+    "/guard/discovery",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="D5: this device's map of where sensitive files are, folder counts only (agent only)",
+)
+async def agent_guard_discovery(
+    body: DiscoveryIn,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    from app.services import guard_discovery
+
+    await guard_discovery.ingest(session, device, body)
 
 
 @router.get(

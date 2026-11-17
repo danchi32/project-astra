@@ -67,7 +67,10 @@ builder.Services.AddSingleton<AstraAgent.Service.Remediation.ISystemTaskRunner,
                               AstraAgent.Service.Remediation.SystemTaskRunner>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
-builder.Services.AddHostedService<AstraAgent.Service.Guard.BrowserPolicyWorker>();
+// One instance: D5's file scan reads the policy this worker last fetched.
+builder.Services.AddSingleton<AstraAgent.Service.Guard.BrowserPolicyWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AstraAgent.Service.Guard.BrowserPolicyWorker>());
+builder.Services.AddHostedService<AstraAgent.Service.Guard.DiscoveryWorker>();
 // E3: events from the browser extension, via the native host, to the backend (counts only).
 builder.Services.AddSingleton(_ => AstraAgent.Service.Guard.GuardEventQueue.OnDisk());
 builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventPipeServer>();

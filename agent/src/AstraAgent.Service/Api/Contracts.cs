@@ -209,6 +209,23 @@ public sealed record RemoteSupportPlan(
     // drift: it is the Windows service name AND the registry key the node id lives under.
     [property: JsonPropertyName("service_name")] string? ServiceName = null);
 
+/// <summary>Phase 3 · D5: one folder where the scan found something, in counts. Never a file
+/// name, never text.</summary>
+public sealed record DiscoveryFolder(
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("files")] int Files,
+    [property: JsonPropertyName("files_with_findings")] int FilesWithFindings,
+    [property: JsonPropertyName("counts")] Dictionary<string, int> Counts,
+    [property: JsonPropertyName("contact_lists")] int ContactLists);
+
+/// <summary>Phase 3 · D5: what the native host's file scan found on this PC.</summary>
+public sealed record DiscoveryReport(
+    [property: JsonPropertyName("ok")] bool Ok,
+    [property: JsonPropertyName("files_scanned")] int FilesScanned,
+    [property: JsonPropertyName("files_skipped")] int FilesSkipped,
+    [property: JsonPropertyName("truncated")] bool Truncated,
+    [property: JsonPropertyName("folders")] IReadOnlyList<DiscoveryFolder> Folders);
+
 /// <summary>Phase 3 · D7: an approval in force on this device: one Windows account, one site, one
 /// channel, until a time.</summary>
 public sealed record AgentGuardApproval(
@@ -239,7 +256,8 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("guard_mode")] string? GuardMode = null,
     [property: JsonPropertyName("guard_watched_sites")] IReadOnlyList<string>? GuardWatchedSites = null,
     [property: JsonPropertyName("guard_ignore_kinds")] IReadOnlyList<string>? GuardIgnoreKinds = null,
-    [property: JsonPropertyName("guard_keywords")] IReadOnlyList<string>? GuardKeywords = null)
+    [property: JsonPropertyName("guard_keywords")] IReadOnlyList<string>? GuardKeywords = null,
+    [property: JsonPropertyName("discovery_enabled")] bool DiscoveryEnabled = false)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -252,5 +270,6 @@ public sealed record AgentBrowserPolicyBody(
         FirefoxExtensionId = FirefoxExtensionId, FirefoxExtensionUrl = FirefoxExtensionUrl,
         GuardMode = GuardMode ?? "log", GuardWatchedSites = GuardWatchedSites ?? [],
         GuardIgnoreKinds = GuardIgnoreKinds ?? ["Email"], GuardKeywords = GuardKeywords ?? [],
+        DiscoveryEnabled = DiscoveryEnabled,
     };
 }
