@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "mode": {
+      "title": "What to do when sensitive data is found",
+      "description": "log = record only (the default, for the first 14 days); warn = ask first; block = refuse.",
+      "type": "string",
+      "enum": ["log", "warn", "block"]
+    },
+    "watchedSites": {
+      "title": "Sites to watch",
+      "description": "Host names (subdomains included). Empty means every site.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "ignoreKinds": {
+      "title": "Kinds of data to record but never act on",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "keywords": {
+      "title": "Restricted keywords",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

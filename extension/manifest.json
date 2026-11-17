@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "SAVIO Guard",
+  "version": "0.1.0",
+  "description": "Checks what leaves your browser for Aadhaar, PAN, card and bank numbers, on PCs your organization manages with SAVIO. Checks run on this PC; nothing is sent to SAVIO's servers.",
+  "permissions": ["nativeMessaging", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_start", "all_frames": true }
+  ],
+  "storage": { "managed_schema": "managed_schema.json" },
+  "browser_specific_settings": { "gecko": { "id": "guard@savio.app", "strict_min_version": "128.0" } }
+}
