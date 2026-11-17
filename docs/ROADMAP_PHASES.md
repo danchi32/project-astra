@@ -996,6 +996,43 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
 - **E3 Outbound Ledger:** readable local copy of everything the agent sends + portal page.
 - **D4 Detectors:** Aadhaar (Verhoeff), PAN, GSTIN, card (Luhn), +91 mobile, email,
   IFSC+account; bulk/structured "contact list" detection; admin keywords.
+  - **As built (16 Nov, branch `phase-3`, not pushed):** new library
+    `agent/src/AstraAgent.Guard`. It has no dependencies and does no I/O, so the E4 isolated
+    scanner process can host it.
+  - **`PiiScanner.Scan(text, keywords)`** returns counts per finding, a contact-list flag,
+    keyword hits *by index*, and Truncated / Incomplete flags. **It returns no text from the
+    input**, which is the E4 contract: it says what kind of thing it saw and how much,
+    never the thing.
+  - **Checks beyond the pattern:**
+    - Aadhaar: Verhoeff check digit.
+    - GSTIN: check character.
+    - Cards: Luhn; must start with 2–6; all-same digits rejected.
+    - Bank account: an account number counts only on a line that also has an IFSC code.
+  - **False-positive guard (Spike 3):** an unformatted 12-digit Aadhaar or 16-digit card
+    counts only with a context word within 40 characters ("aadhaar", "uid", "आधार", "card",
+    "visa", "cvv", …), because order and invoice numbers look exactly like them. The
+    formatted forms (4-4-4, 4-4-4-4) count on their own.
+  - **Safety:**
+    - Digits are ASCII only: .NET's `\d` would also match Devanagari digits.
+    - Every regex has a 500 ms timeout; a timed-out scan is reported Incomplete, never
+      clean.
+    - Input is capped at 5M characters, and a capped scan is flagged Truncated.
+    - Admin keywords are matched literally (escaped), as whole words, at most 200.
+  - **Checked:** `PiiScannerTests` (14):
+    - published checksum examples;
+    - each kind found in ordinary text;
+    - bare digit runs needing context;
+    - six look-alikes not reported;
+    - Devanagari digits ignored;
+    - contact list against prose;
+    - keyword semantics;
+    - no input text in the serialised result;
+    - the size cap.
+  - All 323 agent tests on the `phase-3` base pass.
+  - **Speed:** Spike 3 measured these patterns on one core: 10 KB in 5 ms, 1 MB in 55 ms,
+    about 50 MB of memory.
+  - **Not yet:** false-positive rates on real business documents (needs pilot samples), and
+    wiring it into the extension and native host (D3/E4).
 - **D5 Zero-config discovery:** low-priority scheduled file scan → sensitivity map by folder
   (counts only) → suggested policies for the admin to approve.
 - **D7 Coaching:** warn / justify / block dialogs in-page, Hindi + English.
