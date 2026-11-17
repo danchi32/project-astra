@@ -112,6 +112,6 @@ async def test_email_goes_to_the_asker_only_escaped_and_audited(
 
     async with session_factory() as s:
         rows = (await s.execute(select(AuditLog).where(AuditLog.action == "report.brief_emailed"))).scalars().all()
-    assert len(rows) == 5 and rows[0].detail["sent"] is True
+    assert len(rows) == 5 and {"period": "week"} in [r.detail for r in rows]
     assert (await client.get("/api/v1/reports/brief", headers=user_headers)).status_code == 403
     assert (await client.post("/api/v1/reports/brief/email", headers=user_headers, json={})).status_code == 403

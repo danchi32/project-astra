@@ -159,12 +159,13 @@ async def send(session: AsyncSession, *, actor: User, period: str) -> tuple[bool
     if recent >= MAX_EMAILS_PER_HOUR:
         raise ConflictError(f"At most {MAX_EMAILS_PER_HOUR} briefs an hour. Try again later.")
     to = actor.email
-    brief = await build(session, actor=actor, period=period)
-    sent = await EmailService().send(to=to, subject=f"SAVIO · {brief['title']}", html=render_html(brief))
+    # Recorded (and committed) before the slow build and send, so parallel requests see each
+    # other in the count instead of all passing it at once.
     await AuditService(session).record(
         org_id=actor.org_id, actor_id=actor.id, action="report.brief_emailed",
-        target_type="organization", target_id=str(actor.org_id),
-        detail={"period": period, "sent": sent},
+        target_type="organization", target_id=str(actor.org_id), detail={"period": period},
     )
     await session.commit()
+    brief = await build(session, actor=actor, period=period)
+    sent = await EmailService().send(to=to, subject=f"SAVIO · {brief['title']}", html=render_html(brief))
     return sent, to
