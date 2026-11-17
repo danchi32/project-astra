@@ -81,6 +81,8 @@ public static class BrowserPolicyWriter
                      && File.Exists(exe);
         var scanner = ScannerFirewallReport(forced ? exe : null);
         if (forced || scanner.Changed || scanner.Error is not null) reports.Add(scanner);
+        // An open Chrome reads the new values on its own timer, within about 15 minutes (live
+        // test). RefreshPolicyEx(machine, RP_FORCE) did not shorten that, so it is not called.
         return reports;
     }
 

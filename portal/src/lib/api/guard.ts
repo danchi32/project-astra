@@ -10,6 +10,8 @@ export interface BrowserPolicy {
   allowed_sites: string[];
   google_allowed_domains: string[];
   chrome_extension_id: string | null;
+  // "manual": installed by hand (pilot or test), so no force-install entry. Set by SAVIO.
+  extension_install: "store" | "manual";
   edge_extension_id: string | null;
   firefox_extension_id: string | null;
   firefox_extension_url: string | null;

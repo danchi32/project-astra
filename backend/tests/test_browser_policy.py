@@ -97,6 +97,20 @@ async def test_extension_settings(client, admin_headers, session_factory, admin_
         assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad)).status_code == 422, bad
 
 
+async def test_manual_install(client, admin_headers, session_factory, admin_user):
+    """A hand-installed extension (pilot before the store listing, or testing): no install URL,
+    and developer mode must stay available for it."""
+    await _guard_on(session_factory, admin_user.org_id)
+    ok = {"chrome_extension_id": "abcdefghijklmnopabcdefghijklmnop", "firefox_extension_id": "guard@savio.app",
+          "extension_install": "manual"}
+    r = await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=ok)
+    assert r.status_code == 200 and r.json()["policy"]["extension_install"] == "manual"
+    for bad in ({**ok, "extension_developer_mode_off": True},
+                {**ok, "firefox_extension_url": "https://addons.mozilla.org/x.xpi"},
+                {**ok, "extension_install": "sideload"}):
+        assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad)).status_code == 422, bad
+
+
 async def test_roles(client, admin_headers, user_headers, session_factory, admin_user, org):
     from tests.conftest import _create_user, auth_headers
 
@@ -131,6 +145,18 @@ async def test_reports_are_kept_and_tampering_is_raised(client, admin_headers, s
     assert "TAMPER-PC" in note.message and audit.detail["repaired"] == ["Chrome: IncognitoModeAvailability"]
     assert len((await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()) == 1
 
+    # The admin changed the policy: the first report of version 2 rewrites values, an update.
+    # A planted user-level host in the same report is still tampering.
+    updated = {"version": 2, "results": [{"browser": "Chrome", "repaired": [
+        "IncognitoModeAvailability", "user-level com.savio.guard"]}]}
+    await client.post("/api/v1/agent/browser-policy/report", headers=h, json=updated)
+    async with session_factory() as s:
+        audits = (await s.execute(select(AuditLog).where(AuditLog.action == "guard.browser_policy_tamper")
+                                  .order_by(AuditLog.created_at))).scalars().all()
+    assert [a.detail["repaired"] for a in audits][1:] == [["Chrome: user-level com.savio.guard"]]
+    chrome = (await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()[0]["results"][0]
+    assert chrome["set"] == ["IncognitoModeAvailability"] and chrome["repaired"] == ["user-level com.savio.guard"]
+
     # E4: the scanner's firewall block reports beside the browsers, and its problems show.
     scanner = {"version": 1, "results": [{"browser": "Scanner", "error": "Windows Firewall is off for at least one profile"}]}
     assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=scanner)).status_code == 204
@@ -146,6 +172,7 @@ async def test_tamper_reports_cannot_carry_prose_or_flood(client, admin_headers,
     tamper notification an hour (the audit keeps every one)."""
     await _guard_on(session_factory, admin_user.org_id)
     _, h = await _enroll(client, admin_headers, "LOOP-PC")
+    await client.post("/api/v1/agent/browser-policy/report", headers=h, json={"version": 1, "results": []})
     for _ in range(3):
         r = {"version": 1, "results": [{"browser": "Chrome", "repaired": [
             "IncognitoModeAvailability", "Your account is locked! Call +1-555-0100 now", "\u202eevil"]}]}

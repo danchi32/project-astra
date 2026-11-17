@@ -257,7 +257,8 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("guard_watched_sites")] IReadOnlyList<string>? GuardWatchedSites = null,
     [property: JsonPropertyName("guard_ignore_kinds")] IReadOnlyList<string>? GuardIgnoreKinds = null,
     [property: JsonPropertyName("guard_keywords")] IReadOnlyList<string>? GuardKeywords = null,
-    [property: JsonPropertyName("discovery_enabled")] bool DiscoveryEnabled = false)
+    [property: JsonPropertyName("discovery_enabled")] bool DiscoveryEnabled = false,
+    [property: JsonPropertyName("extension_install")] string? ExtensionInstall = null)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -270,6 +271,6 @@ public sealed record AgentBrowserPolicyBody(
         FirefoxExtensionId = FirefoxExtensionId, FirefoxExtensionUrl = FirefoxExtensionUrl,
         GuardMode = GuardMode ?? "log", GuardWatchedSites = GuardWatchedSites ?? [],
         GuardIgnoreKinds = GuardIgnoreKinds ?? ["Email"], GuardKeywords = GuardKeywords ?? [],
-        DiscoveryEnabled = DiscoveryEnabled,
+        DiscoveryEnabled = DiscoveryEnabled, ExtensionInstall = ExtensionInstall ?? "store",
     };
 }

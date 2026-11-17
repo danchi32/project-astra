@@ -32,6 +32,11 @@ public sealed record BrowserPolicy
     public string? EdgeExtensionId { get; init; }
     public string? FirefoxExtensionId { get; init; }
     public string? FirefoxExtensionUrl { get; init; }
+    /// <summary>"store" (force-installed from the store) or "manual" (installed by hand, for a
+    /// pilot or a test). Manual writes no force-install entry: a browser refuses a hand-installed
+    /// copy of a force-listed ID. Settings and the native host are set up the same way.</summary>
+    public string ExtensionInstall { get; init; } = "store";
+    public bool ManualInstall => ExtensionInstall == "manual";
 
     /// <summary>D3: the extension's own settings, handed to it as managed policy wherever it is
     /// forced in. log = record only; warn = ask first; block = refuse.</summary>
@@ -66,7 +71,13 @@ public sealed record BrowserPolicy
         if (ChromeExtensionId is { } c && !ChromiumId.IsMatch(c)) problems.Add("Chrome extension ID is malformed");
         if (EdgeExtensionId is { } e && !ChromiumId.IsMatch(e)) problems.Add("Edge extension ID is malformed");
         if (FirefoxExtensionId is { } f && !FirefoxId.IsMatch(f)) problems.Add("Firefox extension ID is malformed");
-        if (FirefoxExtensionId is not null != FirefoxExtensionUrl is not null)
+        if (ExtensionInstall is not ("store" or "manual")) problems.Add("extension install must be store or manual");
+        if (ManualInstall)
+        {
+            if (FirefoxExtensionUrl is not null) problems.Add("a manually installed extension has no install URL");
+            if (ExtensionDeveloperModeOff) problems.Add("installing the extension by hand needs developer mode");
+        }
+        else if (FirefoxExtensionId is not null != FirefoxExtensionUrl is not null)
             problems.Add("Firefox extension needs both an ID and an install URL");
         if (FirefoxExtensionUrl is { } u &&
             !(Uri.TryCreate(u, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && u.Length <= 500))
@@ -117,7 +128,8 @@ public static class BrowserPolicyMap
         var id = edge ? p.EdgeExtensionId : p.ChromeExtensionId;
         if (id is not null)
         {
-            v["ExtensionInstallForcelist"] = new[] { $"{id};{(edge ? EdgeStore : ChromeStore)}" };
+            if (!p.ManualInstall)
+                v["ExtensionInstallForcelist"] = new[] { $"{id};{(edge ? EdgeStore : ChromeStore)}" };
             v[$@"3rdparty\extensions\{id}\policy"] = GuardSettings(p);
             // Only machine-wide native hosts: otherwise a user could register their own
             // com.savio.guard under HKCU, which the browser prefers, and answer "nothing found"
@@ -150,16 +162,17 @@ public static class BrowserPolicyMap
                 ["Exceptions"] = p.AllowedSites.SelectMany(Patterns).ToArray(),
             };
         if (p.GoogleAllowedDomains.Count > 0) v["AllowedDomainsForApps"] = string.Join(",", p.GoogleAllowedDomains);
-        if (p.FirefoxExtensionId is not null && p.FirefoxExtensionUrl is not null)
+        if (p.FirefoxExtensionId is not null && (p.FirefoxExtensionUrl is not null || p.ManualInstall))
         {
-            v["ExtensionSettings"] = new Dictionary<string, object>
-            {
-                [p.FirefoxExtensionId] = new Dictionary<string, object>
+            if (!p.ManualInstall)
+                v["ExtensionSettings"] = new Dictionary<string, object>
                 {
-                    ["installation_mode"] = "force_installed",
-                    ["install_url"] = p.FirefoxExtensionUrl,
-                },
-            };
+                    [p.FirefoxExtensionId] = new Dictionary<string, object>
+                    {
+                        ["installation_mode"] = "force_installed",
+                        ["install_url"] = p.FirefoxExtensionUrl!,
+                    },
+                };
             v[$@"3rdparty\Extensions\{p.FirefoxExtensionId}"] = GuardSettings(p);
         }
         return v;

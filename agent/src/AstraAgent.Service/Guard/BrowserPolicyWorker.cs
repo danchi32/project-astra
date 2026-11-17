@@ -94,8 +94,10 @@ public sealed class BrowserPolicyWorker(
             if (await api.ReportBrowserPolicyAsync(token, _current.Version, reports, ct))
                 _lastReported = signature;
         }
+        // A new version also rewrites values, so this cannot say who changed them; the backend,
+        // which knows the last version this PC reported, decides what is tampering.
         foreach (var r in reports.Where(r => r.Repaired.Count > 0))
-            logger.LogWarning("Browser policy for {Browser} was changed on this PC and put back: {Names}",
+            logger.LogWarning("Browser policy for {Browser} differed from the org's and was rewritten: {Names}",
                               r.Browser, string.Join(", ", r.Repaired));
 
         await SyncApprovalsAsync(token, _current.Policy.ToPolicy(), ct);

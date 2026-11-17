@@ -99,7 +99,7 @@ def _rules(p: BrowserPolicyBody, ev: dict) -> list[dict]:
             "changes": ["No incognito / InPrivate / private windows"],
         })
 
-    if extension and not p.extension_developer_mode_off:
+    if extension and p.extension_install == "store" and not p.extension_developer_mode_off:
         out.append({
             "key": "no_unpacked_extensions",
             "title": "Turn off extension developer mode",

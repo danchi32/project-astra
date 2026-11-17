@@ -1486,15 +1486,35 @@ removed and the 0.15.0 agent put back.
 - **Learned about testing from the Claude app:** registry writes made from inside it are
   virtualised (MSIX), so they reach neither the browsers nor the service. Test keys were
   planted as SYSTEM instead.
+- **The extension in real Chrome (manual install):** Chrome refuses an unpacked copy of a
+  force-listed ID ("blocked by the administrator"), so the policy gained `extension_install`:
+  `store` (default) or `manual`. Manual writes everything except the force-install entry, needs
+  developer mode, and has no Firefox install URL. With it, a keyed unpacked copy in a
+  throwaway profile:
+  - read its managed settings and reached the native host;
+  - warn: the prompt appeared; "proceeded" and "cancelled" reached the backend;
+  - justify: the reasons prompt appeared;
+  - redact: "PAN [PAN], card [card number], re [restricted]" was pasted, with the notice;
+  - block: the "SAVIO blocked this" dialog appeared.
+- **Found and fixed in the extension test:** every guard-mode change was reported as
+  tampering ("changed on this PC and put back"), which alerted the admin. The agent cannot tell
+  the org's new value from someone else's. The backend now treats repairs in the first report
+  of a new version as an update. It keeps each PC's last version, so this holds across agent
+  restarts. A planted user-level host is still tampering.
+- **Learned:** an open Chrome re-reads policy on its own 15-minute timer (seen at 17:38, 17:53
+  and 18:08). With the agent's hourly fetch, a mode change reaches an open browser within about
+  75 minutes. A forced Windows policy refresh (`RefreshPolicyEx`) did not shorten this, so the
+  agent does not call it. `chrome://policy` → "Reload policies" applies a change at once.
 - **Not covered here:**
-  - the extension inside a real browser: Chrome refuses an unpacked copy of a force-listed
-    ID, and it needs the store listing;
+  - the store-installed extension, which needs the store listing;
   - a host that really cannot connect, because the firewall is off on this laptop;
   - a junction swap during a scan.
 - **Left on the laptop:**
   - an empty Firefox `policies.json` (`{"policies": {}}`), which has no effect;
   - the agent's admin-only `state` files from the test (ledger, `discovery-last.txt`,
-    `p3test`).
+    `p3test`);
+  - the backup of the 0.15.0 agent, `C:\Program Files\Astra\Agent.bak-p3test` (delete as
+    admin).
   - The 0.15.0 agent is running again.
 
 ### 3b — Compliance packs

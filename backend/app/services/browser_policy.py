@@ -71,6 +71,11 @@ class BrowserPolicyBody(BaseModel):
     edge_extension_id: str | None = None
     firefox_extension_id: str | None = None
     firefox_extension_url: str | None = Field(default=None, max_length=500)
+    # "store": the extension is force-installed from the browser's store (the normal case).
+    # "manual": IT installs it by hand (a pilot before the store listing, or testing): no
+    # force-install entry, because a browser refuses a hand-installed copy of a force-listed
+    # ID; the extension's settings and its native host are set up exactly as for "store".
+    extension_install: Literal["store", "manual"] = "store"
     # D3: the extension's own settings, handed to it as managed policy where it is forced in.
     guard_mode: Literal["log", "warn", "justify", "redact", "approve", "block"] = "log"
     guard_watched_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
@@ -118,7 +123,13 @@ class BrowserPolicyBody(BaseModel):
             value = getattr(self, name)
             if value is not None and not rx.match(value):
                 raise ValueError(f"{name} is malformed")
-        if (self.firefox_extension_id is None) != (self.firefox_extension_url is None):
+        if self.extension_install == "manual":
+            if self.firefox_extension_url is not None:
+                raise ValueError("A manually installed extension has no install URL")
+            if self.extension_developer_mode_off:
+                raise ValueError("Installing the extension by hand needs extension developer mode: "
+                                 "turn off 'No extension developer mode' while it is manual")
+        elif (self.firefox_extension_id is None) != (self.firefox_extension_url is None):
             raise ValueError("A Firefox extension needs both an ID and an install URL")
         if self.firefox_extension_url and not self.firefox_extension_url.startswith("https://"):
             raise ValueError("The Firefox extension URL must be https")
@@ -197,8 +208,17 @@ async def for_device(session: AsyncSession, device: Device) -> dict:
 async def record_report(session: AsyncSession, device: Device, report: BrowserPolicyReport) -> None:
     if not await entitled(session, device.org_id):
         return   # accepted and dropped, as the other AI Guard ingest paths do
-    results = [r.model_dump() for r in report.results]
     state = await session.get(DeviceBrowserPolicyState, device.id)
+    if state is None or state.version != report.version:
+        # The agent cannot tell a value someone changed from one the org changed: both differ
+        # from what is wanted now. In the first report of a new version it is the org's update,
+        # not tampering (live test: every mode change alerted the admin). The version is kept
+        # here, so this holds across agent restarts. A planted user-level host is never the
+        # org's doing and stays tampering.
+        for r in report.results:
+            update = [n for n in r.repaired if not n.startswith("user-level ")]
+            r.set, r.repaired = r.set + update, [n for n in r.repaired if n.startswith("user-level ")]
+    results = [r.model_dump() for r in report.results]
     if state is None:
         state = DeviceBrowserPolicyState(device_id=device.id, org_id=device.org_id, version=report.version,
                                          results=results, reported_at=utcnow())

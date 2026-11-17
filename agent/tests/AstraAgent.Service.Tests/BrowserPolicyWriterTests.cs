@@ -289,6 +289,25 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     }
 
     [Fact]
+    public void A_manual_install_sets_everything_but_the_force_install()
+    {
+        var manual = Full with { ExtensionInstall = "manual", ExtensionDeveloperModeOff = false };
+        Assert.Empty(manual.Validate());
+        var chrome = BrowserPolicyMap.Chromium(manual, Browser.Chrome);
+        Assert.False(chrome.ContainsKey("ExtensionInstallForcelist"));   // a browser refuses a hand-installed force-listed ID
+        Assert.True(chrome.ContainsKey($@"3rdparty\extensions\{ChromeId}\policy"));
+        Assert.Equal(0, chrome["NativeMessagingUserLevelHosts"]);
+
+        var ff = BrowserPolicyMap.Firefox(manual with { FirefoxExtensionId = "guard@savio.app" });
+        Assert.False(ff.ContainsKey("ExtensionSettings"));
+        Assert.True(ff.ContainsKey(@"3rdparty\Extensions\guard@savio.app"));
+
+        Assert.NotEmpty((manual with { ExtensionDeveloperModeOff = true }).Validate());
+        Assert.NotEmpty((manual with { FirefoxExtensionId = "guard@savio.app", FirefoxExtensionUrl = "https://addons.mozilla.org/x.xpi" }).Validate());
+        Assert.NotEmpty((Full with { ExtensionInstall = "sideload" }).Validate());
+    }
+
+    [Fact]
     public void Firefox_is_written_to_only_under_program_files()
     {
         // Review M4: a user-writable install folder is never written to as SYSTEM.
