@@ -10,15 +10,18 @@ service stores the policy, hands it to entitled PCs, and keeps each PC's last re
 from __future__ import annotations
 
 import re
+import unicodedata
+from datetime import timedelta
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Device,
     DeviceBrowserPolicyState,
+    Notification,
     NotificationCategory,
     NotificationSeverity,
     Organization,
@@ -38,11 +41,25 @@ FindingKind = Literal["Aadhaar", "Pan", "Gstin", "PaymentCard", "IndianMobile", 
 _HOST = re.compile(r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$")
 _CHROMIUM_ID = re.compile(r"^[a-p]{32}$")
 _FIREFOX_ID = re.compile(r"^(\{[0-9a-fA-F-]{36}\}|[A-Za-z0-9._-]{1,80}@[A-Za-z0-9.-]{1,80})$")
+# Where a forced Firefox extension may come from (security review L4): Mozilla's own store. A
+# self-hosted .xpi host is added here, in code, when there is one.
+FIREFOX_EXTENSION_HOSTS = ("addons.mozilla.org",)
+# Names an agent may report: policy names, 3rdparty paths, extension IDs, firewall rule names.
+_REPORT_NAME = re.compile(r"^[A-Za-z0-9_.@\\{}: -]{1,100}$")
+TAMPER_NOTIFY_EVERY = timedelta(hours=1)
+
+
+def has_control(s: str) -> bool:
+    """Any control, format (bidi overrides, zero-width), private-use or unassigned character.
+    Text from a device or an admin that ends up on screens is refused if it has one."""
+    return any(unicodedata.category(ch).startswith("C") for ch in s)
 
 
 class BrowserPolicyBody(BaseModel):
     """The same rules the agent's `BrowserPolicy.Validate` applies, checked here first, so a
-    policy the agent would refuse is never saved."""
+    policy the agent would refuse is never saved. Unknown fields are refused."""
+    model_config = ConfigDict(extra="forbid")
+
     incognito_off: bool = False
     extension_developer_mode_off: bool = False
     dev_tools_off: bool = False
@@ -76,6 +93,8 @@ class BrowserPolicyBody(BaseModel):
             kw = (raw or "").strip()
             if not 1 <= len(kw) <= 100:
                 raise ValueError("Keywords must be 1–100 characters")
+            if has_control(kw):
+                raise ValueError("Keywords cannot contain control or invisible characters")
             if kw.lower() not in (o.lower() for o in out):
                 out.append(kw)
         return out
@@ -103,10 +122,15 @@ class BrowserPolicyBody(BaseModel):
             raise ValueError("A Firefox extension needs both an ID and an install URL")
         if self.firefox_extension_url and not self.firefox_extension_url.startswith("https://"):
             raise ValueError("The Firefox extension URL must be https")
+        if self.firefox_extension_url:
+            host = self.firefox_extension_url.removeprefix("https://").split("/", 1)[0].lower()
+            if host not in FIREFOX_EXTENSION_HOSTS:
+                raise ValueError(f"The Firefox extension must come from {', '.join(FIREFOX_EXTENSION_HOSTS)}")
         return self
 
 
 class BrowserResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     # "Scanner" is not a browser: it is E4's firewall block on the extension's native host.
     browser: Literal["Chrome", "Edge", "Firefox", "Scanner"]
     set: list[str] = Field(default_factory=list, max_length=50)
@@ -118,10 +142,17 @@ class BrowserResult(BaseModel):
     @field_validator("set", "repaired", "removed", "conflicts")
     @classmethod
     def _names(cls, v: list[str]) -> list[str]:
-        return [n[:100] for n in v]
+        # Device-supplied, shown to staff and named in notifications: names only, never prose.
+        return [n for n in v if _REPORT_NAME.match(n)]
+
+    @field_validator("error")
+    @classmethod
+    def _error(cls, v: str | None) -> str | None:
+        return None if v is None else "".join(ch for ch in v if not unicodedata.category(ch).startswith("C"))
 
 
 class BrowserPolicyReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     version: int = Field(ge=0)
     results: list[BrowserResult] = Field(max_length=10)
 
@@ -164,6 +195,8 @@ async def for_device(session: AsyncSession, device: Device) -> dict:
 
 
 async def record_report(session: AsyncSession, device: Device, report: BrowserPolicyReport) -> None:
+    if not await entitled(session, device.org_id):
+        return   # accepted and dropped, as the other AI Guard ingest paths do
     results = [r.model_dump() for r in report.results]
     state = await session.get(DeviceBrowserPolicyState, device.id)
     if state is None:
@@ -181,12 +214,19 @@ async def record_report(session: AsyncSession, device: Device, report: BrowserPo
             target_type="device", target_id=str(device.id),
             detail={"device": device.hostname, "repaired": repaired[:20]},
         )
-        await NotificationService(session).notify(
-            org_id=device.org_id, category=NotificationCategory.SYSTEM,
-            severity=NotificationSeverity.WARNING, title="Browser policy tampered",
-            message=f"{device.hostname}: {', '.join(repaired[:5])} had been changed and was put back.",
-            link="/guard",
-        )
+        # At most one notification per PC an hour: a device reporting repairs in a loop must not
+        # flood every user's notification list (security review M1). The audit keeps them all.
+        message = f"{device.hostname}: {', '.join(repaired[:5])} had been changed and was put back."
+        recent = (await session.execute(select(func.count()).select_from(Notification).where(
+            Notification.org_id == device.org_id, Notification.title == "Browser policy tampered",
+            Notification.message.startswith(f"{device.hostname}: "),
+            Notification.created_at >= utcnow() - TAMPER_NOTIFY_EVERY))).scalar_one()
+        if recent == 0:
+            await NotificationService(session).notify(
+                org_id=device.org_id, category=NotificationCategory.SYSTEM,
+                severity=NotificationSeverity.WARNING, title="Browser policy tampered",
+                message=message, link="/guard",
+            )
     await session.commit()
 
 

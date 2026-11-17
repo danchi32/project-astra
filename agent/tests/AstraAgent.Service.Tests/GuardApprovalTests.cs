@@ -41,6 +41,12 @@ public sealed class GuardApprovalTests : IDisposable
             var s = GuardApprovalStore.ReadableBy(sid);
             s.AddAccessRule(new RegistryAccessRule(Me, RegistryRights.FullControl, AccessControlType.Allow));
             return s;
+        },
+        () =>
+        {
+            var s = GuardApprovalStore.AdminsOnly();
+            s.AddAccessRule(new RegistryAccessRule(Me, RegistryRights.FullControl, AccessControlType.Allow));
+            return s;
         });
 
     static AgentGuardApproval A(string user, string site, string channel = "paste", int minutes = 30) =>
@@ -60,7 +66,13 @@ public sealed class GuardApprovalTests : IDisposable
         Assert.Equal(2, Stored(Me.Value)!.Length);
         Assert.Single(Stored("S-1-5-21-1-2-3-1002")!);
         using (var parent = _root.OpenSubKey(GuardApprovals.KeyPath)!)
+        {
             Assert.Equal(2, parent.SubKeyCount);                         // an account Windows cannot name is skipped
+            var acl = parent.GetAccessControl();                           // review L4: not listable by users
+            Assert.True(acl.AreAccessRulesProtected);
+            Assert.DoesNotContain(acl.GetAccessRules(true, false, typeof(SecurityIdentifier)).Cast<RegistryAccessRule>(),
+                r => ((SecurityIdentifier)r.IdentityReference).IsWellKnown(WellKnownSidType.BuiltinUsersSid));
+        }
 
         Store().Write([A(@"PC\asha", "chatgpt.com")]);                   // ravi's ended
         Assert.Null(Stored("S-1-5-21-1-2-3-1002"));

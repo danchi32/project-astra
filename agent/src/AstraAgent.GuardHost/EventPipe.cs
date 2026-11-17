@@ -22,17 +22,21 @@ public static class EventPipe
     {
         try
         {
-            await using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out,
+            await using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut,
                 PipeOptions.Asynchronous, TokenImpersonationLevel.Identification);
-            using (var connect = CancellationTokenSource.CreateLinkedTokenSource(ct))
-            {
-                connect.CancelAfter(TimeSpan.FromSeconds(2));
-                await pipe.ConnectAsync(connect.Token);
-            }
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(3));
+            await pipe.ConnectAsync(timeout.Token);
             if (!OwnedBySystem(pipe)) return false;
-            await pipe.WriteAsync(e.ToJson(), ct);
-            await pipe.FlushAsync(ct);
-            return true;
+            // Length first, then the event; then wait for the service's one-byte answer. The
+            // service identifies this account while the connection is still open, which Windows
+            // allows only after it has read from it (found in the live test on a real PC).
+            var body = e.ToJson();
+            await pipe.WriteAsync(BitConverter.GetBytes(body.Length), timeout.Token);
+            await pipe.WriteAsync(body, timeout.Token);
+            await pipe.FlushAsync(timeout.Token);
+            var ack = new byte[1];
+            return await pipe.ReadAsync(ack, timeout.Token) == 1 && ack[0] == 1;
         }
         catch (Exception ex) when (ex is IOException or OperationCanceledException or TimeoutException or UnauthorizedAccessException)
         {

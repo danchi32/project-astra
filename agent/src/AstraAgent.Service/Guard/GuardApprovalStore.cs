@@ -16,7 +16,9 @@ namespace AstraAgent.Service.Guard;
 /// HKLM\SOFTWARE, so nobody can plant an approval for themselves. An account Windows cannot
 /// name (deleted, or a typo) is skipped, and keys for accounts with nothing in force are removed.
 /// </summary>
-public sealed class GuardApprovalStore(RegistryKey root, Func<string, string?> sidOf, Func<SecurityIdentifier, RegistrySecurity> security)
+public sealed class GuardApprovalStore(
+    RegistryKey root, Func<string, string?> sidOf, Func<SecurityIdentifier, RegistrySecurity> security,
+    Func<RegistrySecurity>? parentSecurity = null)
 {
     public static void WriteMachine(IReadOnlyList<AgentGuardApproval> approvals) =>
         new GuardApprovalStore(Registry.LocalMachine, SidOf, ReadableBy).Write(approvals);
@@ -34,6 +36,10 @@ public sealed class GuardApprovalStore(RegistryKey root, Func<string, string?> s
             return;
         }
         using var parent = root.CreateSubKey(GuardApprovals.KeyPath, writable: true);
+        // Security review L4: the parent lists one subkey per account with an approval in force.
+        // Nobody but SYSTEM and Administrators may list it; each person opens their own subkey
+        // by its full path (the registry checks only the key being opened).
+        parent.SetAccessControl((parentSecurity ?? AdminsOnly)());
         foreach (var stale in parent.GetSubKeyNames().Where(s => !bySid.ContainsKey(s)))
             parent.DeleteSubKeyTree(stale, throwOnMissingSubKey: false);
         foreach (var (sid, entries) in bySid)
@@ -49,6 +55,16 @@ public sealed class GuardApprovalStore(RegistryKey root, Func<string, string?> s
     {
         try { return ((SecurityIdentifier)new NTAccount(account).Translate(typeof(SecurityIdentifier))).Value; }
         catch (Exception ex) when (ex is IdentityNotMappedException or SystemException) { return null; }
+    }
+
+    internal static RegistrySecurity AdminsOnly()
+    {
+        var s = new RegistrySecurity();
+        s.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        foreach (var admin in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
+            s.AddAccessRule(new RegistryAccessRule(new SecurityIdentifier(admin, null), RegistryRights.FullControl,
+                InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow));
+        return s;
     }
 
     /// <summary>SYSTEM and Administrators in full, the account itself read-only, nothing inherited.</summary>

@@ -1364,6 +1364,139 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
 - Actions available: log, warn, justify, redact (where supported), block. Default for a new
   org: **log-only for 14 days** (the pilot mode, E8).
 
+#### 3a security review (17 Nov)
+Three `security-reviewer` passes: the agent, the extension, and the backend with the portal.
+Each finding was checked against the code before it was fixed.
+
+- **Fixed: agent**
+  - **C1:** the Outbound Ledger wrote the generated local-account passwords ("Temporary
+    password: …") to disk. A password written into any sentence is now redacted in the ledger.
+  - **H1:** a user's own `com.savio.guard` under HKCU would win over SAVIO's host.
+    - `NativeMessagingUserLevelHosts=0` for Chrome and Edge.
+    - Firefox has no such policy, so per-user registrations are removed from signed-in
+      hives every cycle and reported as tampering.
+  - **M1:** discovery re-checks every folder for a junction or symlink right before opening
+    it, roots included.
+  - **M2:**
+    - the event pipe always keeps an instance listening, with up to 4 at once;
+    - a 0.5 s read timeout;
+    - a per-account limit of 60 events a minute.
+  - **M3:** folder names below the root go through redaction before they leave the scanner.
+  - **M4:** Firefox's `distribution\` is written to only under Program Files with no link on
+    the way; otherwise the report says to use Group Policy.
+  - **L1:** zip parts are read through a bounded buffer.
+  - **L2:** discovery folders are passed on stdin, so there is no 32K command-line limit.
+  - **L4:** the approvals parent key cannot be listed by users.
+- **Fixed: backend**
+  - **H1:** the "Approval requested" notification no longer names anyone. Notifications
+    reach every role, while who asked for what is for admins only.
+  - **M1:**
+    - `windows_user` must be an account name, with no control or invisible characters;
+    - report names are limited to policy-name characters;
+    - tamper notifications come at most once per PC an hour;
+    - reports from an org without AI Guard are dropped.
+  - **M2:**
+    - events older than 14 days are refused;
+    - a per-PC daily cap of 5,000;
+    - at most 20 open requests per PC, with retention, and pending requests listed first.
+  - **M3:** a decision must quote the request's `requested_at`. A request that changed since
+    the admin looked is refused, and the update matches only a still-pending row, so two
+    admins cannot both win.
+  - **L1:** technicians do not see restricted keywords.
+  - **L2:** the policy and report bodies refuse unknown fields; keywords refuse invisible
+    characters.
+  - **L3:** Apply must quote the changes the admin saw; a policy made invalid is a 409; a
+    double dismiss is harmless.
+  - **L4:** a forced Firefox extension may come only from addons.mozilla.org.
+  - **L5:** discovery `scanned_at` cannot be in the future; paths refuse invisible characters.
+- **Fixed: extension**
+  - **H1:** a file choice is stopped synchronously, before the site sees the files.
+  - **H3:** about:blank, srcdoc and blob frames are covered, and the host comes from the
+    sender's origin.
+  - **M1:** listeners are on `window` in the capture phase.
+  - **M2:** pasted files are checked.
+  - **M3:** unreadable documents are "could not check", never clean.
+  - **M4:** host names are normalized (case, trailing dot, `*.`, URL, punycode).
+  - **M5:** pending events are held in the background and only an id comes back, once.
+  - **M6:** only trusted events count.
+  - **L1:**
+    - the prompt is a top-layer `<dialog>`, so page CSS cannot hide it;
+    - clicks in its first 0.4 s are ignored;
+    - removing it means "no".
+  - **L2:** a WeakSet replaces the DOM flag.
+  - **L3:** mode changes reach open tabs.
+  - **L4:** form text is read with `FormData` and re-submitted with its submitter.
+  - **L6:** counts are limited to known kinds.
+  - **Manifest:** the description is qualified.
+- **Known limits, documented:**
+  - Text a page's own script sends (fetch / XHR / WebSocket), `form.submit()`, clipboard-API
+    reads, DevTools and other browsers are outside what an in-page extension sees.
+  - Binary formats are "could not check", not scanned.
+  - A page that opens its own modal after SAVIO's could sit above it in the top layer.
+  - The Firefox per-user host is removed within a cycle, not prevented; Chrome and Edge
+    refuse it by policy.
+  - Discovery still runs as full SYSTEM. A restricted token is the upgrade path.
+  - Chromium policy ownership is by name: a later GPO for a name SAVIO set is repaired over
+    (review L3, agent).
+  - The firewall rules match by name.
+- **Still to check live, on the VM:** the user-level host refusal in each browser, the
+  pipe under a hostile local user, junction swaps during discovery, and the firewall block.
+
+#### 3a live test on the dev laptop (17 Nov, instead of the VM)
+The phase-3 agent was installed on the dev laptop (LANCE, Windows 11, LocalSystem service, the
+local backend) with the owner's go-ahead, run against real Chrome, Edge and Firefox, then
+removed and the 0.15.0 agent put back.
+
+- **Worked:**
+  - **D10:** policies written to HKLM for Chrome and Edge and to Firefox's `policies.json`.
+    The other tool's `LocalNetworkAccessAllowedForUrls` was left alone and never owned.
+  - **Chrome honoured the policies:**
+    - wetransfer.com was blocked ("Your organization doesn't allow you to view this site");
+    - DevTools off refused remote debugging;
+    - developer mode off stopped an unpacked extension;
+    - `chrome://policy` listed the policies.
+  - **Policy changes:** removed policies were removed. An empty policy removed everything
+    SAVIO set: policies, 3rdparty settings, host registrations, firewall rules, approvals,
+    and the Firefox keys with `savio-owned.json`.
+  - **D3:** the native host was registered for Chrome and Firefox only (Edge had no
+    extension ID). The installed `savio-guard-host.exe`, driven as Chrome drives it, scanned
+    to counts, redacted, refused smuggled text and unknown requests.
+  - **E3:** events went host → SYSTEM pipe → service → backend, attributed to `LANCE\Danish`
+    by Windows. The queue file emptied after upload.
+  - **Ledger:** 486 lines, no Bearer token, no device token, no unredacted password;
+    SYSTEM / Administrators only.
+  - **D7:** a request reached Approvals. Once approved, the host said yes for that site and
+    channel only, within a cycle. The per-account key was readable by that account alone,
+    and the parent key was not listable by users.
+  - **H1 (security review):** fake per-user `com.savio.guard` registrations planted in the
+    real hive were removed within a cycle, reported as `repaired: user-level
+    com.savio.guard`, and raised a "Browser policy tampered" notification.
+  - **E4:** both firewall rules were set on the host exe. The laptop's Windows Firewall is
+    off on all profiles, and the report said so ("not enforced … SAVIO leaves the firewall
+    setting to you").
+  - **D5:** the weekly scan ran: 36 files read, 2 skipped, 2 folders with findings,
+    counts only.
+- **Found and fixed:** a LocalSystem service could not identify an event's sender.
+  Impersonating an Identification-level client of another account failed; the unit tests ran
+  as one account and could not show it.
+  - The service now takes the account from the client process's own token, named by the
+    kernel (`GetNamedPipeClientProcessId`).
+  - The pipe now carries a length, the event and a one-byte answer, so the host knows
+    whether it was taken.
+- **Learned about testing from the Claude app:** registry writes made from inside it are
+  virtualised (MSIX), so they reach neither the browsers nor the service. Test keys were
+  planted as SYSTEM instead.
+- **Not covered here:**
+  - the extension inside a real browser: Chrome refuses an unpacked copy of a force-listed
+    ID, and it needs the store listing;
+  - a host that really cannot connect, because the firewall is off on this laptop;
+  - a junction swap during a scan.
+- **Left on the laptop:**
+  - an empty Firefox `policies.json` (`{"policies": {}}`), which has no effect;
+  - the agent's admin-only `state` files from the test (ledger, `discovery-last.txt`,
+    `p3test`).
+  - The 0.15.0 agent is running again.
+
 ### 3b — Compliance packs
 - **I1 DPDP Autopilot:** data map (from D5), safeguards evidence (F1), retention
   suggestions, breach workflow (J7), readiness score with a task list. Obligations and

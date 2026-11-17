@@ -100,11 +100,16 @@ public sealed class DiscoveryWorker(
     {
         var exe = Path.Combine(AppContext.BaseDirectory, NativeHostRegistration.HostExe);
         if (!File.Exists(exe) || roots.Count == 0) return null;
-        var psi = new ProcessStartInfo(exe) { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true };
+        var psi = new ProcessStartInfo(exe)
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardInput = true, CreateNoWindow = true,
+        };
         psi.ArgumentList.Add("--discover");
-        foreach (var r in roots) psi.ArgumentList.Add(r);
         using var p = Process.Start(psi);
         if (p is null) return null;
+        // The folders go on stdin, not the command line: no 32K limit, whatever the number of profiles.
+        await p.StandardInput.WriteAsync(string.Join("\n", roots));
+        p.StandardInput.Close();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(MaxRun);
         try

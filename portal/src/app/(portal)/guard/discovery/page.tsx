@@ -36,7 +36,7 @@ export default function DiscoveryPage() {
     setBusy(s.key); setMsg(null);
     try {
       if (apply) {
-        const r = await applyGuardSuggestion(s.key);
+        const r = await applyGuardSuggestion(s);
         qc.setQueryData(["browser-policy"], r);
         setMsg({ ok: true, text: `Applied: ${s.title}. Browser policy is now version ${r.version}; PCs pick it up within the hour.` });
       } else {
@@ -46,6 +46,7 @@ export default function DiscoveryPage() {
       await qc.invalidateQueries({ queryKey: ["guard-suggestions"] });
     } catch (e) {
       setMsg({ ok: false, text: apiErrorMessage(e, "Could not save that.") });
+      await qc.invalidateQueries({ queryKey: ["guard-suggestions"] });
     } finally { setBusy(null); }
   }
 

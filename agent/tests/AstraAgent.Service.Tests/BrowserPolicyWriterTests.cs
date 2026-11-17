@@ -115,7 +115,8 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     {
         Chrome(Full);
         var r = Chrome(Full with { BlockedSites = [], ChromeExtensionId = null });
-        Assert.Equal([@"3rdparty\extensions\abcdefghijklmnopabcdefghijklmnop\policy", "ExtensionInstallForcelist", "URLBlocklist"],
+        Assert.Equal([@"3rdparty\extensions\abcdefghijklmnopabcdefghijklmnop\policy", "ExtensionInstallForcelist",
+                      "NativeMessagingUserLevelHosts", "URLBlocklist"],
                      r.Removed.OrderBy(x => x, StringComparer.Ordinal));
         using var pol = Policy(Browser.Chrome);
         Assert.Null(pol.OpenSubKey("URLBlocklist"));
@@ -262,6 +263,40 @@ public sealed class BrowserPolicyWriterTests : IDisposable
         Assert.Null(_root.OpenSubKey(NativeHostRegistration.RegistryPath(Browser.Chrome)));
         Assert.False(File.Exists(manifestPath));
         Assert.Equal(HostChange.None, NativeHostRegistration.Apply(_root, Browser.Chrome, null, exe, _ffDir));
+    }
+
+    [Fact]
+    public void A_users_own_host_registration_is_removed_and_user_level_hosts_are_off()
+    {
+        // Review H1. Chrome and Edge: ignore user-level hosts by policy, whenever the extension is forced.
+        Assert.Equal(0, BrowserPolicyMap.Chromium(Full, Browser.Chrome)["NativeMessagingUserLevelHosts"]);
+        Assert.False(BrowserPolicyMap.Chromium(Full with { ChromeExtensionId = null }, Browser.Chrome)
+            .ContainsKey("NativeMessagingUserLevelHosts"));
+
+        // Firefox has no such policy: a person's own registration is removed from their hive.
+        // Here the sandbox stands in for HKEY_USERS, with two people and a classes hive.
+        foreach (var sid in new[] { "S-1-5-21-1-2-3-1001", "S-1-5-21-1-2-3-1002", "S-1-5-21-1-2-3-1001_Classes", ".DEFAULT" })
+            _root.CreateSubKey(sid).Dispose();
+        using (var planted = _root.CreateSubKey($@"S-1-5-21-1-2-3-1001\{NativeHostRegistration.RegistryPath(Browser.Firefox)}"))
+            planted.SetValue("", @"C:\Users\x\fake-host.json");
+        using (var other = _root.CreateSubKey($@"S-1-5-21-1-2-3-1002\SOFTWARE\Mozilla\NativeMessagingHosts\some.other.host"))
+            other.SetValue("", "x");
+
+        Assert.Equal(["S-1-5-21-1-2-3-1001"], NativeHostRegistration.RemoveUserLevel(_root, Browser.Firefox));
+        Assert.Null(_root.OpenSubKey($@"S-1-5-21-1-2-3-1001\{NativeHostRegistration.RegistryPath(Browser.Firefox)}"));
+        Assert.NotNull(_root.OpenSubKey(@"S-1-5-21-1-2-3-1002\SOFTWARE\Mozilla\NativeMessagingHosts\some.other.host"));   // not ours
+        Assert.Empty(NativeHostRegistration.RemoveUserLevel(_root, Browser.Firefox));
+    }
+
+    [Fact]
+    public void Firefox_is_written_to_only_under_program_files()
+    {
+        // Review M4: a user-writable install folder is never written to as SYSTEM.
+        Assert.False(BrowserPolicyWriter.ProtectedInstall(Path.Combine(_ffDir, "distribution")));
+        Assert.False(BrowserPolicyWriter.ProtectedInstall(@"C:\Tools\Firefox\distribution"));
+        var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        Assert.True(BrowserPolicyWriter.ProtectedInstall(Path.Combine(pf, "Mozilla Firefox Test " + Guid.NewGuid().ToString("N"), "distribution")));
+        Assert.False(BrowserPolicyWriter.ProtectedInstall(pf + @"\..\Tools\Firefox\distribution"));   // no climbing out
     }
 
     [Theory]

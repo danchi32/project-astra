@@ -22,19 +22,22 @@ public sealed record QueuedGuardEvent(DateTime At, string WindowsUser, GuardEven
 ///
 /// Bounded twice. At most <see cref="Capacity"/> are held; past that the newest are dropped,
 /// so a long offline spell keeps its first hours rather than its last. At most
-/// <see cref="PerMinute"/> are taken in any minute, so a page or a person cannot flood it.
-/// Drops are counted and logged by the uploader.
+/// <see cref="PerMinute"/> are taken in any minute, and at most <see cref="PerUserPerMinute"/> from
+/// any one Windows account, so one person on a shared PC cannot crowd out everyone else's events
+/// (security review M2). Drops are counted and logged by the uploader.
 /// </summary>
 public sealed class GuardEventQueue
 {
     public const int Capacity = 5000;
-    public const int PerMinute = 120;
+    public const int PerMinute = 240;
+    public const int PerUserPerMinute = 60;
 
     readonly object _gate = new();
     readonly List<QueuedGuardEvent> _items = [];
     readonly string? _file;
     DateTime _window = DateTime.MinValue;
     int _inWindow;
+    readonly Dictionary<string, int> _byUser = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="file">Where to keep the queue; null for memory only (tests).</param>
     public GuardEventQueue(string? file = null)
@@ -76,9 +79,11 @@ public sealed class GuardEventQueue
         lock (_gate)
         {
             var minute = new DateTime(e.At.Ticks - e.At.Ticks % TimeSpan.TicksPerMinute, DateTimeKind.Utc);
-            if (minute != _window) (_window, _inWindow) = (minute, 0);
-            if (_inWindow >= PerMinute || _items.Count >= Capacity) { Dropped++; return false; }
+            if (minute != _window) { (_window, _inWindow) = (minute, 0); _byUser.Clear(); }
+            var mine = _byUser.GetValueOrDefault(e.WindowsUser);
+            if (_inWindow >= PerMinute || mine >= PerUserPerMinute || _items.Count >= Capacity) { Dropped++; return false; }
             _inWindow++;
+            _byUser[e.WindowsUser] = mine + 1;
             _items.Add(e);
             Persist(() => File.AppendAllText(_file!, Line(e) + "\n"));
             return true;
@@ -148,59 +153,131 @@ public sealed class GuardEventPipeServer(GuardEventQueue queue, ILogger<GuardEve
     /// <summary>Same rules as Fix-my-internet: owned by SYSTEM, signed-in people may connect, no network.</summary>
     internal Func<PipeSecurity?> Security { get; init; } = Workers.NetworkFixPipeServer.Security;
 
+    /// <summary>Connections handled at once. While one is being read, another instance is
+    /// already listening, so the name is never free for someone else to take (security review
+    /// M2), and a client that connects and says nothing holds up only its own slot.</summary>
+    internal const int MaxInstances = 4;
+    static readonly TimeSpan ReadTimeout = TimeSpan.FromMilliseconds(500);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var slots = new SemaphoreSlim(MaxInstances);
+        var first = true;
+        NamedPipeServerStream? listening = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await using var pipe = Create();
-                await pipe.WaitForConnectionAsync(stoppingToken);
-                await HandleAsync(pipe, stoppingToken);
+                if (listening is null)
+                {
+                    await slots.WaitAsync(stoppingToken);
+                    try { listening = Create(first); first = false; }
+                    catch { slots.Release(); throw; }
+                }
+                await listening.WaitForConnectionAsync(stoppingToken);
+                var connected = listening;
+                listening = null;   // the next pass opens the next instance straight away
+                _ = Task.Run(async () =>
+                {
+                    try { await HandleAsync(connected, stoppingToken); }
+                    catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogDebug(ex, "Guard event not read"); }
+                    finally { await connected.DisposeAsync(); slots.Release(); }
+                }, CancellationToken.None);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception ex)
             {
+                if (listening is not null) { await listening.DisposeAsync(); listening = null; slots.Release(); }
+                first = true;   // nothing of ours is open now: the next instance must be the first again
                 logger.LogWarning(ex, "Guard event pipe error");
                 try { await Task.Delay(1000, stoppingToken); } catch (OperationCanceledException) { return; }
             }
         }
     }
 
-    internal NamedPipeServerStream Create()
+    internal NamedPipeServerStream Create(bool first = true)
     {
-        // FirstPipeInstance: if anyone else already created this name, fail rather than share it.
-        var options = PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance;
+        // FirstPipeInstance on the first one: if anyone else already created this name, fail
+        // rather than share it. Later instances join the pipe this service already owns.
+        var options = PipeOptions.Asynchronous | (first ? PipeOptions.FirstPipeInstance : PipeOptions.None);
         var security = Security();
         return security is null
-            ? new NamedPipeServerStream(Name, PipeDirection.In, 1, PipeTransmissionMode.Byte, options, GuardEvent.MaxBytes, 0)
-            : NamedPipeServerStreamAcl.Create(Name, PipeDirection.In, 1, PipeTransmissionMode.Byte, options,
-                                              GuardEvent.MaxBytes, 0, security);
+            ? new NamedPipeServerStream(Name, PipeDirection.InOut, MaxInstances, PipeTransmissionMode.Byte, options, GuardEvent.MaxBytes, 1)
+            : NamedPipeServerStreamAcl.Create(Name, PipeDirection.InOut, MaxInstances, PipeTransmissionMode.Byte, options,
+                                              GuardEvent.MaxBytes, 1, security);
     }
 
-    internal async Task<bool> HandleAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    /// <summary>
+    /// The Windows account of the process on the other end. Windows names the client process
+    /// (GetNamedPipeClientProcessId comes from the kernel, not from anything the client says),
+    /// and the service reads that process's own token. This replaced impersonating the client,
+    /// which failed on a real PC: a LocalSystem service could not open an Identification-level
+    /// token of another account (found in the live test; the unit tests ran as one account).
+    /// The host stays connected while it waits for the answer, so its process is still there.
+    /// </summary>
+    internal static string? ClientAccount(NamedPipeServerStream pipe)
     {
-        string? user = null;
-        try { pipe.RunAsClient(() => user = WindowsIdentity.GetCurrent(ifImpersonating: true)?.Name); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { }
-        if (string.IsNullOrEmpty(user) || user.Length > 256)
-            return false;   // not identified: the event cannot be attributed, so it is not taken
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(2));
-        var buf = new byte[GuardEvent.MaxBytes + 1];
-        int read = 0, n;
+        if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid)) return null;
+        var process = OpenProcess(ProcessQueryLimitedInformation, false, pid);
+        if (process == IntPtr.Zero) return null;
         try
         {
-            while (read < buf.Length && (n = await pipe.ReadAsync(buf.AsMemory(read), timeout.Token)) > 0)
-                read += n;
+            if (!OpenProcessToken(process, TokenQuery | TokenDuplicate, out var token)) return null;
+            try { using var id = new WindowsIdentity(token); return id.Name; }
+            finally { CloseHandle(token); }
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return false; }
+        catch (Exception ex) when (ex is ArgumentException or System.Security.SecurityException or UnauthorizedAccessException) { return null; }
+        finally { CloseHandle(process); }
+    }
 
-        var e = read <= GuardEvent.MaxBytes ? GuardEvent.Parse(buf.AsSpan(0, read)) : null;
-        if (e is null || !e.Notable)
-            return false;
-        return queue.TryAdd(new QueuedGuardEvent(DateTime.UtcNow, user, e));
+    const uint ProcessQueryLimitedInformation = 0x1000;
+    const uint TokenQuery = 0x0008, TokenDuplicate = 0x0002;
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetNamedPipeClientProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint processId);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+    [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true)]
+    static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CloseHandle(IntPtr handle);
+
+    /// <summary>
+    /// One event: a 4-byte length, the event, then a one-byte answer (1 taken, 0 not).
+    /// The client is identified after its message is read and while it waits for the answer:
+    /// Windows lets a server identify a pipe client of another account only once it has read
+    /// from the pipe, and only while the client is connected. (Found in the live test on a real
+    /// PC; identifying first worked only when server and client were the same account.)
+    /// </summary>
+    internal async Task<bool> HandleAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(ReadTimeout);
+        byte[] body;
+        try
+        {
+            var head = new byte[4];
+            await pipe.ReadExactlyAsync(head, timeout.Token);
+            var length = BitConverter.ToInt32(head);
+            if (length is <= 0 or > GuardEvent.MaxBytes) return false;
+            body = new byte[length];
+            await pipe.ReadExactlyAsync(body, timeout.Token);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or EndOfStreamException or IOException
+                                       && !ct.IsCancellationRequested) { return false; }
+
+        var user = ClientAccount(pipe);
+        var e = GuardEvent.Parse(body);
+        var taken = !string.IsNullOrEmpty(user) && user.Length <= 256   // not identified: cannot be attributed
+                    && e is not null && e.Notable
+                    && queue.TryAdd(new QueuedGuardEvent(DateTime.UtcNow, user, e));
+        try
+        {
+            await pipe.WriteAsync(new[] { (byte)(taken ? 1 : 0) }, timeout.Token);
+            await pipe.FlushAsync(timeout.Token);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException) { }
+        return taken;
     }
 }
 

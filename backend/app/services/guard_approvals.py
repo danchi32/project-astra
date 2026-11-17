@@ -8,9 +8,9 @@ decision is audited. The agent fetches what is in force for its PC every minute.
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Device, GuardApproval, NotificationCategory, NotificationSeverity, User
@@ -23,6 +23,9 @@ PENDING_FOR = timedelta(days=1)
 DEFAULT_MINUTES = 30
 MIN_MINUTES = 5
 MAX_MINUTES = 480
+MAX_PENDING_PER_DEVICE = 20
+NOTIFY_EVERY = timedelta(minutes=10)
+RETENTION = timedelta(days=180)
 
 
 class ApprovalNotFound(LookupError):
@@ -43,57 +46,87 @@ def status_of(a: GuardApproval) -> str:
     return a.status
 
 
-async def request(session: AsyncSession, device: Device, e) -> GuardApproval:
-    """From an event with action "approve" and outcome "requested". A second request for the
-    same thing while one is pending refreshes it instead of piling up."""
+async def request(session: AsyncSession, device: Device, e) -> GuardApproval | None:
+    """From an event with action "approve" and outcome "requested".
+
+    - A second request for the same thing while one is pending refreshes it. If what was found
+      changed, its `requested_at` moves, so an admin who looked at the old one must look again
+      (see `decide`).
+    - A device can hold at most MAX_PENDING_PER_DEVICE open requests; more are ignored, so a
+      stolen device token cannot bury real requests.
+    - The notification names nobody: notifications reach every role in the org, while who asked
+      for what is for admins only (security review H1). At most one per org every 10 minutes."""
     now = utcnow()
+    live = (GuardApproval.device_id == device.id, GuardApproval.status == "pending",
+            GuardApproval.requested_at >= now - PENDING_FOR)
     open_ = (await session.execute(select(GuardApproval).where(
-        GuardApproval.device_id == device.id, GuardApproval.windows_user == e.windows_user,
+        *live, GuardApproval.windows_user == e.windows_user,
         GuardApproval.site == e.site, GuardApproval.channel == e.channel,
-        GuardApproval.status == "pending", GuardApproval.requested_at >= now - PENDING_FOR,
     ))).scalars().first()
     if open_ is not None:
-        open_.counts, open_.contact_list, open_.keyword_hits = e.counts, e.contact_list, e.keyword_hits
-        open_.requested_at = now
+        if (open_.counts, open_.contact_list, open_.keyword_hits) != (e.counts, e.contact_list, e.keyword_hits):
+            open_.counts, open_.contact_list, open_.keyword_hits = e.counts, e.contact_list, e.keyword_hits
+            open_.requested_at = now
         return open_
+    if (await session.execute(select(func.count()).where(*live))).scalar_one() >= MAX_PENDING_PER_DEVICE:
+        return None
+
+    # Retention, per device as for events: decided or expired requests older than half a year go.
+    await session.execute(delete(GuardApproval).where(
+        GuardApproval.device_id == device.id, GuardApproval.requested_at < now - RETENTION))
+    recent = (await session.execute(select(func.count()).where(
+        GuardApproval.org_id == device.org_id, GuardApproval.status == "pending",
+        GuardApproval.requested_at >= now - NOTIFY_EVERY))).scalar_one()
     a = GuardApproval(org_id=device.org_id, device_id=device.id, windows_user=e.windows_user, site=e.site,
                       channel=e.channel, counts=e.counts, contact_list=e.contact_list,
                       keyword_hits=e.keyword_hits, status="pending", requested_at=now)
     session.add(a)
-    await NotificationService(session).notify(
-        org_id=device.org_id, category=NotificationCategory.SYSTEM, severity=NotificationSeverity.INFO,
-        title="Approval requested",
-        message=f"{e.windows_user} on {device.hostname} asks to {_verb(e.channel)} on {e.site}.",
-        link="/guard/approvals",
-    )
+    if recent == 0:
+        await NotificationService(session).notify(
+            org_id=device.org_id, category=NotificationCategory.SYSTEM, severity=NotificationSeverity.INFO,
+            title="Approval requested",
+            message="Someone is waiting for IT to approve a paste or upload. An admin can review it under AI Guard.",
+            link="/guard/approvals",
+        )
     return a
 
 
-def _verb(channel: str) -> str:
-    return {"paste": "paste", "drop": "drop content", "file": "upload a file", "submit": "send a form"}.get(channel, channel)
-
-
 async def list_for_org(session: AsyncSession, org_id, limit: int = 200) -> list[tuple[GuardApproval, str]]:
+    """Pending first, so a pile of history can never push a waiting request out of view."""
     return list((await session.execute(
         select(GuardApproval, Device.hostname)
         .join(Device, Device.id == GuardApproval.device_id)
         .where(GuardApproval.org_id == org_id)
-        .order_by(GuardApproval.requested_at.desc())
+        .order_by((GuardApproval.status == "pending").desc(), GuardApproval.requested_at.desc())
         .limit(limit)
     )).all())
 
 
 async def decide(session: AsyncSession, *, actor: User, approval_id: uuid.UUID, approve: bool,
-                 minutes: int = DEFAULT_MINUTES) -> GuardApproval:
+                 seen_requested_at: datetime, minutes: int = DEFAULT_MINUTES) -> GuardApproval:
+    """Decide what the admin actually looked at. `seen_requested_at` is the request's time as
+    the admin's screen showed it; if the device has since changed what was found, the request
+    has a new time and the decision is refused. The update itself only matches a row that is
+    still pending with that time, so two admins deciding at once cannot both win."""
     a = await session.get(GuardApproval, approval_id)
     if a is None or a.org_id != actor.org_id:
         raise ApprovalNotFound()
     if status_of(a) != "pending":
         raise ApprovalClosed(f"This request is {status_of(a)}.")
+    if as_utc(a.requested_at) != as_utc(seen_requested_at):
+        raise ApprovalClosed("This request changed since you looked at it. Review it again.")
     now = utcnow()
-    a.status = "approved" if approve else "denied"
-    a.decided_by_user_id, a.decided_at = actor.id, now
-    a.valid_until = now + timedelta(minutes=minutes) if approve else None
+    decided = await session.execute(
+        update(GuardApproval)
+        .where(GuardApproval.id == a.id, GuardApproval.org_id == actor.org_id,
+               GuardApproval.status == "pending", GuardApproval.requested_at == a.requested_at)
+        .values(status="approved" if approve else "denied", decided_by_user_id=actor.id, decided_at=now,
+                valid_until=now + timedelta(minutes=minutes) if approve else None)
+        .execution_options(synchronize_session=False)
+    )
+    if decided.rowcount != 1:
+        await session.rollback()
+        raise ApprovalClosed("Someone else decided or changed this request a moment ago. Reload to see it.")
     await AuditService(session).record(
         org_id=actor.org_id, actor_id=actor.id,
         action="guard.approval_approve" if approve else "guard.approval_deny",
@@ -102,6 +135,7 @@ async def decide(session: AsyncSession, *, actor: User, approval_id: uuid.UUID, 
                 **({"minutes": minutes} if approve else {})},
     )
     await session.commit()
+    await session.refresh(a)
     return a
 
 

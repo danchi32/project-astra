@@ -27,10 +27,9 @@
   const fill = (s, verb) => s.replace("{verb}", verb).replace("{Verb}", verb[0].toUpperCase() + verb.slice(1));
 
   const CSS = `
-    :host { all: initial; }
-    .back { position: fixed; inset: 0; z-index: 2147483647; background: rgba(15,23,42,.45);
-            display: flex; align-items: center; justify-content: center; padding: 16px;
-            font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    :host { all: initial !important; }
+    dialog.box { border: 0; margin: auto; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    dialog.box::backdrop { background: rgba(15,23,42,.45); }
     .box { --bg:#fff; --fg:#0f172a; --mut:#475569; --line:#e2e8f0; --accent:#2563eb; --on-accent:#fff; --warn:#b45309; --bad:#dc2626;
            background: var(--bg); color: var(--fg); border-radius: 12px; max-width: 440px; width: 100%;
            max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box;
@@ -72,9 +71,10 @@
       const action = result.action;
       const host = el("savio-guard-dialog");
       const root = host.attachShadow({ mode: "closed" });
-      const box = el("div", { class: `box ${action}`, role: "alertdialog", "aria-modal": "true", "aria-labelledby": "t" });
-      const back = el("div", { class: "back" }, box);
-      root.append(el("style", {}, CSS), back);
+      // A modal <dialog> sits in the browser's top layer, above anything the page draws, whatever
+      // its z-index; `all: initial !important` keeps page CSS off the host (security review L1).
+      const box = el("dialog", { class: `box ${action}`, role: "alertdialog", "aria-labelledby": "t" });
+      root.append(el("style", {}, CSS), box);
 
       box.append(el("div", { class: "brand" }, "SAVIO Guard"),
                  el("h2", { id: "t" }, fill(TEXT.title[action] ?? TEXT.title.warn, verb)),
@@ -95,10 +95,19 @@
         go.disabled = true;
       }
 
+      let settled = false;
+      let watcher = null;
       const done = (outcome) => {
+        if (settled) return;
+        settled = true;
+        watcher?.disconnect();
         host.remove();
         resolve({ outcome, reason: outcome === "proceeded" ? chosen : null });
       };
+      // A click in the first moments after it opens is not taken: a page cannot time a
+      // click-through onto "anyway" as the prompt appears.
+      const opened = performance.now();
+      const real = (e) => e.isTrusted && performance.now() - opened > 400;
       const row = el("div", { class: "row" });
       let first;
       if (action === "block") {
@@ -109,21 +118,24 @@
         first = el("button", { class: "primary" }, fill(TEXT.stop, verb));
         const ask = el("button", {}, TEXT.ask);
         first.addEventListener("click", (e) => e.isTrusted && done("cancelled"));
-        ask.addEventListener("click", (e) => e.isTrusted && done("requested"));
+        ask.addEventListener("click", (e) => real(e) && done("requested"));
         row.append(ask, first);
       } else {
         first = el("button", { class: "primary" }, fill(TEXT.stop, verb));
         first.addEventListener("click", (e) => e.isTrusted && done("cancelled"));
-        go.addEventListener("click", (e) => e.isTrusted && !go.disabled && done("proceeded"));
+        go.addEventListener("click", (e) => real(e) && !go.disabled && done("proceeded"));
         row.append(go, first);
       }
       box.append(row, el("p", { class: "mut" }, TEXT.footer));
-      root.addEventListener("keydown", (e) => {
-        if (e.isTrusted && e.key === "Escape") { e.stopPropagation(); done("cancelled"); }
-      });
+      // Escape on a modal dialog fires "cancel".
+      box.addEventListener("cancel", (e) => { e.preventDefault(); if (e.isTrusted) done("cancelled"); });
 
       (document.body ?? document.documentElement).append(host);
+      box.showModal();
       first.focus();   // the safe choice has the focus, so Enter never sends by accident
+      // If the page removes the prompt, the answer is "no": the held action never happens.
+      watcher = new MutationObserver(() => { if (!host.isConnected) done("cancelled"); });
+      watcher.observe(document.documentElement, { childList: true, subtree: true });
     });
   }
 
@@ -141,6 +153,7 @@
     root.append(el("style", {}, CSS + `
       .toast { position: fixed; right: 16px; bottom: 16px; z-index: 2147483647; max-width: 360px; width: auto;
                font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 14px 16px; }
+      .toast { display: block; }
       .toast p { margin: 4px 0 0; }`), box);
     (document.body ?? document.documentElement).append(host);
     setTimeout(() => host.remove(), 6000);

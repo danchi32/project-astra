@@ -61,13 +61,14 @@ export default function GuardApprovalsPage() {
     setBusy(a.id); setMsg(null);
     try {
       const mins = minutes[a.id] ?? 30;
-      if (approve) await approveGuardApproval(a.id, mins); else await denyGuardApproval(a.id);
+      if (approve) await approveGuardApproval(a, mins); else await denyGuardApproval(a);
       setMsg({ ok: true, text: approve
         ? `Approved for ${DURATIONS.find(([m]) => m === mins)?.[1] ?? `${mins} minutes`}. ${a.hostname} picks it up within a minute.`
         : "Denied." });
       await qc.invalidateQueries({ queryKey: ["guard-approvals"] });
     } catch (e) {
       setMsg({ ok: false, text: apiErrorMessage(e, "Could not save the decision.") });
+      await qc.invalidateQueries({ queryKey: ["guard-approvals"] });   // a changed request shows as it is now
     } finally { setBusy(null); }
   }
 

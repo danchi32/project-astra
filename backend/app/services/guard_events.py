@@ -21,13 +21,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Device, GuardEvent
 from app.models.base import utcnow
 from app.services import guard_approvals
-from app.services.browser_policy import FindingKind, entitled
+from app.services.browser_policy import FindingKind, entitled, has_control
 
 Reason = Literal["client_request", "approved", "not_real", "own_data", "other"]
 RETENTION_DAYS = 180
 MAX_BATCH = 500
+# Security review M2: a stolen device token must not be able to fill the shared database.
+# Events older than this are not taken (an offline laptop's queue is kept two weeks), and one
+# PC is taken at most DAILY_CAP events a day; the rest are dropped.
+ACCEPT_DAYS = 14
+DAILY_CAP = 5000
+# DOMAIN\user, as Windows names an account; no characters Windows refuses in either part.
+_ACCOUNT = re.compile(r'^(?:[^\\/:*?"<>|]{1,64}\\)?[^\\/\[\]:;|=,+*?<>"]{1,104}$')
 _HOST = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
-_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class GuardEventIn(BaseModel):
@@ -81,8 +87,9 @@ class GuardEventIn(BaseModel):
     @field_validator("windows_user")
     @classmethod
     def _user(cls, v: str) -> str:
-        if _CONTROL.search(v):
-            raise ValueError("windows_user has control characters")
+        # Shown to admins: an account name, never a sentence (security review M1).
+        if has_control(v) or not _ACCOUNT.match(v):
+            raise ValueError("windows_user is not a Windows account name")
         return v
 
     @field_validator("counts")
@@ -106,7 +113,11 @@ async def ingest(session: AsyncSession, device: Device, batch: GuardEventBatch) 
         return 0
     now = utcnow()
     oldest = now - timedelta(days=RETENTION_DAYS)
-    kept = [e for e in batch.events if oldest <= e.at <= now + timedelta(minutes=5)]
+    accept_from = now - timedelta(days=ACCEPT_DAYS)
+    kept = [e for e in batch.events if accept_from <= e.at <= now + timedelta(minutes=5)]
+    today = (await session.execute(select(func.count()).select_from(GuardEvent).where(
+        GuardEvent.device_id == device.id, GuardEvent.received_at >= now - timedelta(days=1)))).scalar_one()
+    kept = kept[:max(0, DAILY_CAP - today)]
     session.add_all(GuardEvent(
         org_id=device.org_id, device_id=device.id, occurred_at=e.at, windows_user=e.windows_user,
         site=e.site, channel=e.channel, mode=e.mode, action=e.action, counts=e.counts,

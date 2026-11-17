@@ -36,9 +36,15 @@ const LABELS = {
 /** The host answers in snake_case (contact_list, keyword_hits); everything here reads this shape. */
 export function fromHost(r) {
   if (!r || typeof r !== "object") return null;
+  // Only the kinds SAVIO knows, as whole numbers: whatever answers on the host's name, its
+  // counts cannot put new words on the prompt or in an event (security review L6).
+  const counts = {};
+  for (const [kind, n] of Object.entries(r.counts && typeof r.counts === "object" ? r.counts : {})) {
+    if (Object.hasOwn(LABELS, kind) && Number.isInteger(n) && n > 0) counts[kind] = n;
+  }
   return {
     ok: r.ok === true,
-    counts: r.counts && typeof r.counts === "object" ? r.counts : {},
+    counts,
     contactList: r.contact_list === true,
     keywordHits: Array.isArray(r.keyword_hits) ? r.keyword_hits : [],
     incomplete: r.incomplete === true,
@@ -53,7 +59,7 @@ const CHANNELS = ["paste", "drop", "file", "submit"];
  * Null when there is nothing worth recording: an ordinary paste with nothing found.
  */
 export function toEvent(policy, site, channel, scan, result) {
-  const host = String(site || "").toLowerCase();
+  const host = hostOf(site);
   if (!/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(host) || !CHANNELS.includes(channel)) return null;
   const counts = {};
   for (const [kind, n] of Object.entries(scan?.counts ?? {})) if (Number.isInteger(n) && n > 0) counts[kind] = n;
@@ -69,6 +75,23 @@ export function toEvent(policy, site, channel, scan, result) {
   return notable ? event : null;
 }
 
+/**
+ * A page's host name as SAVIO compares it: lower case, punycode for international names (the
+ * URL parser does that), and no trailing dot, so "ChatGPT.com." is "chatgpt.com" (review M4).
+ * Accepts a URL or a bare host; "" when there is none.
+ */
+export function hostOf(value) {
+  let s = String(value ?? "").trim();
+  if (!s) return "";
+  s = s.replace(/^\*\./, "");
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(s) ? s : "http://" + s);
+    return url.hostname.toLowerCase().replace(/\.+$/, "");
+  } catch {
+    return "";
+  }
+}
+
 /** Merge what the admin set (chrome.storage.managed) over the defaults, keeping only valid values. */
 export function readPolicy(managed) {
   const p = { ...DEFAULT_POLICY };
@@ -77,14 +100,16 @@ export function readPolicy(managed) {
   for (const key of ["watchedSites", "ignoreKinds", "keywords"]) {
     if (Array.isArray(managed[key])) p[key] = managed[key].filter((x) => typeof x === "string").slice(0, 500);
   }
+  // A watched entry written as a URL, with a "*." or a trailing dot, still matches (review M4).
+  p.watchedSites = [...new Set(p.watchedSites.map(hostOf).filter(Boolean))];
   return p;
 }
 
 /** True when this page's host is one the policy watches (a listed host or its subdomain). */
 export function isWatched(policy, hostname) {
   if (!policy.watchedSites.length) return true;
-  const host = String(hostname || "").toLowerCase();
-  return policy.watchedSites.some((s) => host === s.toLowerCase() || host.endsWith("." + s.toLowerCase()));
+  const host = hostOf(hostname);
+  return policy.watchedSites.some((s) => host === s || host.endsWith("." + s));
 }
 
 /** What was found that the policy cares about, as human words. */

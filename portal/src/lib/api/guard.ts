@@ -131,11 +131,12 @@ export interface GuardApproval {
 export const getGuardApprovals = () =>
   apiClient.get<GuardApproval[]>("/guard/approvals").then((r) => r.data);
 
-export const approveGuardApproval = (id: string, minutes: number) =>
-  apiClient.post<GuardApproval>(`/guard/approvals/${id}/approve`, { minutes }).then((r) => r.data);
+// `requested_at` is the request as the admin saw it: one that changed since is refused (409).
+export const approveGuardApproval = (a: Pick<GuardApproval, "id" | "requested_at">, minutes: number) =>
+  apiClient.post<GuardApproval>(`/guard/approvals/${a.id}/approve`, { minutes, requested_at: a.requested_at }).then((r) => r.data);
 
-export const denyGuardApproval = (id: string) =>
-  apiClient.post<GuardApproval>(`/guard/approvals/${id}/deny`).then((r) => r.data);
+export const denyGuardApproval = (a: Pick<GuardApproval, "id" | "requested_at">) =>
+  apiClient.post<GuardApproval>(`/guard/approvals/${a.id}/deny`, { requested_at: a.requested_at }).then((r) => r.data);
 // D5: where sensitive files are on the org's PCs, by folder, counts only. Admin only.
 export interface DiscoveryFolder {
   path: string;
@@ -175,8 +176,9 @@ export interface GuardSuggestion {
 export const getGuardSuggestions = () =>
   apiClient.get<GuardSuggestion[]>("/guard/suggestions").then((r) => r.data);
 
-export const applyGuardSuggestion = (key: string) =>
-  apiClient.post<BrowserPolicyRead>(`/guard/suggestions/${key}/apply`).then((r) => r.data);
+// `changes` as the admin saw them: if the evidence has since changed the suggestion, it is refused (409).
+export const applyGuardSuggestion = (s: Pick<GuardSuggestion, "key" | "changes">) =>
+  apiClient.post<BrowserPolicyRead>(`/guard/suggestions/${s.key}/apply`, { changes: s.changes }).then((r) => r.data);
 
 export const dismissGuardSuggestion = (key: string) =>
   apiClient.post(`/guard/suggestions/${key}/dismiss`).then(() => undefined);

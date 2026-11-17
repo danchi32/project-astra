@@ -36,6 +36,10 @@ public sealed class OutboundLedger
     static readonly string[] BodyNeverRecorded = ["/api/v1/agent/bitlocker-keys"];
     static readonly Regex SecretName = new("password|token|secret", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     static readonly Regex RecoveryPassword = new(@"\d{6}(-\d{6}){7}", RegexOptions.CultureInvariant);
+    // A password written into a sentence: the local-account actions report "Temporary password:
+    // …" / "One-time password: …" in a task result's text (security review C1). The value goes;
+    // the rest of the sentence stays readable.
+    static readonly Regex PasswordInText = new(@"(?i)\b(password|passwd|pwd)(\s*[:=]\s*)\S+", RegexOptions.CultureInvariant);
 
     readonly string _dir;
     readonly bool _secure;
@@ -120,6 +124,7 @@ public sealed class OutboundLedger
                     var child = o[name];
                     if (child is null) continue;
                     if (SecretName.IsMatch(name) || IsRecovery(child)) o[name] = NotRecorded;
+                    else if (WithoutPasswords(child) is { } cleaned) o[name] = cleaned;
                     else Scrub(child);
                 }
                 break;
@@ -127,11 +132,18 @@ public sealed class OutboundLedger
                 for (var i = 0; i < a.Count; i++)
                 {
                     if (IsRecovery(a[i])) a[i] = NotRecorded;
+                    else if (WithoutPasswords(a[i]) is { } cleaned) a[i] = cleaned;
                     else Scrub(a[i]);
                 }
                 break;
         }
     }
+
+    /// <summary>The string with any "password: value" emptied, or null if there was none.</summary>
+    static string? WithoutPasswords(JsonNode? n) =>
+        n is JsonValue v && v.TryGetValue(out string? s) && PasswordInText.IsMatch(s)
+            ? PasswordInText.Replace(s, "$1$2" + NotRecorded)
+            : null;
 
     static bool IsRecovery(JsonNode? n) =>
         n is JsonValue v && v.TryGetValue(out string? s) && RecoveryPassword.IsMatch(s);

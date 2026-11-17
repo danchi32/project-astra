@@ -33,6 +33,32 @@ public static class NativeHostRegistration
         _ => throw new ArgumentOutOfRangeException(nameof(b)),
     };
 
+    /// <summary>
+    /// Security review H1: a per-user registration of com.savio.guard (under a person's own
+    /// hive, which browsers check before HKLM) would let them swap in a host that says "nothing
+    /// found". Chrome and Edge are told to ignore user-level hosts by policy; Firefox has no such
+    /// policy, so the service removes any it finds in the hives of signed-in people, every cycle,
+    /// and reports each removal as a repair. Returns the SIDs it removed one from.
+    /// </summary>
+    public static IReadOnlyList<string> RemoveUserLevel(RegistryKey users, Browser b)
+    {
+        var relative = RegistryPath(b);   // the same path under SOFTWARE, in each person's hive
+        var removed = new List<string>();
+        foreach (var sid in users.GetSubKeyNames())
+        {
+            if (!sid.StartsWith("S-1-5-21-", StringComparison.Ordinal) || sid.EndsWith("_Classes", StringComparison.Ordinal))
+                continue;
+            using var hive = users.OpenSubKey(sid, writable: false);
+            using var found = hive?.OpenSubKey(relative);
+            if (found is null) continue;
+            found.Close();
+            using var writable = users.OpenSubKey(sid, writable: true);
+            writable?.DeleteSubKeyTree(relative, throwOnMissingSubKey: false);
+            removed.Add(sid);
+        }
+        return removed;
+    }
+
     /// <summary>Registers the host for one browser's extension, or with a null
     /// <paramref name="extensionId"/> removes the registration. Idempotent.</summary>
     public static HostChange Apply(RegistryKey root, Browser b, string? extensionId, string hostExePath, string manifestDir)

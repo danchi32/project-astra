@@ -62,7 +62,11 @@ async def test_bad_policies_are_refused(client, admin_headers, session_factory, 
     for bad in ({"blocked_sites": ["not a host"]}, {"chrome_extension_id": "xyz"},
                 {"firefox_extension_id": "savio@savio.app"},
                 {"firefox_extension_id": "savio@savio.app", "firefox_extension_url": "http://x.in/a.xpi"},
-                {"blocked_sites": [f"s{i}.example.com" for i in range(501)]}):
+                {"blocked_sites": [f"s{i}.example.com" for i in range(501)]},
+                # Review L2 / L4: unknown fields refused, invisible text in keywords refused, and a
+                # forced Firefox extension only from Mozilla's store.
+                {"incognito_off": True, "made_up": 1}, {"guard_keywords": ["fal\u202econ"]},
+                {"firefox_extension_id": "savio@savio.app", "firefox_extension_url": "https://evil.example/x.xpi"}):
         r = await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad)
         assert r.status_code == 422, (bad, r.text)
 
@@ -99,7 +103,10 @@ async def test_roles(client, admin_headers, user_headers, session_factory, admin
     await _guard_on(session_factory, admin_user.org_id)
     await _create_user(session_factory, org.id, "tech@acme.com", "TechPassw0rd!2345", UserRole.TECHNICIAN)
     tech = await auth_headers(client, "tech@acme.com", "TechPassw0rd!2345")
-    assert (await client.get("/api/v1/guard/browser-policy", headers=tech)).status_code == 200
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**POLICY, "guard_keywords": ["project falcon"]})
+    seen = await client.get("/api/v1/guard/browser-policy", headers=tech)
+    assert seen.status_code == 200 and seen.json()["policy"]["guard_keywords"] == []     # review L1: admins only
+    assert (await client.get("/api/v1/guard/browser-policy", headers=admin_headers)).json()["policy"]["guard_keywords"] == ["project falcon"]
     assert (await client.put("/api/v1/guard/browser-policy", headers=tech, json=POLICY)).status_code == 403
     assert (await client.get("/api/v1/guard/browser-policy", headers=user_headers)).status_code == 403
 
@@ -132,3 +139,27 @@ async def test_reports_are_kept_and_tampering_is_raised(client, admin_headers, s
 
     bogus = {"version": 1, "results": [{"browser": "Opera"}]}
     assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=bogus)).status_code == 422
+
+
+async def test_tamper_reports_cannot_carry_prose_or_flood(client, admin_headers, session_factory, admin_user):
+    """Review M1: report names are policy names, never a sentence, and a PC raises at most one
+    tamper notification an hour (the audit keeps every one)."""
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers, "LOOP-PC")
+    for _ in range(3):
+        r = {"version": 1, "results": [{"browser": "Chrome", "repaired": [
+            "IncognitoModeAvailability", "Your account is locked! Call +1-555-0100 now", "\u202eevil"]}]}
+        await client.post("/api/v1/agent/browser-policy/report", headers=h, json=r)
+    async with session_factory() as s:
+        notes = (await s.execute(select(Notification).where(Notification.title == "Browser policy tampered"))).scalars().all()
+        audits = (await s.execute(select(AuditLog).where(AuditLog.action == "guard.browser_policy_tamper"))).scalars().all()
+    assert len(notes) == 1 and len(audits) == 3
+    assert "locked" not in notes[0].message and "\u202e" not in notes[0].message
+
+
+async def test_reports_from_an_org_without_the_add_on_are_dropped(client, admin_headers, session_factory, admin_user):
+    _, h = await _enroll(client, admin_headers)
+    r = {"version": 1, "results": [{"browser": "Chrome", "repaired": ["IncognitoModeAvailability"]}]}
+    assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=r)).status_code == 204
+    async with session_factory() as s:
+        assert (await s.execute(select(Notification))).scalars().first() is None

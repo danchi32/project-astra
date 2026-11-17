@@ -50,10 +50,21 @@ public static class Discovery
         bool truncated = false;
         var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = Skip, RecurseSubdirectories = false };
 
-        var pending = new Stack<string>(roots.Where(Directory.Exists));
+        // Each folder remembers the root it was found under, so its path can be reported as the
+        // root plus a cleaned-up remainder (see Report).
+        var pending = new Stack<(string Dir, string Root)>(roots.Where(Directory.Exists).Select(r => (r, r)));
         while (pending.Count > 0 && !ct.IsCancellationRequested)
         {
-            var dir = pending.Pop();
+            var (dir, root) = pending.Pop();
+            // Security review M1: checked again right before it is opened, roots included. A
+            // junction or symlink (to another folder, a system path or a network share) planted
+            // by a user is never followed, even if it was swapped in after the folder was listed.
+            try
+            {
+                var info = new DirectoryInfo(dir);
+                if (info.Attributes.HasFlag(FileAttributes.ReparsePoint) || info.LinkTarget is not null) continue;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
             IEnumerable<string> subdirs, files;
             try
             {
@@ -65,7 +76,7 @@ public static class Discovery
             foreach (var sub in subdirs)
             {
                 var name = Path.GetFileName(sub);
-                if (!name.StartsWith('.') && !SkipDirs.Contains(name)) pending.Push(sub);
+                if (!name.StartsWith('.') && !SkipDirs.Contains(name)) pending.Push((sub, root));
             }
             foreach (var file in files)
             {
@@ -79,7 +90,7 @@ public static class Discovery
                 scanned++;
 
                 var r = PiiScanner.Scan(text);
-                var f = folders.GetValueOrDefault(dir) ?? new Folder(dir, 0, 0, new Dictionary<string, int>(), 0);
+                var f = folders.GetValueOrDefault(dir) ?? new Folder(Report(dir, root), 0, 0, new Dictionary<string, int>(), 0);
                 f = f with { Files = f.Files + 1 };
                 if (r.Any)
                 {
@@ -97,6 +108,18 @@ public static class Discovery
         return new Result(true, scanned, skipped, truncated || found.Count > MaxFolders, found.Take(MaxFolders).ToList());
     }
 
+    /// <summary>
+    /// The folder's path as it leaves the scanner. Folder names are free text a person chose,
+    /// and can carry the very data being looked for ("Clients\\Rahul 2345 6789 0123"), so the part
+    /// below the root goes through the same redaction as a paste (security review M3).
+    /// </summary>
+    internal static string Report(string dir, string root)
+    {
+        if (dir.Length <= root.Length) return root;
+        var below = dir[root.Length..];
+        return root + (PiiScanner.Redact(below) ?? "\\[folder]");
+    }
+
     /// <summary>The text of one file, or null if it is too big or not what its name says.</summary>
     internal static string? Text(string path, string ext)
     {
@@ -111,10 +134,14 @@ public static class Discovery
         var sb = new StringBuilder();
         foreach (var entry in parts)
         {
-            // A zip bomb is refused by its declared size before anything is inflated.
+            // A zip bomb is refused by its declared size before anything is inflated, and the
+            // read itself stops at the cap whatever the entry claims (security review L1).
             if (entry.Length > MaxFileBytes || sb.Length > PiiScanner.MaxChars) return null;
             using var reader = new StreamReader(entry.Open());
-            sb.Append(XmlText(reader.ReadToEnd())).Append('\n');
+            var buffer = new char[(int)Math.Min(MaxFileBytes, PiiScanner.MaxChars) + 1];
+            int read = 0, n;
+            while (read < buffer.Length && (n = reader.Read(buffer, read, buffer.Length - read)) > 0) read += n;
+            sb.Append(XmlText(new string(buffer, 0, read))).Append('\n');
         }
         return Cap(sb.ToString());
     }

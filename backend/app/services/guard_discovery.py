@@ -7,9 +7,8 @@ replaces its previous one. Admins only: folder paths name people ("C:\\Users\\as
 """
 from __future__ import annotations
 
-import re
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
@@ -17,10 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Device, GuardDiscovery
 from app.models.base import utcnow
-from app.services.browser_policy import FindingKind, entitled
+from app.services.browser_policy import FindingKind, entitled, has_control
 
 MAX_FOLDERS = 500
-_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class DiscoveryFolderIn(BaseModel):
@@ -35,8 +33,8 @@ class DiscoveryFolderIn(BaseModel):
     @field_validator("path")
     @classmethod
     def _path(cls, v: str) -> str:
-        if _CONTROL.search(v):
-            raise ValueError("path has control characters")
+        if has_control(v):
+            raise ValueError("path has control or invisible characters")
         return v
 
     @field_validator("counts")
@@ -59,7 +57,10 @@ class DiscoveryIn(BaseModel):
     @field_validator("scanned_at")
     @classmethod
     def _utc(cls, v: datetime) -> datetime:
-        return v if v.tzinfo else v.replace(tzinfo=UTC)
+        v = v if v.tzinfo else v.replace(tzinfo=UTC)
+        if v > utcnow() + timedelta(days=1):
+            raise ValueError("scanned_at is in the future")
+        return v
 
 
 async def ingest(session: AsyncSession, device: Device, body: DiscoveryIn) -> bool:

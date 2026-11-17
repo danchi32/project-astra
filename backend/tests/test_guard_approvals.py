@@ -27,9 +27,13 @@ async def test_request_approve_and_serve(client, admin_headers, session_factory,
     rows = (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()
     assert len(rows) == 1 and rows[0]["status"] == "pending" and rows[0]["hostname"] == "SALES-PC"
     async with session_factory() as s:
-        assert (await s.execute(select(Notification).where(Notification.title == "Approval requested"))).scalars().one()
+        note = (await s.execute(select(Notification).where(Notification.title == "Approval requested"))).scalars().one()
+    # Every role reads notifications; who asked for what is for admins only (review H1).
+    assert "asha" not in note.message and "chatgpt" not in note.message and "SALES-PC" not in note.message
 
-    r = await client.post(f"/api/v1/guard/approvals/{rows[0]['id']}/approve", headers=admin_headers, json={"minutes": 15})
+    seen = rows[0]["requested_at"]
+    r = await client.post(f"/api/v1/guard/approvals/{rows[0]['id']}/approve", headers=admin_headers,
+                          json={"minutes": 15, "requested_at": seen})
     assert r.status_code == 200 and r.json()["status"] == "approved"
     served = (await client.get("/api/v1/agent/guard/approvals", headers=h)).json()
     assert [(x["windows_user"], x["site"], x["channel"]) for x in served] == [(r"PC-1\asha", "chatgpt.com", "paste")]
@@ -37,7 +41,8 @@ async def test_request_approve_and_serve(client, admin_headers, session_factory,
     assert timedelta(minutes=14) < until - datetime.now(UTC) <= timedelta(minutes=15)
 
     # Decided once; a second decision is refused. Both outcomes audited.
-    again = await client.post(f"/api/v1/guard/approvals/{rows[0]['id']}/deny", headers=admin_headers)
+    again = await client.post(f"/api/v1/guard/approvals/{rows[0]['id']}/deny", headers=admin_headers,
+                              json={"requested_at": seen})
     assert again.status_code == 409
     async with session_factory() as s:
         audit = (await s.execute(select(AuditLog).where(AuditLog.action == "guard.approval_approve"))).scalars().one()
@@ -53,7 +58,8 @@ async def test_deny_expire_and_end(client, admin_headers, session_factory, admin
     device_id, h = await _enroll(client, admin_headers)
     await _post(client, h, _ask(site="claude.ai"))
     a = (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()[0]
-    assert (await client.post(f"/api/v1/guard/approvals/{a['id']}/deny", headers=admin_headers)).json()["status"] == "denied"
+    r = await client.post(f"/api/v1/guard/approvals/{a['id']}/deny", headers=admin_headers, json={"requested_at": a["requested_at"]})
+    assert r.json()["status"] == "denied"
     assert (await client.get("/api/v1/agent/guard/approvals", headers=h)).json() == []
 
     async with session_factory() as s:
@@ -67,9 +73,12 @@ async def test_deny_expire_and_end(client, admin_headers, session_factory, admin
         s.add_all([old, over])
         await s.commit()
         old_id = old.id
-    statuses = {r["site"]: r["status"] for r in (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()}
+    listed = (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()
+    statuses = {r["site"]: r["status"] for r in listed}
     assert statuses == {"claude.ai": "denied", "a.in": "expired", "b.in": "ended"}
-    assert (await client.post(f"/api/v1/guard/approvals/{old_id}/approve", headers=admin_headers, json={})).status_code == 409
+    old_seen = next(r["requested_at"] for r in listed if r["site"] == "a.in")
+    r = await client.post(f"/api/v1/guard/approvals/{old_id}/approve", headers=admin_headers, json={"requested_at": old_seen})
+    assert r.status_code == 409
     assert (await client.get("/api/v1/agent/guard/approvals", headers=h)).json() == []
 
 
@@ -82,13 +91,44 @@ async def test_bounds_and_roles(client, admin_headers, session_factory, admin_us
     await _post(client, h, _ask())
     a = (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()[0]
     for minutes in (0, 4, 481):
-        r = await client.post(f"/api/v1/guard/approvals/{a['id']}/approve", headers=admin_headers, json={"minutes": minutes})
+        r = await client.post(f"/api/v1/guard/approvals/{a['id']}/approve", headers=admin_headers,
+                              json={"minutes": minutes, "requested_at": a["requested_at"]})
         assert r.status_code == 422, minutes
     await _create_user(session_factory, org.id, "tech@acme.com", "TechPassw0rd!2345", UserRole.TECHNICIAN)
     tech = await auth_headers(client, "tech@acme.com", "TechPassw0rd!2345")
     assert (await client.get("/api/v1/guard/approvals", headers=tech)).status_code == 403
-    assert (await client.post(f"/api/v1/guard/approvals/{a['id']}/approve", headers=tech, json={})).status_code == 403
+    r = await client.post(f"/api/v1/guard/approvals/{a['id']}/approve", headers=tech, json={"requested_at": a["requested_at"]})
+    assert r.status_code == 403
     # An approve event carries no reason; a warn event cannot be "requested".
     for bad in (_ask(reason="approved"), _event(outcome="requested")):
         r = await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [bad]})
         assert r.status_code == 422, bad
+
+
+async def test_an_approval_covers_what_the_admin_saw(client, admin_headers, session_factory, admin_user):
+    """Review M3: if the device changes what was found after the admin looked, the decision is
+    refused; an unchanged repeat does not move the request."""
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers)
+    await _post(client, h, _ask(counts={"Email": 1}))
+    a = (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()[0]
+    await _post(client, h, _ask(counts={"Email": 1}))                      # the same again: unchanged
+    assert (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()[0]["requested_at"] == a["requested_at"]
+
+    await _post(client, h, _ask(counts={"Aadhaar": 5000}, contact_list=True))   # bait and switch
+    r = await client.post(f"/api/v1/guard/approvals/{a['id']}/approve", headers=admin_headers,
+                          json={"minutes": 480, "requested_at": a["requested_at"]})
+    assert r.status_code == 409 and "changed" in r.json()["detail"]
+    fresh = (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()[0]
+    assert fresh["counts"] == {"Aadhaar": 5000} and fresh["status"] == "pending"
+
+
+async def test_a_device_cannot_flood_requests_or_notifications(client, admin_headers, session_factory, admin_user):
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers)
+    await _post(client, h, *[_ask(site=f"s{i}.example.com") for i in range(30)])
+    async with session_factory() as s:
+        pending = (await s.execute(select(GuardApproval))).scalars().all()
+        notes = (await s.execute(select(Notification).where(Notification.title == "Approval requested"))).scalars().all()
+    assert len(pending) == 20                                              # capped per device
+    assert len(notes) == 1                                                 # one note, not thirty

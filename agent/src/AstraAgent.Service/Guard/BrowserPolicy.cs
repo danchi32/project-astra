@@ -119,6 +119,10 @@ public static class BrowserPolicyMap
         {
             v["ExtensionInstallForcelist"] = new[] { $"{id};{(edge ? EdgeStore : ChromeStore)}" };
             v[$@"3rdparty\extensions\{id}\policy"] = GuardSettings(p);
+            // Only machine-wide native hosts: otherwise a user could register their own
+            // com.savio.guard under HKCU, which the browser prefers, and answer "nothing found"
+            // to every check (security review H1).
+            v["NativeMessagingUserLevelHosts"] = 0;
         }
         return v;
     }

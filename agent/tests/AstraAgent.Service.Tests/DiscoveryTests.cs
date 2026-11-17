@@ -22,6 +22,10 @@ public sealed class DiscoveryTests : IDisposable
     public void Dispose()
     {
         if (!Directory.Exists(_root)) return;
+        // Remove junctions first, so deleting the tree never walks through one.
+        foreach (var d in Directory.EnumerateDirectories(_root, "*", SearchOption.AllDirectories)
+                     .Where(d => new DirectoryInfo(d).Attributes.HasFlag(FileAttributes.ReparsePoint)).ToList())
+            Directory.Delete(d);
         foreach (var f in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
             File.SetAttributes(f, FileAttributes.Normal);
         Directory.Delete(_root, true);
@@ -84,6 +88,34 @@ public sealed class DiscoveryTests : IDisposable
         var json = JsonSerializer.Serialize(r);
         foreach (var leak in new[] { "ABCPE1234F", "kyc.csv", "letter.docx", "Asha", "98765" })
             Assert.DoesNotContain(leak, json);
+    }
+
+    [Fact]
+    public void Junctions_are_never_followed_and_folder_names_are_redacted()
+    {
+        Tree();
+        // Review M1: a junction a user planted, here to a folder outside the asked ones.
+        var outside = Path.Combine(_root, "Elsewhere");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "secret.csv"), "pan\nABCPE1234F\n");
+        // A junction, as any standard user can make one (a symlink would need a privilege).
+        using (var mk = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe",
+                   $"/c mklink /J \"{Path.Combine(Docs, "link")}\" \"{outside}\"") { CreateNoWindow = true, UseShellExecute = false }))
+            mk!.WaitForExit();
+        Assert.True(new DirectoryInfo(Path.Combine(Docs, "link")).Attributes.HasFlag(FileAttributes.ReparsePoint));
+        // Review M3: a folder name that is itself sensitive.
+        var named = Path.Combine(Docs, "Rahul ABCPE1234F");
+        Directory.CreateDirectory(named);
+        File.WriteAllText(Path.Combine(named, "a.csv"), "pan\nBCDPF2345G\n");
+
+        var r = Discovery.Run([Docs], TimeSpan.Zero);
+        Assert.DoesNotContain(r.Folders, f => f.Path.Contains("Elsewhere") || f.Path.EndsWith("link"));
+        var folder = Assert.Single(r.Folders, f => f.Path.Contains("Rahul"));
+        Assert.Equal(Path.Combine(Docs, "Rahul [PAN]"), folder.Path);
+        Assert.DoesNotContain("ABCPE1234F", JsonSerializer.Serialize(r));
+
+        // A root that is itself a link is not followed either.
+        Assert.Empty(Discovery.Run([Path.Combine(Docs, "link")], TimeSpan.Zero).Folders);
     }
 
     [Fact]

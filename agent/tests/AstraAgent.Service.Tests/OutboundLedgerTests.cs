@@ -84,6 +84,17 @@ public sealed class OutboundLedgerTests : IDisposable
         Assert.Equal(OutboundLedger.NotRecorded, lines[0]["body"]!.GetValue<string>());   // the whole escrow body
         Assert.Equal("PC-1", lines[1]["body"]!["hostname"]!.GetValue<string>());
         Assert.Equal(OutboundLedger.NotRecorded, lines[1]["body"]!["nested"]!["note"]!.GetValue<string>());
+
+        // Review C1: a generated password inside a task result's sentence.
+        await http.PostAsJsonAsync("/api/v1/agent/tasks/1/result", new
+        {
+            success = true,
+            output = "Reset done.\nTemporary password: Xk9#vQ2!pLm7\n\nOne-time password: Zz8$aa11 must be changed.",
+        });
+        Assert.Contains("Xk9#vQ2!pLm7", stub.Received!);
+        Assert.DoesNotContain("Xk9#vQ2!pLm7", Raw());
+        Assert.DoesNotContain("Zz8$aa11", Raw());
+        Assert.Contains("Temporary password: [not recorded]", Lines()[^1]["body"]!["output"]!.GetValue<string>());
     }
 
     [Fact]

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,10 @@ SHARING_SITES = ["wetransfer.com", "we.tl", "file.io", "gofile.io", "sendanywher
 
 class SuggestionNotFound(LookupError):
     pass
+
+
+class SuggestionChanged(ValueError):
+    """What the suggestion would do now differs from what the admin saw, or no longer fits."""
 
 
 def _is_ai(site: str) -> bool:
@@ -147,14 +152,20 @@ async def _find(session: AsyncSession, org_id, key: str) -> dict:
     raise SuggestionNotFound()
 
 
-async def apply(session: AsyncSession, *, actor: User, key: str):
+async def apply(session: AsyncSession, *, actor: User, key: str, seen_changes: list[str]):
     """Apply one suggestion through the same audited update as the Browser policy page. Lists
-    are added to, never replaced. Refused if it no longer applies."""
+    are added to, never replaced. Refused if it no longer applies, if it would now change
+    something other than what the admin saw, or if the result would not be a valid policy."""
     s = await _find(session, actor.org_id, key)
+    if s["changes"] != seen_changes:
+        raise SuggestionChanged("This suggestion changed since you looked at it. Review it again.")
     current = (await _current(session, actor.org_id)).model_dump()
     for field, value in s["patch"].items():
         current[field] = current[field] + [v for v in value if v not in current[field]] if isinstance(value, list) else value
-    body = BrowserPolicyBody(**current)
+    try:
+        body = BrowserPolicyBody(**current)
+    except ValidationError as e:
+        raise SuggestionChanged(f"Applying this would make the policy invalid: {e.errors()[0]['msg']}") from None
     await AuditService(session).record(
         org_id=actor.org_id, actor_id=actor.id, action="guard.suggestion_apply",
         target_type="organization", target_id=str(actor.org_id), detail={"suggestion": key, "changes": s["changes"]},
@@ -163,7 +174,9 @@ async def apply(session: AsyncSession, *, actor: User, key: str):
 
 
 async def dismiss(session: AsyncSession, *, actor: User, key: str) -> None:
-    await _find(session, actor.org_id, key)
+    await _find(session, actor.org_id, key)   # also refuses one already dismissed
+    if await session.get(GuardSuggestionDismissal, (actor.org_id, key)) is not None:
+        return                                  # two admins at once: the first one counts
     session.add(GuardSuggestionDismissal(org_id=actor.org_id, key=key, dismissed_by_user_id=actor.id,
                                          dismissed_at=utcnow()))
     await AuditService(session).record(

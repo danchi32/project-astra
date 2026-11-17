@@ -43,7 +43,10 @@ async def test_the_schema_is_fixed(client, admin_headers, session_factory, admin
     for bad in (_event(text="ABCPE1234F"),                       # no free text, however named
                 _event(site="chatgpt.com/c/123"), _event(site="My notes"),
                 _event(channel="print"), _event(counts={"Password": 1}),
-                _event(windows_user="a\nb"), _event(keyword_hits=999)):
+                _event(windows_user="a\nb"), _event(keyword_hits=999),
+                # Review M1: an account name, never a message to the admin, and no invisible text.
+                _event(windows_user="IT Security: your account is locked, call +1-555-0100"),
+                _event(windows_user="PC-1\\asha\u202egnp.exe"), _event(windows_user="PC-1\\as\u200bha")):
         r = await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [bad]})
         assert r.status_code == 422, bad
     r = await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event()] * 501})
@@ -109,3 +112,17 @@ async def test_old_events_are_pruned(client, admin_headers, session_factory, adm
     async with session_factory() as s:
         sites = [e.site for e in (await s.execute(select(GuardEvent))).scalars()]
     assert sites == ["chatgpt.com"]
+
+
+async def test_old_events_and_floods_are_not_taken(client, admin_headers, session_factory, admin_user, monkeypatch):
+    """Review M2: events older than two weeks are dropped, and one PC is taken at most a day's cap."""
+    from app.services import guard_events
+
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers)
+    monkeypatch.setattr(guard_events, "DAILY_CAP", 3)
+    old = _event(at=(datetime.now(UTC) - timedelta(days=20)).isoformat())
+    await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [old] + [_event()] * 5})
+    await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event()]})
+    async with session_factory() as s:
+        assert len((await s.execute(select(GuardEvent))).scalars().all()) == 3

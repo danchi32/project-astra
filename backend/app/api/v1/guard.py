@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles, requires
@@ -43,7 +43,11 @@ async def get_browser_policy(
     row = await browser_policy.get(session, actor.org_id)
     if row is None:
         return BrowserPolicyRead(version=0, policy=BrowserPolicyBody(), updated_at=None)
-    return BrowserPolicyRead(version=row.version, policy=BrowserPolicyBody(**row.policy), updated_at=row.updated_at)
+    policy = BrowserPolicyBody(**row.policy)
+    if actor.role != UserRole.ADMIN:
+        # Restricted keywords are often client or project code names: admins only (review L1).
+        policy = policy.model_copy(update={"guard_keywords": []})
+    return BrowserPolicyRead(version=row.version, policy=policy, updated_at=row.updated_at)
 
 
 @router.put("/browser-policy", response_model=BrowserPolicyRead,
@@ -198,17 +202,27 @@ async def list_suggestions(
     return [SuggestionRead(**s) for s in await guard_suggestions.suggestions(session, actor.org_id)]
 
 
+class ApplySuggestionBody(BaseModel):
+    """The changes as the admin's screen showed them: if the evidence has since changed what
+    the suggestion would do, it is refused rather than applied (security review L3)."""
+    model_config = ConfigDict(extra="forbid")
+    changes: list[str] = Field(max_length=10)
+
+
 @router.post("/suggestions/{key}/apply", response_model=BrowserPolicyRead,
              summary="Apply one suggestion to the browser policy (admin; audited)")
 async def apply_suggestion(
     key: str,
+    body: ApplySuggestionBody,
     actor: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> BrowserPolicyRead:
     try:
-        row = await guard_suggestions.apply(session, actor=actor, key=key)
+        row = await guard_suggestions.apply(session, actor=actor, key=key, seen_changes=body.changes)
     except guard_suggestions.SuggestionNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That suggestion no longer applies.") from None
+    except guard_suggestions.SuggestionChanged as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
     return BrowserPolicyRead(version=row.version, policy=BrowserPolicyBody(**row.policy), updated_at=row.updated_at)
 
 
@@ -243,7 +257,14 @@ class GuardApprovalRead(BaseModel):
     valid_until: datetime | None
 
 
-class ApproveBody(BaseModel):
+class DecideBody(BaseModel):
+    """`requested_at` is the request's time as the admin's screen showed it: a request that
+    changed since then is refused, so an approval always covers what the admin looked at."""
+    model_config = ConfigDict(extra="forbid")
+    requested_at: datetime
+
+
+class ApproveBody(DecideBody):
     minutes: int = Field(guard_approvals.DEFAULT_MINUTES, ge=guard_approvals.MIN_MINUTES, le=guard_approvals.MAX_MINUTES)
 
 
@@ -263,9 +284,10 @@ async def list_approvals(
     return [_approval(a, host) for a, host in await guard_approvals.list_for_org(session, actor.org_id)]
 
 
-async def _decide(session, actor, approval_id, approve: bool, minutes: int) -> GuardApprovalRead:
+async def _decide(session, actor, approval_id, approve: bool, minutes: int, seen) -> GuardApprovalRead:
     try:
-        a = await guard_approvals.decide(session, actor=actor, approval_id=approval_id, approve=approve, minutes=minutes)
+        a = await guard_approvals.decide(session, actor=actor, approval_id=approval_id, approve=approve,
+                                         minutes=minutes, seen_requested_at=seen)
     except guard_approvals.ApprovalNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such request.") from None
     except guard_approvals.ApprovalClosed as e:
@@ -282,14 +304,15 @@ async def approve(
     actor: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> GuardApprovalRead:
-    return await _decide(session, actor, approval_id, True, body.minutes)
+    return await _decide(session, actor, approval_id, True, body.minutes, body.requested_at)
 
 
 @router.post("/approvals/{approval_id}/deny", response_model=GuardApprovalRead,
              summary="Refuse a request (admin; audited)")
 async def deny(
     approval_id: uuid.UUID,
+    body: DecideBody,
     actor: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> GuardApprovalRead:
-    return await _decide(session, actor, approval_id, False, 0)
+    return await _decide(session, actor, approval_id, False, 0, body.requested_at)

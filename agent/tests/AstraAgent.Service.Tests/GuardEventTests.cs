@@ -82,18 +82,23 @@ public class GuardEventTests
     static GuardEventPipeServer Server(GuardEventQueue q) =>
         new(q, NullLogger<GuardEventPipeServer>.Instance) { Name = "SAVIO.Test." + Guid.NewGuid().ToString("N"), Security = () => null };
 
+    /// <summary>The host's side of the protocol: length, event, then the service's one-byte answer.</summary>
     static async Task<bool> Send(GuardEventPipeServer server, byte[] payload, TokenImpersonationLevel level)
     {
         await using var pipe = server.Create();
         var connected = pipe.WaitForConnectionAsync();
-        await using var client = new NamedPipeClientStream(".", server.Name, PipeDirection.Out, PipeOptions.Asynchronous, level);
+        await using var client = new NamedPipeClientStream(".", server.Name, PipeDirection.InOut, PipeOptions.Asynchronous, level);
         await client.ConnectAsync(2000);
         await connected;
         var handled = server.HandleAsync(pipe, default);
+        await client.WriteAsync(BitConverter.GetBytes(payload.Length));
         await client.WriteAsync(payload);
         await client.FlushAsync();
-        client.Dispose();
-        return await handled;
+        var ack = new byte[1];
+        var got = await client.ReadAsync(ack);
+        var taken = await handled;
+        Assert.Equal(taken, got == 1 && ack[0] == 1);   // the answer says what happened
+        return taken;
     }
 
     [Fact]
@@ -106,11 +111,13 @@ public class GuardEventTests
         Assert.Equal(WindowsIdentity.GetCurrent().Name, queued.WindowsUser);
         Assert.Equal("chatgpt.com", queued.Event.Site);
 
-        // Not identified (anonymous): cannot be attributed, not taken.
-        Assert.False(await Send(server, B(Valid), TokenImpersonationLevel.Anonymous));
+        // The account comes from the client process's own token (named by the kernel), not from
+        // impersonation, so a client that offers no identity is still attributed correctly.
+        Assert.True(await Send(server, B(Valid), TokenImpersonationLevel.Anonymous));
+        Assert.Equal(WindowsIdentity.GetCurrent().Name, q.Peek(10)[1].WindowsUser);
         // Junk, or an ordinary paste with nothing found: not taken.
         Assert.False(await Send(server, B("""{"text":"hello"}"""), TokenImpersonationLevel.Identification));
-        Assert.Equal(1, q.Count);
+        Assert.Equal(2, q.Count);
     }
 
     static QueuedGuardEvent At(DateTime t) => new(t, @"PC\asha", GuardEvent.Parse(B(Valid))!);
@@ -120,9 +127,15 @@ public class GuardEventTests
     {
         var q = new GuardEventQueue();
         var t = new DateTime(2026, 11, 17, 10, 0, 0, DateTimeKind.Utc);
-        for (var i = 0; i < GuardEventQueue.PerMinute + 5; i++) q.TryAdd(At(t.AddSeconds(i % 60)));
+        // Review M2: one person cannot take the whole minute; everyone else still gets through.
+        for (var i = 0; i < GuardEventQueue.PerUserPerMinute + 10; i++) q.TryAdd(At(t.AddSeconds(i % 60)));
+        Assert.Equal(GuardEventQueue.PerUserPerMinute, q.Count);
+        Assert.True(q.TryAdd(At(t.AddSeconds(30)) with { WindowsUser = @"PC\ravi" }));
+        // And the machine as a whole is capped.
+        for (var u = 0; u < 10; u++)
+            for (var i = 0; i < GuardEventQueue.PerUserPerMinute; i++)
+                q.TryAdd(At(t.AddSeconds(i % 60)) with { WindowsUser = $@"PC\user{u}" });
         Assert.Equal(GuardEventQueue.PerMinute, q.Count);
-        Assert.Equal(5, q.Dropped);
         Assert.True(q.TryAdd(At(t.AddMinutes(1))));                      // a new minute
 
         q.Remove(10);

@@ -51,7 +51,12 @@ async def test_apply_changes_exactly_that_and_is_audited(client, admin_headers, 
                  policy={"blocked_sites": ["example.com"]}, discovery=_map())
     s = await _keys(client, admin_headers)
     assert set(s) == {"block_file_sharing"}
-    r = await client.post("/api/v1/guard/suggestions/block_file_sharing/apply", headers=admin_headers)
+    shown = s["block_file_sharing"]["changes"]
+    stale = await client.post("/api/v1/guard/suggestions/block_file_sharing/apply", headers=admin_headers,
+                              json={"changes": ["Block something else"]})
+    assert stale.status_code == 409                                                       # review L3
+    r = await client.post("/api/v1/guard/suggestions/block_file_sharing/apply", headers=admin_headers,
+                          json={"changes": shown})
     assert r.status_code == 200, r.text
     p = r.json()["policy"]
     assert p["blocked_sites"][0] == "example.com" and "wetransfer.com" in p["blocked_sites"]   # added to, not replaced
@@ -60,7 +65,8 @@ async def test_apply_changes_exactly_that_and_is_audited(client, admin_headers, 
     async with session_factory() as db:
         actions = {a.action for a in (await db.execute(select(AuditLog))).scalars()}
     assert {"guard.suggestion_apply", "guard.browser_policy_update"} <= actions
-    again = await client.post("/api/v1/guard/suggestions/block_file_sharing/apply", headers=admin_headers)
+    again = await client.post("/api/v1/guard/suggestions/block_file_sharing/apply", headers=admin_headers,
+                              json={"changes": shown})
     assert again.status_code == 404
 
 
@@ -73,9 +79,20 @@ async def test_dismiss_for_good_and_roles(client, admin_headers, session_factory
     await _create_user(session_factory, org.id, "tech@acme.com", "TechPassw0rd!2345", UserRole.TECHNICIAN)
     tech = await auth_headers(client, "tech@acme.com", "TechPassw0rd!2345")
     assert (await client.get("/api/v1/guard/suggestions", headers=tech)).status_code == 403
-    assert (await client.post("/api/v1/guard/suggestions/no_private_windows/apply", headers=tech)).status_code == 403
+    body = {"changes": ["No incognito / InPrivate / private windows"]}
+    assert (await client.post("/api/v1/guard/suggestions/no_private_windows/apply", headers=tech, json=body)).status_code == 403
 
     assert (await client.post("/api/v1/guard/suggestions/no_private_windows/dismiss", headers=admin_headers)).status_code == 204
     assert "no_private_windows" not in await _keys(client, admin_headers)
-    assert (await client.post("/api/v1/guard/suggestions/no_private_windows/apply", headers=admin_headers)).status_code == 404
+    assert (await client.post("/api/v1/guard/suggestions/no_private_windows/apply", headers=admin_headers, json=body)).status_code == 404
     assert (await client.post("/api/v1/guard/suggestions/made_up/dismiss", headers=admin_headers)).status_code == 404
+
+
+async def test_apply_that_would_break_the_policy_is_refused(client, admin_headers, session_factory, admin_user):
+    """Review L3: adding to a list already at its limit is a 409, not a 500."""
+    full = [f"s{i}.example.com" for i in range(500)]
+    await _setup(client, admin_headers, session_factory, admin_user, policy={"blocked_sites": full}, discovery=_map())
+    s = await _keys(client, admin_headers)
+    r = await client.post("/api/v1/guard/suggestions/block_file_sharing/apply", headers=admin_headers,
+                          json={"changes": s["block_file_sharing"]["changes"]})
+    assert r.status_code == 409

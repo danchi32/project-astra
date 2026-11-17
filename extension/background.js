@@ -6,7 +6,7 @@
 // E3: when something was found (or could not be checked), the event (counts only, in the fixed
 // shape the agent accepts) goes back through the host to the SAVIO service, which sends it on
 // to the org's portal. A local copy of the last 200 is kept here as well.
-import { REASONS, decide, fromHost, isWatched, readPolicy, toEvent, withOutcome } from "./decide.js";
+import { REASONS, decide, fromHost, hostOf, isWatched, readPolicy, toEvent, withOutcome } from "./decide.js";
 
 const HOST = "com.savio.guard";
 const MAX_EVENTS = 200;
@@ -61,22 +61,45 @@ async function record(event) {
   }
 }
 
+// Security review M5: an event waiting for the person's answer stays here, in session storage
+// (it outlives the service worker going to sleep), under a random id. The page side only ever
+// sends back that id, which is taken once; it cannot change what was found or where.
+async function hold(event) {
+  const id = crypto.randomUUID();
+  await chrome.storage.session.set({ ["pending:" + id]: event });
+  return id;
+}
+
+async function release(id) {
+  if (typeof id !== "string" || !/^[0-9a-f-]{36}$/.test(id)) return null;
+  const key = "pending:" + id;
+  const { [key]: event } = await chrome.storage.session.get(key);
+  await chrome.storage.session.remove(key);
+  return event ?? null;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Only this extension's own content scripts can reach here; a web page cannot.
   if (sender.id !== chrome.runtime.id) return false;
 
   if (msg?.type === "outcome") {
-    // D7: the person answered a warn / justify prompt. Recorded once, with the answer.
-    const event = withOutcome(msg.event, msg.outcome, msg.reason);
-    if (event) record(event);
+    // D7: the person answered a prompt. Recorded once, with the answer.
+    release(msg.id).then((held) => {
+      const event = withOutcome(held, msg.outcome, msg.reason);
+      if (event) record(event);
+    });
     return false;
   }
   if (msg?.type !== "check" || typeof msg.text !== "string") return false;
   (async () => {
     const p = await policy();
-    const host = (() => { try { return new URL(sender.url ?? "").hostname; } catch { return ""; } })();
+    // The page's own origin: about:blank, srcdoc and blob frames carry their creator's (H3).
+    const host = hostOf(sender.origin && sender.origin !== "null" ? sender.origin : sender.url ?? sender.tab?.url);
     if (!isWatched(p, host)) return sendResponse({ action: "allow", findings: [] });
-    const scanned = await scan(msg.text, p.keywords);
+    // Files the content script could not read (binary, too big) make the check "unknown":
+    // never silently clean (M3).
+    const unreadable = Number.isInteger(msg.unreadable) && msg.unreadable > 0;
+    const scanned = unreadable ? null : await scan(msg.text, p.keywords);
     let result = decide(p, scanned, msg.kind);
     if (result.action === "redact") {
       // The same text back from the host with findings replaced; if it cannot vouch for the
@@ -91,8 +114,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return record({ ...event, outcome: "proceeded" });
     }
     if (event && ["warn", "justify", "approve"].includes(result.action)) {
-      // Held until the person answers: the content script sends it back with the outcome.
-      return sendResponse({ ...result, event, reasons: result.action === "justify" ? REASONS : undefined });
+      // Held until the person answers; the content script sends back only the id.
+      return sendResponse({ ...result, pending: await hold(event), reasons: result.action === "justify" ? REASONS : undefined });
     }
     sendResponse(result);                       // the person is not kept waiting for the record
     if (event) await record(event);

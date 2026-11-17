@@ -1,7 +1,7 @@
 // Phase 3 · D3: run with `node --test extension/test/`. No dependencies.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide, fromHost, isWatched, readPolicy, toEvent, withOutcome, DEFAULT_POLICY, REASONS } from "../decide.js";
+import { decide, fromHost, hostOf, isWatched, readPolicy, toEvent, withOutcome, DEFAULT_POLICY, REASONS } from "../decide.js";
 
 const found = { ok: true, counts: { Aadhaar: 1, Email: 3 }, contactList: false, keywordHits: [] };
 const clean = { ok: true, counts: { Email: 2 }, contactList: false, keywordHits: [] };
@@ -122,4 +122,25 @@ test("watched sites cover subdomains and nothing else", () => {
   assert.ok(!isWatched(p, "notopenai.com"));
   assert.ok(!isWatched(p, "openai.com.evil.example"));
   assert.ok(isWatched(readPolicy({}), "anything.example"));   // empty list = every site
+});
+
+
+test("host names compare the same however they are written (security review M4)", () => {
+  assert.equal(hostOf("https://ChatGPT.com./c/123"), "chatgpt.com");
+  assert.equal(hostOf("chatgpt.com."), "chatgpt.com");
+  assert.equal(hostOf("*.openai.com"), "openai.com");
+  assert.equal(hostOf("http://bücher.example/"), "xn--bcher-kva.example");
+  assert.equal(hostOf("about:blank"), "");
+  const p = readPolicy({ watchedSites: ["https://ChatGPT.com/", "*.openai.com", "", 7] });
+  assert.deepEqual(p.watchedSites, ["chatgpt.com", "openai.com"]);
+  assert.ok(isWatched(p, "chatgpt.com."));                 // trailing dot no longer slips past
+  assert.ok(isWatched(p, "chat.openai.com"));
+  assert.ok(!isWatched(p, "evilchatgpt.com"));
+  const scan = fromHost({ ok: true, counts: { Pan: 1 } });
+  assert.equal(toEvent(readPolicy({ mode: "warn" }), "chatgpt.com.", "paste", scan, decide(readPolicy({ mode: "warn" }), scan)).site, "chatgpt.com");
+});
+
+test("only known kinds, as whole numbers, come from the host (security review L6)", () => {
+  const scan = fromHost({ ok: true, counts: { Pan: 2, "Your account is locked, call IT": 1, Aadhaar: 1.5, Email: -1 } });
+  assert.deepEqual(scan.counts, { Pan: 2 });
 });

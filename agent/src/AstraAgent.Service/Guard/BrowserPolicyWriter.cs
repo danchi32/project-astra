@@ -63,7 +63,11 @@ public static class BrowserPolicyWriter
                      policy.EdgeExtensionId),
         };
         var firefox = BrowserPolicyMap.Firefox(policy);
-        var fx = FirefoxDistributionDirs().Select(dir => ApplyFirefox(dir, firefox)).ToList();
+        var fx = FirefoxDistributionDirs().Select(dir => ProtectedInstall(dir)
+            ? ApplyFirefox(dir, firefox)
+            : new ApplyReport(Browser.Firefox, [], [], [], [],
+                $"Firefox is installed outside Program Files ({Path.GetDirectoryName(dir)}), where standard users can change "
+                + "files. SAVIO does not write there; set Firefox's policies by Group Policy instead.")).ToList();
         // One registration per browser, however many Firefox installs: it goes on the first report.
         if (fx.Count > 0) fx[0] = WithHost(fx[0], policy.FirefoxExtensionId);
         else WithHost(new ApplyReport(Browser.Firefox, [], [], [], [], null), null);
@@ -110,6 +114,9 @@ public static class BrowserPolicyWriter
                 HostChange.Unregistered => r with { Removed = [.. r.Removed, NativeHostRegistration.HostName] },
                 _ => r,
             };
+            // Someone's own com.savio.guard would win over SAVIO's: removed, and reported as tampering.
+            if (extensionId is not null && NativeHostRegistration.RemoveUserLevel(Registry.Users, r.Browser).Count > 0)
+                r = r with { Repaired = [.. r.Repaired, "user-level " + NativeHostRegistration.HostName] };
             return missing ? r with { Error = r.Error ?? $"{NativeHostRegistration.HostExe} is missing beside the agent; the extension cannot scan" } : r;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
@@ -370,6 +377,31 @@ public static class BrowserPolicyWriter
         var tmp = path + ".savio-tmp";
         File.WriteAllText(tmp, content);
         File.Move(tmp, path, overwrite: true);
+    }
+
+    /// <summary>
+    /// Security review M4: the service writes, moves and deletes files in Firefox's
+    /// distribution folder as SYSTEM. In a Firefox installed where standard users can write (a
+    /// folder under C:\ inherits "Authenticated Users: Modify"), a junction planted there would
+    /// turn those writes into arbitrary file writes as SYSTEM. Only an install under Program
+    /// Files, with no link anywhere on the way, is written to.
+    /// </summary>
+    internal static bool ProtectedInstall(string distributionDir)
+    {
+        var roots = new[] { Environment.SpecialFolder.ProgramFiles, Environment.SpecialFolder.ProgramFilesX86 }
+            .Select(Environment.GetFolderPath).Where(r => r.Length > 0)
+            .Select(r => r.TrimEnd('\\') + "\\");
+        var full = Path.GetFullPath(distributionDir);
+        if (!roots.Any(r => full.StartsWith(r, StringComparison.OrdinalIgnoreCase))) return false;
+        try
+        {
+            for (var d = new DirectoryInfo(full); d is not null && d.FullName.Length > 3; d = d.Parent)
+                if (d.Exists && (d.Attributes.HasFlag(FileAttributes.ReparsePoint) || d.LinkTarget is not null))
+                    return false;
+            var file = new FileInfo(Path.Combine(full, "policies.json"));
+            return !(file.Exists && file.Attributes.HasFlag(FileAttributes.ReparsePoint));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
     /// <summary>Each installed Firefox's distribution folder, from the uninstall/version keys.</summary>
