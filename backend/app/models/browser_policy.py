@@ -98,6 +98,21 @@ class GuardDiscovery(Base):
     folders: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
 
+class GuardSuggestionDismissal(Base):
+    """Phase 3 · D5: a policy suggestion an admin chose not to take. It stays hidden for good."""
+
+    __tablename__ = "guard_suggestion_dismissals"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    dismissed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    dismissed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
 class GuardApproval(Base):
     """Phase 3 · D7: a person asked IT to let one thing through: one Windows account, one PC,
     one site, one channel (paste / drop / file / submit). An admin approves it for a set time

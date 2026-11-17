@@ -1271,8 +1271,30 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       - backend `test_guard_discovery` (3);
       - migration 0091 up/down/up with no model drift;
       - on screen with two sample PCs.
-  - **Not yet (slice 2):** suggested policies from the map for the admin to approve; PDF text;
-    a live run on the VM.
+  - **As built, slice 2, suggestions (17 Nov):**
+    - **Six fixed rules** in `guard_suggestions.py`, each from the org's own evidence (the
+      D5 map and the last 14 days of E3 events) and its current policy:
+      - leave record-only: "redact" if most findings were on AI chat sites, else "warn";
+      - block personal file-sharing sites when contact lists turn up;
+      - turn off private windows when the extension is forced (it does not run there);
+      - turn off extension developer mode when the extension is forced;
+      - add the AI chat sites to a "sites to check" list that leaves them out;
+      - turn on the file check when the browser shows sensitive data.
+    - **Each card says why, in numbers,** and exactly what it will change.
+    - **Apply** goes through the same audited policy update as the Browser policy page, plus
+      `guard.suggestion_apply`. Lists are added to, never replaced. A suggestion that no
+      longer holds is refused (404) and stops showing.
+    - **Dismiss** hides it for good (`guard_suggestion_dismissals`, migration 0092), audited.
+    - **Admin only.** Shown at the top of "Where data lives".
+    - **Checked:**
+      - `test_guard_suggestions` (4): nothing seen means nothing suggested; each rule's
+        evidence and wording; apply adds to the lists, bumps the version, is audited and
+        clears the card; dismiss; roles;
+      - migration 0092 up/down/up with no model drift;
+      - on screen, "Block personal file-sharing sites" applied: policy version 4, the
+        existing blocked sites kept and the new ones added.
+  - **Not yet:** PDF text (needs a parser beyond the standard library: a dependency to choose
+    with you); a live run on the VM.
 - **D7 Coaching:** warn / justify / block dialogs in-page, English only (no Hindi anywhere,
   decided 17 Nov).
   - **As built (17 Nov, branch `phase-3`):**

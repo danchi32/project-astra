@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles, requires
 from app.core.database import get_db
 from app.models import Device, User, UserRole
-from app.services import browser_policy, guard_approvals, guard_discovery, guard_events
+from app.services import browser_policy, guard_approvals, guard_discovery, guard_events, guard_suggestions
 from app.services.browser_policy import BrowserPolicyBody, BrowserResult
 from app.services.entitlements import AI_GUARD
 
@@ -178,6 +178,51 @@ async def discovery(
     session: AsyncSession = Depends(get_db),
 ) -> DiscoveryRead:
     return DiscoveryRead(**await guard_discovery.for_org(session, actor.org_id))
+
+
+# ── D5 slice 2: policy suggestions from the map and the events. Admin only; audited. ───────
+
+class SuggestionRead(BaseModel):
+    key: str
+    title: str
+    why: str
+    changes: list[str]
+
+
+@router.get("/suggestions", response_model=list[SuggestionRead],
+            summary="Policy changes suggested by what AI Guard has seen, with the evidence (admin)")
+async def list_suggestions(
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> list[SuggestionRead]:
+    return [SuggestionRead(**s) for s in await guard_suggestions.suggestions(session, actor.org_id)]
+
+
+@router.post("/suggestions/{key}/apply", response_model=BrowserPolicyRead,
+             summary="Apply one suggestion to the browser policy (admin; audited)")
+async def apply_suggestion(
+    key: str,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> BrowserPolicyRead:
+    try:
+        row = await guard_suggestions.apply(session, actor=actor, key=key)
+    except guard_suggestions.SuggestionNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That suggestion no longer applies.") from None
+    return BrowserPolicyRead(version=row.version, policy=BrowserPolicyBody(**row.policy), updated_at=row.updated_at)
+
+
+@router.post("/suggestions/{key}/dismiss", status_code=status.HTTP_204_NO_CONTENT,
+             summary="Hide one suggestion for good (admin; audited)")
+async def dismiss_suggestion(
+    key: str,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await guard_suggestions.dismiss(session, actor=actor, key=key)
+    except guard_suggestions.SuggestionNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That suggestion no longer applies.") from None
 
 
 # ── D7: approvals. Admin only; every decision is audited. ──────────────────────────────────

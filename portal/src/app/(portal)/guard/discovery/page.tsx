@@ -1,8 +1,11 @@
 "use client";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { FolderSearch, ShieldAlert } from "lucide-react";
-import { FINDING_KINDS, getDiscovery, type DiscoveryFolder, type FindingKind } from "@/lib/api/guard";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FolderSearch, Lightbulb, ShieldAlert } from "lucide-react";
+import {
+  FINDING_KINDS, applyGuardSuggestion, dismissGuardSuggestion, getDiscovery, getGuardSuggestions,
+  type DiscoveryFolder, type FindingKind, type GuardSuggestion,
+} from "@/lib/api/guard";
 import { isUpgradeRequired } from "@/components/upgrade-required";
 import { apiErrorMessage } from "@/lib/utils";
 
@@ -21,8 +24,30 @@ function kinds(counts: DiscoveryFolder["counts"], contactLists: number) {
 }
 
 export default function DiscoveryPage() {
+  const qc = useQueryClient();
   const { data, error, isLoading } = useQuery({ queryKey: ["guard-discovery"], queryFn: getDiscovery, retry: false });
+  const { data: suggestions } = useQuery({ queryKey: ["guard-suggestions"], queryFn: getGuardSuggestions,
+    enabled: !!data, retry: false });
   const [pc, setPc] = useState<string>("all");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function act(s: GuardSuggestion, apply: boolean) {
+    setBusy(s.key); setMsg(null);
+    try {
+      if (apply) {
+        const r = await applyGuardSuggestion(s.key);
+        qc.setQueryData(["browser-policy"], r);
+        setMsg({ ok: true, text: `Applied: ${s.title}. Browser policy is now version ${r.version}; PCs pick it up within the hour.` });
+      } else {
+        await dismissGuardSuggestion(s.key);
+        setMsg({ ok: true, text: `Dismissed: ${s.title}.` });
+      }
+      await qc.invalidateQueries({ queryKey: ["guard-suggestions"] });
+    } catch (e) {
+      setMsg({ ok: false, text: apiErrorMessage(e, "Could not save that.") });
+    } finally { setBusy(null); }
+  }
 
   const muted = { color: "var(--text-secondary)" };
   const panel = { background: "var(--surface)", border: "1px solid var(--border)" };
@@ -67,6 +92,32 @@ export default function DiscoveryPage() {
 
       {isLoading && <p className="text-sm" style={muted}>Loading…</p>}
       {error && <p className="text-sm" style={{ color: "#ef4444" }}>{apiErrorMessage(error, "Could not load.")}</p>}
+
+      {msg && <p className="text-xs" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}
+      {(suggestions?.length ?? 0) > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
+            <Lightbulb size={15} style={{ color: "var(--accent)" }} /> Suggested from what SAVIO has seen
+          </h2>
+          {suggestions!.map((s) => (
+            <div key={s.key} className="rounded-xl p-4 flex flex-wrap items-start justify-between gap-3" style={panel}>
+              <div className="min-w-0 max-w-3xl">
+                <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{s.title}</div>
+                <p className="text-xs mt-1" style={muted}>{s.why}</p>
+                <p className="text-xs mt-1" style={{ color: "var(--text-primary)" }}>Changes: {s.changes.join("; ")}</p>
+              </div>
+              <div className="flex gap-2">
+                <button disabled={busy === s.key} onClick={() => act(s, true)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                  style={{ background: "var(--accent)" }}>Apply</button>
+                <button disabled={busy === s.key} onClick={() => act(s, false)}
+                  className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
+                  style={{ ...panel, color: "var(--text-primary)" }}>Dismiss</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {data && (
         <>

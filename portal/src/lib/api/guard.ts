@@ -164,3 +164,19 @@ export interface Discovery {
 }
 
 export const getDiscovery = () => apiClient.get<Discovery>("/guard/discovery").then((r) => r.data);
+// D5 slice 2: policy changes suggested by what AI Guard has seen, with the evidence. Admin only.
+export interface GuardSuggestion {
+  key: string;
+  title: string;
+  why: string;
+  changes: string[];
+}
+
+export const getGuardSuggestions = () =>
+  apiClient.get<GuardSuggestion[]>("/guard/suggestions").then((r) => r.data);
+
+export const applyGuardSuggestion = (key: string) =>
+  apiClient.post<BrowserPolicyRead>(`/guard/suggestions/${key}/apply`).then((r) => r.data);
+
+export const dismissGuardSuggestion = (key: string) =>
+  apiClient.post(`/guard/suggestions/${key}/dismiss`).then(() => undefined);
