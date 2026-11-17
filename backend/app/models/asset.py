@@ -78,6 +78,13 @@ class Asset(TimestampMixin, Base):
     purchase_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
     warranty_expiry: Mapped[str | None] = mapped_column(String(10), nullable=True)
     purchase_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # L5b: where the warranty date came from (manual | csv | invoice_ai | dell_api | hp_api |
+    # lenovo_api), and when a lookup last checked it. A lookup never overwrites a date a person
+    # entered: a different date it finds waits in warranty_found for an admin to pick.
+    warranty_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    warranty_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    warranty_found: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    warranty_found_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 

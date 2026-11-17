@@ -70,3 +70,35 @@ export const deleteAsset = (id: string) =>
 // Re-send the receipt-confirmation email to the current assignee.
 export const resendAcknowledgement = (id: string) =>
   apiClient.post<Asset>(`/assets/${id}/resend-acknowledgement`).then((r) => r.data);
+
+// L5b: warranty dates from a CSV (serial_number or asset_tag + warranty_expiry).
+export interface WarrantyImportResult {
+  rows: number; updated: number; unchanged: number; conflicts: number;
+  unmatched: string[]; invalid: string[];
+}
+
+export const importWarrantyCsv = (csv: string) =>
+  apiClient.post<WarrantyImportResult>("/assets/warranty/import", { csv }).then((r) => r.data);
+
+// Read an invoice (PDF/JPG/PNG) for an asset's warranty and purchase details. The file goes as
+// base64 in the request body and is not stored on the server.
+export interface InvoiceResult {
+  result: "set" | "same" | "conflict" | "not_stated";
+  warranty_found: string | null;
+  filled: string[];
+  vendor: string | null;
+  invoice_date: string | null;
+}
+
+export async function readInvoice(id: string, file: File): Promise<InvoiceResult> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return apiClient.post<InvoiceResult>(`/assets/${id}/warranty/invoice`, {
+    media_type: file.type, data_b64: btoa(binary),
+  }).then((r) => r.data);
+}
+
+// Pick between the date a person entered and one an import or lookup found.
+export const resolveWarranty = (id: string, keep: "current" | "found") =>
+  apiClient.post<Asset>(`/assets/${id}/warranty/resolve`, { keep }).then((r) => r.data);

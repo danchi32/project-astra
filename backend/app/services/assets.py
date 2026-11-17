@@ -166,6 +166,7 @@ class AssetService:
 
     async def create(self, *, actor: User, data: AssetCreate) -> AssetRead:
         asset = Asset(org_id=actor.org_id, **data.model_dump())
+        asset.warranty_source = "manual" if asset.warranty_expiry else None   # L5b
         newly_assigned = False
         if asset.assigned_to_user_id is not None:
             asset.ack_token = generate_opaque_token()
@@ -201,8 +202,16 @@ class AssetService:
         old_status = asset.status
         old_location = asset.location
         changes = data.model_dump(exclude_unset=True)
+        old_expiry = asset.warranty_expiry
         for field, value in changes.items():
             setattr(asset, field, value)
+        # L5b: a date typed here is a person's, which no lookup may replace on its own; it
+        # also settles any found date that was waiting for a choice. Only when the date
+        # actually changed: the edit form re-sends every field, and saving a new location
+        # must not relabel an imported date "by hand" or quietly drop a pending choice.
+        if "warranty_expiry" in changes and asset.warranty_expiry != old_expiry:
+            asset.warranty_source = "manual" if asset.warranty_expiry else None
+            asset.warranty_found = asset.warranty_found_source = None
 
         # Detect a (re)assignment so we can ask the new holder to acknowledge receipt.
         newly_assigned = False

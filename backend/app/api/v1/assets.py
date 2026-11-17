@@ -1,7 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_roles
@@ -130,6 +133,90 @@ async def create_asset(
     session: AsyncSession = Depends(get_db),
 ) -> AssetRead:
     return await AssetService(session).create(actor=actor, data=body)
+
+
+class WarrantyImport(BaseModel):
+    # The file's text. Read in the browser, so no upload storage is involved.
+    csv: str = Field(min_length=1, max_length=1_000_000)
+
+
+class WarrantyImportResult(BaseModel):
+    rows: int
+    updated: int
+    unchanged: int
+    conflicts: int
+    unmatched: list[str]
+    invalid: list[str]
+
+
+class WarrantyResolve(BaseModel):
+    keep: Literal["current", "found"]
+
+
+class InvoiceUpload(BaseModel):
+    # Read in the browser and sent as base64; the server never stores the file.
+    media_type: Literal["application/pdf", "image/jpeg", "image/png"]
+    data_b64: str = Field(min_length=4, max_length=14_000_000)   # ~10 MB file
+
+
+class InvoiceResult(BaseModel):
+    result: str             # set | same | conflict | not_stated
+    warranty_found: str | None
+    filled: list[str]
+    vendor: str | None
+    invoice_date: str | None
+
+
+@router.post(
+    "/{asset_id}/warranty/invoice", response_model=InvoiceResult,
+    summary="Read an invoice for this asset's warranty and purchase details (staff; audited; file not stored)",
+)
+async def warranty_from_invoice(
+    asset_id: uuid.UUID,
+    body: InvoiceUpload,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> InvoiceResult:
+    from app.services import warranty
+    from app.services.invoice_reader import AiNotConfigured, InvoiceReadError
+
+    try:
+        return InvoiceResult(**await warranty.apply_invoice(
+            session, actor=actor, asset_id=asset_id, data_b64=body.data_b64, media_type=body.media_type))
+    except AiNotConfigured as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except InvoiceReadError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+
+@router.post(
+    "/warranty/import", response_model=WarrantyImportResult,
+    summary="Import warranty end dates from CSV, matched by serial or asset tag (staff; audited)",
+)
+async def import_warranty(
+    body: WarrantyImport,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> WarrantyImportResult:
+    from app.services import warranty
+
+    return WarrantyImportResult(**await warranty.import_csv(session, actor=actor, text=body.csv))
+
+
+@router.post(
+    "/{asset_id}/warranty/resolve", response_model=AssetRead,
+    summary="Choose between the warranty date a person entered and one a lookup found (staff; audited)",
+)
+async def resolve_warranty(
+    asset_id: uuid.UUID,
+    body: WarrantyResolve,
+    actor: User = Depends(staff_required),
+    session: AsyncSession = Depends(get_db),
+) -> AssetRead:
+    from app.services import warranty
+
+    await warranty.resolve(session, actor=actor, asset_id=asset_id, keep=body.keep)
+    return await AssetService(session).get(actor=actor, asset_id=asset_id)
 
 
 @router.patch("/{asset_id}", response_model=AssetRead, summary="Update an asset (staff)")

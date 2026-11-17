@@ -630,6 +630,11 @@ export interface Asset {
   location: string | null;
   purchase_date: string | null;
   warranty_expiry: string | null;
+  // L5b: where the warranty date came from, and a found date waiting for an admin's choice.
+  warranty_source?: "manual" | "csv" | "invoice_ai" | "dell_api" | "hp_api" | "lenovo_api" | null;
+  warranty_checked_at?: string | null;
+  warranty_found?: string | null;
+  warranty_found_source?: string | null;
   purchase_cost: number | null;
   notes: string | null;
   acknowledgement_status: AcknowledgementStatus;

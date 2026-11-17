@@ -1,9 +1,21 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import AcknowledgementStatus, AssetCategory, AssetStatus
+
+
+def _date_or_none(v: str | None) -> str | None:
+    """Dates are stored as YYYY-MM-DD text, so they are checked on the way in: one that does
+    not parse would break every reader that compares or parses it (the Watchlist, warranty
+    buckets). Day-first input is normalised. Only on create/update, never on read, so a bad
+    value already in the database cannot make the asset list fail."""
+    if v is None or not str(v).strip():
+        return None
+    from app.services.warranty import parse_date
+
+    return parse_date(str(v))
 
 
 class AssetBase(BaseModel):
@@ -24,7 +36,7 @@ class AssetBase(BaseModel):
 
 
 class AssetCreate(AssetBase):
-    pass
+    _dates = field_validator("purchase_date", "warranty_expiry")(_date_or_none)
 
 
 class AssetUpdate(BaseModel):
@@ -45,6 +57,8 @@ class AssetUpdate(BaseModel):
     purchase_cost: float | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=2000)
 
+    _dates = field_validator("purchase_date", "warranty_expiry")(_date_or_none)
+
 
 class AssetRead(AssetBase):
     model_config = ConfigDict(from_attributes=True)
@@ -54,6 +68,11 @@ class AssetRead(AssetBase):
     acknowledgement_status: AcknowledgementStatus = AcknowledgementStatus.NOT_REQUIRED
     acknowledged_at: datetime | None = None
     archived_at: datetime | None = None
+    # L5b warranty provenance (read-only: set by edits, imports and lookups, never posted).
+    warranty_source: str | None = None
+    warranty_checked_at: datetime | None = None
+    warranty_found: str | None = None
+    warranty_found_source: str | None = None
     # Enriched for display (not stored on the row).
     assigned_to_name: str | None = None
     device_hostname: str | None = None

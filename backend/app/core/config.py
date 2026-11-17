@@ -166,6 +166,8 @@ class Settings(BaseSettings):
     # (local demo + tests run without a key or network).
     anthropic_api_key: str | None = None
     ai_model: str = "claude-sonnet-5"
+    # L5b: the model that reads an uploaded invoice for its warranty and purchase details.
+    invoice_ai_model: str = "claude-opus-5-5"
     # Sonnet 5 thinks by default — leaving the thinking parameter unset gets adaptive
     # thinking, where on the previous model it got none. max_tokens caps thinking AND the
     # reply together, so a budget sized for reply-only would now cut answers off mid
