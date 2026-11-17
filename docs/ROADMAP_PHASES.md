@@ -473,6 +473,25 @@ Also: list who at Technomate can reach the production database, and keep that ac
 | 2f | L5b Warranty lookup |
 | 2g | N2 Scheduled alerts — device gone silent (no heartbeat for N hours), warranty expiring 90/60/30 days, agent rollout stuck; uses the 2.0 scheduler; same edge-triggered `alert_states` as N1 |
 
+**N2 as built (16 Nov, on demand per the 2.0 decision):** `app/services/watchlist.py`,
+`GET /watchlist` (staff), portal Operations → Watchlist. The same four lists the scheduled
+alerts will use, shown when someone looks:
+- **PCs gone quiet:** silent for over N hours (default 6, up to 30 days), counted from last
+  seen, or from enrolment if never seen.
+- **Warranties:** ending within 90 days or ended in the last 30, bucketed ended / 30 / 60 /
+  90 days.
+- **Stuck work:** queued over a day and never collected (likely off), or collected and never
+  finished, named with its rollout.
+- **Agents behind:** PCs older than the current signed release, compared only when an update
+  channel is configured.
+
+`test_watchlist.py`, 2 tests, covering each list, another org's PCs, the threshold, and
+403. Checked on screen.
+
+**Not built:** e-mails and notifications for new entries. When a scheduler exists, it calls
+`watchlist.build` and fires on new entries through the N1 `AlertState` table, edge-triggered,
+so an entry fires once and not every run.
+
 **2.0 Decision — how time-based work runs.** The backend has no scheduler on purpose. Options:
 (a) Cloud Scheduler calling an authenticated internal endpoint per job; (b) compute lazily
 when a page/email is requested and cache it. Recommendation: (a) for J1 emails and C1's 7-day
@@ -858,6 +877,91 @@ J2/J5. No Critical findings. Fixed the same day: four Medium and all nine Low (m
 - Feeds: expiry alerts at 90/60/30 days (J2), the Health Check (L1), the refresh planner (L5).
 - Done when: a real Dell/HP/Lenovo serial resolves to the vendor's date; an invoice PDF fills
   an Acer asset; a manual date is never replaced without the admin choosing.
+- **As built, first slice (16 Nov):** `app/services/warranty.py`, migration `0086`.
+  - **New asset fields:** `warranty_source`, `warranty_checked_at`, and a `warranty_found`
+    date with its source, held while it waits for a choice.
+  - **One rule for every source:** `apply_found` fills a blank date, or updates one that an
+    earlier import or lookup set. A date a person entered is never replaced. That covers
+    `manual`, and also an old date with no source, which a person typed before sources
+    existed. A different date is held beside it, and the admin presses "Use it" or "Keep
+    mine". Both choices are audited and written to the asset passport.
+  - **Typing a date by hand** marks it `manual` and settles any date waiting for a choice.
+  - **CSV import** (`POST /assets/warranty/import`, staff):
+    - columns `serial_number` (or `serial`) or `asset_tag`, plus `warranty_expiry` (or
+      `warranty_end`);
+    - dates as YYYY-MM-DD or day-first DD/MM/YYYY;
+    - matched within the org only and case-insensitive, and a serial matching two assets
+      is skipped;
+    - at most 1 MB and 5000 rows, audited.
+  - **Portal:** Assets → "Import warranty CSV". The Warranty column shows the source and,
+    when one is waiting, "CSV says …" with "Use it" / "Keep mine".
+  - **Checked:** `test_warranty.py`, 4 tests. Migration checked up / down / up on Postgres
+    with a write. Checked on screen: a day-first CSV date filled one asset; a different date
+    for a hand-entered one waited; "Use it" took it.
+  - **Not built yet:**
+    - **Vendor connectors.** Dell TechDirect, the HP developer portal and Lenovo need
+      approved API access, and **you have to apply for it**. Each will call
+      `apply_found(asset, date, "dell_api")`, and nothing else changes.
+    - **Invoice upload → AI extraction:** built since, below. Only the live model check is
+      still to do.
+    - **"Refresh warranty" and the weekly refresh.** They wait for a connector to refresh
+      from, and for the scheduler.
+- **As built, invoice reading (16 Nov):** `app/services/invoice_reader.py`, and
+  `POST /assets/{id}/warranty/invoice` (staff).
+  - **Upload:** a PDF, JPG or PNG up to 10 MB is read in the browser and sent as base64. It
+    is never stored, and only the fields read go into the audit log.
+  - **The call:** one Claude call (`invoice_ai_model`, default `claude-opus-5-5`) with the
+    file as a document or image block. A JSON schema fixes the answer to these fields:
+    vendor, invoice date, warranty end or months, total, serials. The server-side refusal
+    fallback is on.
+  - **The warranty date** is the end date the invoice states, or its date plus the months it
+    states (capped at 120). It goes through `apply_found`, so a date typed by hand is never
+    replaced. Purchase date and cost are filled only where the asset has none.
+  - **Guard:** if the invoice lists serial numbers and the asset has one, it must be among
+    them, otherwise the request is refused. Wrong invoice, right asset is the likely
+    mistake.
+  - **Portal:** an invoice button on each asset row.
+  - **Checked:** in `test_warranty.py`, 5 more tests (9 in all):
+    - a blank asset filled;
+    - a hand-entered date kept as a conflict;
+    - a serial mismatch refused;
+    - "not stated";
+    - no AI key gives 503;
+    - a wrong file type gives 422;
+    - a plain user gives 403;
+    - the exact request sent to Claude (document block, schema, fallback);
+    - a refusal reported, not parsed;
+    - month arithmetic.
+  - **Not done:** a live model run on a real invoice. It needs a dev Anthropic key in
+    `backend/.env`.
+
+**Security review, third pass (16 Nov):** covered J1, L5b (CSV and invoice) and N2. No
+Critical findings. Everything was fixed the same day:
+- **H1 (cost).** Invoice reads are paid calls, so they are now limited to 20 per person per
+  hour and 100 per org per day. Every attempt is recorded before the call, so one that
+  fails still counts. The client allows one retry and 60 s; `max_tokens` is 8000.
+- **H2 (database pool).** The database connection is released while the model reads,
+  instead of being held for the whole call.
+- **M1 (provenance).** Saving an asset's other fields no longer relabels its warranty date
+  "by hand" or drops a pending choice. Only a changed date counts as a person's.
+- **M2 (bad dates).** Asset dates are validated on create and edit; day-first input is
+  normalised. A malformed legacy date is skipped by the Watchlist instead of failing it.
+- **Lows:**
+  - The model's answer is validated with Pydantic: finite cost under 1e9, no extra fields,
+    capped lengths.
+  - An invoice never replaces *any* existing date, a CSV one included. It only fills a
+    blank or raises a conflict.
+  - Every SDK error is caught. The minimum SDK is pinned to 2.3.0, and a test sends the real
+    request through the installed SDK with a mocked transport.
+  - CSV handling: a malformed file gives a 400; rows are counted before any query; a
+    serial twice in one file is refused instead of the last row winning; echoes are
+    truncated.
+  - A held conflict, or a dropped found date, writes a passport note.
+  - The brief's rate limit counts the request before the slow send, so parallel requests
+    can't slip past it.
+  - The Watchlist fetches the agent manifest before opening a database transaction.
+- **Not changed:** the invoice model stays `claude-opus-5-5`. Cost is now capped by the
+  limits, and `invoice_ai_model` can be changed in config.
 
 ---
 
@@ -986,8 +1090,8 @@ Existing customers keep everything their plan grants today.
 
 | Phase | Status |
 |---|---|
-| 1 | Not started — starts 9 Nov 2026 |
-| 2 | Not started |
+| 1 | Done: merged to main (PR #57) |
+| 2 | Built on branch `phase-2`, draft PR #63. Left: vendor warranty connectors (needs API access), invoice → AI, scheduled e-mails/alerts (waits for a scheduler), and the live checks (BitLocker escrow, Defender tamper, L3 model) |
 | 3 | Not started (spikes first) |
 | 4 | Not started |
 | 5 | Not started |
