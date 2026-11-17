@@ -987,6 +987,49 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
   policies (Chrome/Edge registry, Firefox `policies.json`): force-install extension,
   incognito off, developer mode off, URL block/allow by category and group; unsupported
   browsers blocked or uninstalled per policy.
+  - **As built, slice 1, agent writer (17 Nov, branch `phase-3`, not pushed):**
+    `agent/src/AstraAgent.Service/Guard/`.
+  - **`BrowserPolicy`** is the browser-neutral model. Every field is off by default:
+    incognito off, extension developer mode off, all dev tools off, new profiles and guest
+    off, blocked / allowed sites (host names), Google allowed domains (D2), and the
+    extension's store IDs. `Validate()` refuses bad hosts, IDs and non-https URLs before
+    anything is written.
+  - **`BrowserPolicyMap`** gives each browser's own names:
+    - Chrome: `IncognitoModeAvailability`, `BrowserAddPersonEnabled`;
+    - Edge: `InPrivateModeAvailability`, `BrowserAddProfileEnabled`;
+    - shared: `ExtensionDeveloperModeSettings`, `URLBlocklist` / `URLAllowlist`,
+      `AllowedDomainsForApps`, `ExtensionInstallForcelist` with each store's update URL;
+    - Firefox: `DisablePrivateBrowsing`, `DisableDeveloperTools`, `WebsiteFilter` match
+      patterns, `ExtensionSettings` force_installed.
+  - **`BrowserPolicyWriter`** owns only what it wrote. The names it set are recorded under
+    `HKLM\SOFTWARE\SAVIO\BrowserPolicy\<browser>` (and `savio-owned.json` for Firefox),
+    and only those are changed or removed.
+    - A policy someone else already sets, such as an org's GPO, is reported as a
+      **conflict** and never overwritten. That covers this laptop's existing
+      `LocalNetworkAccessAllowedForUrls`.
+    - Re-applying is idempotent. Tampering is **repaired and reported**; a local admin
+      can't be stopped, only noticed.
+    - Every write is read back, and one that doesn't stick is an error.
+    - Firefox's policies.json is merged, never replaced. An unreadable file is left
+      untouched, and writes are atomic.
+  - **Checked:** `BrowserPolicyWriterTests` (12), against the real registry under a
+    throwaway HKCU key (never HKLM) and a temp folder:
+    - apply and idempotency;
+    - a foreign policy kept, with a conflict reported;
+    - tamper repaired;
+    - shrink removes only what SAVIO set;
+    - Edge names;
+    - validation;
+    - Firefox merge;
+    - broken Firefox file left alone.
+  - All 382 agent tests pass, and the real browser keys were untouched.
+  - **Next, slice 2:**
+    - per-org policy in the backend, behind the `ai_guard` entitlement and off by default;
+    - an admin page and audit;
+    - the agent fetches the policy, applies it each cycle, and reports conflicts and drift
+      (N1 alert "browser policy tampered").
+  - **Then a live VM test (Spike 2):** which of these policies Chrome and Edge honour on a
+    PC not joined to a domain.
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
   drag-and-drop, form submit on watched sites; talks only to the local agent via native
   messaging (policy offline, device identity).
