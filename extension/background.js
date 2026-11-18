@@ -7,9 +7,26 @@
 // shape the agent accepts) goes back through the host to the SAVIO service, which sends it on
 // to the org's portal. A local copy of the last 200 is kept here as well.
 import { REASONS, decide, fromHost, hostOf, isWatched, readPolicy, toEvent, withOutcome } from "./decide.js";
+import { accountRules } from "./accounts.js";
 
 const HOST = "com.savio.guard";
 const MAX_EVENTS = 200;
+
+// D2: the company-account headers follow the managed settings: set at start, replaced whenever
+// the org's policy changes, and removed when it no longer asks for them.
+async function syncAccounts() {
+  let managed = null;
+  try { managed = await chrome.storage.managed.get(null); } catch { /* no policy: no rules */ }
+  try {
+    const old = (await chrome.declarativeNetRequest.getDynamicRules()).map((r) => r.id);
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: old, addRules: accountRules(managed) });
+  } catch {
+    // Rules stay as they were; the next start or policy change tries again.
+  }
+}
+chrome.runtime.onStartup.addListener(syncAccounts);
+chrome.runtime.onInstalled.addListener(syncAccounts);
+chrome.storage.onChanged.addListener((_, area) => { if (area === "managed") syncAccounts(); });
 
 async function policy() {
   try {

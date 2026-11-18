@@ -40,6 +40,9 @@ FINDING_KINDS = ("Aadhaar", "Pan", "Gstin", "PaymentCard", "IndianMobile", "Emai
 FindingKind = Literal["Aadhaar", "Pan", "Gstin", "PaymentCard", "IndianMobile", "Email", "BankAccount"]
 _HOST = re.compile(r"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$")
 _CHROMIUM_ID = re.compile(r"^[a-p]{32}$")
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+_SLACK_ID = re.compile(r"^[TE][A-Z0-9]{6,20}$")
+MAX_ACCOUNT_IDS = 50
 _FIREFOX_ID = re.compile(r"^(\{[0-9a-fA-F-]{36}\}|[A-Za-z0-9._-]{1,80}@[A-Za-z0-9.-]{1,80})$")
 # Where a forced Firefox extension may come from (security review L4): Mozilla's own store. A
 # self-hosted .xpi host is added here, in code, when there is one.
@@ -82,6 +85,13 @@ def category_hosts(categories: list[str]) -> list[str]:
     return list(dict.fromkeys(h for c in categories for h in SITE_CATEGORIES[c][1]))
 
 
+def _slack_ids(v: list[str]) -> list[str]:
+    out = [x.strip().upper() for x in v if x and x.strip()]
+    if bad := next((x for x in out if not _SLACK_ID.match(x)), None):
+        raise ValueError(f"'{bad[:60]}' is not a Slack workspace or org ID (like T0123ABCD or E0123ABCD)")
+    return list(dict.fromkeys(out))
+
+
 def has_control(s: str) -> bool:
     """Any control, format (bidi overrides, zero-width), private-use or unassigned character.
     Text from a device or an admin that ends up on screens is refused if it has one."""
@@ -119,6 +129,42 @@ class BrowserPolicyBody(BaseModel):
     # D5: weekly scan of each person's Desktop / Documents / Downloads / OneDrive, on the PC, for
     # a map of which folders hold sensitive files (counts only). Off until an admin turns it on.
     discovery_enabled: bool = False
+    # D2 beyond Google: sign-in only to the org's own Microsoft tenant, Claude organizations,
+    # ChatGPT workspaces and Slack workspaces. Each service enforces it itself when its header
+    # arrives; the extension adds the header (as a proxy would), so these need the extension.
+    microsoft_tenant_id: str | None = None
+    microsoft_policy_id: str | None = None      # Entra's tenant-restrictions policy ID
+    claude_org_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
+    chatgpt_workspace_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
+    slack_requester_id: str | None = None       # the org's own workspace or org ID
+    slack_allowed_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
+
+    @field_validator("microsoft_tenant_id", "microsoft_policy_id")
+    @classmethod
+    def _uuid(cls, v: str | None) -> str | None:
+        if v is None or not v.strip():
+            return None
+        if not _UUID.match(v := v.strip().lower()):
+            raise ValueError("Must be an ID like aaaabbbb-0000-cccc-1111-dddd2222eeee")
+        return v
+
+    @field_validator("claude_org_ids", "chatgpt_workspace_ids")
+    @classmethod
+    def _uuids(cls, v: list[str]) -> list[str]:
+        out = [x.strip().lower() for x in v if x and x.strip()]
+        if bad := next((x for x in out if not _UUID.match(x)), None):
+            raise ValueError(f"'{bad[:60]}' is not an ID like aaaabbbb-0000-cccc-1111-dddd2222eeee")
+        return list(dict.fromkeys(out))
+
+    @field_validator("slack_requester_id")
+    @classmethod
+    def _slack_one(cls, v: str | None) -> str | None:
+        return (_slack_ids([v or ""]) or [None])[0]
+
+    @field_validator("slack_allowed_ids")
+    @classmethod
+    def _slack(cls, v: list[str]) -> list[str]:
+        return _slack_ids(v)
 
     @field_validator("guard_ignore_kinds", "blocked_categories")
     @classmethod
@@ -169,6 +215,15 @@ class BrowserPolicyBody(BaseModel):
                                  "turn off 'No extension developer mode' while it is manual")
         elif (self.firefox_extension_id is None) != (self.firefox_extension_url is None):
             raise ValueError("A Firefox extension needs both an ID and an install URL")
+        if (self.microsoft_tenant_id is None) != (self.microsoft_policy_id is None):
+            raise ValueError("Microsoft 365 needs both the tenant ID and the tenant restrictions policy ID")
+        if (self.slack_requester_id is None) != (not self.slack_allowed_ids):
+            raise ValueError("Slack needs your own workspace or org ID and the list of allowed IDs")
+        accounts = (self.microsoft_tenant_id or self.claude_org_ids or self.chatgpt_workspace_ids
+                    or self.slack_requester_id)
+        if accounts and not (self.chrome_extension_id or self.edge_extension_id or self.firefox_extension_id):
+            raise ValueError("Company-account-only sign-in for these services works through the SAVIO "
+                             "extension: set its ID first")
         if self.firefox_extension_url and not self.firefox_extension_url.startswith("https://"):
             raise ValueError("The Firefox extension URL must be https")
         if self.firefox_extension_url:

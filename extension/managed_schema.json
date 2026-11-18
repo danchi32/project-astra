@@ -22,6 +22,15 @@
       "title": "Restricted keywords",
       "type": "array",
       "items": { "type": "string" }
-    }
+    },
+    "microsoftTenant": {
+      "title": "Microsoft 365: sign-in only to this tenant",
+      "description": "<tenant ID>:<tenant restrictions policy ID>, from Microsoft Entra.",
+      "type": "string"
+    },
+    "claudeOrgs": { "title": "Claude: allowed organization IDs", "type": "array", "items": { "type": "string" } },
+    "chatgptWorkspaces": { "title": "ChatGPT: allowed workspace IDs", "type": "array", "items": { "type": "string" } },
+    "slackRequester": { "title": "Slack: your own workspace or org ID", "type": "string" },
+    "slackAllowed": { "title": "Slack: allowed workspace and org IDs", "type": "array", "items": { "type": "string" } }
   }
 }

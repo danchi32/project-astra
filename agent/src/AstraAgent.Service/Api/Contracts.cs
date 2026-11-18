@@ -258,7 +258,13 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("guard_ignore_kinds")] IReadOnlyList<string>? GuardIgnoreKinds = null,
     [property: JsonPropertyName("guard_keywords")] IReadOnlyList<string>? GuardKeywords = null,
     [property: JsonPropertyName("discovery_enabled")] bool DiscoveryEnabled = false,
-    [property: JsonPropertyName("extension_install")] string? ExtensionInstall = null)
+    [property: JsonPropertyName("extension_install")] string? ExtensionInstall = null,
+    [property: JsonPropertyName("microsoft_tenant_id")] string? MicrosoftTenantId = null,
+    [property: JsonPropertyName("microsoft_policy_id")] string? MicrosoftPolicyId = null,
+    [property: JsonPropertyName("claude_org_ids")] IReadOnlyList<string>? ClaudeOrgIds = null,
+    [property: JsonPropertyName("chatgpt_workspace_ids")] IReadOnlyList<string>? ChatGptWorkspaceIds = null,
+    [property: JsonPropertyName("slack_requester_id")] string? SlackRequesterId = null,
+    [property: JsonPropertyName("slack_allowed_ids")] IReadOnlyList<string>? SlackAllowedIds = null)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -272,5 +278,8 @@ public sealed record AgentBrowserPolicyBody(
         GuardMode = GuardMode ?? "log", GuardWatchedSites = GuardWatchedSites ?? [],
         GuardIgnoreKinds = GuardIgnoreKinds ?? ["Email"], GuardKeywords = GuardKeywords ?? [],
         DiscoveryEnabled = DiscoveryEnabled, ExtensionInstall = ExtensionInstall ?? "store",
+        MicrosoftTenantId = MicrosoftTenantId, MicrosoftPolicyId = MicrosoftPolicyId,
+        ClaudeOrgIds = ClaudeOrgIds ?? [], ChatGptWorkspaceIds = ChatGptWorkspaceIds ?? [],
+        SlackRequesterId = SlackRequesterId, SlackAllowedIds = SlackAllowedIds ?? [],
     };
 }

@@ -308,6 +308,30 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     }
 
     [Fact]
+    public void Company_account_ids_go_to_the_extension_only_when_set_and_only_as_ids()
+    {
+        const string tid = "aaaabbbb-0000-cccc-1111-dddd2222eeee", pid = "1aaaaaa1-2bb2-3cc3-4dd4-5eeeeeeeeee5";
+        var accounts = Full with
+        {
+            MicrosoftTenantId = tid, MicrosoftPolicyId = pid, ClaudeOrgIds = [tid], ChatGptWorkspaceIds = [pid],
+            SlackRequesterId = "E0123ABCD", SlackAllowedIds = ["E0123ABCD", "T0456EFGH"],
+        };
+        Assert.Empty(accounts.Validate());
+        var settings = (IReadOnlyDictionary<string, object>)BrowserPolicyMap.Chromium(accounts, Browser.Chrome)[$@"3rdparty\extensions\{ChromeId}\policy"];
+        Assert.Equal($"{tid}:{pid}", settings["microsoftTenant"]);
+        Assert.Equal(new[] { "E0123ABCD", "T0456EFGH" }, settings["slackAllowed"]);
+        var plain = (IReadOnlyDictionary<string, object>)BrowserPolicyMap.Chromium(Full, Browser.Chrome)[$@"3rdparty\extensions\{ChromeId}\policy"];
+        Assert.False(plain.ContainsKey("microsoftTenant") || plain.ContainsKey("claudeOrgs") || plain.ContainsKey("slackRequester"));
+
+        // They become request headers: anything but an ID is refused, including a smuggled header.
+        Assert.NotEmpty((accounts with { MicrosoftPolicyId = null }).Validate());
+        Assert.NotEmpty((accounts with { ClaudeOrgIds = [tid + "\r\nX-Evil: 1"] }).Validate());
+        Assert.NotEmpty((accounts with { SlackRequesterId = "E0123ABCD,T999" }).Validate());
+        Assert.NotEmpty((accounts with { SlackAllowedIds = [] }).Validate());
+        Assert.NotEmpty((accounts with { ChatGptWorkspaceIds = Enumerable.Repeat(pid, 51).ToList() }).Validate());
+    }
+
+    [Fact]
     public void Firefox_is_written_to_only_under_program_files()
     {
         // Review M4: a user-writable install folder is never written to as SYSTEM.

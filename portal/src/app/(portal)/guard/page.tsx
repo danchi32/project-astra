@@ -42,7 +42,8 @@ export default function GuardPage() {
   const { data: categories } = useQuery({ queryKey: ["site-categories"], queryFn: getSiteCategories,
     enabled: !!data, staleTime: Infinity });
   const [form, setForm] = useState<BrowserPolicy | null>(null);
-  const [text, setText] = useState({ blocked: "", allowed: "", google: "", watched: "", keywords: "" });
+  const [text, setText] = useState({ blocked: "", allowed: "", google: "", watched: "", keywords: "",
+                                     claude: "", chatgpt: "", slack: "" });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -51,7 +52,8 @@ export default function GuardPage() {
     setForm(data.policy);
     setText({ blocked: data.policy.blocked_sites.join("\n"), allowed: data.policy.allowed_sites.join("\n"),
               google: data.policy.google_allowed_domains.join("\n"), watched: data.policy.guard_watched_sites.join("\n"),
-              keywords: data.policy.guard_keywords.join("\n") });
+              keywords: data.policy.guard_keywords.join("\n"), claude: data.policy.claude_org_ids.join("\n"),
+              chatgpt: data.policy.chatgpt_workspace_ids.join("\n"), slack: data.policy.slack_allowed_ids.join("\n") });
   }, [data]);
 
   const muted = { color: "var(--text-secondary)" };
@@ -78,7 +80,9 @@ export default function GuardPage() {
       const r = await putBrowserPolicy({ ...form, blocked_sites: lines(text.blocked), allowed_sites: lines(text.allowed),
                                          google_allowed_domains: lines(text.google), guard_watched_sites: lines(text.watched),
                                          // Keywords may contain commas ("Q3, final"): one per line only.
-                                         guard_keywords: text.keywords.split("\n").map((x) => x.trim()).filter(Boolean) });
+                                         guard_keywords: text.keywords.split("\n").map((x) => x.trim()).filter(Boolean),
+                                         claude_org_ids: lines(text.claude), chatgpt_workspace_ids: lines(text.chatgpt),
+                                         slack_allowed_ids: lines(text.slack) });
       qc.setQueryData(["browser-policy"], r);
       setMsg({ ok: true, text: `Saved as version ${r.version}. PCs pick it up within the hour.` });
     } catch (e) {
@@ -229,6 +233,40 @@ export default function GuardPage() {
                   </label>
                 ))}
               </fieldset>
+            </div>
+          </div>
+          <div className="pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
+            <div>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Company accounts only</h2>
+              <p className="text-xs" style={muted}>
+                People can sign in to these services only with your organization&apos;s own accounts, not a personal one.
+                Each service enforces it itself, on plans that support it; the SAVIO extension sends it your IDs, so it
+                needs the extension. Leave a service empty to leave it alone.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {([["microsoft_tenant_id", "Microsoft 365: tenant ID",
+                  "Both IDs: Entra → External Identities → Cross-tenant access settings → Default settings → Tenant restrictions"],
+                 ["microsoft_policy_id", "Microsoft 365: tenant restrictions policy ID",
+                  "That page's Policy ID. Who may sign in to what is set there, in Microsoft Entra."],
+                 ["slack_requester_id", "Slack: your own workspace or org ID", "Like T0123ABCD or E0123ABCD, from Slack support"]] as const).map(([k, label, help]) => (
+                <label key={k} className="text-xs space-y-1" style={muted}>
+                  <span className="font-medium">{label}</span>
+                  <input disabled={!isAdmin} value={form[k] ?? ""} onChange={(e) => setForm({ ...form, [k]: e.target.value.trim() || null })}
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none font-mono" style={input} />
+                  <span className="block">{help}</span>
+                </label>
+              ))}
+              {([["slack", "Slack: allowed workspace and org IDs", "One per line, your own included."],
+                 ["claude", "Claude: allowed organization IDs", "One per line, from Claude's admin settings."],
+                 ["chatgpt", "ChatGPT: allowed workspace IDs", "One per line, from the ChatGPT Enterprise admin settings."]] as const).map(([k, label, help]) => (
+                <label key={k} className="text-xs space-y-1" style={muted}>
+                  <span className="font-medium">{label}</span>
+                  <textarea rows={3} disabled={!isAdmin} value={text[k]} onChange={(e) => setText({ ...text, [k]: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg text-sm outline-none font-mono" style={input} />
+                  <span className="block">{help}</span>
+                </label>
+              ))}
             </div>
           </div>
           {msg && <p className="text-xs" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}

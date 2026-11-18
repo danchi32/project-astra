@@ -135,6 +135,34 @@ async def test_blocking_by_category(client, admin_headers, session_factory, admi
                              json={"blocked_categories": ["gambling"]})).status_code == 422
 
 
+async def test_company_accounts_only(client, admin_headers, session_factory, admin_user):
+    """D2 beyond Google: the org's own IDs per service, normalised, validated, served to PCs as is.
+    They work through the extension, so without one they are refused rather than silently off."""
+    await _guard_on(session_factory, admin_user.org_id)
+    tid, pid = "AAAABBBB-0000-CCCC-1111-DDDD2222EEEE", "1aaaaaa1-2bb2-3cc3-4dd4-5eeeeeeeeee5"
+    body = {"chrome_extension_id": "abcdefghijklmnopabcdefghijklmnop",
+            "microsoft_tenant_id": tid, "microsoft_policy_id": pid,
+            "claude_org_ids": [" 11111111-2222-4333-8444-555555555555 "],
+            "chatgpt_workspace_ids": ["66666666-7777-4888-9999-aaaaaaaaaaaa"],
+            "slack_requester_id": "e0123abcd", "slack_allowed_ids": ["E0123ABCD", "t0456efgh", "E0123ABCD"]}
+    r = await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=body)
+    assert r.status_code == 200, r.text
+    p = r.json()["policy"]
+    assert p["microsoft_tenant_id"] == tid.lower() and p["claude_org_ids"] == ["11111111-2222-4333-8444-555555555555"]
+    assert p["slack_requester_id"] == "E0123ABCD" and p["slack_allowed_ids"] == ["E0123ABCD", "T0456EFGH"]
+    _, h = await _enroll(client, admin_headers)
+    served = (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]
+    assert served["microsoft_policy_id"] == pid and served["chatgpt_workspace_ids"] == ["66666666-7777-4888-9999-aaaaaaaaaaaa"]
+
+    for bad in ({**body, "microsoft_policy_id": None},                          # both or neither
+                {**body, "slack_allowed_ids": []},
+                {**body, "claude_org_ids": ["acme"]},
+                {**body, "slack_requester_id": "workspace-1"},
+                {**body, "chatgpt_workspace_ids": ["x"] * 51},
+                {k: v for k, v in body.items() if k != "chrome_extension_id"}):      # needs the extension
+        assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad)).status_code == 422, bad
+
+
 async def test_a_new_org_only_records_for_14_days(client, admin_headers, user_headers, session_factory, admin_user):
     """E8: the pilot. Nothing but record-only until it ends, by the date or by an admin (audited);
     it never switches a mode on by itself."""

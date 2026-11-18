@@ -24,6 +24,13 @@ export interface BrowserPolicy {
   guard_keywords: string[];
   // D5: weekly scan of each person's Desktop / Documents / Downloads / OneDrive, on the PC.
   discovery_enabled: boolean;
+  // D2: sign-in only to the org's own accounts; the extension sends each service its header.
+  microsoft_tenant_id: string | null;
+  microsoft_policy_id: string | null;
+  claude_org_ids: string[];
+  chatgpt_workspace_ids: string[];
+  slack_requester_id: string | null;
+  slack_allowed_ids: string[];
 }
 
 export const FINDING_KINDS = {

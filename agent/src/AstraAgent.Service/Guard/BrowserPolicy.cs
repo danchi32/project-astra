@@ -49,6 +49,16 @@ public sealed record BrowserPolicy
     /// <summary>D5: once a week, map where sensitive files are on this PC (folder counts only).</summary>
     public bool DiscoveryEnabled { get; init; }
 
+    /// <summary>D2 beyond Google: sign-in only to the org's own accounts. Each service enforces it
+    /// when its header arrives; the extension adds the header, so these go to it as settings.</summary>
+    public string? MicrosoftTenantId { get; init; }
+    public string? MicrosoftPolicyId { get; init; }
+    public IReadOnlyList<string> ClaudeOrgIds { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> ChatGptWorkspaceIds { get; init; } = Array.Empty<string>();
+    public string? SlackRequesterId { get; init; }
+    public IReadOnlyList<string> SlackAllowedIds { get; init; } = Array.Empty<string>();
+    public const int MaxAccountIds = 50;
+
     public const int MaxSites = 500;
     public const int MaxKeywords = 200;
     static readonly string[] Modes = ["log", "warn", "justify", "redact", "approve", "block"];
@@ -56,6 +66,8 @@ public sealed record BrowserPolicy
     static readonly string[] Kinds = ["Aadhaar", "Pan", "Gstin", "PaymentCard", "IndianMobile", "Email", "BankAccount"];
     static readonly Regex Host = new(@"^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$", RegexOptions.CultureInvariant);
     static readonly Regex ChromiumId = new("^[a-p]{32}$", RegexOptions.CultureInvariant);
+    static readonly Regex Uuid = new("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", RegexOptions.CultureInvariant);
+    static readonly Regex SlackId = new("^[TE][A-Z0-9]{6,20}$", RegexOptions.CultureInvariant);
     static readonly Regex FirefoxId = new(@"^(\{[0-9a-fA-F-]{36}\}|[A-Za-z0-9._-]{1,80}@[A-Za-z0-9.-]{1,80})$", RegexOptions.CultureInvariant);
 
     /// <summary>Problems that make this policy unsafe to apply. Empty = valid.</summary>
@@ -88,6 +100,17 @@ public sealed record BrowserPolicy
         problems.AddRange(GuardIgnoreKinds.Where(k => !Kinds.Contains(k)).Select(k => $"'{Trim(k)}' is not a kind of finding"));
         if (GuardKeywords.Count > MaxKeywords) problems.Add($"too many keywords (max {MaxKeywords})");
         if (GuardKeywords.Any(k => string.IsNullOrWhiteSpace(k) || k.Length > 100)) problems.Add("keywords must be 1–100 characters");
+        // These become request headers: only IDs of the expected shape, never anything else.
+        if (MicrosoftTenantId is not null != MicrosoftPolicyId is not null) problems.Add("Microsoft needs a tenant ID and a policy ID");
+        if (new[] { MicrosoftTenantId, MicrosoftPolicyId }.Any(v => v is not null && !Uuid.IsMatch(v))) problems.Add("Microsoft ID is malformed");
+        foreach (var (name, list) in new[] { ("Claude organization", ClaudeOrgIds), ("ChatGPT workspace", ChatGptWorkspaceIds) })
+        {
+            if (list.Count > MaxAccountIds) problems.Add($"too many {name} IDs (max {MaxAccountIds})");
+            if (list.Any(v => !Uuid.IsMatch(v ?? ""))) problems.Add($"{name} ID is malformed");
+        }
+        if (SlackRequesterId is not null != SlackAllowedIds.Count > 0) problems.Add("Slack needs the org's own ID and the allowed IDs");
+        if (SlackAllowedIds.Count > MaxAccountIds) problems.Add($"too many Slack IDs (max {MaxAccountIds})");
+        if (SlackAllowedIds.Append(SlackRequesterId ?? "T0000000").Any(v => !SlackId.IsMatch(v ?? ""))) problems.Add("Slack ID is malformed");
         return problems;
     }
 
@@ -140,13 +163,26 @@ public static class BrowserPolicyMap
     }
 
     /// <summary>D3: the extension's managed settings, named as in extension/managed_schema.json.</summary>
-    static Dictionary<string, object> GuardSettings(BrowserPolicy p) => new()
+    static Dictionary<string, object> GuardSettings(BrowserPolicy p)
     {
-        ["mode"] = p.GuardMode,
-        ["watchedSites"] = p.GuardWatchedSites.ToArray(),
-        ["ignoreKinds"] = p.GuardIgnoreKinds.ToArray(),
-        ["keywords"] = p.GuardKeywords.ToArray(),
-    };
+        var s = new Dictionary<string, object>
+        {
+            ["mode"] = p.GuardMode,
+            ["watchedSites"] = p.GuardWatchedSites.ToArray(),
+            ["ignoreKinds"] = p.GuardIgnoreKinds.ToArray(),
+            ["keywords"] = p.GuardKeywords.ToArray(),
+        };
+        // D2: only what is set, so an org without them sees no change to its settings.
+        if (p.MicrosoftTenantId is not null) s["microsoftTenant"] = $"{p.MicrosoftTenantId}:{p.MicrosoftPolicyId}";
+        if (p.ClaudeOrgIds.Count > 0) s["claudeOrgs"] = p.ClaudeOrgIds.ToArray();
+        if (p.ChatGptWorkspaceIds.Count > 0) s["chatgptWorkspaces"] = p.ChatGptWorkspaceIds.ToArray();
+        if (p.SlackRequesterId is not null)
+        {
+            s["slackRequester"] = p.SlackRequesterId;
+            s["slackAllowed"] = p.SlackAllowedIds.ToArray();
+        }
+        return s;
+    }
 
     /// <summary>Firefox: top-level keys of the "policies" object in policies.json.</summary>
     public static IReadOnlyDictionary<string, object> Firefox(BrowserPolicy p)

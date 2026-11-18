@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "SAVIO Guard",
   "version": "0.1.0",
-  "description": "On PCs your organization manages with SAVIO, checks text you paste, drop, upload (text files) or send in a form on websites for Aadhaar, PAN, card and bank numbers. Checks run on this PC; your organization sees what kind of data was found and where, never the text.",
-  "permissions": ["nativeMessaging", "storage"],
+  "description": "On PCs your organization manages with SAVIO, checks text you paste, drop, upload (text files) or send in a form on websites for Aadhaar, PAN, card and bank numbers. Checks run on this PC; your organization sees what kind of data was found and where, never the text. If your organization asks, it also keeps sign-in to services such as Microsoft 365 and Slack to its own accounts.",
+  "permissions": ["nativeMessaging", "storage", "declarativeNetRequest"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [

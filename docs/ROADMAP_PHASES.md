@@ -1088,8 +1088,56 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       - the suggestion tests;
       - migration 0094 up/down/up, with an existing row given an empty list;
       - on screen: two categories ticked and saved as version 14, with 21 hosts stored.
+  - **As built, slice 4, company accounts beyond Google (18 Nov, Spike 1 answered):**
+    - **The finding:** these services enforce "own accounts only" themselves when a request
+      carries their header. The vendors assume a TLS-inspecting proxy adds it; an extension
+      can add it instead. Checked live in a throwaway Chrome profile:
+      - every header reached the server as set, including `sec-` ones (echoed by
+        httpbin.org);
+      - Microsoft's sign-in read `sec-Restrict-Tenant-Access-Policy` at once and refused a
+        made-up tenant (AADSTS1000107);
+      - ChatGPT and Claude showed nothing to a signed-out visitor: their check applies when
+        someone signs in to a workspace or organization, which needs a real account (the pilot);
+      - the older Microsoft header (`Restrict-Access-To-Tenants`) acts only at sign-in, so the
+        newer tenant restrictions v2 is used instead.
+    - **Services and headers** (each from the vendor's own docs):
+
+      | Service | Header | Sent to |
+      |---|---|---|
+      | Microsoft 365 | `sec-Restrict-Tenant-Access-Policy: <tenant>:<policy>` (tenant restrictions v2) | login.microsoftonline.com, login.microsoft.com, login.windows.net, login.live.com |
+      | Claude | `anthropic-allowed-org-ids` | claude.ai, claude.com, anthropic.com |
+      | ChatGPT Enterprise | `ChatGPT-Allowed-Workspace-Id` | chatgpt.com, chat.openai.com |
+      | Slack (Business+ / Enterprise) | `X-Slack-Allowed-Workspaces-Requester`, `X-Slack-Allowed-Workspaces` | slack.com |
+
+      Dropbox was dropped: its header name is not published.
+    - **Policy:** `microsoft_tenant_id` + `microsoft_policy_id`, `claude_org_ids`,
+      `chatgpt_workspace_ids`, `slack_requester_id` + `slack_allowed_ids`.
+      - Only IDs of the right shape are accepted, at most 50 per service, and the pairs come
+        both or neither. This is checked by the backend, by the agent, and again by the
+        extension, because these become request headers.
+      - Without the extension the IDs are refused, so the setting is never silently off.
+    - **Agent:** passes them to the extension as managed settings, only when set.
+    - **Extension:** `accounts.js` turns the settings into `declarativeNetRequest` rules that
+      *set* (never append) each header on that service's domains only. The service worker
+      keeps them in step with the policy: at start, on install, and whenever the managed
+      settings change. The manifest gains `declarativeNetRequest`, and its description says so.
+    - **Portal:** a "Company accounts only" section with where to find each ID.
+    - **Checked:**
+      - backend `test_company_accounts_only`;
+      - agent `Company_account_ids_go_to_the_extension_only_when_set_and_only_as_ids`
+        (a smuggled `\r\n` header is refused);
+      - extension `accounts.test.mjs` (3);
+      - live: the real extension started with no rules, Chrome accepted the generated rules,
+        and Microsoft read the header;
+      - on screen: the refusal without an extension ID, and saved IDs shown back.
+    - **Not checked:**
+      - that the rules are cleared when the extension restarts with no policy: the service
+        worker went to sleep before it could be read;
+      - each service blocking a real personal account: that needs the org's own accounts.
+    - **Limit:** an extension can only cover the browser. A desktop app (Teams, Slack,
+      ChatGPT) does not pass through it. Windows' own tenant restrictions v2 setting covers
+      Microsoft's apps; it is a later step.
     - **Still to do in D1/D2:**
-      - per-service company-account-only sign-in beyond Google (Spike 1);
       - policies per group of PCs;
       - unsupported browsers.
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
