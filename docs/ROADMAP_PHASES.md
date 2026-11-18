@@ -1064,6 +1064,34 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       and Edge. That is the VM test.
   - **Then a live VM test (Spike 2):** which of these policies Chrome and Edge honour on a
     PC not joined to a domain.
+  - **As built, slice 3, blocking by category (18 Nov):**
+    - **Six categories,** fixed in `browser_policy.SITE_CATEGORIES`: personal file-sharing,
+      personal e-mail, AI chat, messaging on the web, social media and paste sites.
+      - Each names the personal service, never a shared parent that businesses also use:
+        `outlook.live.com`, not `live.com`; `web.whatsapp.com`, not `whatsapp.com`.
+      - Gmail and Drive are not in the list; D2's Google domains handle them.
+    - **Choosing:** an admin ticks categories (`blocked_categories`) under the blocked sites.
+      "Always allowed" still wins, for example linkedin.com for a sales team.
+    - **Served as one block list:** the PC gets the typed sites plus each category's hosts,
+      de-duplicated, with at most 500 in total, checked when the policy is saved. The agent
+      did not change.
+    - **The hosts are copied when saved** (`category_hosts`, migration 0094). A list changed
+      in a later release reaches a PC only when the policy is saved again, as a new version.
+      The PC is never served words nobody saved, and the version-based tamper check stays
+      right.
+    - **Suggestion:** "Block personal file-sharing sites" now ticks the category instead of
+      adding six hosts.
+    - **Checked:**
+      - `test_blocking_by_category`: the category list, the merge and de-duplication, the
+        category not sent to the PC, allowed sites kept, a changed list served only after a
+        save (as version 2), the 500 limit, an unknown category refused;
+      - the suggestion tests;
+      - migration 0094 up/down/up, with an existing row given an empty list;
+      - on screen: two categories ticked and saved as version 14, with 21 hosts stored.
+    - **Still to do in D1/D2:**
+      - per-service company-account-only sign-in beyond Google (Spike 1);
+      - policies per group of PCs;
+      - unsupported browsers.
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
   drag-and-drop, form submit on watched sites; talks only to the local agent via native
   messaging (policy offline, device identity).

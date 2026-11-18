@@ -7,6 +7,8 @@ export interface BrowserPolicy {
   dev_tools_off: boolean;
   new_profiles_off: boolean;
   blocked_sites: string[];
+  // D1: whole kinds of site on top of blocked_sites; "Always allowed" still wins.
+  blocked_categories: string[];
   allowed_sites: string[];
   google_allowed_domains: string[];
   chrome_extension_id: string | null;
@@ -44,6 +46,11 @@ export interface BrowserPolicyRead {
   // E8: while set, record only. With no policy saved yet, when the pilot would end if it began now.
   pilot_until: string | null;
 }
+
+export interface SiteCategory { key: string; label: string; hosts: string[] }
+
+export const getSiteCategories = () =>
+  apiClient.get<SiteCategory[]>("/guard/site-categories").then((r) => r.data);
 
 export const endGuardPilot = () =>
   apiClient.post<BrowserPolicyRead>("/guard/browser-policy/end-pilot").then((r) => r.data);

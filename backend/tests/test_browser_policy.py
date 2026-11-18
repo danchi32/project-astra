@@ -98,6 +98,43 @@ async def test_extension_settings(client, admin_headers, session_factory, admin_
         assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad)).status_code == 422, bad
 
 
+async def test_blocking_by_category(client, admin_headers, session_factory, admin_user):
+    """D1: a category is served to PCs as its hosts, merged into the one block list. The hosts are
+    copied when saved, so a list changed in a later release reaches PCs only with a new version."""
+    from app.models import OrgBrowserPolicy
+    from app.services import browser_policy
+
+    await _guard_on(session_factory, admin_user.org_id)
+    cats = (await client.get("/api/v1/guard/site-categories", headers=admin_headers)).json()
+    assert {c["key"] for c in cats} == set(browser_policy.SITE_CATEGORIES)
+    assert "wetransfer.com" in next(c for c in cats if c["key"] == "file_sharing")["hosts"]
+
+    body = {"blocked_sites": ["example.com", "wetransfer.com"], "blocked_categories": ["file_sharing", "file_sharing"],
+            "allowed_sites": ["we.tl"]}
+    r = (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=body)).json()
+    assert r["policy"]["blocked_categories"] == ["file_sharing"] and r["policy"]["blocked_sites"] == ["example.com", "wetransfer.com"]
+    _, h = await _enroll(client, admin_headers)
+    served = (await client.get("/api/v1/agent/browser-policy", headers=h)).json()
+    sites = served["policy"]["blocked_sites"]
+    assert sites[:2] == ["example.com", "wetransfer.com"] and "mega.nz" in sites and len(sites) == len(set(sites))
+    assert "blocked_categories" not in served["policy"] and served["policy"]["allowed_sites"] == ["we.tl"]
+
+    # A release changes the list: saving the same policy picks it up as a new version.
+    async with session_factory() as s:
+        row = await s.get(OrgBrowserPolicy, admin_user.org_id)
+        row.category_hosts = ["wetransfer.com"]
+        await s.commit()
+    assert "mega.nz" not in (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]["blocked_sites"]
+    again = (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=body)).json()
+    assert again["version"] == 2
+    assert "mega.nz" in (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]["blocked_sites"]
+
+    too_many = {"blocked_sites": [f"s{i}.example.com" for i in range(495)], "blocked_categories": ["file_sharing"]}
+    assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=too_many)).status_code == 422
+    assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers,
+                             json={"blocked_categories": ["gambling"]})).status_code == 422
+
+
 async def test_a_new_org_only_records_for_14_days(client, admin_headers, user_headers, session_factory, admin_user):
     """E8: the pilot. Nothing but record-only until it ends, by the date or by an admin (audited);
     it never switches a mode on by itself."""

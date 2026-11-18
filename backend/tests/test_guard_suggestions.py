@@ -62,7 +62,7 @@ async def test_apply_changes_exactly_that_and_is_audited(client, admin_headers, 
                           json={"changes": shown})
     assert r.status_code == 200, r.text
     p = r.json()["policy"]
-    assert p["blocked_sites"][0] == "example.com" and "wetransfer.com" in p["blocked_sites"]   # added to, not replaced
+    assert p["blocked_sites"] == ["example.com"] and p["blocked_categories"] == ["file_sharing"]
     assert r.json()["version"] == 2
     assert await _keys(client, admin_headers) == {}                                      # condition gone, so is the card
     async with session_factory() as db:

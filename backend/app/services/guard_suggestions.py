@@ -22,9 +22,7 @@ from app.services.audit import AuditService
 from app.services.browser_policy import BrowserPolicyBody
 
 WINDOW = timedelta(days=14)
-AI_SITES = ["chatgpt.com", "chat.openai.com", "claude.ai", "gemini.google.com", "copilot.microsoft.com",
-            "perplexity.ai", "chat.deepseek.com", "meta.ai"]
-SHARING_SITES = ["wetransfer.com", "we.tl", "file.io", "gofile.io", "sendanywhere.com", "filemail.com"]
+AI_SITES = list(browser_policy.SITE_CATEGORIES["ai_chat"][1])
 
 
 class SuggestionNotFound(LookupError):
@@ -78,8 +76,7 @@ def _rules(p: BrowserPolicyBody, ev: dict, pilot: bool = False) -> list[dict]:
         })
 
     contact_lists = ev["file_contact_lists"] + ev["event_contact_lists"]
-    missing_sharing = [s for s in SHARING_SITES if s not in p.blocked_sites]
-    if contact_lists > 0 and missing_sharing:
+    if contact_lists > 0 and "file_sharing" not in p.blocked_categories:
         out.append({
             "key": "block_file_sharing",
             "title": "Block personal file-sharing sites",
@@ -87,8 +84,9 @@ def _rules(p: BrowserPolicyBody, ev: dict, pilot: bool = False) -> list[dict]:
                    + (f" in files on {_plural(ev['pcs'], 'PC')}" if ev["file_contact_lists"] else "")
                    + (" and in what people pasted or uploaded" if ev["event_contact_lists"] else "")
                    + ". Sites like these are the usual way a list leaves the company.",
-            "patch": {"blocked_sites": missing_sharing},
-            "changes": [f"Block {', '.join(missing_sharing)}"],
+            "patch": {"blocked_categories": ["file_sharing"]},
+            "changes": ["Block the category: Personal file-sharing (WeTransfer, Mega and "
+                        + f"{len(browser_policy.SITE_CATEGORIES['file_sharing'][1]) - 2} more)"],
         })
 
     if extension and not p.incognito_off:

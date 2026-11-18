@@ -49,6 +49,38 @@ _REPORT_NAME = re.compile(r"^[A-Za-z0-9_.@\\{}: -]{1,100}$")
 TAMPER_NOTIFY_EVERY = timedelta(hours=1)
 PILOT = timedelta(days=14)   # E8
 
+# D1: sites to block by kind instead of one by one. A host covers its subdomains, so these name
+# the personal service, never a shared parent a business also uses (outlook.live.com, not
+# live.com; web.whatsapp.com, not whatsapp.com; no Gmail or Drive, which D2's Google domains
+# handle). The hosts are copied into the policy when it is saved (`category_hosts`), so a PC is
+# only ever served what an admin saved.
+# ponytail: a fixed list in code. Upgrade path is a maintained category feed (or the browser's
+# own categories) once an org needs more than these.
+SITE_CATEGORIES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "file_sharing": ("Personal file-sharing", (
+        "wetransfer.com", "we.tl", "file.io", "gofile.io", "send-anywhere.com", "sendanywhere.com",
+        "filemail.com", "mega.nz", "mediafire.com", "fromsmash.com", "transfernow.net", "swisstransfer.com")),
+    "personal_email": ("Personal e-mail", (
+        "mail.yahoo.com", "outlook.live.com", "mail.proton.me", "mail.aol.com", "gmx.com", "gmx.net",
+        "mail.com", "tuta.com", "rediffmail.com")),
+    "ai_chat": ("AI chat", (
+        "chatgpt.com", "chat.openai.com", "claude.ai", "gemini.google.com", "copilot.microsoft.com",
+        "perplexity.ai", "chat.deepseek.com", "meta.ai")),
+    "messaging": ("Messaging on the web", (
+        "web.whatsapp.com", "web.telegram.org", "discord.com", "messenger.com")),
+    "social_media": ("Social media", (
+        "facebook.com", "instagram.com", "x.com", "twitter.com", "threads.net", "snapchat.com", "reddit.com",
+        "pinterest.com", "tumblr.com", "sharechat.com")),
+    "paste_sites": ("Paste sites", (
+        "pastebin.com", "paste.ee", "hastebin.com", "justpaste.it", "controlc.com", "rentry.co", "dpaste.org",
+        "privatebin.net")),
+}
+SiteCategory = Literal["file_sharing", "personal_email", "ai_chat", "messaging", "social_media", "paste_sites"]
+
+
+def category_hosts(categories: list[str]) -> list[str]:
+    return list(dict.fromkeys(h for c in categories for h in SITE_CATEGORIES[c][1]))
+
 
 def has_control(s: str) -> bool:
     """Any control, format (bidi overrides, zero-width), private-use or unassigned character.
@@ -66,6 +98,8 @@ class BrowserPolicyBody(BaseModel):
     dev_tools_off: bool = False
     new_profiles_off: bool = False
     blocked_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
+    # D1: whole kinds of site, on top of `blocked_sites`. `allowed_sites` still wins.
+    blocked_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
     allowed_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     google_allowed_domains: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     chrome_extension_id: str | None = None
@@ -86,7 +120,7 @@ class BrowserPolicyBody(BaseModel):
     # a map of which folders hold sensitive files (counts only). Off until an admin turns it on.
     discovery_enabled: bool = False
 
-    @field_validator("guard_ignore_kinds")
+    @field_validator("guard_ignore_kinds", "blocked_categories")
     @classmethod
     def _kinds(cls, v: list[str]) -> list[str]:
         return list(dict.fromkeys(v))
@@ -119,6 +153,9 @@ class BrowserPolicyBody(BaseModel):
 
     @model_validator(mode="after")
     def _extension(self) -> BrowserPolicyBody:
+        # The PC gets one block list, and refuses one over its limit.
+        if len(set(self.blocked_sites) | set(category_hosts(self.blocked_categories))) > MAX_SITES:
+            raise ValueError(f"Blocked sites and categories together come to more than {MAX_SITES} sites")
         for name, rx in (("chrome_extension_id", _CHROMIUM_ID), ("edge_extension_id", _CHROMIUM_ID),
                          ("firefox_extension_id", _FIREFOX_ID)):
             value = getattr(self, name)
@@ -199,14 +236,17 @@ async def put(session: AsyncSession, *, actor: User, body: BrowserPolicyBody) ->
         raise PilotActive(f"AI Guard only records until {as_utc(until):%d %b %Y}, its 14-day pilot. "
                           "End the pilot first to choose another mode.")
     new = body.model_dump()
+    hosts = category_hosts(body.blocked_categories)
     before = row.policy if row else {}
     changed = sorted(k for k in new if before.get(k) != new[k])
+    if row is not None and row.category_hosts != hosts:
+        changed.append("category_hosts")   # same categories, list updated since: a new version too
     if row is None:
         row = OrgBrowserPolicy(org_id=actor.org_id, policy=new, version=1, updated_by_user_id=actor.id,
-                               pilot_until=utcnow() + PILOT)
+                               pilot_until=utcnow() + PILOT, category_hosts=hosts)
         session.add(row)
     elif changed:
-        row.policy, row.version, row.updated_by_user_id = new, row.version + 1, actor.id
+        row.policy, row.version, row.updated_by_user_id, row.category_hosts = new, row.version + 1, actor.id, hosts
     await AuditService(session).record(
         org_id=actor.org_id, actor_id=actor.id, action="guard.browser_policy_update",
         target_type="organization", target_id=str(actor.org_id),
@@ -236,7 +276,12 @@ async def for_device(session: AsyncSession, device: Device) -> dict:
     if not await entitled(session, device.org_id):
         return {"version": 0, "policy": {}}
     row = await session.get(OrgBrowserPolicy, device.org_id)
-    return {"version": row.version, "policy": row.policy} if row else {"version": 0, "policy": {}}
+    if row is None:
+        return {"version": 0, "policy": {}}
+    # D1: the PC gets one block list; categories are the portal's way of choosing it.
+    policy = {k: v for k, v in row.policy.items() if k != "blocked_categories"}
+    policy["blocked_sites"] = list(dict.fromkeys([*policy.get("blocked_sites", []), *(row.category_hosts or [])]))
+    return {"version": row.version, "policy": policy}
 
 
 async def record_report(session: AsyncSession, device: Device, report: BrowserPolicyReport) -> None:

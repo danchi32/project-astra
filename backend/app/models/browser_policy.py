@@ -31,6 +31,9 @@ class OrgBrowserPolicy(TimestampMixin, Base):
     # E8: until then the extension only records (mode "log"). Set when the org first saves a
     # policy; NULL for policies from before the pilot existed. An admin can end it early.
     pilot_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # D1: the hosts of `policy.blocked_categories` as they were when it was saved, served to PCs
+    # beside `blocked_sites`. A copy, so a changed list reaches a PC only with a new version.
+    category_hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
 
 class DeviceBrowserPolicyState(Base):

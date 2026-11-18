@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  FINDING_KINDS, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices, putBrowserPolicy, type BrowserPolicy, type FindingKind,
+  FINDING_KINDS, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices, getSiteCategories, putBrowserPolicy,
+  type BrowserPolicy, type FindingKind,
 } from "@/lib/api/guard";
 import { isUpgradeRequired } from "@/components/upgrade-required";
 import { apiErrorMessage } from "@/lib/utils";
@@ -38,6 +39,8 @@ export default function GuardPage() {
   const { data, error, isLoading } = useQuery({ queryKey: ["browser-policy"], queryFn: getBrowserPolicy, retry: false });
   const { data: devices } = useQuery({ queryKey: ["browser-policy-devices"], queryFn: getBrowserPolicyDevices,
     enabled: !!data, refetchInterval: 60_000 });
+  const { data: categories } = useQuery({ queryKey: ["site-categories"], queryFn: getSiteCategories,
+    enabled: !!data, staleTime: Infinity });
   const [form, setForm] = useState<BrowserPolicy | null>(null);
   const [text, setText] = useState({ blocked: "", allowed: "", google: "", watched: "", keywords: "" });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -136,6 +139,26 @@ export default function GuardPage() {
               </label>
             ))}
           </div>
+          {categories && (
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-medium" style={muted}>Also block whole kinds of site</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {categories.map((c) => (
+                  <label key={c.key} className="flex items-start gap-2 text-sm rounded-lg p-3" style={{ ...panel, color: "var(--text-primary)" }}>
+                    <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={form.blocked_categories.includes(c.key)}
+                      onChange={(e) => setForm({ ...form, blocked_categories: e.target.checked
+                        ? [...form.blocked_categories, c.key] : form.blocked_categories.filter((x) => x !== c.key) })} />
+                    <span className="min-w-0">{c.label}
+                      <span className="block text-xs break-words" style={muted}>{c.hosts.join(", ")}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs" style={muted}>
+                A site in &ldquo;Always allowed&rdquo; stays open even if its category is blocked, e.g. linkedin.com for a sales team.
+              </p>
+            </fieldset>
+          )}
           <label className="flex items-start gap-3 text-sm pt-4" style={{ color: "var(--text-primary)", borderTop: "1px solid var(--border)" }}>
             <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={form.discovery_enabled}
               onChange={(e) => setForm({ ...form, discovery_enabled: e.target.checked })} />

@@ -85,6 +85,21 @@ async def end_pilot(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "There is no pilot running.") from None
 
 
+class SiteCategoryRead(BaseModel):
+    key: str
+    label: str
+    hosts: list[str]
+
+
+@router.get("/site-categories", response_model=list[SiteCategoryRead],
+            summary="The kinds of site the browser policy can block, and what each covers (staff)")
+async def site_categories(
+    actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
+) -> list[SiteCategoryRead]:
+    return [SiteCategoryRead(key=k, label=label, hosts=list(hosts))
+            for k, (label, hosts) in browser_policy.SITE_CATEGORIES.items()]
+
+
 @router.get("/browser-policy/devices", response_model=list[DeviceBrowserState],
             summary="What each PC last reported after applying the policy (staff)")
 async def browser_policy_devices(
