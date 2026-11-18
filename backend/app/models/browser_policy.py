@@ -28,6 +28,9 @@ class OrgBrowserPolicy(TimestampMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+    # E8: until then the extension only records (mode "log"). Set when the org first saves a
+    # policy; NULL for policies from before the pilot existed. An admin can end it early.
+    pilot_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class DeviceBrowserPolicyState(Base):

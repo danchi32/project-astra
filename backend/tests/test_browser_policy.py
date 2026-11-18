@@ -77,6 +77,7 @@ async def test_extension_settings(client, admin_headers, session_factory, admin_
     await _guard_on(session_factory, admin_user.org_id)
     r = await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=POLICY)
     assert r.json()["policy"]["guard_mode"] == "log" and r.json()["policy"]["guard_ignore_kinds"] == ["Email"]
+    await client.post("/api/v1/guard/browser-policy/end-pilot", headers=admin_headers)   # E8
 
     body = {**POLICY, "guard_mode": "warn", "guard_watched_sites": ["https://ChatGPT.com/"],
             "guard_ignore_kinds": ["Email", "Email", "IndianMobile"],
@@ -95,6 +96,50 @@ async def test_extension_settings(client, admin_headers, session_factory, admin_
                 {"guard_keywords": ["x" * 101]}, {"guard_keywords": [f"k{i}" for i in range(201)]},
                 {"guard_watched_sites": ["not a host"]}):
         assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad)).status_code == 422, bad
+
+
+async def test_a_new_org_only_records_for_14_days(client, admin_headers, user_headers, session_factory, admin_user):
+    """E8: the pilot. Nothing but record-only until it ends, by the date or by an admin (audited);
+    it never switches a mode on by itself."""
+    from datetime import datetime, timedelta
+
+    from app.models import OrgBrowserPolicy
+    from app.models.base import as_utc, utcnow
+
+    await _guard_on(session_factory, admin_user.org_id)
+    url = "/api/v1/guard/browser-policy"
+    fresh = (await client.get(url, headers=admin_headers)).json()
+    assert fresh["version"] == 0 and fresh["pilot_until"] is not None          # it starts with the first save
+    assert (await client.put(url, headers=admin_headers, json={**POLICY, "guard_mode": "warn"})).status_code == 409
+
+    r = (await client.put(url, headers=admin_headers, json=POLICY)).json()
+    left = datetime.fromisoformat(r["pilot_until"]) - utcnow()
+    assert timedelta(days=13, hours=23) < left <= timedelta(days=14)
+    refused = await client.put(url, headers=admin_headers, json={**POLICY, "guard_mode": "block"})
+    assert refused.status_code == 409 and "End the pilot" in refused.json()["detail"]
+    _, h = await _enroll(client, admin_headers)
+    assert (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]["guard_mode"] == "log"
+
+    async def set_until(when):
+        async with session_factory() as s:
+            row = await s.get(OrgBrowserPolicy, admin_user.org_id)
+            row.pilot_until = when
+            await s.commit()
+
+    await set_until(utcnow() - timedelta(minutes=1))                          # 14 days later
+    assert (await client.get(url, headers=admin_headers)).json()["pilot_until"] is None
+    assert (await client.get(url, headers=admin_headers)).json()["policy"]["guard_mode"] == "log"   # nothing switched on
+    assert (await client.put(url, headers=admin_headers, json={**POLICY, "guard_mode": "warn"})).status_code == 200
+    assert (await client.post(f"{url}/end-pilot", headers=admin_headers)).status_code == 404
+
+    await set_until(utcnow() + timedelta(days=3))                             # ending it early
+    assert (await client.post(f"{url}/end-pilot", headers=user_headers)).status_code == 403
+    ended = await client.post(f"{url}/end-pilot", headers=admin_headers)
+    assert ended.status_code == 200 and ended.json()["pilot_until"] is None
+    async with session_factory() as s:
+        audit = (await s.execute(select(AuditLog).where(AuditLog.action == "guard.pilot_end"))).scalars().one()
+        assert as_utc((await s.get(OrgBrowserPolicy, admin_user.org_id)).pilot_until) <= utcnow()
+    assert audit.actor_id == admin_user.id
 
 
 async def test_manual_install(client, admin_headers, session_factory, admin_user):

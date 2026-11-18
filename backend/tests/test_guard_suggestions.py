@@ -37,6 +37,9 @@ async def test_evidence_drives_each_rule(client, admin_headers, session_factory,
     await _setup(client, admin_headers, session_factory, admin_user,
                  policy={"chrome_extension_id": EXT, "guard_watched_sites": ["intranet.acme.in"]},
                  events=ai + other, discovery=_map())
+    # E8: during the pilot recording is the point, so no card asks to stop recording.
+    assert "leave_record_only" not in await _keys(client, admin_headers)
+    await client.post("/api/v1/guard/browser-policy/end-pilot", headers=admin_headers)
     s = await _keys(client, admin_headers)
     assert set(s) == {"leave_record_only", "block_file_sharing", "no_private_windows",
                       "no_unpacked_extensions", "watch_ai_sites", "find_files"}

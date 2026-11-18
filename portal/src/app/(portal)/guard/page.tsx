@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  FINDING_KINDS, getBrowserPolicy, getBrowserPolicyDevices, putBrowserPolicy, type BrowserPolicy, type FindingKind,
+  FINDING_KINDS, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices, putBrowserPolicy, type BrowserPolicy, type FindingKind,
 } from "@/lib/api/guard";
 import { isUpgradeRequired } from "@/components/upgrade-required";
 import { apiErrorMessage } from "@/lib/utils";
@@ -23,7 +23,7 @@ const SWITCHES: { key: keyof BrowserPolicy; label: string; help: string }[] = [
 const lines = (s: string) => s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
 
 const MODES: { value: BrowserPolicy["guard_mode"]; label: string; help: string }[] = [
-  { value: "log", label: "Record only", help: "Nothing is stopped. Start here for two weeks and see what turns up." },
+  { value: "log", label: "Record only", help: "Nothing is stopped. Every organization starts here for 14 days to see what turns up." },
   { value: "warn", label: "Warn", help: "The person is told what was found and can go ahead." },
   { value: "justify", label: "Ask for a reason", help: "To go ahead, the person picks a work reason from a short list. You see which." },
   { value: "redact", label: "Hide the sensitive parts", help: "A paste goes in with numbers replaced, e.g. [PAN]. Files and forms get a warning." },
@@ -80,6 +80,21 @@ export default function GuardPage() {
       setMsg({ ok: true, text: `Saved as version ${r.version}. PCs pick it up within the hour.` });
     } catch (e) {
       setMsg({ ok: false, text: apiErrorMessage(e, "Could not save the policy.") });
+    } finally { setSaving(false); }
+  }
+
+  // E8: the first 14 days only record. The backend refuses any other mode until then.
+  const pilotUntil = data?.pilot_until ? new Date(data.pilot_until) : null;
+  const pilotDays = pilotUntil ? Math.max(1, Math.ceil((pilotUntil.getTime() - Date.now()) / 86_400_000)) : 0;
+
+  async function endPilot() {
+    setSaving(true); setMsg(null);
+    try {
+      qc.setQueryData(["browser-policy"], await endGuardPilot());
+      qc.invalidateQueries({ queryKey: ["guard-suggestions"] });
+      setMsg({ ok: true, text: "Pilot ended. Pick a mode and save; until then PCs keep recording only." });
+    } catch (e) {
+      setMsg({ ok: false, text: apiErrorMessage(e, "Could not end the pilot.") });
     } finally { setSaving(false); }
   }
 
@@ -141,10 +156,30 @@ export default function GuardPage() {
                 the browser stores; until then these settings wait.
               </p>
             </div>
+            {pilotUntil && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg p-3 text-sm"
+                style={{ background: "rgba(37,99,235,0.08)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                <span className="flex-1 min-w-[16rem]">
+                  <span className="font-medium">Pilot: record only until {pilotUntil.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}.</span>
+                  <span className="block text-xs" style={muted}>
+                    {data?.version ? `${pilotDays} ${pilotDays === 1 ? "day" : "days"} left. ` : "The 14 days start when you first save. "}
+                    Nobody is interrupted while you see what turns up. Afterwards nothing changes on its own: you pick the mode.
+                  </span>
+                </span>
+                {isAdmin && !!data?.version && (
+                  <button type="button" onClick={endPilot} disabled={saving}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                    End the pilot now
+                  </button>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {MODES.map((m) => (
-                <label key={m.value} className="flex items-start gap-2 text-sm rounded-lg p-3" style={{ ...panel, color: "var(--text-primary)" }}>
-                  <input type="radio" name="guard_mode" className="mt-1" disabled={!isAdmin} checked={form.guard_mode === m.value}
+                <label key={m.value} className="flex items-start gap-2 text-sm rounded-lg p-3"
+                  style={{ ...panel, color: "var(--text-primary)", opacity: pilotUntil && m.value !== "log" ? 0.5 : 1 }}>
+                  <input type="radio" name="guard_mode" className="mt-1" disabled={!isAdmin || (!!pilotUntil && m.value !== "log")}
+                    checked={form.guard_mode === m.value}
                     onChange={() => setForm({ ...form, guard_mode: m.value })} />
                   <span>{m.label}<span className="block text-xs" style={muted}>{m.help}</span></span>
                 </label>

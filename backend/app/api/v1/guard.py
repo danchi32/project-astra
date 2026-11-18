@@ -24,6 +24,14 @@ class BrowserPolicyRead(BaseModel):
     version: int
     policy: BrowserPolicyBody
     updated_at: datetime | None
+    # E8: while set, the extension only records. For an org with no policy yet, when the pilot
+    # would end if it started now.
+    pilot_until: datetime | None = None
+
+
+def _read(row, policy: BrowserPolicyBody | None = None) -> BrowserPolicyRead:
+    return BrowserPolicyRead(version=row.version, policy=policy or BrowserPolicyBody(**row.policy),
+                             updated_at=row.updated_at, pilot_until=browser_policy.pilot_until(row))
 
 
 class DeviceBrowserState(BaseModel):
@@ -42,23 +50,39 @@ async def get_browser_policy(
 ) -> BrowserPolicyRead:
     row = await browser_policy.get(session, actor.org_id)
     if row is None:
-        return BrowserPolicyRead(version=0, policy=BrowserPolicyBody(), updated_at=None)
+        return BrowserPolicyRead(version=0, policy=BrowserPolicyBody(), updated_at=None,
+                                 pilot_until=browser_policy.pilot_until(None))
     policy = BrowserPolicyBody(**row.policy)
     if actor.role != UserRole.ADMIN:
         # Restricted keywords are often client or project code names: admins only (review L1).
         policy = policy.model_copy(update={"guard_keywords": []})
-    return BrowserPolicyRead(version=row.version, policy=policy, updated_at=row.updated_at)
+    return _read(row, policy)
 
 
 @router.put("/browser-policy", response_model=BrowserPolicyRead,
-            summary="Set the organization's browser policy (admin; audited)")
+            summary="Set the organization's browser policy (admin; audited)",
+            responses={409: {"description": "A mode other than record-only during the 14-day pilot"}})
 async def put_browser_policy(
     body: BrowserPolicyBody,
     actor: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> BrowserPolicyRead:
-    row = await browser_policy.put(session, actor=actor, body=body)
-    return BrowserPolicyRead(version=row.version, policy=BrowserPolicyBody(**row.policy), updated_at=row.updated_at)
+    try:
+        return _read(await browser_policy.put(session, actor=actor, body=body))
+    except browser_policy.PilotActive as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+
+
+@router.post("/browser-policy/end-pilot", response_model=BrowserPolicyRead,
+             summary="End the 14-day record-only pilot early (admin; audited)")
+async def end_pilot(
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> BrowserPolicyRead:
+    try:
+        return _read(await browser_policy.end_pilot(session, actor=actor))
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "There is no pilot running.") from None
 
 
 @router.get("/browser-policy/devices", response_model=list[DeviceBrowserState],
@@ -221,9 +245,9 @@ async def apply_suggestion(
         row = await guard_suggestions.apply(session, actor=actor, key=key, seen_changes=body.changes)
     except guard_suggestions.SuggestionNotFound:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That suggestion no longer applies.") from None
-    except guard_suggestions.SuggestionChanged as e:
+    except (guard_suggestions.SuggestionChanged, browser_policy.PilotActive) as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
-    return BrowserPolicyRead(version=row.version, policy=BrowserPolicyBody(**row.policy), updated_at=row.updated_at)
+    return _read(row)
 
 
 @router.post("/suggestions/{key}/dismiss", status_code=status.HTTP_204_NO_CONTENT,

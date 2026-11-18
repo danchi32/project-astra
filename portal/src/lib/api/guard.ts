@@ -41,7 +41,12 @@ export interface BrowserPolicyRead {
   version: number;
   policy: BrowserPolicy;
   updated_at: string | null;
+  // E8: while set, record only. With no policy saved yet, when the pilot would end if it began now.
+  pilot_until: string | null;
 }
+
+export const endGuardPilot = () =>
+  apiClient.post<BrowserPolicyRead>("/guard/browser-policy/end-pilot").then((r) => r.data);
 
 export interface BrowserResult {
   browser: "Chrome" | "Edge" | "Firefox" | "Scanner";   // Scanner: E4's firewall block on the native host

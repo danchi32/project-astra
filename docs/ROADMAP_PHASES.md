@@ -1363,6 +1363,27 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
     - redacting files and forms.
 - Actions available: log, warn, justify, redact (where supported), block. Default for a new
   org: **log-only for 14 days** (the pilot mode, E8).
+  - **As built, E8 (18 Nov, branch `phase-3`):**
+    - **When it starts:** the pilot begins when an org first saves its browser policy, and
+      lasts 14 days (`org_browser_policies.pilot_until`, migration 0093). Policies saved
+      before it existed have no pilot.
+    - **What it holds:** until then, the backend refuses any mode but "Record only" (409).
+      This covers the policy page and the suggestions alike, so it is enforced in code, not
+      only in the UI.
+    - **How it ends:** by the date, or when an admin presses "End the pilot now" (audited
+      `guard.pilot_end`). Nothing switches on by itself: the mode stays "Record only" until an
+      admin picks one. The "Ask people before…" suggestion is held back during the pilot, and
+      it is the card that greets its end, with the 14 days' numbers.
+    - **Portal:** a notice above the modes gives the end date and the days left, and the other
+      modes are greyed out until the pilot ends.
+    - **Checked:**
+      - `test_a_new_org_only_records_for_14_days`: refused before and during the pilot, agent
+        served "log", ends by date with nothing switched on, ended early by an admin only,
+        audited;
+      - suggestions: the record-only card is hidden during the pilot;
+      - migration 0093 up/down/up, with a pre-existing policy row kept and given no pilot;
+      - on screen, light and dark: the notice, the greyed modes, and "End the pilot now"
+        (modes enabled, audit row written).
 
 #### 3a security review (17 Nov)
 Three `security-reviewer` passes: the agent, the extension, and the backend with the portal.

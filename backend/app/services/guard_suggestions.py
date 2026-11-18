@@ -58,12 +58,13 @@ async def _evidence(session: AsyncSession, org_id) -> dict:
             "file_contact_lists": disc["contact_lists"], "files": disc["files_with_findings"], "pcs": disc["pcs"]}
 
 
-def _rules(p: BrowserPolicyBody, ev: dict) -> list[dict]:
+def _rules(p: BrowserPolicyBody, ev: dict, pilot: bool = False) -> list[dict]:
     """Every rule whose condition holds now. `patch` is the change; `changes` says it in words."""
     out: list[dict] = []
     extension = (p.chrome_extension_id or p.edge_extension_id or p.firefox_extension_id) is not None
 
-    if p.guard_mode == "log" and ev["events"] > 0:
+    # E8: during the pilot recording is the point; this is the card that greets its end.
+    if p.guard_mode == "log" and ev["events"] > 0 and not pilot:
         mostly_ai = ev["ai_events"] * 2 >= ev["events"]
         out.append({
             "key": "leave_record_only",
@@ -141,7 +142,8 @@ async def _current(session: AsyncSession, org_id) -> BrowserPolicyBody:
 async def suggestions(session: AsyncSession, org_id) -> list[dict]:
     dismissed = set((await session.execute(
         select(GuardSuggestionDismissal.key).where(GuardSuggestionDismissal.org_id == org_id))).scalars())
-    rules = _rules(await _current(session, org_id), await _evidence(session, org_id))
+    pilot = browser_policy.pilot_until(await browser_policy.get(session, org_id)) is not None
+    rules = _rules(await _current(session, org_id), await _evidence(session, org_id), pilot)
     return [s for s in rules if s["key"] not in dismissed]
 
 

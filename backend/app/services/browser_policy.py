@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -28,7 +28,7 @@ from app.models import (
     OrgBrowserPolicy,
     User,
 )
-from app.models.base import utcnow
+from app.models.base import as_utc, utcnow
 from app.services.audit import AuditService
 from app.services.entitlements import AI_GUARD, features_for
 from app.services.notifications import NotificationService
@@ -47,6 +47,7 @@ FIREFOX_EXTENSION_HOSTS = ("addons.mozilla.org",)
 # Names an agent may report: policy names, 3rdparty paths, extension IDs, firewall rule names.
 _REPORT_NAME = re.compile(r"^[A-Za-z0-9_.@\\{}: -]{1,100}$")
 TAMPER_NOTIFY_EVERY = timedelta(hours=1)
+PILOT = timedelta(days=14)   # E8
 
 
 def has_control(s: str) -> bool:
@@ -177,13 +178,32 @@ async def get(session: AsyncSession, org_id) -> OrgBrowserPolicy | None:
     return await session.get(OrgBrowserPolicy, org_id)
 
 
+class PilotActive(ValueError):
+    """E8: a mode other than record-only was asked for during the pilot."""
+
+
+def pilot_until(row: OrgBrowserPolicy | None) -> datetime | None:
+    """When the pilot ends, if it is still running. A new org (no policy yet) is about to
+    start one, so its first save is held to record-only as well."""
+    if row is None:
+        return utcnow() + PILOT
+    return row.pilot_until if row.pilot_until is not None and as_utc(row.pilot_until) > utcnow() else None
+
+
 async def put(session: AsyncSession, *, actor: User, body: BrowserPolicyBody) -> OrgBrowserPolicy:
     row = await session.get(OrgBrowserPolicy, actor.org_id)
+    # E8: the first 14 days only record, so the org sees what happens before anyone is
+    # interrupted. Enforced here, under the policy page and suggestions alike. Nothing switches
+    # on by itself when the pilot ends: an admin picks the mode.
+    if body.guard_mode != "log" and (until := pilot_until(row)) is not None:
+        raise PilotActive(f"AI Guard only records until {as_utc(until):%d %b %Y}, its 14-day pilot. "
+                          "End the pilot first to choose another mode.")
     new = body.model_dump()
     before = row.policy if row else {}
     changed = sorted(k for k in new if before.get(k) != new[k])
     if row is None:
-        row = OrgBrowserPolicy(org_id=actor.org_id, policy=new, version=1, updated_by_user_id=actor.id)
+        row = OrgBrowserPolicy(org_id=actor.org_id, policy=new, version=1, updated_by_user_id=actor.id,
+                               pilot_until=utcnow() + PILOT)
         session.add(row)
     elif changed:
         row.policy, row.version, row.updated_by_user_id = new, row.version + 1, actor.id
@@ -191,6 +211,20 @@ async def put(session: AsyncSession, *, actor: User, body: BrowserPolicyBody) ->
         org_id=actor.org_id, actor_id=actor.id, action="guard.browser_policy_update",
         target_type="organization", target_id=str(actor.org_id),
         detail={"changed": changed, "version": row.version},
+    )
+    await session.commit()
+    return row
+
+
+async def end_pilot(session: AsyncSession, *, actor: User) -> OrgBrowserPolicy:
+    """E8: an admin chose not to wait the 14 days. Audited; the mode itself is still theirs to pick."""
+    row = await session.get(OrgBrowserPolicy, actor.org_id)
+    if row is None or pilot_until(row) is None:
+        raise LookupError("There is no pilot running.")
+    row.pilot_until = utcnow()
+    await AuditService(session).record(
+        org_id=actor.org_id, actor_id=actor.id, action="guard.pilot_end",
+        target_type="organization", target_id=str(actor.org_id), detail={},
     )
     await session.commit()
     return row
