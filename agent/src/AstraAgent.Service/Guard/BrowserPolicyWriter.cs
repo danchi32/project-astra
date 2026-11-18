@@ -42,8 +42,12 @@ public static class BrowserPolicyWriter
     {
         Browser.Chrome => @"SOFTWARE\Policies\Google\Chrome",
         Browser.Edge => @"SOFTWARE\Policies\Microsoft\Edge",
-        _ => throw new ArgumentException("not a Chromium browser", nameof(b)),
+        Browser.Windows => WindowsPayloadPath,   // plain registry values too: the same writer serves it
+        _ => throw new ArgumentException("not a registry policy target", nameof(b)),
     };
+
+    /// <summary>Windows' tenant restrictions v2, "Cloud Policy Details" (TenantRestrictions.admx).</summary>
+    public const string WindowsPayloadPath = @"SOFTWARE\Policies\Microsoft\Windows\TenantRestrictions\Payload";
 
     static string OwnershipPath(Browser b) => $@"SOFTWARE\SAVIO\BrowserPolicy\{b}";
 
@@ -72,6 +76,10 @@ public static class BrowserPolicyWriter
         if (fx.Count > 0) fx[0] = WithHost(fx[0], policy.FirefoxExtensionId);
         else WithHost(new ApplyReport(Browser.Firefox, [], [], [], [], null), null);
         reports.AddRange(fx);
+
+        var windows = ApplyWindows(Registry.LocalMachine, BrowserPolicyMap.Windows(policy));
+        if (windows.Changed || windows.Error is not null || windows.Conflicts.Count > 0 || policy.MicrosoftOnWindows)
+            reports.Add(windows);
 
         // E4: while the scanner reads anything (a browser runs the extension, or D5's file scan
         // is on), it has no network.
@@ -166,6 +174,44 @@ public static class BrowserPolicyWriter
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
             return new ApplyReport(browser, set, repaired, removed, conflicts, $"Could not write {browser} policy: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// D2 on the PC: Windows' tenant restrictions payload. Windows reads it as one policy, so it is
+    /// all or nothing. If anything else already sets any part of it (Intune, a GPO), SAVIO writes
+    /// none of it and reports what it wanted as a conflict. When no longer wanted, SAVIO's values
+    /// go, and the keys they leave empty with them.
+    /// </summary>
+    public static ApplyReport ApplyWindows(RegistryKey root, IReadOnlyDictionary<string, object> desired)
+    {
+        try
+        {
+            var owned = ReadOwned(root, Browser.Windows);
+            using (var payload = root.OpenSubKey(WindowsPayloadPath))
+            {
+                var foreign = (payload?.GetValueNames() ?? []).Concat(payload?.GetSubKeyNames() ?? [])
+                    .Where(n => !owned.Contains(n)).ToList();
+                if (foreign.Count > 0)
+                    return new ApplyReport(Browser.Windows, [], [], [], desired.Keys.Order().ToList(), null);
+                if (payload is null && desired.Count == 0 && owned.Count == 0)
+                    return new ApplyReport(Browser.Windows, [], [], [], [], null);   // never used here: touch nothing
+            }
+            var r = ApplyChromium(root, Browser.Windows, desired);
+            if (desired.Count == 0)
+            {
+                foreach (var path in new[] { WindowsPayloadPath, WindowsPayloadPath[..WindowsPayloadPath.LastIndexOf('\\')] })
+                {
+                    using (var k = root.OpenSubKey(path))
+                        if (k is null || k.ValueCount + k.SubKeyCount > 0) break;
+                    root.DeleteSubKey(path, false);
+                }
+            }
+            return r;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            return new ApplyReport(Browser.Windows, [], [], [], [], $"Could not write Windows tenant restrictions: {ex.Message}");
         }
     }
 

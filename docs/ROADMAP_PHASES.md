@@ -1202,6 +1202,38 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       both, and the switch saved as version 17.
     - **Not checked:** closing a real Opera on a PC. The process list, kill and notice were
       replaced in tests; that is a VM test.
+  - **As built, slice 7, Microsoft 365 on the PC (18 Nov):** company-account-only for the
+    desktop apps, not only the browser. The extension's header (slice 4) covers browsers;
+    Outlook, Teams, Word and the rest sign in outside them.
+    - **How:** Windows' own tenant restrictions v2, the Group Policy "Cloud Policy Details"
+      (`TenantRestrictions.admx`, shipped with Windows): `tenantid` and `policyid` as strings
+      under `HKLM\SOFTWARE\Policies\Microsoft\Windows\TenantRestrictions\Payload`. Value names
+      and types read from the ADMX on this laptop. Per Microsoft it covers all Office apps,
+      UWP apps, and Edge with every site in it, for sign-in and for SharePoint, Exchange and
+      Graph data; not Chrome, Firefox or .NET apps (the extension covers the browsers).
+      Windows 11, or Windows 10 2004 or later with KB5006738. Microsoft still calls the Windows
+      method "preview".
+    - **Switch:** `microsoft_on_windows` ("Microsoft 365 on the PC too"), off by default,
+      using the two IDs already on the form. It needs no extension; the other services still
+      do.
+    - **Never `enforceFirewall`:** Microsoft warns that without a matching App Control policy it
+      cuts every app off from Microsoft's endpoints. Hostnames and IP ranges are left blank,
+      as Microsoft's own test steps say.
+    - **Writer:** the registry writer Chrome and Edge use (ownership list under
+      `SOFTWARE\SAVIO\BrowserPolicy\Windows`, repair, read-back), reported as "Windows". The
+      payload is one policy, so all or nothing: if Intune or a GPO already sets any part of it,
+      SAVIO writes none of it and shows a conflict. Turned off: SAVIO's values and the keys
+      they leave empty are removed.
+    - **Risk, said on the page:** a wrong ID stops Office signing in on every PC that gets it;
+      try it on one group first (slice 5).
+    - **Checked:** agent test against a throwaway HKCU key (nothing created when unused, the two
+      strings, no `enforceFirewall`, repair, removal with empty keys pruned, someone else's
+      payload left alone and reported); backend (needs the IDs, no extension needed, served,
+      a "Windows" report row kept); agent suite 448; on screen against the local backend:
+      switched on and saved as version 18.
+    - **Not checked:** Windows actually enforcing it. Not on this laptop: a test tenant ID
+      would stop its real Office sign-ins. That is the VM test, with a real Entra tenant
+      (Event Viewer → Microsoft → Windows → TenantRestrictions → Operational).
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
   drag-and-drop, form submit on watched sites; talks only to the local agent via native
   messaging (policy offline, device identity).

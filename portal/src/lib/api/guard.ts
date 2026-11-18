@@ -29,6 +29,8 @@ export interface BrowserPolicy {
   // D2: sign-in only to the org's own accounts; the extension sends each service its header.
   microsoft_tenant_id: string | null;
   microsoft_policy_id: string | null;
+  // The same IDs in Windows' own tenant restrictions, for Office apps and Edge on the PC.
+  microsoft_on_windows: boolean;
   claude_org_ids: string[];
   chatgpt_workspace_ids: string[];
   slack_requester_id: string | null;
@@ -67,7 +69,8 @@ export const endGuardPilot = () =>
   apiClient.post<BrowserPolicyRead>("/guard/browser-policy/end-pilot").then((r) => r.data);
 
 export interface BrowserResult {
-  browser: "Chrome" | "Edge" | "Firefox" | "Scanner";   // Scanner: E4's firewall block on the native host
+  // Scanner: E4's firewall block on the native host. Windows: its own tenant restrictions (Office apps).
+  browser: "Chrome" | "Edge" | "Firefox" | "Scanner" | "Windows";
   set: string[];
   repaired: string[];
   removed: string[];

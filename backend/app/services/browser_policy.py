@@ -158,6 +158,10 @@ class BrowserPolicyBody(BaseModel):
     # arrives; the extension adds the header (as a proxy would), so these need the extension.
     microsoft_tenant_id: str | None = None
     microsoft_policy_id: str | None = None      # Entra's tenant-restrictions policy ID
+    # The same two IDs in Windows' own tenant restrictions v2 on each PC, so Office apps (Outlook,
+    # Teams, Word…) and Edge enforce them too. Needs no extension. Off by default: a wrong ID stops
+    # Office signing in on every PC that gets it.
+    microsoft_on_windows: bool = False
     claude_org_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
     chatgpt_workspace_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
     slack_requester_id: str | None = None       # the org's own workspace or org ID
@@ -246,8 +250,11 @@ class BrowserPolicyBody(BaseModel):
             raise ValueError("Microsoft 365 needs both the tenant ID and the tenant restrictions policy ID")
         if (self.slack_requester_id is None) != (not self.slack_allowed_ids):
             raise ValueError("Slack needs your own workspace or org ID and the list of allowed IDs")
-        accounts = (self.microsoft_tenant_id or self.claude_org_ids or self.chatgpt_workspace_ids
-                    or self.slack_requester_id)
+        if self.microsoft_on_windows and self.microsoft_tenant_id is None:
+            raise ValueError("Microsoft 365 on the PC needs the tenant ID and the tenant restrictions policy ID")
+        # Windows enforces the Microsoft IDs itself when asked to; everything else needs the extension.
+        accounts = ((self.microsoft_tenant_id and not self.microsoft_on_windows) or self.claude_org_ids
+                    or self.chatgpt_workspace_ids or self.slack_requester_id)
         if accounts and not (self.chrome_extension_id or self.edge_extension_id or self.firefox_extension_id):
             raise ValueError("Company-account-only sign-in for these services works through the SAVIO "
                              "extension: set its ID first")
@@ -263,7 +270,8 @@ class BrowserPolicyBody(BaseModel):
 class BrowserResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # "Scanner" is not a browser: it is E4's firewall block on the extension's native host.
-    browser: Literal["Chrome", "Edge", "Firefox", "Scanner"]
+    # Nor is "Windows": it is Windows' own tenant restrictions (D2 on the PC).
+    browser: Literal["Chrome", "Edge", "Firefox", "Scanner", "Windows"]
     set: list[str] = Field(default_factory=list, max_length=50)
     repaired: list[str] = Field(default_factory=list, max_length=50)
     removed: list[str] = Field(default_factory=list, max_length=50)

@@ -336,6 +336,47 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     }
 
     [Fact]
+    public void Windows_tenant_restrictions_are_the_two_ids_all_or_nothing()
+    {
+        const string tid = "aaaabbbb-0000-cccc-1111-dddd2222eeee", pid = "1aaaaaa1-2bb2-3cc3-4dd4-5eeeeeeeeee5";
+        var on = new BrowserPolicy { MicrosoftTenantId = tid, MicrosoftPolicyId = pid, MicrosoftOnWindows = true };
+        Assert.Empty(on.Validate());
+        Assert.NotEmpty(new BrowserPolicy { MicrosoftOnWindows = true }.Validate());          // needs the IDs
+        Assert.Empty(BrowserPolicyMap.Windows(on with { MicrosoftOnWindows = false }));       // the extension's only
+
+        // Never used here: nothing is created.
+        var none = BrowserPolicyWriter.ApplyWindows(_root, BrowserPolicyMap.Windows(new BrowserPolicy()));
+        Assert.False(none.Changed);
+        Assert.Null(_root.OpenSubKey(BrowserPolicyWriter.WindowsPayloadPath));
+
+        var r = BrowserPolicyWriter.ApplyWindows(_root, BrowserPolicyMap.Windows(on));
+        Assert.Equal(["policyid", "tenantid"], r.Set.Order());
+        using (var k = _root.OpenSubKey(BrowserPolicyWriter.WindowsPayloadPath)!)
+        {
+            Assert.Equal(tid, k.GetValue("tenantid"));
+            Assert.Equal(RegistryValueKind.String, k.GetValueKind("policyid"));
+            Assert.Null(k.GetValue("enforceFirewall"));                                     // never: it cuts apps off
+        }
+        using (var k = _root.OpenSubKey(BrowserPolicyWriter.WindowsPayloadPath, true)!) k.DeleteValue("policyid");
+        Assert.Equal(["policyid"], BrowserPolicyWriter.ApplyWindows(_root, BrowserPolicyMap.Windows(on)).Repaired);
+
+        // Turned off: SAVIO's values go, and the keys they leave empty.
+        Assert.Equal(2, BrowserPolicyWriter.ApplyWindows(_root, BrowserPolicyMap.Windows(new BrowserPolicy())).Removed.Count);
+        Assert.Null(_root.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\TenantRestrictions"));
+
+        // Intune or a GPO already sets it (even only part of it): left entirely alone, reported.
+        using (var gpo = _root.CreateSubKey(BrowserPolicyWriter.WindowsPayloadPath, true)) gpo.SetValue("tenantid", "their-tenant");
+        var c = BrowserPolicyWriter.ApplyWindows(_root, BrowserPolicyMap.Windows(on));
+        Assert.Equal(["policyid", "tenantid"], c.Conflicts);
+        Assert.False(c.Changed);
+        using (var k = _root.OpenSubKey(BrowserPolicyWriter.WindowsPayloadPath)!)
+        {
+            Assert.Equal("their-tenant", k.GetValue("tenantid"));
+            Assert.Null(k.GetValue("policyid"));
+        }
+    }
+
+    [Fact]
     public void Firefox_is_written_to_only_under_program_files()
     {
         // Review M4: a user-writable install folder is never written to as SYSTEM.

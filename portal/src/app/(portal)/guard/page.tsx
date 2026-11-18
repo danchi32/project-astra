@@ -25,6 +25,9 @@ const SWITCHES: { key: keyof BrowserPolicy; label: string; help: string }[] = [
     help: "None of this reaches Brave, Opera, Vivaldi, Yandex, Tor, Chromium, Waterfox or LibreWolf. SAVIO closes them as they start and tells the person to use Chrome, Edge or Firefox. To remove one, use the PC's Software tab." },
 ];
 
+// What a PC's report rows are, where they aren't a browser.
+const WHERE: Record<string, string> = { Scanner: "Scanner's network block", Windows: "Microsoft 365 on the PC" };
+
 const lines = (s: string) => s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
 
 const MODES: { value: BrowserPolicy["guard_mode"]; label: string; help: string }[] = [
@@ -323,9 +326,21 @@ export default function GuardPage() {
               <p className="text-xs" style={muted}>
                 People can sign in to these services only with your organization&apos;s own accounts, not a personal one.
                 Each service enforces it itself, on plans that support it; the SAVIO extension sends it your IDs, so it
-                needs the extension. Leave a service empty to leave it alone.
+                needs the extension (Microsoft 365 on the PC excepted, below). Leave a service empty to leave it alone.
               </p>
             </div>
+            <label className="flex items-start gap-3 text-sm" style={{ color: "var(--text-primary)" }}>
+              <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={form.microsoft_on_windows}
+                onChange={(e) => setForm({ ...form, microsoft_on_windows: e.target.checked })} />
+              <span>Microsoft 365 on the PC too: Outlook, Teams, Word and the other Office apps, and Edge
+                <span className="block text-xs" style={muted}>
+                  Uses Windows&apos; own tenant restrictions with the two Microsoft IDs below; no extension needed. Windows 11, or
+                  Windows 10 2004 or later with updates. If Intune or Group Policy already sets this on a PC, SAVIO leaves it
+                  alone and shows a conflict. A wrong ID stops Office signing in on every PC that gets it, so try it on one
+                  group first.
+                </span>
+              </span>
+            </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {([["microsoft_tenant_id", "Microsoft 365: tenant ID",
                   "Both IDs: Entra → External Identities → Cross-tenant access settings → Default settings → Tenant restrictions"],
@@ -399,7 +414,7 @@ export default function GuardPage() {
             <tbody>
               {(devices ?? []).map((d) => {
                 const errors = d.results.filter((r) => r.error);
-                const conflicts = d.results.flatMap((r) => r.conflicts.map((c) => `${r.browser}: ${c}`));
+                const conflicts = d.results.flatMap((r) => r.conflicts.map((c) => `${WHERE[r.browser] ?? r.browser}: ${c}`));
                 const behind = d.version !== d.policy_version;   // its own policy's, which may be a group's
                 return (
                   <tr key={d.device_id} style={{ borderBottom: "1px solid var(--border)", color: "var(--text-primary)" }}>
@@ -409,7 +424,7 @@ export default function GuardPage() {
                     <td className="px-4 py-2 text-xs">
                       {errors.map((r) => (
                         <div key={r.browser} style={{ color: "#ef4444" }}>
-                          {r.browser === "Scanner" ? "Scanner's network block" : r.browser}: {r.error}
+                          {WHERE[r.browser] ?? r.browser}: {r.error}
                         </div>
                       ))}
                       {conflicts.length > 0 && <div style={{ color: "#f59e0b" }}>Set elsewhere, left alone: {conflicts.join(", ")}</div>}

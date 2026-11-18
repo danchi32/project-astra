@@ -56,6 +56,9 @@ public sealed record BrowserPolicy
     /// when its header arrives; the extension adds the header, so these go to it as settings.</summary>
     public string? MicrosoftTenantId { get; init; }
     public string? MicrosoftPolicyId { get; init; }
+    /// <summary>The same Microsoft IDs in Windows' own tenant restrictions (v2), so Office apps
+    /// (Outlook, Teams, Word…) and Edge on the PC enforce them too, not only the extension.</summary>
+    public bool MicrosoftOnWindows { get; init; }
     public IReadOnlyList<string> ClaudeOrgIds { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> ChatGptWorkspaceIds { get; init; } = Array.Empty<string>();
     public string? SlackRequesterId { get; init; }
@@ -109,6 +112,7 @@ public sealed record BrowserPolicy
         if (GuardKeywords.Any(k => string.IsNullOrWhiteSpace(k) || k.Length > 100)) problems.Add("keywords must be 1–100 characters");
         // These become request headers: only IDs of the expected shape, never anything else.
         if (MicrosoftTenantId is not null != MicrosoftPolicyId is not null) problems.Add("Microsoft needs a tenant ID and a policy ID");
+        if (MicrosoftOnWindows && MicrosoftTenantId is null) problems.Add("Windows tenant restrictions need the Microsoft tenant ID and policy ID");
         if (new[] { MicrosoftTenantId, MicrosoftPolicyId }.Any(v => v is not null && !Uuid.IsMatch(v))) problems.Add("Microsoft ID is malformed");
         foreach (var (name, list) in new[] { ("Claude organization", ClaudeOrgIds), ("ChatGPT workspace", ChatGptWorkspaceIds) })
         {
@@ -125,8 +129,9 @@ public sealed record BrowserPolicy
 }
 
 /// <summary>Where a report comes from. <see cref="Scanner"/> is not a browser: it is E4's
-/// firewall block on the native host, reported beside the browsers it serves.</summary>
-public enum Browser { Chrome, Edge, Firefox, Scanner }
+/// firewall block on the native host, reported beside the browsers it serves. Nor is
+/// <see cref="Windows"/>: it is Windows' own tenant restrictions setting (D2).</summary>
+public enum Browser { Chrome, Edge, Firefox, Scanner, Windows }
 
 /// <summary>
 /// A browser's own name for each setting. Chromium policies are registry values, or list
@@ -223,4 +228,14 @@ public static class BrowserPolicyMap
     }
 
     static IEnumerable<string> Patterns(string host) => new[] { $"*://{host}/*", $"*://*.{host}/*" };
+
+    /// <summary>
+    /// D2 on the PC: Windows' tenant restrictions v2 ("Cloud Policy Details", TenantRestrictions.admx),
+    /// read by Office apps and Edge. Only the two IDs. Never <c>enforceFirewall</c>: Microsoft warns
+    /// that without a matching App Control policy it cuts every app off from Microsoft's services.
+    /// </summary>
+    public static IReadOnlyDictionary<string, object> Windows(BrowserPolicy p) =>
+        p.MicrosoftOnWindows && p.MicrosoftTenantId is { } tid && p.MicrosoftPolicyId is { } pid
+            ? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { ["tenantid"] = tid, ["policyid"] = pid }
+            : new Dictionary<string, object>();
 }

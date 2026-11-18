@@ -228,8 +228,21 @@ async def test_company_accounts_only(client, admin_headers, session_factory, adm
                 {**body, "claude_org_ids": ["acme"]},
                 {**body, "slack_requester_id": "workspace-1"},
                 {**body, "chatgpt_workspace_ids": ["x"] * 51},
-                {k: v for k, v in body.items() if k != "chrome_extension_id"}):      # needs the extension
+                {k: v for k, v in body.items() if k != "chrome_extension_id"},       # needs the extension
+                {"microsoft_on_windows": True}):                                      # Windows needs the IDs
         assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad)).status_code == 422, bad
+
+    # Microsoft 365 on the PC itself: Windows enforces the IDs, so no extension is needed for them.
+    windows = {"microsoft_tenant_id": tid, "microsoft_policy_id": pid, "microsoft_on_windows": True}
+    assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=windows)).status_code == 200
+    served = (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]
+    assert served["microsoft_on_windows"] is True and served["microsoft_tenant_id"] == tid.lower()
+    # What the PC reports about it shows beside the browsers, conflicts included.
+    report = {"version": 2, "results": [{"browser": "Windows", "conflicts": ["policyid", "tenantid"]}]}
+    assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=report)).status_code == 204
+    state = (await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()[0]
+    assert state["results"][0] == {"browser": "Windows", "set": [], "repaired": [], "removed": [],
+                                   "conflicts": ["policyid", "tenantid"], "error": None}
 
 
 async def test_a_new_org_only_records_for_14_days(client, admin_headers, user_headers, session_factory, admin_user):
