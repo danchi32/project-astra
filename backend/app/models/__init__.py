@@ -9,6 +9,7 @@ from app.models.banned_software import BannedSoftware
 from app.models.bitlocker_key import DeviceBitLockerKey
 from app.models.browser_policy import (
     DeviceBrowserPolicyState,
+    GroupBrowserPolicy,
     GuardApproval,
     GuardDiscovery,
     GuardEvent,
@@ -121,6 +122,7 @@ __all__ = [
     "DevicePosture",
     "DeviceBitLockerKey",
     "DeviceBrowserPolicyState",
+    "GroupBrowserPolicy",
     "GuardApproval",
     "GuardDiscovery",
     "GuardEvent",

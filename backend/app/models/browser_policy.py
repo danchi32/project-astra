@@ -34,6 +34,38 @@ class OrgBrowserPolicy(TimestampMixin, Base):
     # D1: the hosts of `policy.blocked_categories` as they were when it was saved, served to PCs
     # beside `blocked_sites`. A copy, so a changed list reaches a PC only with a new version.
     category_hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # D1 groups: the last version number issued to any of this org's policies, this one or a
+    # group's. Every saved change takes the next one, so a number names one policy's content
+    # and is never reused. A PC moved between groups then always reports a different version,
+    # which is what tells an update from tampering.
+    seq: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class GroupBrowserPolicy(TimestampMixin, Base):
+    """Phase 3 · D1: a device group's own browser policy, instead of the org's.
+
+    Groups overlap, so a PC in several gets the one with the lowest `priority` (then by group
+    name): exactly one policy per PC, never a merge. A PC in none gets the org's policy.
+    `version` comes from the org's `seq`."""
+
+    __tablename__ = "group_browser_policies"
+
+    group_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("device_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    category_hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
 
 
 class DeviceBrowserPolicyState(Base):

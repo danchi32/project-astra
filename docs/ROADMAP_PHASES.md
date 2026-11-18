@@ -1137,9 +1137,40 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
     - **Limit:** an extension can only cover the browser. A desktop app (Teams, Slack,
       ChatGPT) does not pass through it. Windows' own tenant restrictions v2 setting covers
       Microsoft's apps; it is a later step.
-    - **Still to do in D1/D2:**
-      - policies per group of PCs;
-      - unsupported browsers.
+  - **As built, slice 5, a policy per device group (18 Nov):**
+    - **Shape:** the org's policy stays the default for everyone. An admin can give a device
+      group a complete policy of its own, which starts as a copy of the default
+      (`group_browser_policies`, migration 0095).
+    - **One policy per PC, never a merge.** Groups overlap, so a PC in several groups with a
+      policy gets the one with the lowest priority number (ties: group name). A PC in none
+      gets the default. The agent did not change.
+    - **Version numbers are never reused.** One sequence per org (`org_browser_policies.seq`)
+      numbers every saved change, the default's or a group's. A number therefore names exactly
+      one policy's content.
+      - A PC moved into or out of a group, or a group policy removed, always reports a new
+        version, so the tamper check counts it as an update.
+      - Re-ranking changes which policy a PC gets without a new number, because each number
+        already names its content.
+    - **The same rules as the default:** the E8 pilot holds group policies to record-only
+      too, categories are copied on save, and every change is audited
+      (`guard.group_policy_update` / `_delete`). A group policy needs the default to exist
+      first.
+    - **Deleting the group** removes its policy (cascade), and its PCs go back to the
+      default.
+    - **Portal:**
+      - "Policy for: Everyone · <groups>" above the form, which then edits that group's policy;
+      - "+ A policy for a group…" for groups without one;
+      - a priority box and "Remove this group's policy";
+      - the PC table gains a Policy column, and "older" now compares a PC with its own
+        policy.
+    - **Checked:**
+      - `test_group_policies`: needs the default first, the pilot, the winner by priority,
+        re-ranking without a new version, the default taking the next number, the PC row's
+        policy, technician refused, removal sending PCs back, 404s, the audit;
+      - migration 0095 up/down/up, with an existing row given `seq` = its version;
+      - on screen: Sales team given a copy plus "Social media", saved as version 16 after the
+        default's 15, and "Everyone" still showing the default.
+    - **Still to do in D1/D2:** unsupported browsers.
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
   drag-and-drop, form submit on watched sites; talks only to the local agent via native
   messaging (policy offline, device identity).

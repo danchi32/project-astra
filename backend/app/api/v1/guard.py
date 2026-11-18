@@ -40,6 +40,9 @@ class DeviceBrowserState(BaseModel):
     version: int
     results: list[BrowserResult]
     reported_at: datetime
+    # D1: which policy this PC should be on now: a group's name, or None for the org's.
+    policy_group: str | None = None
+    policy_version: int = 0
 
 
 @router.get("/browser-policy", response_model=BrowserPolicyRead,
@@ -106,9 +109,85 @@ async def browser_policy_devices(
     actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
     session: AsyncSession = Depends(get_db),
 ) -> list[DeviceBrowserState]:
-    return [DeviceBrowserState(device_id=s.device_id, hostname=host, version=s.version,
-                               results=[BrowserResult(**r) for r in s.results], reported_at=s.reported_at)
-            for s, host in await browser_policy.device_states(session, actor.org_id)]
+    states = await browser_policy.device_states(session, actor.org_id)
+    org = await browser_policy.get(session, actor.org_id)
+    groups = await browser_policy.applies_to(session, actor.org_id, {s.device_id for s, _ in states})
+    out = []
+    for s, host in states:
+        name, row = groups.get(s.device_id, (None, org))
+        out.append(DeviceBrowserState(device_id=s.device_id, hostname=host, version=s.version,
+                                      results=[BrowserResult(**r) for r in s.results], reported_at=s.reported_at,
+                                      policy_group=name, policy_version=row.version if row else 0))
+    return out
+
+
+# ── D1: a device group's own policy ───────────────────────────────────────────────────────────
+
+class GroupPolicyRead(BaseModel):
+    group_id: uuid.UUID
+    group_name: str
+    priority: int
+    version: int
+    policy: BrowserPolicyBody
+    updated_at: datetime
+
+
+class GroupPolicyWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # Lower wins when a PC is in more than one group with a policy.
+    priority: int = Field(ge=1, le=1000)
+    policy: BrowserPolicyBody
+
+
+@router.get("/group-policies", response_model=list[GroupPolicyRead],
+            summary="Device groups with a browser policy of their own, in the order they win (staff)")
+async def list_group_policies(
+    actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
+    session: AsyncSession = Depends(get_db),
+) -> list[GroupPolicyRead]:
+    out = []
+    for row, name in await browser_policy.group_policies(session, actor.org_id):
+        policy = BrowserPolicyBody(**row.policy)
+        if actor.role != UserRole.ADMIN:
+            policy = policy.model_copy(update={"guard_keywords": []})   # as for the org's policy (review L1)
+        out.append(GroupPolicyRead(group_id=row.group_id, group_name=name, priority=row.priority,
+                                   version=row.version, policy=policy, updated_at=row.updated_at))
+    return out
+
+
+@router.put("/group-policies/{group_id}", response_model=GroupPolicyRead,
+            summary="Give a device group its own browser policy, or change it (admin; audited)",
+            responses={404: {"description": "No such group"},
+                        409: {"description": "No org policy yet, or a mode other than record-only in the pilot"}})
+async def put_group_policy(
+    group_id: uuid.UUID,
+    body: GroupPolicyWrite,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> GroupPolicyRead:
+    try:
+        row = await browser_policy.put_group(session, actor=actor, group_id=group_id,
+                                             priority=body.priority, body=body.policy)
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such group.") from None
+    except (browser_policy.NoOrgPolicy, browser_policy.PilotActive) as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    name = next(n for r, n in await browser_policy.group_policies(session, actor.org_id) if r.group_id == group_id)
+    return GroupPolicyRead(group_id=row.group_id, group_name=name, priority=row.priority, version=row.version,
+                           policy=BrowserPolicyBody(**row.policy), updated_at=row.updated_at)
+
+
+@router.delete("/group-policies/{group_id}", status_code=status.HTTP_204_NO_CONTENT,
+               summary="Remove a group's own policy; its PCs go back to the org's (admin; audited)")
+async def delete_group_policy(
+    group_id: uuid.UUID,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await browser_policy.delete_group(session, actor=actor, group_id=group_id)
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That group has no policy of its own.") from None
 
 
 # ── E3: what the extension saw. These name people, so admins only. ─────────────────────────

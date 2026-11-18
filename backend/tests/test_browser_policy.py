@@ -135,6 +135,70 @@ async def test_blocking_by_category(client, admin_headers, session_factory, admi
                              json={"blocked_categories": ["gambling"]})).status_code == 422
 
 
+async def test_group_policies(client, admin_headers, user_headers, session_factory, admin_user):
+    """D1: a group's own policy. A PC gets exactly one policy (the winning group's, else the
+    org's), and version numbers are never reused across them, so moving a PC is an update."""
+    await _guard_on(session_factory, admin_user.org_id)
+    G = "/api/v1/grouping/groups"
+
+    async def group(name, device_ids):
+        gid = (await client.post(G, headers=admin_headers, json={"name": name})).json()["id"]
+        assert (await client.put(f"{G}/{gid}/devices", headers=admin_headers,
+                                 json={"device_ids": device_ids})).status_code == 200
+        return gid
+
+    a, ha = await _enroll(client, admin_headers, "SALES-1")
+    b, hb = await _enroll(client, admin_headers, "ACCTS-1")
+    sales, both = await group("Sales", [a]), await group("Everyone-ish", [a, b])
+    url = "/api/v1/guard/group-policies"
+    served = lambda h: client.get("/api/v1/agent/browser-policy", headers=h)
+
+    # Groups start from the org's policy, so that comes first.
+    assert (await client.put(f"{url}/{sales}", headers=admin_headers, json={"priority": 1, "policy": POLICY})).status_code == 409
+    assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=POLICY)).json()["version"] == 1
+
+    r = await client.put(f"{url}/{sales}", headers=admin_headers,
+                         json={"priority": 1, "policy": {**POLICY, "blocked_categories": ["social_media"]}})
+    assert r.status_code == 200 and r.json()["version"] == 2 and r.json()["group_name"] == "Sales"
+    r = await client.put(f"{url}/{both}", headers=admin_headers, json={"priority": 5, "policy": {"dev_tools_off": True}})
+    assert r.json()["version"] == 3
+    assert (await client.put(f"{url}/{sales}", headers=admin_headers,
+                             json={"priority": 1, "policy": {**POLICY, "guard_mode": "warn"}})).status_code == 409   # E8 pilot
+
+    pa, pb = (await served(ha)).json(), (await served(hb)).json()
+    assert pa["version"] == 2 and "facebook.com" in pa["policy"]["blocked_sites"]       # Sales wins (priority 1)
+    assert pb["version"] == 3 and pb["policy"]["dev_tools_off"] is True                  # only in the other group
+    listed = (await client.get(url, headers=admin_headers)).json()
+    assert [g["group_name"] for g in listed] == ["Sales", "Everyone-ish"]
+
+    # Re-ranking changes who wins without a new version: the version already names the content.
+    await client.put(f"{url}/{both}", headers=admin_headers, json={"priority": 1, "policy": {"dev_tools_off": True}})
+    assert (await client.put(f"{url}/{sales}", headers=admin_headers,
+                             json={"priority": 2, "policy": {**POLICY, "blocked_categories": ["social_media"]}})).json()["version"] == 2
+    assert (await served(ha)).json()["version"] == 3
+
+    # The org's policy changing takes the next number, never one a group used.
+    assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers,
+                             json={**POLICY, "dev_tools_off": True})).json()["version"] == 4
+
+    # Each PC's row says which policy it should be on.
+    await client.post("/api/v1/agent/browser-policy/report", headers=ha, json={"version": 3, "results": []})
+    rows = {d["hostname"]: d for d in (await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()}
+    assert rows["SALES-1"]["policy_group"] == "Everyone-ish" and rows["SALES-1"]["policy_version"] == 3
+
+    # Removing a group's policy sends its PCs back to the org's; others' groups are not touched.
+    assert (await client.put(f"{url}/{sales}", headers=user_headers, json={"priority": 1, "policy": {}})).status_code == 403
+    assert (await client.delete(f"{url}/{both}", headers=admin_headers)).status_code == 204
+    assert (await served(hb)).json()["version"] == 4 and (await served(ha)).json()["version"] == 2
+    assert (await client.delete(f"{url}/{both}", headers=admin_headers)).status_code == 404
+    assert (await client.put(f"{url}/00000000-0000-4000-8000-000000000000", headers=admin_headers,
+                             json={"priority": 1, "policy": {}})).status_code == 404
+    async with session_factory() as s:
+        actions = [a.action for a in (await s.execute(select(AuditLog).where(
+            AuditLog.action.like("guard.group_policy%")))).scalars()]
+    assert actions.count("guard.group_policy_update") == 4 and actions.count("guard.group_policy_delete") == 1
+
+
 async def test_company_accounts_only(client, admin_headers, session_factory, admin_user):
     """D2 beyond Google: the org's own IDs per service, normalised, validated, served to PCs as is.
     They work through the extension, so without one they are refused rather than silently off."""

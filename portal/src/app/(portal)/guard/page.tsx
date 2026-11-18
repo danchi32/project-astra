@@ -4,9 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  FINDING_KINDS, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices, getSiteCategories, putBrowserPolicy,
-  type BrowserPolicy, type FindingKind,
+  FINDING_KINDS, deleteGroupPolicy, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices, getGroupPolicies,
+  getSiteCategories, putBrowserPolicy, putGroupPolicy, type BrowserPolicy, type FindingKind,
 } from "@/lib/api/guard";
+import { listDeviceGroups } from "@/lib/api/grouping";
 import { isUpgradeRequired } from "@/components/upgrade-required";
 import { apiErrorMessage } from "@/lib/utils";
 
@@ -41,6 +42,14 @@ export default function GuardPage() {
     enabled: !!data, refetchInterval: 60_000 });
   const { data: categories } = useQuery({ queryKey: ["site-categories"], queryFn: getSiteCategories,
     enabled: !!data, staleTime: Infinity });
+  // D1: which policy the form edits: everyone's ("org") or one device group's (its id).
+  const { data: groupPolicies } = useQuery({ queryKey: ["group-policies"], queryFn: getGroupPolicies, enabled: !!data });
+  const { data: groups } = useQuery({ queryKey: ["device-groups"], queryFn: listDeviceGroups, enabled: !!data && isAdmin });
+  const [scope, setScope] = useState("org");
+  const [priority, setPriority] = useState(1);
+  const groupPolicy = groupPolicies?.find((g) => g.group_id === scope);
+  // A group without its own policy yet starts as a copy of everyone's.
+  const shown = scope === "org" ? data?.policy : (groupPolicy?.policy ?? data?.policy);
   const [form, setForm] = useState<BrowserPolicy | null>(null);
   const [text, setText] = useState({ blocked: "", allowed: "", google: "", watched: "", keywords: "",
                                      claude: "", chatgpt: "", slack: "" });
@@ -48,13 +57,19 @@ export default function GuardPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!data) return;
-    setForm(data.policy);
-    setText({ blocked: data.policy.blocked_sites.join("\n"), allowed: data.policy.allowed_sites.join("\n"),
-              google: data.policy.google_allowed_domains.join("\n"), watched: data.policy.guard_watched_sites.join("\n"),
-              keywords: data.policy.guard_keywords.join("\n"), claude: data.policy.claude_org_ids.join("\n"),
-              chatgpt: data.policy.chatgpt_workspace_ids.join("\n"), slack: data.policy.slack_allowed_ids.join("\n") });
-  }, [data]);
+    if (!shown) return;
+    setForm(shown);
+    setText({ blocked: shown.blocked_sites.join("\n"), allowed: shown.allowed_sites.join("\n"),
+              google: shown.google_allowed_domains.join("\n"), watched: shown.guard_watched_sites.join("\n"),
+              keywords: shown.guard_keywords.join("\n"), claude: shown.claude_org_ids.join("\n"),
+              chatgpt: shown.chatgpt_workspace_ids.join("\n"), slack: shown.slack_allowed_ids.join("\n") });
+  }, [shown]);
+
+  function pick(next: string) {
+    setScope(next); setMsg(null);
+    const existing = groupPolicies?.find((g) => g.group_id === next);
+    setPriority(existing?.priority ?? Math.max(0, ...(groupPolicies ?? []).map((g) => g.priority)) + 1);
+  }
 
   const muted = { color: "var(--text-secondary)" };
   const panel = { background: "var(--surface)", border: "1px solid var(--border)" };
@@ -77,16 +92,38 @@ export default function GuardPage() {
     if (!form) return;
     setSaving(true); setMsg(null);
     try {
-      const r = await putBrowserPolicy({ ...form, blocked_sites: lines(text.blocked), allowed_sites: lines(text.allowed),
-                                         google_allowed_domains: lines(text.google), guard_watched_sites: lines(text.watched),
-                                         // Keywords may contain commas ("Q3, final"): one per line only.
-                                         guard_keywords: text.keywords.split("\n").map((x) => x.trim()).filter(Boolean),
-                                         claude_org_ids: lines(text.claude), chatgpt_workspace_ids: lines(text.chatgpt),
-                                         slack_allowed_ids: lines(text.slack) });
-      qc.setQueryData(["browser-policy"], r);
-      setMsg({ ok: true, text: `Saved as version ${r.version}. PCs pick it up within the hour.` });
+      const body = { ...form, blocked_sites: lines(text.blocked), allowed_sites: lines(text.allowed),
+                     google_allowed_domains: lines(text.google), guard_watched_sites: lines(text.watched),
+                     // Keywords may contain commas ("Q3, final"): one per line only.
+                     guard_keywords: text.keywords.split("\n").map((x) => x.trim()).filter(Boolean),
+                     claude_org_ids: lines(text.claude), chatgpt_workspace_ids: lines(text.chatgpt),
+                     slack_allowed_ids: lines(text.slack) };
+      if (scope === "org") {
+        const r = await putBrowserPolicy(body);
+        qc.setQueryData(["browser-policy"], r);
+        setMsg({ ok: true, text: `Saved as version ${r.version}. PCs pick it up within the hour.` });
+      } else {
+        const r = await putGroupPolicy(scope, priority, body);
+        await qc.invalidateQueries({ queryKey: ["group-policies"] });
+        qc.invalidateQueries({ queryKey: ["browser-policy-devices"] });
+        setMsg({ ok: true, text: `Saved for ${r.group_name} as version ${r.version}. Its PCs pick it up within the hour.` });
+      }
     } catch (e) {
       setMsg({ ok: false, text: apiErrorMessage(e, "Could not save the policy.") });
+    } finally { setSaving(false); }
+  }
+
+  async function removeGroupPolicy() {
+    if (scope === "org") return;
+    setSaving(true); setMsg(null);
+    try {
+      await deleteGroupPolicy(scope);
+      await qc.invalidateQueries({ queryKey: ["group-policies"] });
+      qc.invalidateQueries({ queryKey: ["browser-policy-devices"] });
+      pick("org");
+      setMsg({ ok: true, text: "Removed. That group's PCs go back to the policy for everyone within the hour." });
+    } catch (e) {
+      setMsg({ ok: false, text: apiErrorMessage(e, "Could not remove the group's policy.") });
     } finally { setSaving(false); }
   }
 
@@ -121,6 +158,38 @@ export default function GuardPage() {
 
       {isLoading && <p className="text-sm" style={muted}>Loading…</p>}
       {error && !isUpgradeRequired(error) && <p className="text-sm" style={{ color: "#ef4444" }}>{apiErrorMessage(error, "Could not load the policy.")}</p>}
+
+      {data && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs" style={muted}>Policy for</span>
+          {[{ id: "org", label: "Everyone" }, ...(groupPolicies ?? []).map((g) => ({ id: g.group_id, label: g.group_name })),
+            // The group being given a policy, before its first save.
+            ...(scope !== "org" && !groupPolicy ? [{ id: scope, label: `${groups?.find((g) => g.id === scope)?.name ?? "Group"} (new)` }] : []),
+          ].map((o) => (
+            <button key={o.id} type="button" onClick={() => pick(o.id)} className="px-3 py-1 rounded-full text-xs font-medium"
+              style={{ border: "1px solid var(--border)", background: scope === o.id ? "var(--accent)" : "var(--surface)",
+                       color: scope === o.id ? "#fff" : "var(--text-primary)" }}>
+              {o.label}
+            </button>
+          ))}
+          {isAdmin && !!data.version && (groups ?? []).some((g) => !groupPolicies?.some((p) => p.group_id === g.id)) && (
+            <select value="" onChange={(e) => e.target.value && pick(e.target.value)} aria-label="Add a policy for a group"
+              className="px-2 py-1 rounded-lg text-xs outline-none" style={input}>
+              <option value="">+ A policy for a group…</option>
+              {(groups ?? []).filter((g) => !groupPolicies?.some((p) => p.group_id === g.id)).map((g) => (
+                <option key={g.id} value={g.id}>{g.name} ({g.device_count} PCs)</option>
+              ))}
+            </select>
+          )}
+          {scope !== "org" && (
+            <span className="text-xs basis-full" style={muted}>
+              {groupPolicy ? "" : "New: starts as a copy of the policy for everyone. "}
+              PCs in this group get this policy instead of the one for everyone. A PC in more than one such group gets
+              the one with the lowest priority number.
+            </span>
+          )}
+        </div>
+      )}
 
       {form && (
         <div className="rounded-xl p-5 space-y-4" style={panel}>
@@ -270,14 +339,35 @@ export default function GuardPage() {
             </div>
           </div>
           {msg && <p className="text-xs" style={{ color: msg.ok ? "#10b981" : "#ef4444" }}>{msg.text}</p>}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs" style={muted}>
-              Version {data?.version ?? 0}{data?.updated_at ? ` · saved ${new Date(data.updated_at).toLocaleString()}` : ""}
+              {scope === "org"
+                ? <>Version {data?.version ?? 0}{data?.updated_at ? ` · saved ${new Date(data.updated_at).toLocaleString()}` : ""}</>
+                : groupPolicy ? <>Version {groupPolicy.version} · saved {new Date(groupPolicy.updated_at).toLocaleString()}</> : "Not saved yet"}
               {!isAdmin && " · only an admin can change it"}
             </span>
             {isAdmin && (
-              <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
-                style={{ background: "var(--accent)" }}>{saving ? "Saving…" : "Save policy"}</button>
+              <div className="flex flex-wrap items-center gap-2">
+                {scope !== "org" && (
+                  <>
+                    <label className="text-xs flex items-center gap-1" style={muted}>
+                      Priority
+                      <input type="number" min={1} max={1000} value={priority}
+                        onChange={(e) => setPriority(Math.min(1000, Math.max(1, Number(e.target.value) || 1)))}
+                        className="w-16 px-2 py-1 rounded-lg text-sm outline-none" style={input} />
+                    </label>
+                    {groupPolicy && (
+                      <button type="button" onClick={removeGroupPolicy} disabled={saving}
+                        className="px-3 py-2 rounded-lg text-xs font-medium disabled:opacity-50"
+                        style={{ border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                        Remove this group&apos;s policy
+                      </button>
+                    )}
+                  </>
+                )}
+                <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                  style={{ background: "var(--accent)" }}>{saving ? "Saving…" : "Save policy"}</button>
+              </div>
             )}
           </div>
         </div>
@@ -288,7 +378,7 @@ export default function GuardPage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {["PC", "Version", "Status", "Reported"].map((h) => (
+                {["PC", "Policy", "Version", "Status", "Reported"].map((h) => (
                   <th key={h} className="text-left px-4 py-2 text-xs uppercase" style={muted}>{h}</th>
                 ))}
               </tr>
@@ -297,10 +387,11 @@ export default function GuardPage() {
               {(devices ?? []).map((d) => {
                 const errors = d.results.filter((r) => r.error);
                 const conflicts = d.results.flatMap((r) => r.conflicts.map((c) => `${r.browser}: ${c}`));
-                const behind = d.version !== data.version;
+                const behind = d.version !== d.policy_version;   // its own policy's, which may be a group's
                 return (
                   <tr key={d.device_id} style={{ borderBottom: "1px solid var(--border)", color: "var(--text-primary)" }}>
                     <td className="px-4 py-2 font-medium">{d.hostname}</td>
+                    <td className="px-4 py-2 text-xs" style={muted}>{d.policy_group ?? "Everyone"}</td>
                     <td className="px-4 py-2" style={{ color: behind ? "#f59e0b" : muted.color }}>{d.version}{behind ? " (older)" : ""}</td>
                     <td className="px-4 py-2 text-xs">
                       {errors.map((r) => (
@@ -316,7 +407,7 @@ export default function GuardPage() {
                 );
               })}
               {devices && !devices.length && (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-sm" style={muted}>
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm" style={muted}>
                   No PC has reported yet. Agents with AI Guard support report within the hour.
                 </td></tr>
               )}

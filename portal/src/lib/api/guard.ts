@@ -77,7 +77,29 @@ export interface DeviceBrowserState {
   version: number;
   results: BrowserResult[];
   reported_at: string;
+  // D1: the policy this PC should be on: a group's name, or null for everyone's.
+  policy_group: string | null;
+  policy_version: number;
 }
+
+// D1: a device group's own policy. A PC in several groups gets the lowest priority number's.
+export interface GroupPolicy {
+  group_id: string;
+  group_name: string;
+  priority: number;
+  version: number;
+  policy: BrowserPolicy;
+  updated_at: string;
+}
+
+export const getGroupPolicies = () =>
+  apiClient.get<GroupPolicy[]>("/guard/group-policies").then((r) => r.data);
+
+export const putGroupPolicy = (groupId: string, priority: number, policy: BrowserPolicy) =>
+  apiClient.put<GroupPolicy>(`/guard/group-policies/${groupId}`, { priority, policy }).then((r) => r.data);
+
+export const deleteGroupPolicy = (groupId: string) =>
+  apiClient.delete(`/guard/group-policies/${groupId}`).then(() => undefined);
 
 export const getBrowserPolicy = () =>
   apiClient.get<BrowserPolicyRead>("/guard/browser-policy").then((r) => r.data);

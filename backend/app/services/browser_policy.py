@@ -21,6 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import (
     Device,
     DeviceBrowserPolicyState,
+    DeviceGroup,
+    DeviceGroupMember,
+    GroupBrowserPolicy,
     Notification,
     NotificationCategory,
     NotificationSeverity,
@@ -282,26 +285,40 @@ def pilot_until(row: OrgBrowserPolicy | None) -> datetime | None:
     return row.pilot_until if row.pilot_until is not None and as_utc(row.pilot_until) > utcnow() else None
 
 
-async def put(session: AsyncSession, *, actor: User, body: BrowserPolicyBody) -> OrgBrowserPolicy:
-    row = await session.get(OrgBrowserPolicy, actor.org_id)
+def _check_pilot(org: OrgBrowserPolicy | None, body: BrowserPolicyBody) -> None:
     # E8: the first 14 days only record, so the org sees what happens before anyone is
-    # interrupted. Enforced here, under the policy page and suggestions alike. Nothing switches
-    # on by itself when the pilot ends: an admin picks the mode.
-    if body.guard_mode != "log" and (until := pilot_until(row)) is not None:
+    # interrupted. Enforced here, under the policy page, group policies and suggestions alike.
+    # Nothing switches on by itself when the pilot ends: an admin picks the mode.
+    if body.guard_mode != "log" and (until := pilot_until(org)) is not None:
         raise PilotActive(f"AI Guard only records until {as_utc(until):%d %b %Y}, its 14-day pilot. "
                           "End the pilot first to choose another mode.")
+
+
+def _save(row, org: OrgBrowserPolicy, body: BrowserPolicyBody, actor: User) -> list[str]:
+    """Write `body` into a policy row (the org's or a group's). A real change takes the org's
+    next version number. Returns the fields that changed."""
     new = body.model_dump()
     hosts = category_hosts(body.blocked_categories)
-    before = row.policy if row else {}
-    changed = sorted(k for k in new if before.get(k) != new[k])
-    if row is not None and row.category_hosts != hosts:
+    changed = sorted(k for k in new if (row.policy or {}).get(k) != new[k])
+    if row.category_hosts != hosts:
         changed.append("category_hosts")   # same categories, list updated since: a new version too
+    if changed:
+        org.seq += 1
+        row.policy, row.version, row.updated_by_user_id, row.category_hosts = new, org.seq, actor.id, hosts
+    return changed
+
+
+async def put(session: AsyncSession, *, actor: User, body: BrowserPolicyBody) -> OrgBrowserPolicy:
+    row = await session.get(OrgBrowserPolicy, actor.org_id)
+    _check_pilot(row, body)
     if row is None:
-        row = OrgBrowserPolicy(org_id=actor.org_id, policy=new, version=1, updated_by_user_id=actor.id,
-                               pilot_until=utcnow() + PILOT, category_hosts=hosts)
+        hosts = category_hosts(body.blocked_categories)
+        row = OrgBrowserPolicy(org_id=actor.org_id, policy=body.model_dump(), version=1, seq=1,
+                               updated_by_user_id=actor.id, pilot_until=utcnow() + PILOT, category_hosts=hosts)
         session.add(row)
-    elif changed:
-        row.policy, row.version, row.updated_by_user_id, row.category_hosts = new, row.version + 1, actor.id, hosts
+        changed = sorted(row.policy)
+    else:
+        changed = _save(row, row, body, actor)
     await AuditService(session).record(
         org_id=actor.org_id, actor_id=actor.id, action="guard.browser_policy_update",
         target_type="organization", target_id=str(actor.org_id),
@@ -325,14 +342,99 @@ async def end_pilot(session: AsyncSession, *, actor: User) -> OrgBrowserPolicy:
     return row
 
 
+# ── D1: a group's own policy ────────────────────────────────────────────────────────────────
+
+class NoOrgPolicy(ValueError):
+    """Group policies start from, and fall back to, the org's policy: it must exist first."""
+
+
+async def group_policies(session: AsyncSession, org_id) -> list[tuple[GroupBrowserPolicy, str]]:
+    """The org's group policies with their group names, in the order they win."""
+    return list((await session.execute(
+        select(GroupBrowserPolicy, DeviceGroup.name)
+        .join(DeviceGroup, DeviceGroup.id == GroupBrowserPolicy.group_id)
+        .where(GroupBrowserPolicy.org_id == org_id)
+        .order_by(GroupBrowserPolicy.priority, DeviceGroup.name)
+    )).all())
+
+
+async def put_group(session: AsyncSession, *, actor: User, group_id, priority: int,
+                    body: BrowserPolicyBody) -> GroupBrowserPolicy:
+    group = await session.get(DeviceGroup, group_id)
+    if group is None or group.org_id != actor.org_id:
+        raise LookupError("No such group.")
+    org = await session.get(OrgBrowserPolicy, actor.org_id)
+    if org is None:
+        raise NoOrgPolicy("Save the policy for everyone first; groups start from it.")
+    _check_pilot(org, body)
+    row = await session.get(GroupBrowserPolicy, group_id)
+    if row is None:
+        org.seq += 1
+        row = GroupBrowserPolicy(group_id=group_id, org_id=actor.org_id, priority=priority, policy=body.model_dump(),
+                                 version=org.seq, category_hosts=category_hosts(body.blocked_categories),
+                                 updated_by_user_id=actor.id)
+        session.add(row)
+        changed = sorted(row.policy)
+    else:
+        changed = _save(row, org, body, actor)
+    if row.priority != priority:
+        # Which policy a PC gets may change; its version already names the content, so no new one.
+        row.priority = priority
+        changed.append("priority")
+    await AuditService(session).record(
+        org_id=actor.org_id, actor_id=actor.id, action="guard.group_policy_update",
+        target_type="device_group", target_id=str(group_id),
+        detail={"group": group.name, "changed": changed, "version": row.version, "priority": row.priority},
+    )
+    await session.commit()
+    return row
+
+
+async def delete_group(session: AsyncSession, *, actor: User, group_id) -> None:
+    """The group's PCs go back to the org's policy (a different version, so an update)."""
+    row = await session.get(GroupBrowserPolicy, group_id)
+    if row is None or row.org_id != actor.org_id:
+        raise LookupError("That group has no policy of its own.")
+    group = await session.get(DeviceGroup, group_id)
+    await AuditService(session).record(
+        org_id=actor.org_id, actor_id=actor.id, action="guard.group_policy_delete",
+        target_type="device_group", target_id=str(group_id), detail={"group": group.name if group else None},
+    )
+    await session.delete(row)
+    await session.commit()
+
+
+async def applies_to(session: AsyncSession, org_id, device_ids) -> dict:
+    """Device id → (group name, its policy) for PCs a group policy covers; others get the org's."""
+    ranked = await group_policies(session, org_id)
+    if not ranked or not device_ids:
+        return {}
+    members = (await session.execute(
+        select(DeviceGroupMember.group_id, DeviceGroupMember.device_id)
+        .where(DeviceGroupMember.group_id.in_([g.group_id for g, _ in ranked]),
+               DeviceGroupMember.device_id.in_(list(device_ids)))
+    )).all()
+    by_group: dict = {}
+    for gid, did in members:
+        by_group.setdefault(gid, set()).add(did)
+    out: dict = {}
+    for g, name in ranked:                          # first match wins: lowest priority, then name
+        for did in by_group.get(g.group_id, ()):
+            out.setdefault(did, (name, g))
+    return out
+
+
 async def for_device(session: AsyncSession, device: Device) -> dict:
-    """What a PC should apply. An org without the add-on gets an empty policy at version 0,
-    which tells the agent to remove everything SAVIO set."""
+    """What a PC should apply: its group's policy if one covers it, else the org's. An org
+    without the add-on gets an empty policy at version 0, which tells the agent to remove
+    everything SAVIO set."""
     if not await entitled(session, device.org_id):
         return {"version": 0, "policy": {}}
     row = await session.get(OrgBrowserPolicy, device.org_id)
     if row is None:
         return {"version": 0, "policy": {}}
+    if (hit := (await applies_to(session, device.org_id, {device.id})).get(device.id)) is not None:
+        row = hit[1]
     # D1: the PC gets one block list; categories are the portal's way of choosing it.
     policy = {k: v for k, v in row.policy.items() if k != "blocked_categories"}
     policy["blocked_sites"] = list(dict.fromkeys([*policy.get("blocked_sites", []), *(row.category_hosts or [])]))
