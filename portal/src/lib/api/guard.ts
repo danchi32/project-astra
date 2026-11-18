@@ -180,6 +180,52 @@ export interface GuardApproval {
   valid_until: string | null;
 }
 
+// C1: cases, not alerts. One person's events as one ranked story. Admin only (names people).
+export interface GuardCaseSite {
+  site: string;
+  kind: string | null;   // a site category key, if the site is in one
+  new: boolean;          // first seen in the org this week
+  events: number;
+  items: number;
+  contact_lists: number;
+  went_ahead: number;
+  blocked: number;
+  channels: string[];
+}
+
+export interface GuardCase {
+  id: string;
+  windows_user: string;
+  opened_at: string;
+  last_event_at: string;
+  status: "open" | "closed";
+  resolution: "expected" | "handled" | null;
+  score: number;
+  level: "low" | "medium" | "high";
+  reasons: string[];
+  sites: GuardCaseSite[];
+  kinds: Record<string, number>;
+  events: number;
+  devices: string[];
+  closed_at: string | null;
+}
+
+export interface GuardCases {
+  open: { high: number; medium: number; low: number };
+  quiet_sites: string[];
+  quiet_events_30d: number;
+  cases: GuardCase[];
+}
+
+export const getGuardCases = (status: "open" | "closed") =>
+  apiClient.get<GuardCases>("/guard/cases", { params: { status } }).then((r) => r.data);
+
+export const closeGuardCase = (id: string, resolution: "expected" | "handled", quiet_site: string | null) =>
+  apiClient.post<GuardCase>(`/guard/cases/${id}/close`, { resolution, quiet_site }).then((r) => r.data);
+
+export const removeQuietSite = (site: string) =>
+  apiClient.delete(`/guard/quiet-sites/${encodeURIComponent(site)}`);
+
 export const getGuardApprovals = () =>
   apiClient.get<GuardApproval[]>("/guard/approvals").then((r) => r.data);
 

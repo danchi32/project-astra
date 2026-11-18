@@ -151,6 +151,49 @@ class GuardSuggestionDismissal(Base):
     dismissed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
+class GuardCase(Base):
+    """Phase 3c · C1: one person's run of sensitive-data events, joined into one story instead
+    of one alert per event. Open while events keep coming (within `guard_cases.CASE_GAP` of the
+    last); IT closes it as expected or handled. `summary` holds the ranked reasons and per-site
+    counts, computed from the events: counts and host names only, never content."""
+
+    __tablename__ = "guard_cases"
+    __table_args__ = (Index("ix_guard_cases_org_status", "org_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    windows_user: Mapped[str] = mapped_column(String(256), nullable=False)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_event_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="open")   # open | closed
+    resolution: Mapped[str | None] = mapped_column(String(10), nullable=True)          # expected | handled
+    score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    level: Mapped[str] = mapped_column(String(10), nullable=False, default="low")       # low | medium | high
+    summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GuardQuietSite(Base):
+    """Phase 3c · C1: a site IT said is expected (the firm's own file share, a client portal).
+    Its events are still recorded and shown under "What was found"; they just never raise a
+    case. Counted on the Cases page, never silently."""
+
+    __tablename__ = "guard_quiet_sites"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    site: Mapped[str] = mapped_column(String(253), primary_key=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
 class GuardApproval(Base):
     """Phase 3 · D7: a person asked IT to let one thing through: one Windows account, one PC,
     one site, one channel (paste / drop / file / submit). An admin approves it for a set time

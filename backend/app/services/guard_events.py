@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Device, GuardEvent
 from app.models.base import utcnow
-from app.services import guard_approvals
+from app.services import guard_approvals, guard_cases
 from app.services.browser_policy import FindingKind, entitled, has_control
 
 Reason = Literal["client_request", "approved", "not_real", "own_data", "other"]
@@ -129,6 +129,13 @@ async def ingest(session: AsyncSession, device: Device, batch: GuardEventBatch) 
     for e in kept:
         if e.action == "approve" and e.outcome == "requested":
             await guard_approvals.request(session, device, e)
+    # C1: each person's events join their case, which is scored as a whole.
+    await session.flush()
+    earliest: dict[str, datetime] = {}
+    for e in kept:
+        earliest[e.windows_user] = min(e.at, earliest.get(e.windows_user, e.at))
+    for user, at in earliest.items():
+        await guard_cases.update(session, device.org_id, user, at)
     await session.commit()
     return len(kept)
 

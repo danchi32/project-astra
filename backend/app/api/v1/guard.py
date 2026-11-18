@@ -5,6 +5,7 @@ organization. Editing is admin-only and audited. Staff can read the status.
 """
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,7 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles, requires
 from app.core.database import get_db
 from app.models import Device, DeviceInstalledApp, User, UserRole
-from app.services import browser_policy, guard_approvals, guard_discovery, guard_events, guard_suggestions
+from app.services import (
+    browser_policy,
+    guard_approvals,
+    guard_cases,
+    guard_discovery,
+    guard_events,
+    guard_suggestions,
+)
 from app.services.browser_policy import BrowserPolicyBody, BrowserResult
 from app.services.entitlements import AI_GUARD
 
@@ -445,3 +453,98 @@ async def deny(
     session: AsyncSession = Depends(get_db),
 ) -> GuardApprovalRead:
     return await _decide(session, actor, approval_id, False, 0, body.requested_at)
+
+
+# ── C1: cases, not alerts ─────────────────────────────────────────────────────────────────────
+# A case names a person, so, like events about named people, admins only.
+
+class CaseSite(BaseModel):
+    site: str
+    kind: str | None
+    new: bool
+    events: int
+    items: int
+    contact_lists: int
+    went_ahead: int
+    blocked: int
+    channels: list[str]
+
+
+class CaseRead(BaseModel):
+    id: uuid.UUID
+    windows_user: str
+    opened_at: datetime
+    last_event_at: datetime
+    status: str
+    resolution: str | None
+    score: int
+    level: str
+    reasons: list[str]
+    sites: list[CaseSite]
+    kinds: dict[str, int]
+    events: int
+    devices: list[str]
+    closed_at: datetime | None
+
+
+class CasesRead(BaseModel):
+    open: dict[str, int]
+    quiet_sites: list[str]
+    quiet_events_30d: int
+    cases: list[CaseRead]
+
+
+def _case(c) -> CaseRead:
+    s = c.summary or {}
+    return CaseRead(id=c.id, windows_user=c.windows_user, opened_at=c.opened_at, last_event_at=c.last_event_at,
+                    status=c.status, resolution=c.resolution, score=c.score, level=c.level,
+                    reasons=s.get("reasons", []), sites=s.get("sites", []), kinds=s.get("kinds", {}),
+                    events=s.get("events", 0), devices=s.get("devices", []), closed_at=c.closed_at)
+
+
+@router.get("/cases", response_model=CasesRead,
+            summary="AI Guard cases: each person's sensitive-data events as one ranked story (admin)")
+async def list_cases(
+    status_: Literal["open", "closed"] = Query("open", alias="status"),
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> CasesRead:
+    overview = await guard_cases.overview(session, actor.org_id)
+    return CasesRead(**overview, cases=[_case(c) for c in await guard_cases.cases(session, actor.org_id, status_)])
+
+
+class CloseCaseBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    resolution: Literal["expected", "handled"]
+    # "Stop raising cases for this site": only a site in this case, only when closed as expected.
+    quiet_site: str | None = Field(default=None, max_length=253)
+
+
+@router.post("/cases/{case_id}/close", response_model=CaseRead,
+             summary="Close a case as expected or handled; optionally make one of its sites quiet (admin; audited)")
+async def close_case(
+    case_id: uuid.UUID,
+    body: CloseCaseBody,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> CaseRead:
+    try:
+        return _case(await guard_cases.close(session, actor=actor, case_id=case_id, resolution=body.resolution,
+                                             quiet_site=body.quiet_site))
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such case.") from None
+    except ValueError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+
+
+@router.delete("/quiet-sites/{site}", status_code=status.HTTP_204_NO_CONTENT,
+               summary="Let a quiet site raise cases again (admin; audited)")
+async def remove_quiet_site(
+    site: str,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await guard_cases.unquiet(session, actor=actor, site=site)
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That site is not quiet.") from None
