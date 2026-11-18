@@ -150,6 +150,9 @@ class BrowserPolicyBody(BaseModel):
     # D5: weekly scan of each person's Desktop / Documents / Downloads / OneDrive, on the PC, for
     # a map of which folders hold sensitive files (counts only). Off until an admin turns it on.
     discovery_enabled: bool = False
+    # D3/D5: also read the text inside PDFs, for uploads and the weekly map, on the PC (Word and
+    # Excel are read either way). Off: a PDF is "could not check". The admin's choice.
+    guard_read_pdfs: bool = False
     # D2 beyond Google: sign-in only to the org's own Microsoft tenant, Claude organizations,
     # ChatGPT workspaces and Slack workspaces. Each service enforces it itself when its header
     # arrives; the extension adds the header (as a proxy would), so these need the extension.

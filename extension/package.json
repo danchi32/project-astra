@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "description": "Only so Node treats decide.js as an ES module for `npm test`; the browser ignores this file.",
-  "scripts": { "test": "node --test test/decide.test.mjs test/accounts.test.mjs" }
+  "scripts": { "test": "node --test test/decide.test.mjs test/accounts.test.mjs test/background.test.mjs" }
 }

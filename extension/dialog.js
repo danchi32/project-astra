@@ -21,7 +21,8 @@
     go: "{Verb} anyway",
     ok: "OK",
     pick: "Why does this need to go here?",
-    hidden: "Pasted with the sensitive parts hidden.",
+    hidden: { paste: "Pasted with the sensitive parts hidden.", file: "Uploaded with the sensitive parts hidden.",
+              submit: "Sent with the sensitive parts hidden." },
     footer: "Checked on this PC. Your organization sees what kind of data was found and where, never the text itself.",
   };
   const fill = (s, verb) => s.replace("{verb}", verb).replace("{Verb}", verb[0].toUpperCase() + verb.slice(1));
@@ -140,10 +141,11 @@
   }
 
   /** A short note that does not stop the person, gone after a few seconds: after a redacted
-   *  paste ("hidden"), or after asking IT for approval ("asked"). */
+   *  paste, form or upload ("hidden"), or after asking IT for approval ("asked"). */
   function notice(kind, detail, channel = "paste") {
     const verb = TEXT.verb[channel] ?? "continue";
-    const [title, more] = kind === "asked" ? [TEXT.asked, fill(TEXT.askedHelp, verb)] : [TEXT.hidden, detail ?? ""];
+    const [title, more] = kind === "asked" ? [TEXT.asked, fill(TEXT.askedHelp, verb)]
+      : [TEXT.hidden[channel] ?? TEXT.hidden.paste, detail ?? ""];
     document.querySelectorAll("savio-guard-notice").forEach((n) => n.remove());   // one at a time
     const host = el("savio-guard-notice");
     const root = host.attachShadow({ mode: "closed" });

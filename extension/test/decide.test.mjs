@@ -1,7 +1,16 @@
 // Phase 3 · D3: run with `node --test extension/test/`. No dependencies.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide, fromHost, hostOf, isWatched, readPolicy, toEvent, withOutcome, DEFAULT_POLICY, REASONS } from "../decide.js";
+import { decide, fromHost, hostOf, isWatched, mergeScans, readPolicy, toEvent, withOutcome, DEFAULT_POLICY, REASONS } from "../decide.js";
+
+test("scans of an upload's parts add up, and one unknown part makes the whole unknown", () => {
+  const a = fromHost({ ok: true, counts: { Pan: 1 }, keyword_hits: [0] });
+  const b = fromHost({ ok: true, counts: { Pan: 2, Aadhaar: 1 }, contact_list: true, keyword_hits: [0, 3] });
+  assert.deepEqual(mergeScans(a, b), { ok: true, counts: { Pan: 3, Aadhaar: 1 }, contactList: true,
+                                       keywordHits: [0, 3], incomplete: false });
+  assert.equal(mergeScans(a, null), null);
+  assert.equal(mergeScans(a, { ...b, incomplete: true }), null);
+});
 
 const found = { ok: true, counts: { Aadhaar: 1, Email: 3 }, contactList: false, keywordHits: [] };
 const clean = { ok: true, counts: { Email: 2 }, contactList: false, keywordHits: [] };
@@ -71,10 +80,14 @@ test("justify asks for a reason, but a broken scanner still only warns", () => {
   assert.equal(decide(p, null).action, "warn");
 });
 
-test("redact rewrites a paste; anything else it cannot rewrite is a warning", () => {
+test("redact rewrites a paste, a form and text files; anything it cannot rewrite is a warning", () => {
   const p = readPolicy({ mode: "redact" });
-  assert.equal(decide(p, found, "paste").action, "redact");
-  for (const channel of ["drop", "file", "submit"]) assert.equal(decide(p, found, channel).action, "warn");
+  for (const channel of ["paste", "file", "submit"]) assert.equal(decide(p, found, channel).action, "redact");
+  assert.equal(decide(p, found, "drop").action, "warn");               // a drop cannot be re-dropped
+  // What cannot be rewritten (a PDF, a form's other fields) must be clean, or it is a warning.
+  assert.equal(decide(p, found, "file", clean).action, "redact");
+  assert.equal(decide(p, found, "file", found).action, "warn");
+  assert.equal(decide(p, found, "submit", null).action, "warn");        // the rest could not be checked
   assert.equal(decide(p, clean, "paste").action, "allow");
   assert.equal(decide(p, null, "paste").action, "warn");                // could not check: never "hidden"
   const scan = fromHost({ ok: true, counts: { Pan: 1 } });

@@ -1,7 +1,3 @@
-using System.IO.Compression;
-using System.Net;
-using System.Text;
-using System.Text.RegularExpressions;
 using AstraAgent.Guard;
 
 namespace AstraAgent.GuardHost;
@@ -16,7 +12,8 @@ namespace AstraAgent.GuardHost;
 ///
 /// Careful by design:
 /// <list type="bullet">
-/// <item>Only text-like files and Word / Excel (.docx / .xlsx), up to 20 MB each.</item>
+/// <item>Only text-like files, Word / Excel (.docx / .xlsx) and, if the org chose, PDF; up to
+/// 20 MB each (<see cref="Documents"/>).</item>
 /// <item>Cloud-only files (OneDrive placeholders) are skipped: reading one would download it.</item>
 /// <item>Hidden, system and linked (junction) entries are skipped, and so are AppData, dot-folders
 /// and dependency folders.</item>
@@ -31,7 +28,6 @@ public static class Discovery
 
     static readonly HashSet<string> TextExt = new(StringComparer.OrdinalIgnoreCase)
         { ".txt", ".csv", ".tsv", ".json", ".md", ".xml", ".log", ".html", ".htm" };
-    static readonly HashSet<string> OfficeExt = new(StringComparer.OrdinalIgnoreCase) { ".docx", ".xlsx" };
     static readonly HashSet<string> SkipDirs = new(StringComparer.OrdinalIgnoreCase)
         { "AppData", "node_modules", "$Recycle.Bin", "bin", "obj", "packages", "site-packages" };
 
@@ -43,7 +39,8 @@ public static class Discovery
 
     public sealed record Result(bool Ok, int FilesScanned, int FilesSkipped, bool Truncated, IReadOnlyList<Folder> Folders);
 
-    public static Result Run(IEnumerable<string> roots, TimeSpan pause, CancellationToken ct = default)
+    /// <param name="pdf">Also read PDFs: the org's choice (<c>--pdf</c>).</param>
+    public static Result Run(IEnumerable<string> roots, TimeSpan pause, CancellationToken ct = default, bool pdf = false)
     {
         var folders = new Dictionary<string, Folder>(StringComparer.OrdinalIgnoreCase);
         int scanned = 0, skipped = 0;
@@ -82,9 +79,9 @@ public static class Discovery
             {
                 if (scanned >= MaxFiles) { truncated = true; pending.Clear(); break; }
                 var ext = Path.GetExtension(file);
-                if (!TextExt.Contains(ext) && !OfficeExt.Contains(ext)) continue;
+                if (!TextExt.Contains(ext) && !Documents.Readable(ext, pdf)) continue;
                 string? text;
-                try { text = Text(file, ext); }
+                try { text = Text(file, ext, pdf); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException) { text = null; }
                 if (text is null) { skipped++; continue; }
                 scanned++;
@@ -121,38 +118,10 @@ public static class Discovery
     }
 
     /// <summary>The text of one file, or null if it is too big or not what its name says.</summary>
-    internal static string? Text(string path, string ext)
+    internal static string? Text(string path, string ext, bool pdf = false)
     {
         if (new FileInfo(path).Length > MaxFileBytes) return null;
-        if (TextExt.Contains(ext)) return Cap(File.ReadAllText(path));
-
-        using var zip = ZipFile.OpenRead(path);
-        var parts = ext.Equals(".docx", StringComparison.OrdinalIgnoreCase)
-            ? zip.Entries.Where(e => e.FullName == "word/document.xml")
-            : zip.Entries.Where(e => e.FullName == "xl/sharedStrings.xml" ||
-                                     (e.FullName.StartsWith("xl/worksheets/sheet") && e.FullName.EndsWith(".xml")));
-        var sb = new StringBuilder();
-        foreach (var entry in parts)
-        {
-            // A zip bomb is refused by its declared size before anything is inflated, and the
-            // read itself stops at the cap whatever the entry claims (security review L1).
-            if (entry.Length > MaxFileBytes || sb.Length > PiiScanner.MaxChars) return null;
-            using var reader = new StreamReader(entry.Open());
-            var buffer = new char[(int)Math.Min(MaxFileBytes, PiiScanner.MaxChars) + 1];
-            int read = 0, n;
-            while (read < buffer.Length && (n = reader.Read(buffer, read, buffer.Length - read)) > 0) read += n;
-            sb.Append(XmlText(new string(buffer, 0, read))).Append('\n');
-        }
-        return Cap(sb.ToString());
+        if (TextExt.Contains(ext)) return Documents.Cap(File.ReadAllText(path));
+        return Documents.Text(File.ReadAllBytes(path), ext, pdf);
     }
-
-    static readonly Regex LineEnd = new(@"</(w:p|row|si)>", RegexOptions.Compiled);
-    static readonly Regex CellEnd = new(@"</c>", RegexOptions.Compiled);
-    static readonly Regex Tag = new(@"<[^>]{0,2000}>", RegexOptions.Compiled);
-
-    /// <summary>Word paragraphs and Excel rows become lines, cells become tabs, tags go.</summary>
-    static string XmlText(string xml) =>
-        WebUtility.HtmlDecode(Tag.Replace(CellEnd.Replace(LineEnd.Replace(xml, "\n"), "\t"), ""));
-
-    static string Cap(string s) => s.Length > PiiScanner.MaxChars ? s[..PiiScanner.MaxChars] : s;
 }

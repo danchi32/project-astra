@@ -48,6 +48,9 @@ public sealed record BrowserPolicy
     public IReadOnlyList<string> GuardKeywords { get; init; } = Array.Empty<string>();
     /// <summary>D5: once a week, map where sensitive files are on this PC (folder counts only).</summary>
     public bool DiscoveryEnabled { get; init; }
+    /// <summary>Read the text inside PDFs: uploads (the extension's <c>readPdf</c>) and the weekly
+    /// map. Off: a PDF is "could not check". Word and Excel are read either way.</summary>
+    public bool ReadPdfs { get; init; }
 
     /// <summary>D2 beyond Google: sign-in only to the org's own accounts. Each service enforces it
     /// when its header arrives; the extension adds the header, so these go to it as settings.</summary>
@@ -176,6 +179,7 @@ public static class BrowserPolicyMap
             ["ignoreKinds"] = p.GuardIgnoreKinds.ToArray(),
             ["keywords"] = p.GuardKeywords.ToArray(),
         };
+        if (p.ReadPdfs) s["readPdf"] = true;
         // D2: only what is set, so an org without them sees no change to its settings.
         if (p.MicrosoftTenantId is not null) s["microsoftTenant"] = $"{p.MicrosoftTenantId}:{p.MicrosoftPolicyId}";
         if (p.ClaudeOrgIds.Count > 0) s["claudeOrgs"] = p.ClaudeOrgIds.ToArray();

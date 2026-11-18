@@ -32,7 +32,8 @@ public sealed class DiscoveryWorker(
 
     internal Func<BrowserPolicy?> Policy { get; init; } = () => policy.Current;
     internal Func<IReadOnlyList<string>> Roots { get; init; } = UserFolders;
-    internal Func<IReadOnlyList<string>, CancellationToken, Task<DiscoveryReport?>> Scan { get; init; } = RunHostAsync;
+    internal Func<IReadOnlyList<string>, CancellationToken, Task<DiscoveryReport?>> Scan { get; init; } =
+        (roots, ct) => RunHostAsync(roots, policy.Current?.ReadPdfs == true, ct);
     internal string LastRunFile { get; init; } = Path.Combine(SecureDirectory.StateRoot, "discovery-last.txt");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -96,7 +97,7 @@ public sealed class DiscoveryWorker(
             f.Files >= f.FilesWithFindings && f.FilesWithFindings >= 0 && f.ContactLists >= 0 &&
             f.Counts.All(kv => GuardEvent.Kinds.Contains(kv.Key) && kv.Value >= 0));
 
-    static async Task<DiscoveryReport?> RunHostAsync(IReadOnlyList<string> roots, CancellationToken ct)
+    static async Task<DiscoveryReport?> RunHostAsync(IReadOnlyList<string> roots, bool pdf, CancellationToken ct)
     {
         var exe = Path.Combine(AppContext.BaseDirectory, NativeHostRegistration.HostExe);
         if (!File.Exists(exe) || roots.Count == 0) return null;
@@ -105,6 +106,7 @@ public sealed class DiscoveryWorker(
             UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardInput = true, CreateNoWindow = true,
         };
         psi.ArgumentList.Add("--discover");
+        if (pdf) psi.ArgumentList.Add("--pdf");
         using var p = Process.Start(psi);
         if (p is null) return null;
         // The folders go on stdin, not the command line: no 32K limit, whatever the number of profiles.

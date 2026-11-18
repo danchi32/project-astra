@@ -3,7 +3,7 @@
   "properties": {
     "mode": {
       "title": "What to do when sensitive data is found",
-      "description": "log = record only (the default, for the first 14 days); warn = ask first; justify = ask for a reason first; redact = paste with the sensitive parts hidden (other actions warn); approve = held until IT approves; block = refuse.",
+      "description": "log = record only (the default, for the first 14 days); warn = ask first; justify = ask for a reason first; redact = a paste, a form or a text file goes ahead with the sensitive parts hidden (anything else warns); approve = held until IT approves; block = refuse.",
       "type": "string",
       "enum": ["log", "warn", "justify", "redact", "approve", "block"]
     },
@@ -22,6 +22,11 @@
       "title": "Restricted keywords",
       "type": "array",
       "items": { "type": "string" }
+    },
+    "readPdf": {
+      "title": "Read the text inside uploaded PDFs",
+      "description": "Checked on this PC by the SAVIO host, like Word and Excel files. Off: a PDF is 'could not check'.",
+      "type": "boolean"
     },
     "microsoftTenant": {
       "title": "Microsoft 365: sign-in only to this tenant",

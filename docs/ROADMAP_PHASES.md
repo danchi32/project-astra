@@ -1431,8 +1431,8 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       - migration 0092 up/down/up with no model drift;
       - on screen, "Block personal file-sharing sites" applied: policy version 4, the
         existing blocked sites kept and the new ones added.
-  - **Not yet:** PDF text (needs a parser beyond the standard library: a dependency to choose
-    with you); a live run on the VM.
+  - **Not yet:** a live run on the VM. (PDF text: done 18 Nov, see "Redact for forms and
+    files" under D7.)
 - **D7 Coaching:** warn / justify / block dialogs in-page, English only (no Hindi anywhere,
   decided 17 Nov).
   - **As built (17 Nov, branch `phase-3`):**
@@ -1467,11 +1467,57 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       says so.
     - **How:** the scanner's `Redact()` uses exactly the checks `Scan()` uses. A bare order
       number with no context word stays as it is, in both. Kinds the policy ignores are kept.
-    - **Where it applies:** only a paste can be rewritten. A file, a drop or a form gets a
-      warning instead.
+    - **Where it applies:** only a paste could be rewritten at first; forms and text files
+      followed on 18 Nov (below).
     - **When it cannot redact** (over 5M characters, or a timeout), it warns rather than
       pasting unchecked text.
     - **The redacted text** goes back only to the browser on that PC, never into an event.
+  - **Redact for forms and files, and documents read (18 Nov):**
+    - **Forms:** in redact mode, a form's text fields (text and search inputs, text areas) go
+      ahead with findings replaced. They are set the way a page's framework expects (the
+      native setter plus an input event), so a React form sends the new value too. The form's
+      other values (selects, hidden, e-mail, number…) are the fixed rest. Passwords are never
+      read.
+    - **Text files chosen for upload:** each file with a finding is swapped for a copy, same
+      name and type, with the findings replaced.
+    - **The rule that keeps "hidden" honest:** what cannot be rewritten (a form's other fields,
+      a Word or PDF file, pasted or dropped files) must be clean, or could-not-check counts as
+      not clean. Otherwise the person is asked (warn) instead of being told it was hidden.
+      A drop still always warns.
+    - **Documents are read now:** Word and Excel uploads (`.docx` / `.xlsx`) go to the native
+      host as base64 (`scan_file`), which reads them in memory with the same code as the
+      weekly map (`Documents.cs`) and answers with counts only. Old `.doc` / `.xls`,
+      PowerPoint and archives are still "could not check". Up to 5 MB a file, 20 MB a check.
+    - **PDF, the admin's choice:** "Read the text inside PDFs" (`guard_read_pdfs`, off by
+      default) on the policy page. It covers uploads (the extension's `readPdf`) and the
+      weekly map (`--pdf`). Off: an uploaded PDF is "could not check" and the map skips PDFs.
+      - Parser: **PdfPig 0.1.16** (Apache-2.0, pure .NET, no dependencies of its own; NuGet
+        id `PdfPig`). Chosen because a PDF cannot be read without a parser, and this one
+        brings no native code into the process that reads other people's files.
+      - At most 500 pages, 10 seconds, and the scanner's character cap. Encrypted, broken,
+        or slower than that: "could not check". It runs in the host, which E4 keeps off the
+        network.
+      - ponytail: an overrunning parse is abandoned, not stopped (PdfPig has no
+        cancellation). For an upload the host process ends with the check; in the weekly
+        map it can keep a core busy until the run ends. Upgrade path: one child process per
+        PDF, killed at the limit.
+    - **Checked:**
+      - agent `DocumentsTests` (7): a real PDF made with PdfPig read only when chosen; files
+        that are not what their name says, too big, or old Word are null; the host answers a
+        PDF or Word upload with counts and no text, refuses broken data; the weekly map reads
+        a PDF only with `--pdf`. `readPdf` reaches the extension only when on. Agent suite 447.
+      - extension `background.test.mjs` (2), with a fake browser and host: each part
+        redacted; a PAN in the fixed rest or in a PDF means warn; a form sent without its
+        parts warns; a paste is still rewritten whole; documents read by the host; an
+        unreadable one is unknown. `decide` / `mergeScans` tests. Extension suite 20.
+      - backend: the switch is off by default and served to the PC.
+      - in a page, in the browser pane, with the extension's APIs faked and real typing and
+        clicks: the site's own submit handler received `Client PAN [PAN]` with the other
+        fields untouched, and a PAN in a hidden field led to the prompt, and nothing was
+        sent when it was cancelled.
+    - **Not checked:** the file swap in a real browser (a file can only be chosen through the
+      operating system's dialog), and the whole thing with the real host in Chrome. Both are
+      the VM test.
   - **Approvals (17 Nov):**
     - **Mode "Needs IT approval":** the prompt offers "Ask IT for approval" or "Don't". A
       request is an event with `outcome: requested`. The backend turns it into a

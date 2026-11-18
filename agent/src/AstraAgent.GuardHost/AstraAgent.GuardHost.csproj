@@ -15,6 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AstraAgent.Guard\AstraAgent.Guard.csproj" />
+    <!-- PDF text for uploads and the file map, only where the org turns it on. Pure managed code,
+         Apache-2.0, no dependencies of its own on net8.0. -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
 
   <ItemGroup>

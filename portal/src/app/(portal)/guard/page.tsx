@@ -31,7 +31,7 @@ const MODES: { value: BrowserPolicy["guard_mode"]; label: string; help: string }
   { value: "log", label: "Record only", help: "Nothing is stopped. Every organization starts here for 14 days to see what turns up." },
   { value: "warn", label: "Warn", help: "The person is told what was found and can go ahead." },
   { value: "justify", label: "Ask for a reason", help: "To go ahead, the person picks a work reason from a short list. You see which." },
-  { value: "redact", label: "Hide the sensitive parts", help: "A paste goes in with numbers replaced, e.g. [PAN]. Files and forms get a warning." },
+  { value: "redact", label: "Hide the sensitive parts", help: "A paste, a form's text boxes and text files go ahead with numbers replaced, e.g. [PAN]. Word, Excel and PDF files can't be changed, so they get a warning." },
   { value: "approve", label: "Needs IT approval", help: "Held until an admin approves it under Approvals; then allowed on that site for a while." },
   { value: "block", label: "Block", help: "Paste, upload or send is refused. If the check itself fails, it warns instead." },
 ];
@@ -243,6 +243,16 @@ export default function GuardPage() {
                 Once a week, on each PC, SAVIO checks the text, Word and Excel files in people&apos;s Desktop, Documents,
                 Downloads and OneDrive folders. You see which folders hold Aadhaar, PAN, card or bank numbers and how many,
                 never the files&apos; names or contents. Results under AI Guard → Where data lives.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-sm" style={{ color: "var(--text-primary)" }}>
+            <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={form.guard_read_pdfs}
+              onChange={(e) => setForm({ ...form, guard_read_pdfs: e.target.checked })} />
+            <span>Read the text inside PDFs
+              <span className="block text-xs" style={muted}>
+                PDFs being uploaded, and PDFs in the weekly check above, are read on the PC like Word and Excel files.
+                Off: an uploaded PDF counts as &ldquo;could not check&rdquo; and the weekly check skips PDFs.
               </span>
             </span>
           </label>

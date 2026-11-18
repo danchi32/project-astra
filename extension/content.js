@@ -1,5 +1,7 @@
 // Phase 3 · D3: watches the four ways text leaves a page: paste, drop, file upload and form
-// submit.
+// submit. Word and Excel files (and PDFs, where the org chose it) are read by the SAVIO host on
+// this PC; in redact mode a paste, a form's text fields and text files go ahead with the
+// sensitive parts hidden.
 //
 // In "log" mode nothing is held up: the content is checked afterwards and only the counts are
 // recorded. In the other modes the action is held, checked by the local scanner (a few
@@ -17,33 +19,46 @@
 // WebSocket), `form.submit()`, and reads of the clipboard API are not seen. See docs.
 (() => {
   const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  const MAX_DOC_BYTES = 20 * 1024 * 1024;   // all documents in one check, sent to the host as base64
   const TEXT_FILE = /\.(txt|csv|tsv|json|md|xml|log|html?)$/i;
-  // Files that hold text SAVIO cannot read here. A photo or a video is not one of them.
+  // Read by the SAVIO host on this PC: Word and Excel always, PDF where the org chose it.
+  const OFFICE = /\.(docx|xlsx)$/i;
+  const PDF = /\.pdf$/i;
+  // Files that hold text SAVIO cannot read. A photo or a video is not one of them.
   const DOCUMENT = /\.(pdf|docx?|xlsx?|xlsm|pptx?|odt|ods|odp|rtf|zip|rar|7z)$/i;
   const MIN_TEXT = 4;
   const MODES = ["log", "warn", "justify", "redact", "approve", "block"];
   let mode = "log";
+  let readPdf = false;
   let resubmitting = false;
   const checkedInputs = new WeakSet();   // not a DOM attribute, which the page could set (L2)
 
-  const readMode = (m) => { if (m && MODES.includes(m.mode)) mode = m.mode; };
-  chrome.storage.managed.get("mode").then(readMode).catch(() => {});
+  const readMode = (m) => {
+    if (m && MODES.includes(m.mode)) mode = m.mode;
+    if (m && "readPdf" in m) readPdf = m.readPdf === true;
+  };
+  chrome.storage.managed.get(["mode", "readPdf"]).then(readMode).catch(() => {});
   // A tighter policy reaches open tabs at once, not after a reload (L3).
   chrome.storage.onChanged?.addListener((changes, area) => {
-    if (area === "managed" && changes.mode) readMode({ mode: changes.mode.newValue });
+    if (area !== "managed") return;
+    if (changes.mode) readMode({ mode: changes.mode.newValue });
+    if (changes.readPdf) readMode({ readPdf: changes.readPdf.newValue });
   });
 
-  const check = (kind, text, unreadable = 0) =>
-    chrome.runtime.sendMessage({ type: "check", kind, text, unreadable })
+  // `what`: { text, unreadable, docs, parts }. `parts` are the pieces that can be rewritten
+  // (form fields, text files); without them, all of `text` is one rewritable whole (a paste).
+  const check = (kind, what) =>
+    chrome.runtime.sendMessage({ type: "check", kind, ...what })
       .catch(() => ({ action: "warn", unknown: true }));
 
-  // The text to go ahead with (the original, or with the sensitive parts hidden), or null.
-  async function handled(kind, text, unreadable = 0) {
-    const r = await check(kind, text, unreadable);
-    if (r.action === "allow") return text;
-    if (r.action === "redact" && typeof r.redacted === "string") {
-      globalThis.__savioGuardNotice("hidden", r.reason);
-      return r.redacted;
+  // What to go ahead with ({ text, parts }: the originals, or with the sensitive parts hidden),
+  // or null to stop.
+  async function handled(kind, what) {
+    const r = await check(kind, what);
+    if (r.action === "allow") return what;
+    if (r.action === "redact" && (typeof r.redacted === "string" || Array.isArray(r.redactedParts))) {
+      globalThis.__savioGuardNotice("hidden", r.reason, kind);
+      return { ...what, text: r.redacted ?? what.text, parts: r.redactedParts ?? what.parts };
     }
     const answer = await globalThis.__savioGuardDialog(kind, r);
     if (r.pending) {
@@ -52,29 +67,56 @@
         .catch(() => {});
     }
     if (answer.outcome === "requested") globalThis.__savioGuardNotice("asked", null, kind);
-    return ["warn", "justify"].includes(r.action) && answer.outcome === "proceeded" ? text : null;
+    return ["warn", "justify"].includes(r.action) && answer.outcome === "proceeded" ? what : null;
   }
-  const allowed = async (kind, text, unreadable = 0) => (await handled(kind, text, unreadable)) !== null;
+  const allowed = async (kind, what) => (await handled(kind, what)) !== null;
 
   function insert(target, text) {
     target?.focus?.();
     document.execCommand("insertText", false, text);
   }
 
-  /** The text of the files we can read, and how many documents we could not (an Office file,
-   *  a PDF, an archive, or a text file too big): those make the check "could not check". */
+  function base64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let s = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+
+  /** What can be checked in these files: the text of text files (each also a rewritable part,
+   *  with its File), documents for the host, and how many could not be read (an old Office
+   *  file, a PDF the org does not read, an archive, anything too big): "could not check". */
   async function filesText(files) {
-    const parts = [];
-    let unreadable = 0;
+    const parts = [], textFiles = [], docs = [];
+    let unreadable = 0, docBytes = 0;
     for (const f of files) {
       const textual = f.type.startsWith("text/") || TEXT_FILE.test(f.name);
+      const document = OFFICE.test(f.name) || (readPdf && PDF.test(f.name));
       if (textual && f.size <= MAX_FILE_BYTES) {
-        try { parts.push(await f.text()); } catch { unreadable++; }
+        try { parts.push(await f.text()); textFiles.push(f); } catch { unreadable++; }
+      } else if (document && f.size <= MAX_FILE_BYTES && docBytes + f.size <= MAX_DOC_BYTES) {
+        try { docs.push({ name: f.name, data: base64(await f.arrayBuffer()) }); docBytes += f.size; } catch { unreadable++; }
       } else if (textual || DOCUMENT.test(f.name)) {
         unreadable++;
       }
     }
-    return { text: parts.join("\n"), unreadable };
+    return { text: parts.join("\n"), parts, textFiles, docs, unreadable };
+  }
+
+  // The text fields a form will send, which can be rewritten: inputs of type text or search, and
+  // text areas. Other fields (selects, hidden, e-mail, number…) are sent as they are.
+  const PASSWORD = /pass(word)?|pwd/i;
+  const editableFields = (form) => [...form.elements].filter((el) =>
+    (el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && ["text", "search"].includes(el.type))) &&
+    el.name && !el.disabled && el.value && !PASSWORD.test(el.name));
+
+  // A field's new value, set as the page's own framework expects (React and the like track it
+  // through the native setter and an input event), so a script that sends the form sees it too.
+  function setValue(el, value) {
+    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value").set.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   window.addEventListener("paste", (e) => {
@@ -82,8 +124,9 @@
     const files = [...(e.clipboardData?.files ?? [])];
     const text = e.clipboardData?.getData("text/plain") ?? "";
     if (text.length < MIN_TEXT && !files.length) return;
+    const withFiles = (f) => ({ text: [text, f.text].join("\n"), unreadable: f.unreadable, docs: f.docs });
     if (mode === "log") {
-      filesText(files).then((f) => check("paste", [text, f.text].join("\n"), f.unreadable));
+      filesText(files).then((f) => check("paste", withFiles(f)));
       return;
     }
     e.preventDefault();
@@ -91,12 +134,13 @@
     const target = e.target;
     filesText(files).then(async (f) => {
       if (!files.length) {
-        const out = await handled("paste", text);
-        if (out !== null) insert(target, out);
+        const out = await handled("paste", { text });
+        if (out !== null) insert(target, out.text);
         return;
       }
       // Pasted files cannot be re-pasted after a check: the person pastes again if allowed.
-      await allowed("paste", [text, f.text].join("\n"), f.unreadable);
+      // Nothing here can be rewritten (parts: []), so redact asks instead.
+      await allowed("paste", { ...withFiles(f), parts: [] });
     });
   }, true);
 
@@ -112,8 +156,9 @@
       e.stopImmediatePropagation();
     }
     const f = await filesText(files);
-    if (mode === "log") { check("drop", [text, f.text].join("\n"), f.unreadable); return; }
-    if (await allowed("drop", [text, f.text].join("\n"), f.unreadable) && text) insert(e.target, text);
+    const what = { text: [text, f.text].join("\n"), unreadable: f.unreadable, docs: f.docs };
+    if (mode === "log") { check("drop", what); return; }
+    if (await allowed("drop", what) && text) insert(e.target, text);
     // A dropped file is not re-dropped: the person can attach it again through the file picker.
   }, true);
 
@@ -125,9 +170,28 @@
     // Stopped now, synchronously: after an await the site would already have the files (H1).
     if (mode !== "log") e.stopImmediatePropagation();
     if (e.type === "input") return;   // the check runs once, on change
-    const f = await filesText([...input.files]);
-    if (mode === "log") { if (f.text || f.unreadable) check("file", f.text, f.unreadable); return; }
-    if (await allowed("file", f.text, f.unreadable)) {
+    const chosen = [...input.files];
+    const f = await filesText(chosen);
+    if (mode === "log") {
+      if (f.text || f.docs.length || f.unreadable) check("file", { text: f.text, unreadable: f.unreadable, docs: f.docs });
+      return;
+    }
+    // In redact mode each text file is a part that can be rewritten; elsewhere it is plain text.
+    const what = mode === "redact"
+      ? { text: "", parts: f.parts, unreadable: f.unreadable, docs: f.docs }
+      : { text: f.text, unreadable: f.unreadable, docs: f.docs };
+    const out = await handled("file", what);
+    if (out !== null) {
+      if (out.parts && out.parts !== what.parts) {
+        // A copy of each text file with the sensitive parts hidden, same name and type, in place.
+        const dt = new DataTransfer();
+        for (const file of chosen) {
+          const i = f.textFiles.indexOf(file);
+          dt.items.add(i >= 0 && out.parts[i] !== f.parts[i]
+            ? new File([out.parts[i]], file.name, { type: file.type, lastModified: file.lastModified }) : file);
+        }
+        input.files = dt.files;
+      }
       checkedInputs.add(input);
       input.dispatchEvent(new Event("input", { bubbles: true }));    // let the site see it now
       input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -143,19 +207,35 @@
     const form = e.target;
     if (!(form instanceof HTMLFormElement)) return;
     // Every field the form will send, including ones placed outside it with form="…" (L4).
-    let text = "";
+    let values = [];
     try {
       const data = new FormData(form, e.submitter ?? undefined);
-      text = [...data.entries()]
-        .filter(([name, v]) => typeof v === "string" && !/pass(word)?|pwd/i.test(name))
-        .map(([, v]) => v).filter(Boolean).join("\n");
+      values = [...data.entries()]
+        .filter(([name, v]) => typeof v === "string" && !PASSWORD.test(name))
+        .map(([, v]) => v).filter(Boolean);
     } catch { return; }
+    const text = values.join("\n");
     if (text.length < MIN_TEXT) return;
-    if (mode === "log") { check("submit", text); return; }
+    if (mode === "log") { check("submit", { text }); return; }
     e.preventDefault();
     e.stopImmediatePropagation();
     const submitter = e.submitter;
-    if (await allowed("submit", text)) {
+    // In redact mode the text fields are parts that can be rewritten; every other value the
+    // form sends is the fixed rest (one occurrence of each field's value taken out of it).
+    let fields = [];
+    let what = { text };
+    if (mode === "redact") {
+      const rest = [...values];
+      fields = editableFields(form).filter((el) => {
+        const i = rest.indexOf(el.value);
+        return i >= 0 && rest.splice(i, 1).length === 1;
+      });
+      what = { text: rest.join("\n"), parts: fields.map((el) => el.value) };
+    }
+    const out = await handled("submit", what);
+    if (out !== null) {
+      fields.forEach((el, i) => { if (out.parts[i] !== el.value) setValue(el, out.parts[i]); });
+      if (fields.length) await new Promise((r) => setTimeout(r, 0));   // let the page's framework catch up
       resubmitting = true;
       try { form.requestSubmit(submitter && submitter.form === form ? submitter : undefined); } finally { resubmitting = false; }
     }

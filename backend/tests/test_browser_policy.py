@@ -86,11 +86,16 @@ async def test_extension_settings(client, admin_headers, session_factory, admin_
     assert p["guard_watched_sites"] == ["chatgpt.com"]
     assert p["guard_ignore_kinds"] == ["Email", "IndianMobile"]
     assert p["guard_keywords"] == ["project falcon", "Q3 numbers"]
+    assert p["guard_read_pdfs"] is False                                     # off unless the admin turns it on
 
     async with session_factory() as s:
         audit = (await s.execute(select(AuditLog).where(AuditLog.action == "guard.browser_policy_update")
                                  .order_by(AuditLog.created_at.desc()))).scalars().first()
     assert "guard_keywords" in audit.detail["changed"] and "falcon" not in str(audit.detail)
+
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**body, "guard_read_pdfs": True})
+    _, h = await _enroll(client, admin_headers, "PDF-PC")
+    assert (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]["guard_read_pdfs"] is True
 
     for bad in ({"guard_mode": "shout"}, {"guard_ignore_kinds": ["Passwords"]}, {"guard_keywords": ["  "]},
                 {"guard_keywords": ["x" * 101]}, {"guard_keywords": [f"k{i}" for i in range(201)]},

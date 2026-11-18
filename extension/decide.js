@@ -4,12 +4,13 @@
 // The scanner answers with counts only ({counts:{Aadhaar:1}, contactList, keywordHits,
 // incomplete}); nothing here ever sees the text again.
 
-// redact: a paste goes in with the sensitive parts replaced by labels such as [PAN]. Only a
-// paste can be rewritten; a file, a drop or a form falls back to warn.
+// redact: the sensitive parts are replaced by labels such as [PAN] in a paste, in a form's text
+// fields, and in text files chosen for upload. What cannot be rewritten (a drop, a Word or PDF
+// file, a form's other fields) must be clean, or it falls back to warn.
 // approve: held until IT approves; then the same channel on the same site goes through for a
 // while (the host checks the approvals the agent stored for this Windows account).
 export const MODES = ["log", "warn", "justify", "redact", "approve", "block"];
-export const REDACTABLE = ["paste"];
+export const REDACTABLE = ["paste", "file", "submit"];
 
 // D7: why someone went ahead after a "justify" prompt. A fixed list, never typed text: the
 // event schema has no free-text field (E4), and that promise does not bend for this.
@@ -129,15 +130,34 @@ export function sensitiveFindings(policy, scan) {
  * outright: a broken scanner must not stop a whole office pasting, so it warns instead and the
  * warning is logged.
  */
-export function decide(policy, scan, channel = "paste") {
-  const unknown = scan === null || scan?.ok === false || scan?.incomplete === true;
+export function decide(policy, scan, channel = "paste", fixed = undefined) {
+  const unknown = isUnknown(scan);
   const findings = unknown ? [] : sensitiveFindings(policy, scan);
   if (policy.mode === "log") return { action: "allow", findings, unknown };
   if (unknown) return { action: "warn", findings, unknown, reason: "SAVIO could not check this content." };
   if (!findings.length) return { action: "allow", findings, unknown };
   const reason = `This contains ${findings.join(", ")}.`;
-  const action = policy.mode === "redact" && !REDACTABLE.includes(channel) ? "warn" : policy.mode;
+  // `fixed`: the scan of what cannot be rewritten (undefined when all of it can). Hiding only
+  // some of the sensitive parts would send the rest while saying "hidden": a warning instead.
+  const rewritable = REDACTABLE.includes(channel) &&
+    (fixed === undefined || (!isUnknown(fixed) && !sensitiveFindings(policy, fixed).length));
+  const action = policy.mode === "redact" && !rewritable ? "warn" : policy.mode;
   return { action, findings, unknown, reason };
+}
+
+const isUnknown = (scan) => scan === null || scan?.ok === false || scan?.incomplete === true;
+
+/** Two scans of parts of one upload or form, as one. Either one unknown makes it unknown. */
+export function mergeScans(a, b) {
+  if (isUnknown(a) || isUnknown(b)) return null;
+  const counts = { ...a.counts };
+  for (const [kind, n] of Object.entries(b.counts ?? {})) counts[kind] = (counts[kind] ?? 0) + n;
+  return {
+    ok: true, counts,
+    contactList: !!(a.contactList || b.contactList),
+    keywordHits: [...new Set([...(a.keywordHits ?? []), ...(b.keywordHits ?? [])])],
+    incomplete: false,
+  };
 }
 
 /**

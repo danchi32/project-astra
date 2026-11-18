@@ -322,6 +322,10 @@ public sealed class BrowserPolicyWriterTests : IDisposable
         Assert.Equal(new[] { "E0123ABCD", "T0456EFGH" }, settings["slackAllowed"]);
         var plain = (IReadOnlyDictionary<string, object>)BrowserPolicyMap.Chromium(Full, Browser.Chrome)[$@"3rdparty\extensions\{ChromeId}\policy"];
         Assert.False(plain.ContainsKey("microsoftTenant") || plain.ContainsKey("claudeOrgs") || plain.ContainsKey("slackRequester"));
+        // PDFs are read only where the org chose it; otherwise the setting is not there at all.
+        Assert.False(plain.ContainsKey("readPdf"));
+        var pdf = (IReadOnlyDictionary<string, object>)BrowserPolicyMap.Chromium(Full with { ReadPdfs = true }, Browser.Chrome)[$@"3rdparty\extensions\{ChromeId}\policy"];
+        Assert.Equal(true, pdf["readPdf"]);
 
         // They become request headers: anything but an ID is refused, including a smuggled header.
         Assert.NotEmpty((accounts with { MicrosoftPolicyId = null }).Validate());

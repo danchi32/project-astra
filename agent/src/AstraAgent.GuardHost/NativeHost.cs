@@ -31,7 +31,8 @@ public static class NativeHost
     };
 
     public sealed record Request(string? Type, string? Text, IReadOnlyList<string>? Keywords, JsonElement? Event = null,
-                                 IReadOnlyList<string>? Keep = null, string? Site = null, string? Channel = null);
+                                 IReadOnlyList<string>? Keep = null, string? Site = null, string? Channel = null,
+                                 string? Name = null, string? Data = null);
 
     /// <summary>D7: this account's approvals, as the service wrote them. Tests replace it.</summary>
     public static Func<IReadOnlyList<string>?> ReadApprovals { get; set; } = ApprovalsForThisAccount;
@@ -79,7 +80,7 @@ public static class NativeHost
     }
 
     /// <summary>
-    /// Two requests: "scan" (text in, counts out) and "event" (E3: what the extension decided,
+    /// Requests: "scan" (text in, counts out), "scan_file" (a document in, counts out) and "event" (E3: what the extension decided,
     /// passed on to the service). An event is parsed into the fixed <see cref="GuardEvent"/>
     /// shape and re-serialized from it, so whatever else the extension put in the message
     /// is dropped here and never reaches the pipe.
@@ -124,10 +125,24 @@ public static class NativeHost
             var redacted = PiiScanner.Redact(req.Text, req.Keywords, keep);
             return redacted is null ? new Response(false, "could not redact") : new Response(true, Redacted: redacted);
         }
-        if (req?.Type != "scan")
+        var text = req?.Text;
+        if (req?.Type == "scan_file")
+        {
+            // A document the person is uploading (Word, Excel, PDF), as base64: scanned like
+            // text, answered with counts only. The extension sends a PDF only where the org
+            // chose to read them. Unreadable is an error, which the extension treats as
+            // "could not check".
+            var ext = Path.GetExtension(req.Name ?? "");
+            byte[]? bytes;
+            try { bytes = Convert.FromBase64String(req.Data ?? ""); }
+            catch (FormatException) { bytes = null; }
+            text = bytes is null ? null : Documents.Text(bytes, ext, pdf: true);
+            if (text is null) return new Response(false, "could not read the document");
+        }
+        else if (req?.Type != "scan")
             return new Response(false, "unknown request");
 
-        var r = PiiScanner.Scan(req.Text, req.Keywords);
+        var r = PiiScanner.Scan(text, req.Keywords);
         return new Response(
             Ok: true,
             Counts: r.Counts.Where(kv => kv.Value > 0).ToDictionary(kv => kv.Key.ToString(), kv => kv.Value),
