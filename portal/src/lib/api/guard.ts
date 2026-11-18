@@ -31,6 +31,8 @@ export interface BrowserPolicy {
   chatgpt_workspace_ids: string[];
   slack_requester_id: string | null;
   slack_allowed_ids: string[];
+  // D10: the agent closes browsers these settings don't reach, as they start.
+  block_other_browsers: boolean;
 }
 
 export const FINDING_KINDS = {
@@ -80,6 +82,8 @@ export interface DeviceBrowserState {
   // D1: the policy this PC should be on: a group's name, or null for everyone's.
   policy_group: string | null;
   policy_version: number;
+  // D10: browsers the policy doesn't reach that are installed on this PC (from its app inventory).
+  other_browsers: string[];
 }
 
 // D1: a device group's own policy. A PC in several groups gets the lowest priority number's.

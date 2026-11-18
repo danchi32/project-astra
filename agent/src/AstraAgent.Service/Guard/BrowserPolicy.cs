@@ -59,6 +59,10 @@ public sealed record BrowserPolicy
     public IReadOnlyList<string> SlackAllowedIds { get; init; } = Array.Empty<string>();
     public const int MaxAccountIds = 50;
 
+    /// <summary>Close <see cref="OtherBrowsers"/> as they start (<see cref="OtherBrowserBlocker"/>).
+    /// Not a browser setting: the writer ignores it.</summary>
+    public bool BlockOtherBrowsers { get; init; }
+
     public const int MaxSites = 500;
     public const int MaxKeywords = 200;
     static readonly string[] Modes = ["log", "warn", "justify", "redact", "approve", "block"];

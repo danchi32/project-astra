@@ -67,9 +67,11 @@ public interface IAstraApiClient
     /// as "keep what you have", never as "remove everything".</summary>
     Task<AgentBrowserPolicy?> GetBrowserPolicyAsync(string deviceToken, CancellationToken ct);
 
-    /// <summary>D10: what applying it did, per browser.</summary>
+    /// <summary>D10: what applying it did, per browser, and how many times each other browser
+    /// was closed since the last report.</summary>
     Task<bool> ReportBrowserPolicyAsync(
-        string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports, CancellationToken ct);
+        string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports,
+        IReadOnlyDictionary<string, int> closed, CancellationToken ct);
 
     /// <summary>E3: a batch of extension events (counts only). True when the backend has them,
     /// or refused them for good, so the caller can drop the batch.</summary>
@@ -285,21 +287,26 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
     }
 
     public async Task<bool> ReportBrowserPolicyAsync(
-        string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports, CancellationToken ct)
+        string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports,
+        IReadOnlyDictionary<string, int> closed, CancellationToken ct)
     {
+        var body = new Dictionary<string, object>
+        {
+            ["version"] = version,
+            ["results"] = reports.Take(10).Select(r => new
+            {
+                browser = r.Browser.ToString(),
+                set = r.Set.Take(50), repaired = r.Repaired.Take(50),
+                removed = r.Removed.Take(50), conflicts = r.Conflicts.Take(50),
+                error = r.Error is { Length: > 500 } e ? e[..500] : r.Error,
+            }),
+        };
+        // Only when there is something: a backend from before D10's closing refuses the field.
+        if (closed.Count > 0)
+            body["closed"] = closed;
         using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/browser-policy/report")
         {
-            Content = JsonContent.Create(new
-            {
-                version,
-                results = reports.Take(10).Select(r => new
-                {
-                    browser = r.Browser.ToString(),
-                    set = r.Set.Take(50), repaired = r.Repaired.Take(50),
-                    removed = r.Removed.Take(50), conflicts = r.Conflicts.Take(50),
-                    error = r.Error is { Length: > 500 } e ? e[..500] : r.Error,
-                }),
-            }),
+            Content = JsonContent.Create(body),
         };
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
         try

@@ -30,12 +30,15 @@ public class BrowserPolicyWorkerTests
         public AgentBrowserPolicy? Next;
         public int Fetches;
         public readonly List<(int Version, IReadOnlyList<ApplyReport> Reports)> Reports = [];
+        public readonly List<IReadOnlyDictionary<string, int>> Closed = [];
+        public bool ReportAccepted = true;
         public readonly List<IReadOnlyList<QueuedGuardEvent>> EventBatches = [];
         public bool EventsAccepted = true;
 
         public Task<AgentBrowserPolicy?> GetBrowserPolicyAsync(string t, CancellationToken ct) { Fetches++; return Task.FromResult(Next); }
-        public Task<bool> ReportBrowserPolicyAsync(string t, int v, IReadOnlyList<ApplyReport> r, CancellationToken ct)
-        { Reports.Add((v, r)); return Task.FromResult(true); }
+        public Task<bool> ReportBrowserPolicyAsync(string t, int v, IReadOnlyList<ApplyReport> r,
+                                                   IReadOnlyDictionary<string, int> closed, CancellationToken ct)
+        { Reports.Add((v, r)); Closed.Add(closed); return Task.FromResult(ReportAccepted); }
         public Task<bool> SendGuardEventsAsync(string t, IReadOnlyList<QueuedGuardEvent> events, CancellationToken ct)
         { EventBatches.Add(events); return Task.FromResult(EventsAccepted); }
         public IReadOnlyList<AgentGuardApproval>? Approvals = [];

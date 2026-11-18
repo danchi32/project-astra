@@ -83,6 +83,24 @@ SITE_CATEGORIES: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 SiteCategory = Literal["file_sharing", "personal_email", "ai_chat", "messaging", "social_media", "paste_sites"]
 
+# D10: browsers SAVIO's policies and extension do not reach. Each name is the agent's own
+# (OtherBrowsers.cs), with the installed-app name it is recognised by in telemetry. Supported
+# browsers are Chrome, Edge and Firefox.
+# ponytail: a fixed list in code, kept in step with the agent's. Upgrade path is serving the list
+# with the policy once someone needs one that is not here.
+OTHER_BROWSERS: dict[str, str] = {   # name → how its installed-app name starts (lower case)
+    "Brave": "brave", "Opera": "opera", "Vivaldi": "vivaldi", "Yandex Browser": "yandex",
+    "Tor Browser": "tor browser", "Chromium": "chromium", "Waterfox": "waterfox", "LibreWolf": "librewolf",
+}
+OtherBrowser = Literal["Brave", "Opera", "Vivaldi", "Yandex Browser", "Tor Browser", "Chromium", "Waterfox",
+                       "LibreWolf"]
+
+
+def other_browsers(app_names) -> list[str]:
+    """Which of OTHER_BROWSERS a PC's installed applications include ("Opera GX Stable", not "Operations")."""
+    names = [(n or "").lower() for n in app_names]
+    return [b for b, p in OTHER_BROWSERS.items() if any(re.match(rf"{re.escape(p)}\b", n) for n in names)]
+
 
 def category_hosts(categories: list[str]) -> list[str]:
     return list(dict.fromkeys(h for c in categories for h in SITE_CATEGORIES[c][1]))
@@ -141,6 +159,9 @@ class BrowserPolicyBody(BaseModel):
     chatgpt_workspace_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
     slack_requester_id: str | None = None       # the org's own workspace or org ID
     slack_allowed_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
+    # D10: the agent closes any of OTHER_BROWSERS as it starts, and tells the person why. Removing
+    # one stays the admin-only "Uninstall software" action, PC by PC.
+    block_other_browsers: bool = False
 
     @field_validator("microsoft_tenant_id", "microsoft_policy_id")
     @classmethod
@@ -262,6 +283,13 @@ class BrowserPolicyReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int = Field(ge=0)
     results: list[BrowserResult] = Field(max_length=10)
+    # D10: how many times each other browser was closed since the last report. Only known names.
+    closed: dict[OtherBrowser, int] = Field(default_factory=dict)
+
+    @field_validator("closed")
+    @classmethod
+    def _closed(cls, v: dict[str, int]) -> dict[str, int]:
+        return {k: min(n, 10_000) for k, n in v.items() if n > 0}
 
 
 async def entitled(session: AsyncSession, org_id) -> bool:
@@ -461,7 +489,13 @@ async def record_report(session: AsyncSession, device: Device, report: BrowserPo
         session.add(state)
     else:
         state.version, state.results, state.reported_at = report.version, results, utcnow()
-    repaired = sorted({f"{r.browser}: {n}" for r in report.results for n in r.repaired})
+    if report.closed:
+        await AuditService(session).record(
+            org_id=device.org_id, actor_id=None, action="guard.other_browser_closed",
+            target_type="device", target_id=str(device.id),
+            detail={"device": device.hostname, "closed": report.closed},
+        )
+    repaired =sorted({f"{r.browser}: {n}" for r in report.results for n in r.repaired})
     if repaired:
         # Someone on this PC removed or changed a lock SAVIO set. It is back on; the admin
         # should know it happened, and on which PC.

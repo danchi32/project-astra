@@ -39,6 +39,12 @@ public sealed class BrowserPolicyWorker(
     /// backend has answered once.</summary>
     public BrowserPolicy? Current => _current?.Policy.ToPolicy();
 
+    /// <summary>Other browsers closed since the last report that reached the backend.</summary>
+    readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _closed = new();
+
+    /// <summary>Called by <see cref="OtherBrowserBlocker"/>; sent with the next report.</summary>
+    public void CountClosed(string browser) => _closed.AddOrUpdate(browser, 1, (_, n) => n + 1);
+
     private bool _approvalsMayBeStored = true;   // from a previous run, until the first cycle clears them
     private string? _currentFor;
     private DateTime _nextFetch = DateTime.MinValue;
@@ -89,10 +95,16 @@ public sealed class BrowserPolicyWorker(
         var reports = Apply(_current.Policy.ToPolicy());
         var signature = $"{_current.Version}|" + string.Join("|", reports.Select(r =>
             $"{r.Browser}:{string.Join(",", r.Conflicts.Order())}:{r.Error}"));
-        if (reports.Any(r => r.Changed) || signature != _lastReported)
+        var closed = _closed.ToDictionary();
+        if (reports.Any(r => r.Changed) || signature != _lastReported || closed.Count > 0)
         {
-            if (await api.ReportBrowserPolicyAsync(token, _current.Version, reports, ct))
+            if (await api.ReportBrowserPolicyAsync(token, _current.Version, reports, closed, ct))
+            {
                 _lastReported = signature;
+                foreach (var (name, n) in closed)   // closes counted meanwhile stay for the next report
+                    if (_closed.AddOrUpdate(name, 0, (_, now) => now - n) == 0)
+                        _closed.TryRemove(new KeyValuePair<string, int>(name, 0));
+            }
         }
         // A new version also rewrites values, so this cannot say who changed them; the backend,
         // which knows the last version this PC reported, decides what is tampering.

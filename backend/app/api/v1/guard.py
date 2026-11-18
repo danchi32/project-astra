@@ -8,11 +8,12 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles, requires
 from app.core.database import get_db
-from app.models import Device, User, UserRole
+from app.models import Device, DeviceInstalledApp, User, UserRole
 from app.services import browser_policy, guard_approvals, guard_discovery, guard_events, guard_suggestions
 from app.services.browser_policy import BrowserPolicyBody, BrowserResult
 from app.services.entitlements import AI_GUARD
@@ -43,6 +44,8 @@ class DeviceBrowserState(BaseModel):
     # D1: which policy this PC should be on now: a group's name, or None for the org's.
     policy_group: str | None = None
     policy_version: int = 0
+    # D10: browsers the policy does not reach that are installed here, from the app inventory.
+    other_browsers: list[str] = Field(default_factory=list)
 
 
 @router.get("/browser-policy", response_model=BrowserPolicyRead,
@@ -112,12 +115,20 @@ async def browser_policy_devices(
     states = await browser_policy.device_states(session, actor.org_id)
     org = await browser_policy.get(session, actor.org_id)
     groups = await browser_policy.applies_to(session, actor.org_id, {s.device_id for s, _ in states})
+    apps: dict = {}
+    for did, app in (await session.execute(
+            select(DeviceInstalledApp.device_id, DeviceInstalledApp.name)
+            .where(DeviceInstalledApp.org_id == actor.org_id,
+                   or_(*(func.lower(DeviceInstalledApp.name).like(p + "%")
+                         for p in browser_policy.OTHER_BROWSERS.values()))))).all():
+        apps.setdefault(did, []).append(app)
     out = []
     for s, host in states:
         name, row = groups.get(s.device_id, (None, org))
         out.append(DeviceBrowserState(device_id=s.device_id, hostname=host, version=s.version,
                                       results=[BrowserResult(**r) for r in s.results], reported_at=s.reported_at,
-                                      policy_group=name, policy_version=row.version if row else 0))
+                                      policy_group=name, policy_version=row.version if row else 0,
+                                      other_browsers=browser_policy.other_browsers(apps.get(s.device_id, []))))
     return out
 
 

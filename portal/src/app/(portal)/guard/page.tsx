@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
@@ -20,6 +21,8 @@ const SWITCHES: { key: keyof BrowserPolicy; label: string; help: string }[] = [
   { key: "extension_developer_mode_off", label: "No extension developer mode", help: "Stops people loading unpacked extensions (Chrome, Edge)." },
   { key: "new_profiles_off", label: "No new browser profiles or guest windows", help: "A fresh profile would start without the company's settings." },
   { key: "dev_tools_off", label: "No developer tools", help: "Broader: also stops IT staff using them. Firefox's only way to block temporary add-ons." },
+  { key: "block_other_browsers", label: "Close other browsers",
+    help: "None of this reaches Brave, Opera, Vivaldi, Yandex, Tor, Chromium, Waterfox or LibreWolf. SAVIO closes them as they start and tells the person to use Chrome, Edge or Firefox. To remove one, use the PC's Software tab." },
 ];
 
 const lines = (s: string) => s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
@@ -401,6 +404,13 @@ export default function GuardPage() {
                       ))}
                       {conflicts.length > 0 && <div style={{ color: "#f59e0b" }}>Set elsewhere, left alone: {conflicts.join(", ")}</div>}
                       {!errors.length && !conflicts.length && <span style={{ color: "#10b981" }}>Applied</span>}
+                      {d.other_browsers.length > 0 && (
+                        <div>
+                          <Link href={`/devices/${d.device_id}`} style={{ color: "#f59e0b" }}>
+                            Other browsers installed: {d.other_browsers.join(", ")}
+                          </Link>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-xs" style={muted}>{new Date(d.reported_at).toLocaleString()}</td>
                   </tr>

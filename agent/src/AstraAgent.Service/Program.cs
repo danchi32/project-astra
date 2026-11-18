@@ -71,6 +71,7 @@ builder.Services.AddHostedService<TelemetryWorker>();
 builder.Services.AddSingleton<AstraAgent.Service.Guard.BrowserPolicyWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AstraAgent.Service.Guard.BrowserPolicyWorker>());
 builder.Services.AddHostedService<AstraAgent.Service.Guard.DiscoveryWorker>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.OtherBrowserBlocker>();
 // E3: events from the browser extension, via the native host, to the backend (counts only).
 builder.Services.AddSingleton(_ => AstraAgent.Service.Guard.GuardEventQueue.OnDisk());
 builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventPipeServer>();

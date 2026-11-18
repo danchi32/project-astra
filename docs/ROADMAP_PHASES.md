@@ -1170,7 +1170,38 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
       - migration 0095 up/down/up, with an existing row given `seq` = its version;
       - on screen: Sales team given a copy plus "Social media", saved as version 16 after the
         default's 15, and "Everyone" still showing the default.
-    - **Still to do in D1/D2:** unsupported browsers.
+  - **As built, slice 6, other browsers (18 Nov):** the last D1/D2 piece. Nothing above
+    reaches a browser other than Chrome, Edge and Firefox.
+    - **Which:** Brave, Opera (and GX), Vivaldi, Yandex, Tor Browser, Chromium, Waterfox,
+      LibreWolf. A fixed list in the agent (`OtherBrowsers.cs`) and the backend
+      (`OTHER_BROWSERS`), kept in step.
+    - **Seen:** the PC table shows "Other browsers installed: …" from each PC's app inventory
+      (machine and per-user installs), linking to the PC. No agent change was needed for this.
+    - **Closed:** a policy switch, "Close other browsers" (`block_other_browsers`, off by
+      default). The agent's `OtherBrowserBlocker` checks running processes every 2 s and closes
+      a match:
+      - a match needs the exe name *and* the browser's name in the file's company, product or
+        path, so Google Chrome, an unrelated `browser.exe`, or a file it cannot read is left
+        alone;
+      - the person gets a Windows message, at most once a minute per browser and session, naming
+        the browser and saying to use Chrome, Edge or Firefox (fixed text, never from the server);
+      - one start counts once, however many processes it has. Counts go with the next policy
+        report (`closed`, sent only when there are some, so an older backend never sees the
+        field), are kept if the report fails, and the backend audits each report as
+        `guard.other_browser_closed`. Only known names are accepted.
+    - **Not automatic: uninstall.** Removing one stays the admin-only "Uninstall software" action
+      from the PC's Software tab, decided by a person. That action removes machine-wide installs
+      only; most of these browsers install per user by default, so closing is what reaches them.
+    - Not held by the E8 pilot, like blocked sites: the pilot is about the extension's mode.
+    - **Checked:** `test_other_browsers` (served, listed from inventory without matching
+      "Operations Manager", audited, a zero dropped, unknown names refused); agent
+      `OtherBrowsersTests` (11 match cases including Chrome, Firefox and an unknown
+      `browser.exe` left alone; closed only when asked, once per start, one notice a minute,
+      reported once, kept after a failed report, nothing while dormant); agent suite 440; on
+      screen against the local backend: a PC with Opera GX and Brave in its inventory showed
+      both, and the switch saved as version 17.
+    - **Not checked:** closing a real Opera on a PC. The process list, kill and notice were
+      replaced in tests; that is a VM test.
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
   drag-and-drop, form submit on watched sites; talks only to the local agent via native
   messaging (policy offline, device identity).

@@ -264,7 +264,8 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("claude_org_ids")] IReadOnlyList<string>? ClaudeOrgIds = null,
     [property: JsonPropertyName("chatgpt_workspace_ids")] IReadOnlyList<string>? ChatGptWorkspaceIds = null,
     [property: JsonPropertyName("slack_requester_id")] string? SlackRequesterId = null,
-    [property: JsonPropertyName("slack_allowed_ids")] IReadOnlyList<string>? SlackAllowedIds = null)
+    [property: JsonPropertyName("slack_allowed_ids")] IReadOnlyList<string>? SlackAllowedIds = null,
+    [property: JsonPropertyName("block_other_browsers")] bool BlockOtherBrowsers = false)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -281,5 +282,6 @@ public sealed record AgentBrowserPolicyBody(
         MicrosoftTenantId = MicrosoftTenantId, MicrosoftPolicyId = MicrosoftPolicyId,
         ClaudeOrgIds = ClaudeOrgIds ?? [], ChatGptWorkspaceIds = ChatGptWorkspaceIds ?? [],
         SlackRequesterId = SlackRequesterId, SlackAllowedIds = SlackAllowedIds ?? [],
+        BlockOtherBrowsers = BlockOtherBrowsers,
     };
 }

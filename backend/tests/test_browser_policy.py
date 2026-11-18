@@ -341,6 +341,42 @@ async def test_reports_are_kept_and_tampering_is_raised(client, admin_headers, s
     assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=bogus)).status_code == 422
 
 
+async def test_other_browsers(client, admin_headers, session_factory, admin_user):
+    """D10: browsers the policy cannot reach are listed per PC from its app inventory, can be
+    closed on start, and each close the PC reports is audited. Only known names are accepted."""
+    import uuid
+
+    from app.models import DeviceInstalledApp
+    from app.models.base import utcnow
+
+    await _guard_on(session_factory, admin_user.org_id)
+    body = (await client.put("/api/v1/guard/browser-policy", headers=admin_headers,
+                             json={**POLICY, "block_other_browsers": True})).json()
+    assert body["policy"]["block_other_browsers"] is True
+    did, h = await _enroll(client, admin_headers, "OPERA-PC")
+    assert (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]["block_other_browsers"] is True
+
+    async with session_factory() as s:
+        for name in ("Opera GX Stable 112.0", "Brave", "Operations Manager", "Google Chrome", "Tor Browser"):
+            s.add(DeviceInstalledApp(device_id=uuid.UUID(did), org_id=admin_user.org_id, name=name,
+                                     collected_at=utcnow()))
+        await s.commit()
+    report = {"version": 1, "results": [], "closed": {"Opera": 3, "Brave": 0}}
+    assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=report)).status_code == 204
+    state = (await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()[0]
+    assert state["other_browsers"] == ["Brave", "Opera", "Tor Browser"]
+    async with session_factory() as s:
+        audit = (await s.execute(select(AuditLog).where(AuditLog.action == "guard.other_browser_closed"))).scalars().one()
+    assert audit.detail == {"device": "OPERA-PC", "closed": {"Opera": 3}}
+
+    # A report without closes adds nothing; an unknown name is refused.
+    await client.post("/api/v1/agent/browser-policy/report", headers=h, json={"version": 1, "results": []})
+    bogus = {"version": 1, "results": [], "closed": {"Call +1-555-0100": 1}}
+    assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=bogus)).status_code == 422
+    async with session_factory() as s:
+        assert len((await s.execute(select(AuditLog).where(AuditLog.action == "guard.other_browser_closed"))).all()) == 1
+
+
 async def test_tamper_reports_cannot_carry_prose_or_flood(client, admin_headers, session_factory, admin_user):
     """Review M1: report names are policy names, never a sentence, and a PC raises at most one
     tamper notification an hour (the audit keeps every one)."""
