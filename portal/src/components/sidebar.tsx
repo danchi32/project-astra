@@ -73,7 +73,8 @@ const ORG_NAV: NavEntry[] = [
     children: [{ href: "/guard/cases", label: "Cases" }, { href: "/guard", label: "Browser policy" },
                 { href: "/guard/events", label: "What was found" },
                 { href: "/guard/approvals", label: "Approvals" },
-                { href: "/guard/discovery", label: "Where data lives" }] },
+                { href: "/guard/discovery", label: "Where data lives" },
+                { href: "/guard/dpdp", label: "DPDP readiness" }] },
   // The rest of the common pages.
   { href: "/reports", icon: BarChart3, label: "Reports" },
   { href: "/audit", icon: Shield, label: "Audit Logs" },

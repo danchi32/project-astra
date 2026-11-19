@@ -100,6 +100,34 @@ export interface DeviceBrowserState {
   usb_write_until: string | null;
 }
 
+// I1: DPDP readiness from SAVIO's own records.
+export interface DpdpItem {
+  key: string;
+  title: string;
+  why: string;
+  status: "done" | "todo";
+  detail: string;
+  link: string;
+}
+
+export interface DpdpReadiness {
+  score: number;
+  done: number;
+  total: number;
+  items: DpdpItem[];
+  map: {
+    on_pcs: { pcs: number; files: number; contact_lists: number; kinds: Record<string, number> };
+    leaving: { events: number; kinds: Record<string, number>; where: Record<string, number> };
+  };
+  contact: { name: string | null; email: string | null };
+  disclaimer: string;
+  generated_at: string;
+}
+
+export const getDpdp = () => apiClient.get<DpdpReadiness>("/guard/dpdp").then((r) => r.data);
+export const setPrivacyContact = (name: string, email: string) =>
+  apiClient.put("/guard/dpdp/contact", { name: name || null, email: email || null });
+
 // C3b: USB drives the org's PCs have used, and which policies already approve each.
 export interface DriveSeen {
   id: string;

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -464,6 +464,65 @@ async def deny(
     session: AsyncSession = Depends(get_db),
 ) -> GuardApprovalRead:
     return await _decide(session, actor, approval_id, False, 0, body.requested_at)
+
+
+# ── I1: DPDP readiness ──────────────────────────────────────────────────────────────────────
+
+class DpdpItem(BaseModel):
+    key: str
+    title: str
+    why: str
+    status: Literal["done", "todo"]
+    detail: str
+    link: str
+
+
+class DpdpRead(BaseModel):
+    score: int
+    done: int
+    total: int
+    items: list[DpdpItem]
+    map: dict
+    contact: dict
+    disclaimer: str
+    generated_at: datetime
+
+
+@router.get("/dpdp", response_model=DpdpRead,
+            summary="I1: DPDP readiness from SAVIO's own records: score, tasks, where personal data is (admin)")
+async def dpdp_readiness(
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> DpdpRead:
+    from app.services import dpdp
+
+    return DpdpRead(**await dpdp.readiness(session, actor.org_id))
+
+
+class PrivacyContactWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str | None = Field(default=None, max_length=120)
+    email: EmailStr | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str | None) -> str | None:
+        v = (v or "").strip()
+        if v and browser_policy.has_control(v):
+            raise ValueError("A name must be plain text")
+        return v or None
+
+
+@router.put("/dpdp/contact", status_code=status.HTTP_204_NO_CONTENT,
+            summary="I1: who handles privacy complaints and breaches (admin; audited)")
+async def set_privacy_contact(
+    body: PrivacyContactWrite,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    from app.services import dpdp
+
+    await dpdp.set_contact(session, actor=actor, name=body.name, email=body.email)
 
 
 # ── C3b: USB drives the PCs have seen, for approving company drives ─────────────────────────

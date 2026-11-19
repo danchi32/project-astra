@@ -2048,6 +2048,26 @@ is where S1's AI site categories plug in.
 - **J3 Board report, J4 Compliance packs, J7 Incident report:** print-styled pages (same
   approach as L1).
 
+**I1, slice 1 as built (19 Nov, branch `phase-3`):** DPDP readiness from SAVIO's own records.
+- **Where:** AI Guard → DPDP readiness (`GET /guard/dpdp`, admin; behind the AI Guard add-on).
+- **Score and tasks:** the share of eleven items in place, each with SAVIO's evidence in numbers
+  and a link to where it is fixed: the weekly file map has run in the last 8 days; BitLocker,
+  Defender and the firewall on 90% of PCs and updates on 80% (F1's checks); the extension in place
+  and acting (past record-only); USB controlled or recorded; company accounts only; no high-risk
+  case open over a week; a named privacy and breach contact; and the audit log (always in place).
+- **Data map:** personal data kept on PCs by kind (D5's totals, contact lists), and where it went
+  in 30 days by kind of destination (personal file sharing, AI chat, USB…, using S1's kinds).
+- **Contact:** `PUT /guard/dpdp/contact` (name, e-mail; validated, audited as
+  `dpdp.contact_update`), kept in organization settings (migration 0101).
+- **No legal claims:** each item says why it matters in plain words; the page and the answer carry
+  a fixed line that this is not legal advice and the Act's and Rules' requirements are for the
+  org's counsel to confirm. Obligations and timelines stay out until the lawyer has confirmed them.
+- **Checked:** `test_dpdp` (the eleven items; done/to-do from real records; a map, a name, the
+  extension acting, USB and company accounts turning items done; the map's kinds and
+  destinations; bad name / e-mail / extra field refused; admins only; audit). On screen against
+  the local backend: 36% with seven to-dos and their evidence, then 45% once a contact was saved.
+- **Next in I1:** retention suggestions and the breach workflow (with J7, the incident report).
+
 ---
 
 ## Phase 4 — Smart Guard advanced + lifecycle
