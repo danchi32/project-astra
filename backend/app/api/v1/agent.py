@@ -2,8 +2,8 @@ import logging
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid
@@ -428,6 +428,39 @@ async def agent_guard_approvals(
     from app.services import guard_approvals
 
     return await guard_approvals.for_device(session, device)
+
+
+class UsbRequestIn(BaseModel):
+    """C3b: the tray's request, through the service, which takes the person from Windows."""
+    model_config = ConfigDict(extra="forbid")
+    windows_user: str = Field(min_length=1, max_length=256)
+    reason: Literal["client_or_ca", "backup", "presentation", "other"]
+
+    @field_validator("windows_user")
+    @classmethod
+    def _user(cls, v: str) -> str:
+        from app.services.guard_events import GuardEventIn
+
+        return GuardEventIn._user(v)
+
+
+@router.post(
+    "/usb-request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="C3b: the person at this PC asks IT for a USB write window (agent only)",
+    responses={409: {"description": "This PC's policy does not take USB requests"}},
+)
+async def agent_usb_request(
+    body: UsbRequestIn,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.services import browser_policy, guard_approvals
+
+    if (await browser_policy.for_device(session, device))["policy"].get("usb_mode") != "on_request":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This PC's policy does not take USB requests.")
+    a = await guard_approvals.request_usb(session, device, body.windows_user, body.reason)
+    return {"status": "requested" if a is not None else "too many requests"}
 
 
 @router.get(

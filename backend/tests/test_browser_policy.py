@@ -438,6 +438,35 @@ async def test_usb_modes_and_write_windows(client, admin_headers, user_headers, 
                               json={"minutes": 30})).status_code == 409
 
 
+async def test_usb_requests_from_the_tray(client, admin_headers, session_factory, admin_user):
+    """C3b: the person asks from the tray; it waits on the Approvals page with its reason;
+    approving it opens that PC's write window for the time chosen."""
+    await _guard_on(session_factory, admin_user.org_id)
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**POLICY, "usb_mode": "read_only"})
+    _, h = await _enroll(client, admin_headers, "MEENA-PC")
+    ask = {"windows_user": r"ACME\meena", "reason": "presentation"}
+    assert (await client.post("/api/v1/agent/usb-request", headers=h, json=ask)).status_code == 409   # not in that mode
+
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**POLICY, "usb_mode": "on_request"})
+    for bad in ({**ask, "reason": "my boss said so"}, {**ask, "windows_user": "Call +1 555 now!"}, {**ask, "x": 1}):
+        assert (await client.post("/api/v1/agent/usb-request", headers=h, json=bad)).status_code == 422, bad
+    for _ in range(2):   # asked twice: one request
+        assert (await client.post("/api/v1/agent/usb-request", headers=h, json=ask)).status_code == 202
+    pending = [a for a in (await client.get("/api/v1/guard/approvals", headers=admin_headers)).json()
+               if a["channel"] == "usb"]
+    a = pending[0]
+    assert len(pending) == 1 and (a["reason"], a["site"], a["status"]) == ("presentation", "usb", "pending")
+    async with session_factory() as s:
+        note = (await s.execute(select(Notification).where(Notification.title == "Approval requested"))).scalars().one()
+    assert "USB" in note.message and "meena" not in note.message
+
+    r = await client.post(f"/api/v1/guard/approvals/{a['id']}/approve", headers=admin_headers,
+                          json={"minutes": 60, "requested_at": a["requested_at"]})
+    assert r.status_code == 200, r.text
+    assert (await client.get("/api/v1/agent/usb-window", headers=h)).json()["until"] is not None
+    assert (await client.get("/api/v1/agent/guard/approvals", headers=h)).json() == []   # not a site approval
+
+
 async def test_company_drives(client, admin_headers, user_headers, session_factory, admin_user):
     """C3b: PCs report the USB drives they have seen; an admin approves the company's own as part
     of the policy (a new version), and PCs in company_drives mode get only those."""

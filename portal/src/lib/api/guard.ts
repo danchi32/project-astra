@@ -169,7 +169,8 @@ export interface GuardEventRow {
   hostname: string;
   windows_user: string;
   site: string;
-  channel: "paste" | "drop" | "file" | "submit";
+  // "usb": files copied to a USB drive, or (on an approval) a request to write to one.
+  channel: "paste" | "drop" | "file" | "submit" | "usb";
   mode: "log" | "warn" | "justify" | "redact" | "approve" | "block";
   action: "allow" | "warn" | "justify" | "redact" | "approve" | "block";
   counts: Partial<Record<FindingKind, number>>;
@@ -201,6 +202,7 @@ export interface GuardApproval {
   contact_list: boolean;
   keyword_hits: number;
   status: "pending" | "approved" | "denied" | "expired" | "ended";
+  reason: "client_or_ca" | "backup" | "presentation" | "other" | null;   // C3b: a USB request's why
   requested_at: string;
   decided_at: string | null;
   valid_until: string | null;

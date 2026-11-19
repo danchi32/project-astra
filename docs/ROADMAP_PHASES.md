@@ -1921,6 +1921,34 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
   and the retroactive removal. That is the VM test, with two real pendrives.
 - **Next in C3b:** a person asking for a write window from the tray.
 
+**C3b, part 3 as built (19 Nov, branch `phase-3`):** asking IT for USB writing from the tray.
+- **Tray:** "Ask IT to allow USB writing…" appears only on a PC whose policy is "read-only, IT can
+  allow writing" (the tray asks the service each time the menu opens); while a window is open it
+  reads "USB writing allowed until 14:30". The person picks a reason from a fixed list (files for
+  a client, CA or auditor · a company backup · a presentation or meeting · another work reason),
+  never typed text, and gets a balloon saying whether it was sent.
+- **Service:** a new local pipe, `SAVIO.UsbRequest`, with two requests (`status`,
+  `request:<reason>`), the same rules as Fix-my-internet (SYSTEM-owned, signed-in people only,
+  no network; the tray refuses a pipe not owned by SYSTEM). Who asks is read from the client
+  process's own token, as for the browser's events, never from the message.
+- **Backend:** `POST /agent/usb-request` (409 unless the PC's own policy is on_request). It is an
+  approval request with channel "usb" and the reason code (migration 0100), in the same queue,
+  limits and notification ("…approve USB writing on their PC", naming nobody). Approving it for N
+  minutes opens that PC's write window until then; it is not served to the browser's host as a
+  site approval.
+- **Portal:** Approvals shows "wants to copy files onto USB drives · Reason: …"; "What was found"
+  now names the "usb" channel ("Copied to USB"), which part 1 had left unlabelled.
+- **Checked:** agent `UsbRequestPipeTests` (status per mode and window; a listed reason only; the
+  person from Windows over a real pipe; nothing sent outside the mode, while open, or without a
+  person; unreachable backend), tray builds; backend `test_usb_requests_from_the_tray` (409
+  outside the mode, bad reason / account / extra field refused, asked twice is one request,
+  reason shown, notification naming nobody, approving opens the window, not a site approval).
+  Agent suite 460. On screen against the local backend: a made-up PC in a group whose own policy
+  is "write on request" asked (reason: a presentation); the request showed on Approvals with its
+  reason and was approved for 30 minutes.
+- **Not checked:** the tray menu and dialog on a real desktop with the real service. That is the
+  VM test.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.

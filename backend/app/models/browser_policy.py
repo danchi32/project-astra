@@ -239,6 +239,8 @@ class GuardApproval(Base):
     contact_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     keyword_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    # C3b: why, for a USB write request (channel "usb"): a code from a fixed list, never text.
+    reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True

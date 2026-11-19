@@ -401,6 +401,7 @@ class GuardApprovalRead(BaseModel):
     requested_at: datetime
     decided_at: datetime | None
     valid_until: datetime | None
+    reason: str | None = None   # C3b: why a USB write request was made (a code)
 
 
 class DecideBody(BaseModel):
@@ -418,7 +419,8 @@ def _approval(a, host: str) -> GuardApprovalRead:
     return GuardApprovalRead(id=a.id, device_id=a.device_id, hostname=host, windows_user=a.windows_user,
                              site=a.site, channel=a.channel, counts=a.counts, contact_list=a.contact_list,
                              keyword_hits=a.keyword_hits, status=guard_approvals.status_of(a),
-                             requested_at=a.requested_at, decided_at=a.decided_at, valid_until=a.valid_until)
+                             requested_at=a.requested_at, decided_at=a.decided_at, valid_until=a.valid_until,
+                             reason=a.reason)
 
 
 @router.get("/approvals", response_model=list[GuardApprovalRead],

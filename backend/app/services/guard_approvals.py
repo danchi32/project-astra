@@ -13,7 +13,14 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Device, GuardApproval, NotificationCategory, NotificationSeverity, User
+from app.models import (
+    Device,
+    GuardApproval,
+    GuardUsbWindow,
+    NotificationCategory,
+    NotificationSeverity,
+    User,
+)
 from app.models.base import as_utc, utcnow
 from app.services.audit import AuditService
 from app.services.browser_policy import entitled
@@ -79,15 +86,35 @@ async def request(session: AsyncSession, device: Device, e) -> GuardApproval | N
         GuardApproval.requested_at >= now - NOTIFY_EVERY))).scalar_one()
     a = GuardApproval(org_id=device.org_id, device_id=device.id, windows_user=e.windows_user, site=e.site,
                       channel=e.channel, counts=e.counts, contact_list=e.contact_list,
-                      keyword_hits=e.keyword_hits, status="pending", requested_at=now)
+                      keyword_hits=e.keyword_hits, status="pending", requested_at=now,
+                      reason=getattr(e, "usb_reason", None))
     session.add(a)
     if recent == 0:
+        what = "USB writing on their PC" if e.channel == "usb" else "a paste or upload"
         await NotificationService(session).notify(
             org_id=device.org_id, category=NotificationCategory.SYSTEM, severity=NotificationSeverity.INFO,
             title="Approval requested",
-            message="Someone is waiting for IT to approve a paste or upload. An admin can review it under AI Guard.",
+            message=f"Someone is waiting for IT to approve {what}. An admin can review it under AI Guard.",
             link="/guard/approvals",
         )
+    return a
+
+
+USB_REASONS = ("client_or_ca", "backup", "presentation", "other")
+
+
+async def request_usb(session: AsyncSession, device: Device, windows_user: str, reason: str) -> GuardApproval | None:
+    """C3b: the person at a PC whose USB drives are read-only asks IT for a write window, from
+    the tray. The same queue, limits and notification as any approval; approving it opens the
+    PC's window (see `decide`)."""
+    from types import SimpleNamespace
+
+    e = SimpleNamespace(windows_user=windows_user, site="usb", channel="usb", counts={}, contact_list=False,
+                        keyword_hits=0, usb_reason=reason)
+    a = await request(session, device, e)
+    if a is not None and a.reason != reason:
+        a.reason, a.requested_at = reason, utcnow()   # asked again for another reason: look again
+    await session.commit()
     return a
 
 
@@ -127,6 +154,13 @@ async def decide(session: AsyncSession, *, actor: User, approval_id: uuid.UUID, 
     if decided.rowcount != 1:
         await session.rollback()
         raise ApprovalClosed("Someone else decided or changed this request a moment ago. Reload to see it.")
+    if approve and a.channel == "usb":
+        # C3b: a USB request approved is that PC's write window, until the approval ends.
+        window = await session.get(GuardUsbWindow, a.device_id)
+        if window is None:
+            window = GuardUsbWindow(device_id=a.device_id, org_id=a.org_id, until=now)
+            session.add(window)
+        window.until, window.opened_by_user_id, window.opened_at = now + timedelta(minutes=minutes), actor.id, now
     await AuditService(session).record(
         org_id=actor.org_id, actor_id=actor.id,
         action="guard.approval_approve" if approve else "guard.approval_deny",
@@ -146,7 +180,7 @@ async def for_device(session: AsyncSession, device: Device) -> list[dict]:
     now = utcnow()
     rows = (await session.execute(select(GuardApproval).where(
         GuardApproval.device_id == device.id, GuardApproval.status == "approved",
-        GuardApproval.valid_until > now,
+        GuardApproval.valid_until > now, GuardApproval.channel != "usb",   # USB: the write window instead
     ))).scalars().all()
     # Always with its zone: the agent compares it with its own UTC clock.
     return [{"windows_user": a.windows_user, "site": a.site, "channel": a.channel, "valid_until": as_utc(a.valid_until)}

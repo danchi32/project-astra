@@ -14,7 +14,12 @@ import { apiErrorMessage } from "@/lib/utils";
 // time chosen; the PC picks it up within a minute. Every decision is audited. Admin only.
 
 const VERB: Record<GuardApproval["channel"], string> = {
-  paste: "paste", drop: "drop content", file: "upload a file", submit: "send a form",
+  paste: "paste", drop: "drop content", file: "upload a file", submit: "send a form", usb: "copy files onto USB drives",
+};
+// C3b: why a person asked for USB writing, from the tray's fixed list.
+const USB_REASON: Record<string, string> = {
+  client_or_ca: "Files for a client, CA or auditor", backup: "A company backup",
+  presentation: "A presentation or meeting", other: "Another work reason",
 };
 const DURATIONS = [[15, "15 minutes"], [30, "30 minutes"], [60, "1 hour"], [240, "4 hours"], [480, "8 hours"]] as const;
 const STATUS: Record<GuardApproval["status"], { label: string; color: string }> = {
@@ -28,6 +33,7 @@ const STATUS: Record<GuardApproval["status"], { label: string; color: string }> 
 const status = (e: unknown) => (e as { response?: { status?: number } } | null)?.response?.status;
 
 function found(a: GuardApproval) {
+  if (a.channel === "usb") return `Reason: ${USB_REASON[a.reason ?? "other"] ?? "Another work reason"}`;
   const parts = (Object.entries(a.counts) as [FindingKind, number][])
     .filter(([, n]) => n > 0).map(([k, n]) => `${FINDING_KINDS[k] ?? k} ×${n}`);
   if (a.contact_list) parts.push("a contact list");
@@ -98,8 +104,8 @@ export default function GuardApprovalsPage() {
           {pending.map((a) => (
             <div key={a.id} className="rounded-xl p-4 flex flex-wrap items-center justify-between gap-3" style={panel}>
               <div className="text-sm min-w-0" style={{ color: "var(--text-primary)" }}>
-                <div><span className="font-medium">{a.windows_user}</span> on {a.hostname} wants to {VERB[a.channel]} on{" "}
-                  <span className="font-mono text-xs">{a.site}</span></div>
+                <div><span className="font-medium">{a.windows_user}</span> on {a.hostname} wants to {VERB[a.channel]}
+                  {a.channel !== "usb" && <> on <span className="font-mono text-xs">{a.site}</span></>}</div>
                 <div className="text-xs" style={muted}>{found(a)} · asked {new Date(a.requested_at).toLocaleString()}</div>
               </div>
               <div className="flex items-center gap-2">
@@ -133,7 +139,7 @@ export default function GuardApprovalsPage() {
                     <tr key={a.id} style={{ borderBottom: "1px solid var(--border)", color: "var(--text-primary)" }}>
                       <td className="px-4 py-2 text-xs whitespace-nowrap" style={muted}>{new Date(a.requested_at).toLocaleString()}</td>
                       <td className="px-4 py-2 text-xs"><span className="font-medium">{a.windows_user}</span><span className="block" style={muted}>{a.hostname}</span></td>
-                      <td className="px-4 py-2 font-mono text-xs">{a.site}</td>
+                      <td className="px-4 py-2 font-mono text-xs">{a.channel === "usb" ? "USB drives" : a.site}</td>
                       <td className="px-4 py-2 text-xs">{VERB[a.channel]}</td>
                       <td className="px-4 py-2 text-xs">
                         <span className="font-medium" style={{ color: STATUS[a.status].color }}>{STATUS[a.status].label}</span>

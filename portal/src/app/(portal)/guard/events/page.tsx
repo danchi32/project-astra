@@ -13,7 +13,7 @@ import { apiErrorMessage } from "@/lib/utils";
 // here but "2 PAN numbers were pasted into chatgpt.com". Admin only: it names people.
 
 const CHANNEL: Record<GuardEventRow["channel"], string> = {
-  paste: "Pasted", drop: "Dropped", file: "File chosen", submit: "Form sent",
+  paste: "Pasted", drop: "Dropped", file: "File chosen", submit: "Form sent", usb: "Copied to USB",
 };
 
 const RESULT: Record<GuardEventRow["action"], { label: string; color: string }> = {

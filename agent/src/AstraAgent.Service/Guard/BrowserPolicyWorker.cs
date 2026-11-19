@@ -51,6 +51,9 @@ public sealed class BrowserPolicyWorker(
 
     private bool _approvalsMayBeStored = true;   // from a previous run, until the first cycle clears them
     private DateTime? _usbWriteUntil;
+
+    /// <summary>C3b: the end of the USB write window this PC knows of (the tray shows it).</summary>
+    public DateTime? UsbWriteUntil => _usbWriteUntil;
     private string? _currentFor;
     private DateTime _nextFetch = DateTime.MinValue;
     private string? _lastReported;

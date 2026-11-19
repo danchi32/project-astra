@@ -87,6 +87,10 @@ public interface IAstraApiClient
     /// <summary>C3: the USB write window open for this PC. Null on any failure (keep what is
     /// known; a window ends at its own time anyway).</summary>
     Task<AgentUsbWindow?> GetUsbWindowAsync(string deviceToken, CancellationToken ct);
+
+    /// <summary>C3b: the person at this PC asks IT for a USB write window. The HTTP status, or 0
+    /// when the backend could not be reached.</summary>
+    Task<int> RequestUsbWriteAsync(string deviceToken, string windowsUser, string reason, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -269,6 +273,23 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             logger.LogWarning(ex, "Heartbeat succeeded but its body could not be parsed");
             return HeartbeatResult.From(HeartbeatStatus.Ok);
+        }
+    }
+
+    public async Task<int> RequestUsbWriteAsync(string deviceToken, string windowsUser, string reason, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/usb-request")
+        {
+            Content = JsonContent.Create(new { windows_user = windowsUser, reason }),
+        };
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            return (int)(await http.SendAsync(message, ct)).StatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return 0;
         }
     }
 

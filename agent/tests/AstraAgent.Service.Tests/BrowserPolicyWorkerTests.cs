@@ -55,6 +55,10 @@ public class BrowserPolicyWorkerTests
         public int UsbWindowFetches;
         public Task<AgentUsbWindow?> GetUsbWindowAsync(string t, CancellationToken ct)
         { UsbWindowFetches++; return Task.FromResult(UsbWindow); }
+        public readonly List<(string User, string Reason)> UsbRequests = [];
+        public int UsbRequestStatus = 202;
+        public Task<int> RequestUsbWriteAsync(string t, string user, string reason, CancellationToken ct)
+        { UsbRequests.Add((user, reason)); return Task.FromResult(UsbRequestStatus); }
 
         public Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct) => throw new NotSupportedException();
         public Task<HeartbeatResult> HeartbeatAsync(string token, HeartbeatRequest request, CancellationToken ct) => throw new NotSupportedException();
