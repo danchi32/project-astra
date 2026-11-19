@@ -133,6 +133,10 @@ public sealed record BrowserPolicy
         if (!UsbModes.Contains(UsbMode)) problems.Add($"USB mode '{Trim(UsbMode)}' is not off, read_only, encrypted_only, on_request, block or company_drives");
         if (UsbApprovedDrives.Count > MaxApprovedDrives) problems.Add($"too many approved drives (max {MaxApprovedDrives})");
         if (UsbApprovedDrives.Any(d => !DriveId.IsMatch(d ?? ""))) problems.Add("an approved drive is not a USB drive's device ID");
+        // A drive without a serial gets an ID Windows makes up ("7&1a2b3c4d&0"): any drive of the
+        // same model in the same port would share it, so it cannot stand for one drive (review 3b L2).
+        if (UsbApprovedDrives.Any(d => d is not null && d.LastIndexOf('\\') is var i && i >= 0 && d.Length > i + 2 && d[i + 2] == '&'))
+            problems.Add("an approved drive has no serial number of its own");
         if (new[] { MicrosoftTenantId, MicrosoftPolicyId }.Any(v => v is not null && !Uuid.IsMatch(v))) problems.Add("Microsoft ID is malformed");
         foreach (var (name, list) in new[] { ("Claude organization", ClaudeOrgIds), ("ChatGPT workspace", ChatGptWorkspaceIds) })
         {

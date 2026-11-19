@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using AstraAgent.Guard;
 using AstraAgent.Service.Api;
@@ -43,6 +44,10 @@ public sealed class UsbCopyWatcher(
 
     readonly Dictionary<string, FileSystemWatcher> _watchers = new(StringComparer.OrdinalIgnoreCase);
     readonly ConcurrentDictionary<string, DateTime> _pending = new(StringComparer.OrdinalIgnoreCase);
+    // Copies that could not be followed (the watcher's buffer overflowed, or too many files at
+    // once): recorded as "could not check", never as nothing (security review 3b M2).
+    int _lost;
+    internal const int MaxPending = 5000;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -65,19 +70,28 @@ public sealed class UsbCopyWatcher(
     }
 
     /// <summary>Something was written to a drive: (re)start its quiet period.</summary>
-    internal void Written(string path, DateTime nowUtc) => _pending[path] = nowUtc;
+    internal void Written(string path, DateTime nowUtc)
+    {
+        if (_pending.Count >= MaxPending && !_pending.ContainsKey(path)) { Interlocked.Exchange(ref _lost, 1); return; }
+        _pending[path] = nowUtc;
+    }
+
+    /// <summary>The watcher missed changes (its buffer overflowed).</summary>
+    internal void Lost() => Interlocked.Exchange(ref _lost, 1);
 
     /// <summary>Files quiet for long enough are checked, as one batch, and recorded if anything
     /// in them matters.</summary>
     internal void Flush(DateTime nowUtc, BrowserPolicy p)
     {
         var ready = _pending.Where(kv => nowUtc - kv.Value >= Settle).Select(kv => kv.Key).Take(FileScanLimit).ToList();
-        if (ready.Count == 0) return;
+        var lost = Interlocked.Exchange(ref _lost, 0) == 1;
+        if (ready.Count == 0 && !lost) return;
         foreach (var path in ready) _pending.TryRemove(path, out _);
-        var r = Scan(ready, p);
-        if (r is null) return;
+        // A scan that failed (crashed, timed out, answered nonsense) is "could not check" for the
+        // whole batch, never nothing: one poisoned file must not hide the rest (review 3b M2).
+        var r = (ready.Count > 0 ? Scan(ready, p) : null) ?? new UsbScanResult(0, Math.Max(ready.Count, 1), [], false, 0);
         var e = new GuardEvent("usb", "usb", "log", "allow", r.Counts, r.ContactList, r.KeywordHits,
-                               Unknown: r.Unreadable > 0);
+                               Unknown: r.Unreadable > 0 || lost);
         if (!e.Notable || !e.IsValid()) return;
         var user = User();
         if (string.IsNullOrEmpty(user)) return;   // nobody at the console: cannot be attributed
@@ -107,6 +121,7 @@ public sealed class UsbCopyWatcher(
                 w.Created += (_, a) => Written(a.FullPath, DateTime.UtcNow);
                 w.Changed += (_, a) => Written(a.FullPath, DateTime.UtcNow);
                 w.Renamed += (_, a) => Written(a.FullPath, DateTime.UtcNow);
+                w.Error += (_, _) => Lost();
                 w.EnableRaisingEvents = true;
                 _watchers[root] = w;
             }
@@ -117,15 +132,46 @@ public sealed class UsbCopyWatcher(
         }
     }
 
+    /// <summary>USB drives: removable ones, and USB hard drives and SSDs, which Windows calls
+    /// Fixed (review 3b M2). Never the system drive.</summary>
     static IReadOnlyList<string> RemovableDrives()
     {
         try
         {
-            return DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Removable && d.IsReady)
-                            .Select(d => d.RootDirectory.FullName).ToList();
+            var system = Path.GetPathRoot(Environment.SystemDirectory);
+            return DriveInfo.GetDrives()
+                .Where(d => d.IsReady && !string.Equals(d.RootDirectory.FullName, system, StringComparison.OrdinalIgnoreCase) &&
+                            (d.DriveType == DriveType.Removable || (d.DriveType == DriveType.Fixed && OnUsb(d.RootDirectory.FullName))))
+                .Select(d => d.RootDirectory.FullName).ToList();
         }
         catch (IOException) { return []; }
     }
+
+    /// <summary>Whether the disk behind a volume is on the USB bus (IOCTL_STORAGE_QUERY_PROPERTY).</summary>
+    static bool OnUsb(string root)
+    {
+        var h = CreateFile(@"\\.\" + root.TrimEnd('\\'), 0, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        if (h == new IntPtr(-1)) return false;
+        try
+        {
+            var query = new byte[12];                       // StorageDeviceProperty, PropertyStandardQuery
+            var buffer = new byte[1024];
+            if (!DeviceIoControl(h, 0x2D1400, query, query.Length, buffer, buffer.Length, out var n, IntPtr.Zero) || n < 32)
+                return false;
+            return BitConverter.ToInt32(buffer, 28) == 7;   // STORAGE_DEVICE_DESCRIPTOR.BusType == BusTypeUsb
+        }
+        finally { CloseHandle(h); }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateFileW")]
+    static extern IntPtr CreateFile(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool DeviceIoControl(IntPtr device, uint code, byte[] input, int inputLength, byte[] output, int outputLength,
+                                       out int returned, IntPtr overlapped);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CloseHandle(IntPtr handle);
 
     static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 

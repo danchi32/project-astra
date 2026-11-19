@@ -463,7 +463,8 @@ class UsbRequestIn(BaseModel):
     "/usb-request",
     status_code=status.HTTP_202_ACCEPTED,
     summary="C3b: the person at this PC asks IT for a USB write window (agent only)",
-    responses={409: {"description": "This PC's policy does not take USB requests"}},
+    responses={409: {"description": "This PC's policy does not take USB requests"},
+               429: {"description": "This PC already has as many requests waiting as it may"}},
 )
 async def agent_usb_request(
     body: UsbRequestIn,
@@ -474,8 +475,10 @@ async def agent_usb_request(
 
     if (await browser_policy.for_device(session, device))["policy"].get("usb_mode") != "on_request":
         raise HTTPException(status.HTTP_409_CONFLICT, "This PC's policy does not take USB requests.")
-    a = await guard_approvals.request_usb(session, device, body.windows_user, body.reason)
-    return {"status": "requested" if a is not None else "too many requests"}
+    if await guard_approvals.request_usb(session, device, body.windows_user, body.reason) is None:
+        # Its own status, so the Tray does not tell the person it was sent (review 3b L3).
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many requests are waiting for IT on this PC.")
+    return {"status": "requested"}
 
 
 @router.get(

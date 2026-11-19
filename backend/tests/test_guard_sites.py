@@ -129,6 +129,14 @@ async def test_new_sites_are_named_once_and_suggested_for_blocking(client, admin
     assert rows == {"sendbig.io": "file_sharing", "zoho.com": "business"}
     assert len(asked) == 1 and "wetransfer.com" not in asked[0] and "sendbig.io" in asked[0]   # listed sites not asked
 
+    # Review 3b L1: a new site within ten minutes waits for the next pass, not a call of its own.
+    await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [_event("drop.newshare.io")]})
+    async with session_factory() as s:
+        assert await guard_sites.classify_new_sites(s, admin_user.org_id) == 0 and len(asked) == 1
+        monkeypatch.setattr(guard_sites, "_LAST_PASS", {})                           # ten minutes later
+        await guard_sites.classify_new_sites(s, admin_user.org_id)
+    assert len(asked) == 2 and "newshare.io" in asked[1]
+
     cards = (await client.get("/api/v1/guard/suggestions", headers=admin_headers)).json()
     card = next(c for c in cards if c["key"].startswith("block_found:"))
     assert card["changes"] == ["Block sendbig.io (file sharing)"] and "2 times" in card["why"]

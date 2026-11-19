@@ -8,6 +8,8 @@ using AstraAgent.GuardHost;
 // document on stdout. This process has no network (E4's firewall rules).
 if (args.Length > 0 && args[0] == "--discover")
 {
+    // Security review (3b) H1: as SYSTEM over folders users control, follow no junction a user made.
+    SafeOpen.TrustOnlyAdminRedirections();
     try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.Idle; } catch { /* best effort */ }
     // Folders come on stdin, one per line (a PC with many profiles would overflow the 32K
     // command line, security review L2), or as arguments. "--pdf" after it: the org reads PDFs too.
@@ -25,6 +27,8 @@ if (args.Length > 0 && args[0] == "--discover")
 // (paths, keywords, whether to read PDFs) is JSON on stdin; one total comes back on stdout.
 if (args.Length > 0 && args[0] == "--scan")
 {
+    // Security review (3b) H1: as SYSTEM over folders users control, follow no junction a user made.
+    SafeOpen.TrustOnlyAdminRedirections();
     var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
     var request = JsonSerializer.Deserialize<FileScan.Request>(Console.In.ReadToEnd(), json);
     if (request?.Paths is null) return 2;

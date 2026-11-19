@@ -34,6 +34,8 @@ LEARNED_KIND = "guard"
 KINDS: dict[str, str] = {**{k: label for k, (label, _) in SITE_CATEGORIES.items()},
                          "business": "Business tool", "other": "Something else"}
 _MAX_PER_PASS = 12
+PASS_EVERY = timedelta(minutes=10)
+_LAST_PASS: dict = {}
 _HOST = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$")
 _SYSTEM = (
     "You classify websites for a data-loss-prevention tool at a company. For each host name, choose "
@@ -100,6 +102,14 @@ async def classify_new_sites(session: AsyncSession, org_id) -> int:
     the answers globally. Returns how many were learned."""
     if not get_settings().anthropic_api_key:
         return 0
+    # At most one pass per org every few minutes: a device sending many small batches must not
+    # turn into as many model calls (security review 3b L1).
+    # ponytail: per process, so each Cloud Run instance keeps its own clock; upgrade path is a
+    # last-run column per org if instances multiply.
+    now = utcnow()
+    if (last := _LAST_PASS.get(org_id)) is not None and now - last < PASS_EVERY:
+        return 0
+    _LAST_PASS[org_id] = now
     known = await learned(session)
     sites = (await session.execute(select(GuardEvent.site).where(
         GuardEvent.org_id == org_id, GuardEvent.occurred_at >= utcnow() - timedelta(days=30))

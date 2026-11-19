@@ -2143,6 +2143,59 @@ is where S1's AI site categories plug in.
   gap, the gap edited, the CSV downloaded.
 - **Needs staging:** the real model's drafts (no AI key locally).
 
+#### 3b security review (19 Nov)
+Three `security-reviewer` passes over everything after the 3a review (cca65c5..4b72e7c): the
+agent, the extension (with the host code it calls), and the backend with the portal. 6 High,
+6 Medium, 10 Low, no Critical. Each finding was checked against the code. Batch 1 fixed:
+- **Extension**
+  - **H1:** after one allowed upload, the next file chosen in the same input skipped the check
+    (a "checked" mark outlived the re-sent events). The mark is gone: re-sent events are
+    untrusted and pass anyway. If the person chooses again during a check, that result is not
+    applied to the new choice (part of M1).
+  - **H2:** past 10 documents or 200 text files the rest were silently unscanned. Now the whole
+    check is "could not check".
+  - **H3:** text past the scanner's limit counted as clean. The host's `truncated` now makes a
+    scan incomplete, and the agent's document and text readers return "could not check" for
+    anything longer than they read, instead of cutting it.
+  - **L1:** tenant and org IDs in capitals were dropped silently; any case is accepted, sent in
+    lowercase.
+- **Agent**
+  - **H1:** the USB scan runs as SYSTEM on paths a user controls, and followed links: a junction
+    plus an object-manager link could make SYSTEM authenticate to an attacker's SMB server.
+    Now: Redirection Guard on in `--scan` and `--discover` (Windows 11 22H2+), no reparse point
+    anywhere on the path, the final path of the opened handle must be on the same drive, and the
+    bytes are read from that handle (`SafeOpen`). On older Windows a race at the open remains;
+    the upgrade path is running the scan as the console user.
+  - **M2:** a failed scan, a watcher overflow, or more than 5,000 pending files were recorded as
+    nothing. They are recorded as "could not check". USB hard drives and SSDs (Windows calls them
+    Fixed) are watched too, found by the disk's bus type; never the system drive.
+  - **L2:** a drive ID Windows made up (no serial of its own) cannot be approved: agent and
+    backend refuse it, and the portal says why instead of offering Approve.
+  - **L3:** "too many requests" now returns 429, and the Tray says so instead of "sent".
+- **Backend**
+  - **M1:** a tiny .xlsx naming a far-off column made the reader build a huge row. Columns stop
+    at three letters (Excel's XFD), rows are sparse, the parse runs off the event loop, and a bad
+    zip checksum or an over-long CSV field is a 422.
+  - **M2:** technicians could read breach-record text and step notes in the audit log, and case
+    reasons in remediation tasks. The audit now holds which fields and steps changed, never the
+    words, and case actions carry the fixed reason "AI Guard case".
+  - **L1:** S1 asks the model at most once per org every ten minutes.
+  - **L4:** the high-case notification, which every role sees, no longer carries the reasons.
+  - **L5:** a device can add at most one "other browser closed" audit row an hour.
+  - Two 500s: applying a Tracker suggestion with no browser policy, and the file errors above.
+- **Batch 2, with the VM test (not done):**
+  - **Agent H2:** company-drives mode misses USB 3 (UASP) drives and SD cards. Needs blocking
+    by `USB\Class_08` and approval by the USB parent ID.
+  - **Extension H4:** in .xlsx files, number cells lose the column headings their detectors
+    need.
+  - **Agent M1:** the PDF and Office readers need a memory limit (a job object).
+  - **Extension M1:** the rest of the check-to-send gap on forms.
+  - **Extension M2:** company accounts only should force incognito off and block other
+    extensions when on.
+  - **Agent L1:** close other browsers by handle and by version info.
+  - **Backend L2/L3:** which PC each case event came from; cap events scored per case.
+  - **Extension L2:** show the download origin as "likely source".
+
 ---
 
 ## Phase 4 — Smart Guard advanced + lifecycle

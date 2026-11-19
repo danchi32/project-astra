@@ -37,3 +37,10 @@ test("anything not shaped like an ID is dropped: these become headers", () => {
   assert.deepEqual(accountRules({ slackRequester: "E0123ABCD", slackAllowed: [] }), []);
   assert.deepEqual(accountRules({ slackRequester: "E0123ABCD,T1", slackAllowed: ["E0123ABCD"] }), []);
 });
+
+test("an ID pasted in capitals is the same ID, sent in lowercase (review L1)", () => {
+  const rules = accountRules({ microsoftTenant: `${T.toUpperCase()}:${P}`, claudeOrgs: [T.toUpperCase()] });
+  assert.equal(rules.length, 2);
+  assert.equal(header(rules[0])["sec-Restrict-Tenant-Access-Policy"], `${T}:${P}`);
+  assert.equal(header(rules[1])["anthropic-allowed-org-ids"], T);
+});

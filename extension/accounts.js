@@ -8,7 +8,9 @@
 // The IDs come from managed policy (written by the SAVIO agent). Anything not shaped like an ID
 // is dropped here as well: these become request headers.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Either case: an ID pasted in capitals is the same ID, and dropping it would fail open (review L1).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const lower = (v) => v.map((x) => x.toLowerCase()).join(",");
 const SLACK = /^[TE][A-Z0-9]{6,20}$/;
 const MAX_IDS = 50;
 const TYPES = ["main_frame", "sub_frame", "xmlhttprequest", "websocket", "other"];
@@ -32,11 +34,11 @@ export function accountRules(managed) {
   if (UUID.test(tenant ?? "") && UUID.test(policy ?? "") && extra.length === 0)
     // Tenant restrictions v2. login.live.com too, so personal Microsoft accounts follow the policy.
     add(["login.microsoftonline.com", "login.microsoft.com", "login.windows.net", "login.live.com"],
-        [["sec-Restrict-Tenant-Access-Policy", `${tenant}:${policy}`]]);
+        [["sec-Restrict-Tenant-Access-Policy", `${tenant}:${policy}`.toLowerCase()]]);
   if (ids(m.claudeOrgs, UUID))
-    add(["claude.ai", "claude.com", "anthropic.com"], [["anthropic-allowed-org-ids", m.claudeOrgs.join(",")]]);
+    add(["claude.ai", "claude.com", "anthropic.com"], [["anthropic-allowed-org-ids", lower(m.claudeOrgs)]]);
   if (ids(m.chatgptWorkspaces, UUID))
-    add(["chatgpt.com", "chat.openai.com"], [["ChatGPT-Allowed-Workspace-Id", m.chatgptWorkspaces.join(",")]]);
+    add(["chatgpt.com", "chat.openai.com"], [["ChatGPT-Allowed-Workspace-Id", lower(m.chatgptWorkspaces)]]);
   if (typeof m.slackRequester === "string" && SLACK.test(m.slackRequester) && ids(m.slackAllowed, SLACK))
     add(["slack.com"], [["X-Slack-Allowed-Workspaces-Requester", m.slackRequester],
                         ["X-Slack-Allowed-Workspaces", m.slackAllowed.join(",")]]);

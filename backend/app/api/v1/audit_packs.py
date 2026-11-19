@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,7 +102,8 @@ async def upload(
         data = base64.b64decode(body.content_base64, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(422, "The file did not arrive intact") from exc
-    found = audit_pack.questions(body.name, data)
+    # Off the event loop: reading a sheet is CPU work, and other requests must not wait on it.
+    found = await run_in_threadpool(audit_pack.questions, body.name, data)
     if audit_pack._provider() is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The AI is not set up on this server")
     if await audit_pack.busy(session, actor.org_id):

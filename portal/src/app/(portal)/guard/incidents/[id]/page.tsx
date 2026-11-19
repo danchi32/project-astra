@@ -21,11 +21,12 @@ function since(iso: string, until?: string | null) {
 /** An update's audit detail in words: the step settled, closed / reopened, and which facts changed. */
 function describe(action: string, detail: Record<string, unknown> | null): string {
   if (action !== "dpdp.incident_update" || !detail) return "";
-  const { step, status, ...facts } = detail as { step?: { key: string; state: string | null; note: string | null }; status?: string };
+  // The audit holds which step and which fields, never the words (security review 3b M2).
+  const { step, status, fields } = detail as { step?: { key: string; state: string | null }; status?: string; fields?: string[] };
   const parts: string[] = [];
-  if (step) parts.push(`${step.key}: ${step.state === "not_needed" ? "not needed" : step.state ?? "undone"}${step.note ? ` — ${step.note}` : ""}`);
+  if (step) parts.push(`${step.key}: ${step.state === "not_needed" ? "not needed" : step.state ?? "undone"}`);
   if (status) parts.push(status === "closed" ? "closed" : "reopened");
-  if (Object.keys(facts).length) parts.push(`changed ${Object.keys(facts).join(", ").replaceAll("_", " ")}`);
+  if (fields?.length) parts.push(`changed ${fields.join(", ").replaceAll("_", " ")}`);
   return parts.join("; ");
 }
 

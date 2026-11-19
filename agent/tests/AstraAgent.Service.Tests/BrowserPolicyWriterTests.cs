@@ -418,6 +418,9 @@ public sealed class BrowserPolicyWriterTests : IDisposable
         Assert.Empty(new BrowserPolicy { UsbMode = "company_drives", UsbApprovedDrives = [sandisk] }.Validate());
         Assert.NotEmpty(new BrowserPolicy { UsbMode = "company_drives", UsbApprovedDrives = [@"SCSI\Disk&Ven_NVMe\5&1e9"] }.Validate());
         Assert.NotEmpty(new BrowserPolicy { UsbApprovedDrives = ["USBSTOR\\x\\y\r\nevil"] }.Validate());
+        // Review 3b L2: an ID Windows made up (no serial of its own) stands for no one drive.
+        Assert.NotEmpty(new BrowserPolicy { UsbMode = "company_drives",
+                                            UsbApprovedDrives = [@"USBSTOR\Disk&Ven_General&Prod_USB_Disk&Rev_2.00\7&1a2b3c&0"] }.Validate());
         Assert.Equal(2, BrowserPolicyMap.Usb(new BrowserPolicy { UsbMode = "company_drives" }, DateTime.UtcNow).Count);   // phones read-only
 
         // Never used: nothing created.
@@ -473,7 +476,9 @@ public sealed class BrowserPolicyWriterTests : IDisposable
         Assert.Equal(@"USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", cruzer.Id);
         Assert.True(cruzer.UniqueSerial);
         Assert.False(seen.Single(s => s.Name.StartsWith("General")).UniqueSerial);       // Windows made the serial up
-        Assert.Empty(new BrowserPolicy { UsbApprovedDrives = seen.Select(s => s.Id).ToList() }.Validate());
+        // Every drive with a serial of its own can be approved; a made-up one cannot (review 3b L2).
+        Assert.Empty(new BrowserPolicy { UsbApprovedDrives = seen.Where(s => s.UniqueSerial).Select(s => s.Id).ToList() }.Validate());
+        Assert.NotEmpty(new BrowserPolicy { UsbApprovedDrives = seen.Where(s => !s.UniqueSerial).Select(s => s.Id).ToList() }.Validate());
     }
 
     [Fact]

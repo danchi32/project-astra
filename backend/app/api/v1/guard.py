@@ -370,6 +370,9 @@ async def apply_suggestion(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That suggestion no longer applies.") from None
     except (guard_suggestions.SuggestionChanged, browser_policy.PilotActive) as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    if row is None:   # a Tracker suggestion applied where the org has no browser policy yet
+        return BrowserPolicyRead(version=0, policy=BrowserPolicyBody(), updated_at=None,
+                                 pilot_until=browser_policy.pilot_until(None))
     return _read(row)
 
 

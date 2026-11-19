@@ -163,7 +163,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!isWatched(p, host)) return sendResponse({ action: "allow", findings: [] });
     // Files the content script could not read (binary, too big) make the check "unknown":
     // never silently clean (M3).
-    const unreadable = Number.isInteger(msg.unreadable) && msg.unreadable > 0;
+    // More documents or parts than are scanned is "could not check" too, never the first ones
+    // standing in for all (review H2).
+    const over = (Array.isArray(msg.parts) && msg.parts.length > 200) || (Array.isArray(msg.docs) && msg.docs.length > 10);
+    const unreadable = (Number.isInteger(msg.unreadable) && msg.unreadable > 0) || over;
     // `parts`: the form fields or text files that can be rewritten; `text` and `docs` are the
     // rest. Without `parts`, all of `text` is one rewritable whole (a paste).
     const parts = Array.isArray(msg.parts) ? msg.parts.filter((s) => typeof s === "string").slice(0, 200) : null;

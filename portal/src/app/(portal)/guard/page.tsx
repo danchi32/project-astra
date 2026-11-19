@@ -83,15 +83,20 @@ function CompanyDrives({ form, setForm, canEdit }: {
             <div key={d.id} className="flex flex-wrap items-center gap-2 text-xs py-1">
               <span>{d.name}</span>
               <span style={muted}>on {d.pcs.join(", ")}</span>
-              {!d.unique_serial && <span style={{ color: "#f59e0b" }} title="Windows made its serial number up, so it only matches in the same USB port">no serial of its own</span>}
-              <input placeholder="Name, e.g. Accounts drive 1" maxLength={60} value={names[d.id] ?? ""}
-                onChange={(e) => setNames({ ...names, [d.id]: e.target.value })}
-                className="px-2 py-1 rounded text-xs outline-none" style={box} />
-              <button className="underline" style={{ color: "var(--accent)" }} disabled={!(names[d.id] ?? "").trim()}
-                onClick={() => setForm({ ...form, usb_approved_drives: [...form.usb_approved_drives,
-                  { id: d.id, name: (names[d.id] ?? "").trim() }] })}>
-                Approve
-              </button>
+              {/* Windows made its ID up, so any drive of that model in that port would share it:
+                  it cannot be approved on its own (review 3b L2). */}
+              {!d.unique_serial ? <span style={{ color: "#f59e0b" }}>no serial number of its own, so it cannot be approved</span> : (
+                <>
+                  <input placeholder="Name, e.g. Accounts drive 1" maxLength={60} value={names[d.id] ?? ""}
+                    onChange={(e) => setNames({ ...names, [d.id]: e.target.value })}
+                    className="px-2 py-1 rounded text-xs outline-none" style={box} />
+                  <button className="underline" style={{ color: "var(--accent)" }} disabled={!(names[d.id] ?? "").trim()}
+                    onClick={() => setForm({ ...form, usb_approved_drives: [...form.usb_approved_drives,
+                      { id: d.id, name: (names[d.id] ?? "").trim() }] })}>
+                    Approve
+                  </button>
+                </>
+              )}
             </div>
           ))}
           {seen && !pending.length && <p className="text-xs" style={muted}>No other drives seen.</p>}

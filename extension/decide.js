@@ -48,7 +48,8 @@ export function fromHost(r) {
     counts,
     contactList: r.contact_list === true,
     keywordHits: Array.isArray(r.keyword_hits) ? r.keyword_hits : [],
-    incomplete: r.incomplete === true,
+    // Text past the scanner's limit was not read: "could not check" too (review H3).
+    incomplete: r.incomplete === true || r.truncated === true,
   };
 }
 

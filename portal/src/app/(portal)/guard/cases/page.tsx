@@ -39,7 +39,9 @@ function CaseActions({ c }: { c: GuardCase }) {
     try {
       const params = a.action_id === "message_session" ? { ...a.params, message: message.trim() } : a.params;
       await createRemediation({ device_id: a.device_id, action_id: a.action_id, params, approve: true,
-        reason: `AI Guard case: ${c.reasons.slice(0, 2).join("; ")}`.slice(0, 1000) });
+        // A fixed reason: technicians read remediation tasks, and what a case is about is for admins
+        // (security review 3b M2).
+        reason: "AI Guard case" });
       setDone({ ...done, [key(a)]: "Sent. It runs on the PC within a minute; the result is under Remediation." });
       setConfirm(null);
     } catch (e) {

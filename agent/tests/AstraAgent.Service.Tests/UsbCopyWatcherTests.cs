@@ -99,4 +99,52 @@ public sealed class UsbCopyWatcherTests : IDisposable
         w.Cycle(t0.AddSeconds(20));
         Assert.Equal(2, _scanned.Count);                                   // not checked at all
     }
+
+    [Fact]
+    public void A_failed_scan_or_a_missed_copy_is_could_not_check_never_nothing()
+    {
+        // Security review 3b M2.
+        var w = Watcher();
+        var t0 = new DateTime(2026, 11, 19, 10, 0, 0, DateTimeKind.Utc);
+        _result = null;                                                    // the scanner crashed or timed out
+        w.Written(@"E:\a.xlsx", t0);
+        w.Cycle(t0.AddSeconds(6));
+        Assert.True(_queue.Peek(1).Single().Event.Unknown);
+
+        w.Lost();                                                          // the watcher's buffer overflowed
+        w.Cycle(t0.AddSeconds(12));
+        Assert.Equal(2, _queue.Count);
+        Assert.Single(_scanned);                                           // nothing to scan, still recorded
+
+        _result = new(3, 0, [], false, 0);
+        for (var i = 0; i < UsbCopyWatcher.MaxPending + 10; i++) w.Written($@"E:\f{i}.txt", t0.AddSeconds(13));
+        w.Cycle(t0.AddSeconds(20));                                        // too many at once: counted as missed
+        Assert.True(_queue.Peek(3)[2].Event.Unknown);
+    }
+
+    [Fact]
+    public void A_link_on_the_drive_is_never_followed()
+    {
+        // Security review 3b H1: a junction a user planted, here to a folder of someone else's.
+        Directory.CreateDirectory(_dir);
+        var outside = _dir + "-other";
+        Directory.CreateDirectory(outside);
+        try
+        {
+            File.WriteAllText(Path.Combine(outside, "kyc.csv"), "pan\nABCPE1234F\n");
+            using (var mk = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe",
+                       $"/c mklink /J \"{Path.Combine(_dir, "J")}\" \"{outside}\"") { CreateNoWindow = true, UseShellExecute = false }))
+                mk!.WaitForExit();
+            File.WriteAllText(Path.Combine(_dir, "ok.csv"), "pan\nBCDPF2345G\n");
+
+            var r = FileScan.Run(new FileScan.Request([Path.Combine(_dir, "J", "kyc.csv"), Path.Combine(_dir, "ok.csv")]));
+            Assert.Equal((1, 1), (r.Files, r.Unreadable));                 // the linked one: could not check
+            Assert.Equal(1, r.Counts["Pan"]);
+        }
+        finally
+        {
+            if (Directory.Exists(Path.Combine(_dir, "J"))) Directory.Delete(Path.Combine(_dir, "J"));
+            Directory.Delete(outside, true);
+        }
+    }
 }

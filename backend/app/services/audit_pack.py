@@ -20,6 +20,7 @@ import logging
 import re
 import unicodedata
 import zipfile
+import zlib
 from datetime import timedelta
 from xml.etree import ElementTree
 
@@ -45,7 +46,7 @@ BATCH = 25
 STALE = timedelta(minutes=30)
 _ZIP_ENTRY = 20 * 1024 * 1024
 _ZIP_TOTAL = 50 * 1024 * 1024
-_COL = re.compile(r"^([A-Z]+)")
+_COL = re.compile(r"^([A-Z]{1,3})[0-9]")   # Excel stops at XFD (review 3b M1)
 
 SYSTEM = (
     "You draft answers to a client's IT security questionnaire for a company that uses SAVIO, an IT "
@@ -68,12 +69,20 @@ def _plain(s: str, limit: int) -> str:
     return " ".join(s.split())[:limit]
 
 
-def _csv_grid(data: bytes) -> list[list[str]]:
+# Rows as {column: text}, holding only cells that have something: a sheet cannot make this grow
+# by naming far-off columns (security review 3b M1).
+Grid = list[dict[int, str]]
+
+
+def _csv_grid(data: bytes) -> Grid:
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = data.decode("cp1252", errors="replace")
-    return [row for row in csv.reader(io.StringIO(text))]
+    try:
+        return [{i: c for i, c in enumerate(row) if c} for row in csv.reader(io.StringIO(text))]
+    except csv.Error as exc:
+        raise HTTPException(422, "That CSV file could not be read") from exc
 
 
 def _col(ref: str) -> int:
@@ -83,7 +92,7 @@ def _col(ref: str) -> int:
     return n - 1
 
 
-def _xlsx_grid(data: bytes) -> list[list[str]]:
+def _xlsx_grid(data: bytes) -> Grid:
     try:
         z = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
@@ -101,13 +110,13 @@ def _xlsx_grid(data: bytes) -> list[list[str]]:
         if "xl/sharedStrings.xml" in names:
             for si in ElementTree.fromstring(z.read("xl/sharedStrings.xml")).iterfind("{*}si"):
                 shared.append("".join(t.text or "" for t in si.iterfind(".//{*}t")))
-        grid: list[list[str]] = []
+        grid: Grid = []
         for row in ElementTree.fromstring(z.read(sheet)).iterfind(".//{*}row"):
             cells: dict[int, str] = {}
             for c in row.iterfind("{*}c"):
                 ref, kind = c.get("r", ""), c.get("t")
                 if not _COL.match(ref):
-                    continue
+                    continue   # no reference, or a column past Excel's last
                 if kind == "inlineStr":
                     value = "".join(t.text or "" for t in c.iterfind(".//{*}t"))
                 else:
@@ -115,10 +124,11 @@ def _xlsx_grid(data: bytes) -> list[list[str]]:
                     value = v.text if v is not None and v.text else ""
                     if kind == "s" and value.isdigit() and int(value) < len(shared):
                         value = shared[int(value)]
-                cells[_col(ref)] = value
-            grid.append([cells.get(i, "") for i in range(max(cells) + 1)] if cells else [])
+                if value:
+                    cells[_col(ref)] = value
+            grid.append(cells)
         return grid
-    except ElementTree.ParseError as exc:
+    except (ElementTree.ParseError, zipfile.BadZipFile, zlib.error) as exc:   # broken XML, CRC or deflate
         raise HTTPException(422, "That spreadsheet could not be read") from exc
 
 
@@ -135,14 +145,14 @@ def questions(filename: str, data: bytes) -> list[str]:
         raise HTTPException(422, "Upload an .xlsx or .csv file")
     counts: dict[int, int] = {}
     for row in grid:
-        for i, cell in enumerate(row):
+        for i, cell in row.items():
             if len(cell.strip()) >= MIN_QUESTION and any(ch.isalpha() for ch in cell):
                 counts[i] = counts.get(i, 0) + 1
     if not counts:
         raise HTTPException(422, "No questions found: SAVIO looks for a column of questions")
     col = max(counts, key=lambda i: (counts[i], -i))
     found = [_plain(row[col], MAX_QUESTION) for row in grid
-             if len(row) > col and len(row[col].strip()) >= MIN_QUESTION and any(ch.isalpha() for ch in row[col])]
+             if len(row.get(col, "").strip()) >= MIN_QUESTION and any(ch.isalpha() for ch in row[col])]
     if len(found) > MAX_QUESTIONS:
         raise HTTPException(422, f"At most {MAX_QUESTIONS} questions at a time; this file has {len(found)}")
     return found

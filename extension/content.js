@@ -31,7 +31,6 @@
   let mode = "log";
   let readPdf = false;
   let resubmitting = false;
-  const checkedInputs = new WeakSet();   // not a DOM attribute, which the page could set (L2)
 
   const readMode = (m) => {
     if (m && MODES.includes(m.mode)) mode = m.mode;
@@ -170,7 +169,6 @@
   const onFiles = async (e) => {
     const input = e.target;
     if (!e.isTrusted || !(input instanceof HTMLInputElement) || input.type !== "file" || !input.files?.length) return;
-    if (checkedInputs.has(input)) { if (e.type === "change") checkedInputs.delete(input); return; }
     // Stopped now, synchronously: after an await the site would already have the files (H1).
     if (mode !== "log") e.stopImmediatePropagation();
     if (e.type === "input") return;   // the check runs once, on change
@@ -185,6 +183,9 @@
       ? { text: "", parts: f.parts, unreadable: f.unreadable, docs: f.docs, files: meta(chosen) }
       : { text: f.text, unreadable: f.unreadable, docs: f.docs, files: meta(chosen) };
     const out = await handled("file", what);
+    // The person chose again while this was checked: that choice is checked on its own change
+    // event, and this result does not apply to it (review M1).
+    if (input.files.length !== chosen.length || [...input.files].some((x, i) => x !== chosen[i])) return;
     if (out !== null) {
       if (out.parts && out.parts !== what.parts) {
         // A copy of each text file with the sensitive parts hidden, same name and type, in place.
@@ -196,7 +197,8 @@
         }
         input.files = dt.files;
       }
-      checkedInputs.add(input);
+      // Re-sent events are untrusted, so this listener lets them through to the site; the next
+      // real choice on this input is checked again (review H1: a "checked" mark let it skip).
       input.dispatchEvent(new Event("input", { bubbles: true }));    // let the site see it now
       input.dispatchEvent(new Event("change", { bubbles: true }));
     } else {

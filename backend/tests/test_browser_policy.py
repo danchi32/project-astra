@@ -496,7 +496,8 @@ async def test_company_drives(client, admin_headers, user_headers, session_facto
     seen = {d["id"]: d for d in (await client.get("/api/v1/guard/drives", headers=admin_headers)).json()}
     assert seen[cruzer]["approved_in"] == ["Everyone"] and seen[generic]["unique_serial"] is False
 
-    for bad_drive in ({"id": "C:\\Windows", "name": "x"}, {"id": cruzer, "name": ""}, {"id": cruzer, "name": "a\u202eb"}):
+    for bad_drive in ({"id": "C:\\Windows", "name": "x"}, {"id": cruzer, "name": ""}, {"id": cruzer, "name": "a\u202eb"},
+                      {"id": generic, "name": "No serial"}):   # review 3b L2: a made-up ID stands for no one drive
         bad_body = {**body, "usb_approved_drives": [bad_drive]}
         assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad_body)).status_code == 422
 

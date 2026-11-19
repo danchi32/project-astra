@@ -25,7 +25,7 @@ public static class Documents
         ext.Equals(".docx", StringComparison.OrdinalIgnoreCase) || ext.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) ||
         (pdf && ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>The document's text, capped at what the scanner reads, or null.</summary>
+    /// <summary>The document's text, or null, also when it is longer than the scanner reads.</summary>
     public static string? Text(byte[] bytes, string ext, bool pdf)
     {
         if (bytes.Length > MaxBytes || !Readable(ext, pdf)) return null;
@@ -53,9 +53,12 @@ public static class Documents
             var buffer = new char[(int)Math.Min(MaxBytes, PiiScanner.MaxChars) + 1];
             int read = 0, n;
             while (read < buffer.Length && (n = reader.Read(buffer, read, buffer.Length - read)) > 0) read += n;
+            // More than the scanner reads: "could not check", never the start standing in for the
+            // whole (review H3).
+            if (read == buffer.Length) return null;
             sb.Append(XmlText(new string(buffer, 0, read))).Append('\n');
         }
-        return Cap(sb.ToString());
+        return Fits(sb.ToString());
     }
 
     /// <summary>
@@ -78,9 +81,9 @@ public static class Documents
                 foreach (var page in doc.GetPages())
                 {
                     sb.Append(ContentOrderTextExtractor.GetText(page)).Append('\n');
-                    if (sb.Length > PiiScanner.MaxChars) break;
+                    if (sb.Length > PiiScanner.MaxChars) return null;   // longer than the scanner reads (H3)
                 }
-                return Cap(sb.ToString());
+                return sb.ToString();
             }
 #pragma warning disable CA1031 // a parser of untrusted input: whatever it throws means "could not check"
             catch (Exception) { return null; }
@@ -97,5 +100,6 @@ public static class Documents
     static string XmlText(string xml) =>
         WebUtility.HtmlDecode(Tag.Replace(CellEnd.Replace(LineEnd.Replace(xml, "\n"), "\t"), ""));
 
-    internal static string Cap(string s) => s.Length > PiiScanner.MaxChars ? s[..PiiScanner.MaxChars] : s;
+    /// <summary>The text if the scanner reads all of it, else null: "could not check" (review H3).</summary>
+    internal static string? Fits(string s) => s.Length > PiiScanner.MaxChars ? null : s;
 }

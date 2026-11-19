@@ -38,7 +38,7 @@ public static class FileScan
                 continue;
             }
             string? text;
-            try { text = File.Exists(path) ? Discovery.Text(path, ext, r.Pdf) : null; }
+            try { text = Read(path, ext, r.Pdf); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException) { text = null; }
             if (text is null) { unreadable++; continue; }
             files++;
@@ -49,5 +49,15 @@ public static class FileScan
             keywords.UnionWith(s.KeywordHits);
         }
         return new Result(files, unreadable, counts, contact, keywords.Count);
+    }
+
+    /// <summary>A copied file's text, opened only if no link leads to it and it is really on its
+    /// drive (security review 3b H1: this runs as SYSTEM on paths a user controls).</summary>
+    static string? Read(string path, string ext, bool pdf)
+    {
+        var root = Path.GetPathRoot(Path.GetFullPath(path));
+        if (string.IsNullOrEmpty(root)) return null;
+        var bytes = SafeOpen.ReadUnder(root, path, Discovery.MaxFileBytes);
+        return bytes is null ? null : Discovery.TextOf(bytes, ext, pdf);
     }
 }

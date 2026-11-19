@@ -95,8 +95,8 @@ async def open_(session: AsyncSession, *, actor: User, title: str, what_happened
     await session.flush()
     await AuditService(session).record(
         org_id=actor.org_id, actor_id=actor.id, action="dpdp.incident_open", target_type=TARGET,
-        target_id=str(row.id), detail={"title": title, "found_at": found_at.isoformat(), "case_id":
-                                       str(case_id) if case_id else None},
+        # No title or text: technicians read the audit log, and a breach record is for admins (3b M2).
+        target_id=str(row.id), detail={"found_at": found_at.isoformat(), "case_id": str(case_id) if case_id else None},
     )
     await session.commit()
     return row
@@ -105,11 +105,13 @@ async def open_(session: AsyncSession, *, actor: User, title: str, what_happened
 async def update(session: AsyncSession, *, actor: User, row: GuardIncident, fields: dict,
                  step: dict | None, close: bool | None) -> GuardIncident:
     """Edit the facts, set one step, or close / reopen. Closing needs every step settled."""
+    # The audit says what changed, never the words: technicians read the audit log, and the
+    # record itself is for admins (security review 3b M2).
     changed: dict = {}
     for name, value in fields.items():
         if getattr(row, name) != value:
             setattr(row, name, value)
-            changed[name] = value.isoformat() if isinstance(value, datetime) else value
+            changed.setdefault("fields", []).append(name)
     if step is not None:
         key, state = step["key"], step["state"]
         if state == "not_needed" and key not in OPTIONAL:
@@ -120,7 +122,7 @@ async def update(session: AsyncSession, *, actor: User, row: GuardIncident, fiel
         else:
             steps[key] = {"state": state, "at": utcnow().isoformat(), "by": actor.full_name, "note": step.get("note")}
         row.steps = steps
-        changed["step"] = {"key": key, "state": state, "note": step.get("note")}
+        changed["step"] = {"key": key, "state": state}
     if close is not None and close != (row.status == "closed"):
         if close and any(k not in row.steps for k in STEP_KEYS):
             raise HTTPException(status.HTTP_409_CONFLICT, "Settle every step before closing the record")

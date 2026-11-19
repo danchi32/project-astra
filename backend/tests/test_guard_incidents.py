@@ -67,6 +67,11 @@ async def test_a_breach_record_from_open_to_closed(client, admin_headers, user_h
     assert d["case"]["windows_user"] == r"ACME\ravi" and d["case"]["level"] == "high"
     assert [t["action"] for t in d["timeline"]][:2] == ["dpdp.incident_open", "dpdp.incident_update"]
     assert len(d["timeline"]) == 1 + 1 + 5 + 1 + 1 and all(t["by"] == admin_user.full_name for t in d["timeline"])
+    # Review 3b M2: technicians read the audit log, so it holds which step and field, never the words.
+    details = str([t["detail"] for t in d["timeline"]])
+    assert "Blocked gmail" not in details and "Client list" not in details and "Found in case" not in details
+    assert {"key": "contain", "state": "done"} in [t["detail"].get("step") for t in d["timeline"]]
+    assert {"fields": ["people_affected"], "status": "closed"} in [t["detail"] for t in d["timeline"]]
     assert (await client.get(URL, headers=admin_headers)).json()[0]["id"] == inc["id"]
     assert (await client.get(one, headers=user_headers)).status_code == 403
 

@@ -102,3 +102,12 @@ test("documents are read by the host; one it cannot read is 'could not check'", 
   await check({ kind: "file", text: "", unreadable: 1, docs: [doc("DOC: x")] });
   assert.deepEqual(asked.filter((t) => t.startsWith("scan")), []);   // already unknown: nothing sent to the host
 });
+
+test("more documents or parts than are scanned is 'could not check', not the first ones for all (review H2)", async () => {
+  managed = { mode: "block" };
+  const docs = [...Array(10).fill(doc("DOC: nothing")), doc("DOC: ABCPE1234F")];
+  const r = await check({ kind: "file", text: "", docs });
+  assert.deepEqual([r.action, r.unknown], ["warn", true]);
+  const parts = await check({ kind: "file", text: "", parts: Array(201).fill("ok") });
+  assert.equal(parts.unknown, true);
+});

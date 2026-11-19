@@ -96,6 +96,7 @@ public sealed class UsbRequestPipeServer(
         {
             >= 200 and < 300 => "Request sent to IT. When they approve it, USB writing opens within a minute.",
             409 => "Your organization does not take USB requests on this PC right now.",
+            429 => "Requests from this PC are already waiting for IT. Ask IT to look at them.",
             0 => "SAVIO could not reach the server. Try again in a few minutes, or contact IT.",
             _ => "The request could not be sent. Contact IT.",
         };

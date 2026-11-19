@@ -131,7 +131,15 @@ public static class Discovery
     internal static string? Text(string path, string ext, bool pdf = false)
     {
         if (new FileInfo(path).Length > MaxFileBytes) return null;
-        if (TextExt.Contains(ext)) return Documents.Cap(File.ReadAllText(path));
+        if (TextExt.Contains(ext)) return Documents.Fits(File.ReadAllText(path));
         return Documents.Text(File.ReadAllBytes(path), ext, pdf);
+    }
+
+    /// <summary>The same, from bytes already read (the USB scan reads through <see cref="SafeOpen"/>).</summary>
+    internal static string? TextOf(byte[] bytes, string ext, bool pdf)
+    {
+        if (!TextExt.Contains(ext)) return Documents.Text(bytes, ext, pdf);
+        using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
+        return Documents.Fits(reader.ReadToEnd());
     }
 }

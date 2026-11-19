@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    AuditLog,
     Device,
     DeviceBrowserPolicyState,
     DeviceGroup,
@@ -110,6 +111,10 @@ class ApprovedDrive(BaseModel):
     def _id(cls, v: str) -> str:
         if not _DRIVE_ID.match(v):
             raise ValueError("Not a USB drive's device ID")
+        # A drive without its own serial gets an ID Windows makes up ("…\7&1a2b3c4d&0"): every
+        # drive of that model in that port shares it. The agent refuses it too (review 3b L2).
+        if v.rsplit("\\", 1)[1][1:2] == "&":
+            raise ValueError("This drive has no serial number of its own, so it cannot be approved by itself")
         return v
 
     @field_validator("name")
@@ -622,7 +627,11 @@ async def record_report(session: AsyncSession, device: Device, report: BrowserPo
         session.add(state)
     else:
         state.version, state.results, state.reported_at, state.drives = report.version, results, utcnow(), drives
-    if report.closed:
+    # At most one audit row per PC an hour for closed browsers: a device must not be able to push
+    # real entries off the audit log's first pages (security review 3b L5).
+    if report.closed and not (await session.execute(select(func.count()).select_from(AuditLog).where(
+            AuditLog.org_id == device.org_id, AuditLog.action == "guard.other_browser_closed",
+            AuditLog.target_id == str(device.id), AuditLog.created_at >= utcnow() - TAMPER_NOTIFY_EVERY))).scalar_one():
         await AuditService(session).record(
             org_id=device.org_id, actor_id=None, action="guard.other_browser_closed",
             target_type="device", target_id=str(device.id),

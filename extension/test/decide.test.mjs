@@ -28,6 +28,8 @@ test("where a download came from, and which upload it is: the host only", () => 
 });
 
 test("scans of an upload's parts add up, and one unknown part makes the whole unknown", () => {
+  // Text past the host's limit was not read: never "clean" (review H3).
+  assert.equal(fromHost({ ok: true, counts: {}, truncated: true }).incomplete, true);
   const a = fromHost({ ok: true, counts: { Pan: 1 }, keyword_hits: [0] });
   const b = fromHost({ ok: true, counts: { Pan: 2, Aadhaar: 1 }, contact_list: true, keyword_hits: [0, 3] });
   assert.deepEqual(mergeScans(a, b), { ok: true, counts: { Pan: 3, Aadhaar: 1 }, contactList: true,

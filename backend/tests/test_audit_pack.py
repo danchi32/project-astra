@@ -61,7 +61,19 @@ def test_reading_questions_from_csv_and_xlsx():
                "B3": "inline:Is antivirus running on every PC?", "C3": "short", "B4": "Do you\u202e log access?"})
     assert audit_pack.questions("Q.XLSX", x) == ["Are laptops encrypted with BitLocker?",
                                                  "Is antivirus running on every PC?", "Do you log access?"]
+    # Review 3b M1: a cell that names a far-off column cannot make the reader build a huge row.
+    far = _xlsx({"ZZZZZZZZZZ1": "Are laptops encrypted with BitLocker?"})   # skipped: no questions left
+    assert audit_pack.questions("q.xlsx", _xlsx({"XFD1": "Are laptops encrypted with BitLocker?",
+                                                 "XFD2": "Is antivirus running on every PC?"})) == [
+        "Are laptops encrypted with BitLocker?", "Is antivirus running on every PC?"]
+    # A broken file is a 422, never a 500: a bad checksum inside the zip, a CSV field over the limit.
+    stored = io.BytesIO()
+    with zipfile.ZipFile(stored, "w", zipfile.ZIP_STORED) as z:
+        z.writestr("xl/worksheets/sheet1.xml", '<worksheet><sheetData><row><c r="A1" t="inlineStr"><is><t>'
+                   "Are laptops encrypted with BitLocker?</t></is></c></row></sheetData></worksheet>")
+    corrupt = stored.getvalue().replace(b"BitLocker", b"BitLockeX")
     for name, data, code in (
+            ("q.xlsx", far, 422), ("q.xlsx", corrupt, 422), ("q.csv", b'"' + b"x" * 200_000 + b'"\n', 422),
             ("q.pdf", b"%PDF", 422), ("q.xlsx", b"not a zip", 422), ("q.csv", b"a,b\n1,2\n", 422),
             ("q.csv", b"x" * (audit_pack.MAX_FILE_BYTES + 1), 413),
             ("q.csv", "\n".join(f"Is control number {i} in place?" for i in range(301)).encode(), 422),

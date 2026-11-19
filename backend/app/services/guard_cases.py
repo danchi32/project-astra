@@ -227,7 +227,9 @@ async def update(session: AsyncSession, org_id, windows_user: str, earliest_new)
         await NotificationService(session).notify(
             org_id=org_id, category=NotificationCategory.SYSTEM, severity=NotificationSeverity.CRITICAL,
             title="AI Guard: a high-risk case",
-            message="Sensitive data is leaving in a way that needs a look: " + "; ".join(summary["reasons"][:2]),
+            # No reasons either: plain users get notifications too, and in a small office the data
+            # and the site can say who it is (security review 3b L4).
+            message="Sensitive data is leaving in a way that needs a look. An admin can see it under AI Guard → Cases.",
             link="/guard/cases",
         )
     return case
