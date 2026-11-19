@@ -563,6 +563,13 @@ export default function ReportsPage() {
               <span><strong>Compliance pack</strong> — the evidence an auditor, insurer or client asks for</span>
             </Link>
           )}
+          {me?.role === "admin" && me.entitlements?.includes("audit_pack") && (
+            <Link href="/reports/audit-pack" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+              <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
+              <span><strong>Client-Audit Pack</strong> — a client&apos;s security questionnaire, answered from SAVIO&apos;s evidence</span>
+            </Link>
+          )}
         </div>
       )}
 

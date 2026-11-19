@@ -5,6 +5,7 @@ from app.models.recommendation import Recommendation
 from app.models.asset_event import AssetEvent, AssetEventType
 from app.models.assistant import Assistant, AssistantVersion, AssistantVersionStatus
 from app.models.audit_log import AuditLog
+from app.models.audit_pack import AuditPack
 from app.models.banned_software import BannedSoftware
 from app.models.bitlocker_key import DeviceBitLockerKey
 from app.models.browser_policy import (
@@ -112,6 +113,7 @@ __all__ = [
     "AssistantVersion",
     "AssistantVersionStatus",
     "AuditLog",
+    "AuditPack",
     "BannedSoftware",
     "Base",
     "Conversation",

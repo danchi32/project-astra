@@ -75,6 +75,11 @@ WORKFORCE_INSIGHTS = "workforce_insights"
 #: something else.
 AI_GUARD = "ai_guard"
 
+#: Phase 3b · I4 Client-Audit Pack: a client's security questionnaire answered from SAVIO's
+#: evidence by the AI. A paid add-on (roadmap §7), so in no plan: an operator turns it on per
+#: organization, and every questionnaire costs model calls.
+AUDIT_PACK = "audit_pack"
+
 # ── Plans ──────────────────────────────────────────────────────────────────
 
 ESSENTIAL = "essential"

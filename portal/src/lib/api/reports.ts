@@ -148,5 +148,36 @@ export interface CompliancePack {
 export const getCompliancePack = (days: 30 | 90) =>
   apiClient.get<CompliancePack>("/reports/compliance-pack", { params: { days } }).then((r) => r.data);
 
+// I4: a client's security questionnaire with SAVIO's draft answers (admin; an add-on).
+export interface AuditPackRow {
+  n: number;
+  question: string;
+  status: "pending" | "answered" | "gap";
+  answer: string | null;
+  evidence: { key: string; label: string; link: string }[];
+  edited_by?: string | null;
+}
+export interface AuditPackSummary {
+  id: string;
+  name: string;
+  status: "answering" | "ready" | "failed";
+  error: string | null;
+  created_at: string;
+  answered_at: string | null;
+  questions: number;
+  answered: number;
+  gaps: number;
+}
+export interface AuditPack extends AuditPackSummary { rows: AuditPackRow[] }
+export const getAuditPacks = () => apiClient.get<AuditPackSummary[]>("/audit-packs").then((r) => r.data);
+export const getAuditPack = (id: string) => apiClient.get<AuditPack>(`/audit-packs/${id}`).then((r) => r.data);
+export const uploadAuditPack = (name: string, content_base64: string) =>
+  apiClient.post<AuditPack>("/audit-packs", { name, content_base64 }).then((r) => r.data);
+export const editAuditPackRow = (id: string, n: number, answer: string, status: "answered" | "gap") =>
+  apiClient.patch<AuditPack>(`/audit-packs/${id}/rows/${n}`, { answer, status }).then((r) => r.data);
+export const exportAuditPack = (id: string) =>
+  apiClient.get<Blob>(`/audit-packs/${id}/export`, { responseType: "blob" }).then((r) => r);
+export const deleteAuditPack = (id: string) => apiClient.delete(`/audit-packs/${id}`);
+
 export const getValueReport = (days: number) =>
   apiClient.get<ValueReport>("/reports/value", { params: { days } }).then((r) => r.data);

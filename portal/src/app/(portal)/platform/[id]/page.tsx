@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone, Clock, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Monitor, Users as UsersIcon, Package, Zap, Eye, Sparkles, MonitorSmartphone, Clock, ShieldAlert, ClipboardList } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   getOrganization, getOrgUsers, getOrgDevices, getOrgRemediation, getOrgAssets, createViewToken, requestSupportAccess,
@@ -108,7 +108,7 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
 
   // Same per-org switch for AI Guard (Phase 3): it changes how employees' browsers behave, so
   // it is turned on deliberately for one customer, never bundled into a plan.
-  async function toggleAddon(key: "workforce_insights" | "ai_guard") {
+  async function toggleAddon(key: "workforce_insights" | "ai_guard" | "audit_pack") {
     if (!org) return;
     const on = org.entitlements.includes(key);
     const overrides = { ...(org.entitlement_overrides ?? {}), [key]: !on };
@@ -389,6 +389,41 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
                   ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
                   : { background: "var(--accent)", color: "#fff" }}>
                 <ShieldAlert size={15} /> {guardOn ? "Disable" : "Enable"}
+              </button>
+            </div>
+          );
+        })()}
+        {/* I4 Client-Audit Pack — a paid add-on: each questionnaire costs model calls. */}
+        {org && (() => {
+          const packOn = org.entitlements.includes("audit_pack");
+          return (
+            <div className="rounded-xl p-5 flex items-start justify-between gap-4" style={card}>
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg shrink-0" style={{ background: packOn ? "rgba(37,99,235,0.12)" : "rgba(100,116,139,0.12)", color: packOn ? "var(--accent)" : "var(--text-secondary)" }}>
+                  <ClipboardList size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Client-Audit Pack</h2>
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                      style={packOn
+                        ? { color: "var(--accent)", background: "rgba(37,99,235,0.12)" }
+                        : { color: "var(--text-secondary)", background: "rgba(100,116,139,0.12)" }}>
+                      {packOn ? "Enabled" : "Off"}
+                    </span>
+                  </div>
+                  <p className="text-xs mt-1 max-w-md" style={{ color: "var(--text-secondary)" }}>
+                    Lets the customer upload a client&apos;s security questionnaire and get draft answers from SAVIO&apos;s evidence.
+                    Each questionnaire uses the AI.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => toggleAddon("audit_pack")}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+                style={packOn
+                  ? { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-secondary)" }
+                  : { background: "var(--accent)", color: "#fff" }}>
+                <ClipboardList size={15} /> {packOn ? "Disable" : "Enable"}
               </button>
             </div>
           );

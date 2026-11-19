@@ -2114,6 +2114,35 @@ is where S1's AI site categories plug in.
   against the local backend: both pages with live data, the part switches, and the links on
   Reports.
 
+**I4 as built (19 Nov, branch `phase-3`):** the Client-Audit Pack.
+- **Where:** Reports → Client-Audit Pack (`/audit-packs`, admin), behind a new `audit_pack`
+  add-on in no plan: the operator turns it on per org on the platform org page (every
+  questionnaire costs model calls).
+- **Upload:** an .xlsx or .csv up to 2 MB and 300 questions, sent as base64 JSON (no multipart
+  dependency) and read with the standard library: zip entry sizes capped before inflating, and
+  Python's expat refuses entity expansion. The column with the most question-length cells is
+  the question column; headers and section titles are skipped. Only the questions are kept.
+- **Evidence:** a fixed list of facts from SAVIO's records, each with a key, label and link:
+  the fleet and every F1 check in counts, USB, roles, the audit log, the fix tiers and, with AI
+  Guard, the twelve DPDP items and the breach workflow.
+- **Answering:** in the background, 25 questions a call, the model sees the evidence and the
+  questions (framed as data from someone else's file) and nothing else: no tools. Its JSON is
+  checked: citations must be evidence keys, an answer citing nothing becomes a gap, a question
+  left out is a gap. One questionnaire answering at a time per org; a run cut off shows as
+  failed after 30 minutes. No AI key, no upload (503): nothing is sent anywhere.
+- **Review and export:** each row shows the answer and links to its evidence; an admin edits an
+  answer or marks a gap (their name on it, audited), then downloads a CSV (audited) with every
+  cell that could be a spreadsheet formula escaped. Delete is audited too.
+- **Checked:** `test_audit_pack` (questions from CSV and xlsx with inline and shared strings and
+  an invisible character; wrong type, broken zip, no questions, over 2 MB, over 300, zip bomb
+  refused; the add-on, admin only, no AI key; the model's prompt has the evidence and the
+  questions as data and no tools; a made-up citation demoted, a missing answer a gap, an extra
+  one ignored; edit with name; CSV formula escaping; audit; one at a time; another org's 404;
+  delete; a model failure shown on the pack). On screen with a stand-in model on the local
+  backend: an 8-question CSV uploaded through the page, 7 answered with evidence links and one
+  gap, the gap edited, the CSV downloaded.
+- **Needs staging:** the real model's drafts (no AI key locally).
+
 ---
 
 ## Phase 4 — Smart Guard advanced + lifecycle
