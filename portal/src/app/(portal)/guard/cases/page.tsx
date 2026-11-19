@@ -2,7 +2,10 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
-import { closeGuardCase, getGuardCases, removeQuietSite, type GuardCase } from "@/lib/api/guard";
+import {
+  closeGuardCase, getGuardCaseActions, getGuardCases, removeQuietSite, type GuardCase, type GuardCaseAction,
+} from "@/lib/api/guard";
+import { createRemediation } from "@/lib/api/remediation";
 import { isUpgradeRequired } from "@/components/upgrade-required";
 import { apiErrorMessage } from "@/lib/utils";
 
@@ -16,6 +19,67 @@ const LEVEL: Record<GuardCase["level"], { label: string; color: string }> = {
   low: { label: "Low", color: "var(--text-secondary)" },
 };
 const RESOLUTION = { expected: "Expected", handled: "Handled" } as const;
+
+/** C4: what SAVIO can do about one case. Each is an ordinary remediation task: the admin runs
+ *  it, its tier and audit apply, and it shows under Remediation like any other. */
+function CaseActions({ c }: { c: GuardCase }) {
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery({ queryKey: ["guard-case-actions", c.id], queryFn: () => getGuardCaseActions(c.id), enabled: open });
+  const [confirm, setConfirm] = useState<GuardCaseAction | null>(null);
+  const [message, setMessage] = useState("");
+  const [done, setDone] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const muted = { color: "var(--text-secondary)" };
+  const box = { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" };
+  const key = (a: GuardCaseAction) => `${a.device_id}:${a.action_id}`;
+
+  async function run(a: GuardCaseAction) {
+    setBusy(true);
+    try {
+      const params = a.action_id === "message_session" ? { ...a.params, message: message.trim() } : a.params;
+      await createRemediation({ device_id: a.device_id, action_id: a.action_id, params, approve: true,
+        reason: `AI Guard case: ${c.reasons.slice(0, 2).join("; ")}`.slice(0, 1000) });
+      setDone({ ...done, [key(a)]: "Sent. It runs on the PC within a minute; the result is under Remediation." });
+      setConfirm(null);
+    } catch (e) {
+      setDone({ ...done, [key(a)]: apiErrorMessage(e, "Could not send it.") });
+    } finally { setBusy(false); }
+  }
+
+  if (!open) {
+    return <button className="text-xs underline" style={{ color: "var(--accent)" }} onClick={() => setOpen(true)}>What SAVIO can do</button>;
+  }
+  return (
+    <div className="rounded-lg p-3 space-y-2 text-xs" style={box}>
+      <div className="font-medium text-sm">What SAVIO can do</div>
+      {!data && <p style={muted}>Loading…</p>}
+      {data?.map((a) => (
+        <div key={key(a)} className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <button disabled={!a.available || busy} onClick={() => { setConfirm(a); setMessage(a.params.message ?? ""); }}
+              className="px-2 py-1 rounded disabled:opacity-40" style={{ ...box, color: "var(--text-primary)" }}>{a.label}</button>
+            {!a.available && <span style={muted}>{a.why}</span>}
+            {done[key(a)] && <span style={{ color: done[key(a)].startsWith("Sent") ? "#10b981" : "#ef4444" }}>{done[key(a)]}</span>}
+          </div>
+          {confirm && key(confirm) === key(a) && (
+            <div className="rounded p-2 space-y-2" style={{ border: "1px solid var(--border)" }}>
+              {a.action_id === "message_session" && (
+                <textarea rows={3} maxLength={1000} value={message} onChange={(e) => setMessage(e.target.value)}
+                  className="w-full px-2 py-1 rounded outline-none" style={box} />
+              )}
+              <div className="flex gap-2 items-center">
+                <span>{a.label} on {a.hostname}?</span>
+                <button disabled={busy || (a.action_id === "message_session" && !message.trim())} onClick={() => run(a)}
+                  className="px-2 py-1 rounded text-white disabled:opacity-50" style={{ background: "#ef4444" }}>Yes, do it</button>
+                <button onClick={() => setConfirm(null)} className="px-2 py-1 rounded" style={box}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const status = (e: unknown) => (e as { response?: { status?: number } } | null)?.response?.status;
 const when = (s: string) => new Date(s).toLocaleString();
@@ -163,6 +227,7 @@ export default function GuardCasesPage() {
             </table>
           </div>
 
+          {c.status === "open" && <CaseActions c={c} />}
           {c.status === "open" && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <button disabled={busy === c.id} onClick={() => close(c, "handled")}

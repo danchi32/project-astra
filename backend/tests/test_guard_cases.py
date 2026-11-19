@@ -100,6 +100,58 @@ async def test_events_become_one_case_and_only_a_high_one_notifies(client, admin
     assert (await client.get("/api/v1/guard/cases", headers=user_headers)).status_code == 403
 
 
+async def test_a_case_offers_fixes_through_the_existing_tiers(client, admin_headers, user_headers, session_factory,
+                                                              admin_user):
+    """C4: SAVIO acts. For each PC in a case: block USB, tell the person to stop, lock, sign out,
+    disable a local account; each available only when it can be done, and run as an ordinary
+    remediation task (tier, approval, audit unchanged)."""
+    import uuid
+
+    from app.models import DeviceSession, RemediationTask
+
+    await _guard_on(session_factory, admin_user.org_id)
+    did, h = await _enroll(client, admin_headers, "RAVI-PC")
+    local = r"RAVI-PC\ravi"
+    await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [
+        _event(5, windows_user=local, site="wetransfer.com", counts={"Pan": 300})]})
+    case = (await client.get("/api/v1/guard/cases", headers=admin_headers)).json()["cases"][0]
+
+    offered = {a["action_id"]: a for a in (await client.get(f"/api/v1/guard/cases/{case['id']}/actions",
+                                                            headers=admin_headers)).json()}
+    assert set(offered) == {"block_usb_storage", "message_session", "lock_session", "logoff_session",
+                            "disable_local_account"}
+    assert offered["block_usb_storage"]["available"] and offered["disable_local_account"]["params"] == {"username": "ravi"}
+    assert not offered["lock_session"]["available"] and "not signed in" in offered["lock_session"]["why"]
+
+    async with session_factory() as s:
+        s.add(DeviceSession(org_id=admin_user.org_id, device_id=uuid.UUID(did), session_id=3, username=local,
+                            state="active", connection="console"))
+        await s.commit()
+    offered = {a["action_id"]: a for a in (await client.get(f"/api/v1/guard/cases/{case['id']}/actions",
+                                                            headers=admin_headers)).json()}
+    assert offered["lock_session"]["available"] and offered["lock_session"]["params"] == {"session_id": "3"}
+    assert offered["message_session"]["params"]["message"].startswith("IT noticed")
+    assert (await client.get(f"/api/v1/guard/cases/{case['id']}/actions", headers=user_headers)).status_code == 403
+
+    # Run one exactly as the portal does: the ordinary remediation endpoint, the admin approving.
+    a = offered["block_usb_storage"]
+    r = await client.post("/api/v1/remediations", headers=admin_headers, json={
+        "device_id": str(a["device_id"]), "action_id": a["action_id"], "params": a["params"],
+        "reason": "AI Guard case: 300 PANs to wetransfer.com", "approve": True})
+    assert r.status_code == 201, r.text
+    async with session_factory() as s:
+        assert (await s.execute(select(RemediationTask))).scalars().one().action_id == "block_usb_storage"
+
+    # A domain account cannot be disabled on the PC: said, not offered.
+    await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [
+        _event(4, windows_user=r"ACME\meena", site="wetransfer.com", counts={"Pan": 300})]})
+    meena = next(c for c in (await client.get("/api/v1/guard/cases", headers=admin_headers)).json()["cases"]
+                 if c["windows_user"] == r"ACME\meena")
+    disable = next(a for a in (await client.get(f"/api/v1/guard/cases/{meena['id']}/actions",
+                                                headers=admin_headers)).json() if a["action_id"] == "disable_local_account")
+    assert not disable["available"] and "Entra" in disable["why"]
+
+
 async def test_closing_quiet_sites_and_a_new_case_after_a_gap(client, admin_headers, session_factory, admin_user):
     await _guard_on(session_factory, admin_user.org_id)
     _, h = await _enroll(client, admin_headers, "ASHA-PC")

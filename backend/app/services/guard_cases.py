@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Device,
+    DeviceSession,
     GuardCase,
     GuardEvent,
     GuardQuietSite,
@@ -246,6 +247,50 @@ async def overview(session: AsyncSession, org_id) -> dict:
         GuardEvent.occurred_at >= utcnow() - timedelta(days=30)))).scalar_one() if quiet else 0
     return {"open": {k: by_level.get(k, 0) for k in ("high", "medium", "low")},
             "quiet_sites": quiet, "quiet_events_30d": quiet_events}
+
+
+# ── C4: SAVIO acts. What a case can do, through the existing remediation tiers. ─────────────
+
+MESSAGE = ("IT noticed company or client data going somewhere it should not. Please stop, save your work, "
+           "and contact IT.")
+
+
+async def actions(session: AsyncSession, org_id, case_id) -> list[dict]:
+    """The fixes on offer for a case, per PC it happened on. Each is an existing remediation
+    action, so its tier, approval and audit apply unchanged: SAVIO suggests, the admin runs it.
+    One that cannot be done right now says why (the person is not signed in there; a domain
+    account cannot be disabled on the PC; USB storage is already blocked)."""
+    case = await session.get(GuardCase, case_id)
+    if case is None or case.org_id != org_id:
+        raise LookupError("No such case.")
+    device_ids = set((await session.execute(select(GuardEvent.device_id).where(
+        GuardEvent.org_id == org_id, GuardEvent.windows_user == case.windows_user,
+        GuardEvent.occurred_at >= case.opened_at, GuardEvent.occurred_at <= case.last_event_at))).scalars())
+    out: list[dict] = []
+    who = case.windows_user.split("\\")[-1]
+    for device in (await session.execute(select(Device).where(Device.id.in_(device_ids))
+                                         .order_by(Device.hostname))).scalars():
+        sessions = (await session.execute(select(DeviceSession).where(
+            DeviceSession.device_id == device.id,
+            func.lower(DeviceSession.username) == case.windows_user.lower()))).scalars().all()
+        signed_in = sessions[0] if sessions else None
+        not_in = None if signed_in else f"{who} is not signed in on {device.hostname} now."
+
+        def add(action_id, label, params=None, why=None, _d=device):
+            out.append({"device_id": _d.id, "hostname": _d.hostname, "action_id": action_id, "label": label,
+                        "params": params or {}, "available": why is None, "why": why})
+
+        add("block_usb_storage", f"Block USB storage on {device.hostname}",
+            why="USB storage is already blocked there." if device.usb_storage_blocked else None)
+        sid = {"session_id": str(signed_in.session_id)} if signed_in else {}
+        add("message_session", f"Tell {who} to stop (a message on their screen)", {**sid, "message": MESSAGE}, not_in)
+        add("lock_session", f"Lock {who}'s screen", sid, not_in)
+        add("logoff_session", f"Sign {who} out (unsaved work is lost)", sid, not_in)
+        domain = case.windows_user.split("\\")[0] if "\\" in case.windows_user else ""
+        local = domain.lower() == device.hostname.lower()
+        add("disable_local_account", f"Disable {who}'s account on {device.hostname}", {"username": who},
+            None if local else "A domain or Microsoft account: disable it in Active Directory or Entra.")
+    return out
 
 
 async def close(session: AsyncSession, *, actor: User, case_id, resolution: str, quiet_site: str | None) -> GuardCase:

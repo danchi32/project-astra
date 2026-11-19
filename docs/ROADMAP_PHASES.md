@@ -1949,6 +1949,30 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 - **Not checked:** the tray menu and dialog on a real desktop with the real service. That is the
   VM test.
 
+**C4 as built (19 Nov, branch `phase-3`):** SAVIO acts on a case.
+- **What it offers,** per PC the case happened on (`GET /guard/cases/{id}/actions`, admin):
+  block USB storage there; tell the person to stop (a message on their screen, text editable);
+  lock their screen; sign them out (unsaved work lost, said in the label); disable their
+  account on that PC. All existing remediation actions, nothing new on the agent.
+- **Only what can be done now:** the session actions need the person signed in on that PC
+  (their session ID from the PC's own session list), else "ravi is not signed in on CASE-DEMO
+  now"; disabling is offered only for a local account (DOMAIN = the PC's name), else "a domain
+  or Microsoft account: disable it in Active Directory or Entra"; USB block not if already
+  blocked.
+- **Through the existing tiers:** the portal runs each with the ordinary remediation endpoint,
+  the admin clicking being the approver, after a confirm step; tier rules, audit and the
+  Remediation page apply unchanged. The task's reason names the case ("AI Guard case: 300
+  PANs to wetransfer.com"). The AI is never handed these: they are an admin's choice on a
+  case (lock and message stay operator-only).
+- **Checked:** `test_a_case_offers_fixes_through_the_existing_tiers` (the five actions; lock not
+  offered until the person is signed in, then with their session ID; the default message;
+  admins only; one run through `/remediations` with approve; a domain account's disable refused
+  with the reason). On screen against the local backend: the made-up CASE-DEMO case listed
+  "Block USB storage on CASE-DEMO" and "Disable ravi's account", the session actions marked
+  "not signed in", and the USB block sent after the confirm step.
+- **Not checked:** the actions running on a real PC from a case (each action itself is already
+  covered by its own tests). That is the VM test.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.

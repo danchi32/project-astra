@@ -587,6 +587,29 @@ async def list_cases(
     return CasesRead(**overview, cases=[_case(c) for c in await guard_cases.cases(session, actor.org_id, status_)])
 
 
+class CaseAction(BaseModel):
+    device_id: uuid.UUID
+    hostname: str
+    action_id: str
+    label: str
+    params: dict[str, str]
+    available: bool
+    why: str | None
+
+
+@router.get("/cases/{case_id}/actions", response_model=list[CaseAction],
+            summary="C4: the fixes SAVIO offers for a case, per PC: existing remediation actions (admin)")
+async def case_actions(
+    case_id: uuid.UUID,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> list[CaseAction]:
+    try:
+        return [CaseAction(**a) for a in await guard_cases.actions(session, actor.org_id, case_id)]
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such case.") from None
+
+
 class CloseCaseBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     resolution: Literal["expected", "handled"]

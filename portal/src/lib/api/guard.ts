@@ -249,7 +249,21 @@ export interface GuardCases {
 export const getGuardCases = (status: "open" | "closed") =>
   apiClient.get<GuardCases>("/guard/cases", { params: { status } }).then((r) => r.data);
 
-export const closeGuardCase = (id: string, resolution: "expected" | "handled", quiet_site: string | null) =>
+// C4: the fixes SAVIO offers for a case, per PC: existing remediation actions.
+export interface GuardCaseAction {
+  device_id: string;
+  hostname: string;
+  action_id: string;
+  label: string;
+  params: Record<string, string>;
+  available: boolean;
+  why: string | null;
+}
+
+export const getGuardCaseActions = (id: string) =>
+  apiClient.get<GuardCaseAction[]>(`/guard/cases/${id}/actions`).then((r) => r.data);
+
+export const closeGuardCase =(id: string, resolution: "expected" | "handled", quiet_site: string | null) =>
   apiClient.post<GuardCase>(`/guard/cases/${id}/close`, { resolution, quiet_site }).then((r) => r.data);
 
 export const removeQuietSite = (site: string) =>
