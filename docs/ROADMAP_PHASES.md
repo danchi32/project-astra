@@ -2018,6 +2018,23 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 - **Not in S3:** blocking only during work hours. Chrome and Edge have no time-of-day block list;
   it would mean the agent switching the policy by the clock. Later, if asked for.
 
+**S5 as built (19 Nov, branch `phase-3`):** the AI Guard part of the owner's brief.
+- **Where:** J1's brief (Reports → Brief, Today / This week, "Email it to me") gains an "AI Guard"
+  section when the org has the add-on; nothing new to schedule, and a scheduler can still call
+  `build` / `send` unchanged.
+- **Lines, all counts from SAVIO's records, no sentence written by a model:** cases opened by
+  level (or "nobody's handling of sensitive data stood out"); how often sensitive data was
+  stopped or hidden; how often people went ahead after a warning; the change against the period
+  before; USB copies with sensitive data; other browsers closed; sites SAVIO newly recognised;
+  SAVIO's top two suggestions.
+- **Needs your attention:** high cases still open; requests waiting for IT.
+- **Never who:** technicians read and e-mail the brief too, and cases name people, so no person
+  is named.
+- **Checked:** `test_weekly_brief_has_an_ai_guard_section_in_counts` (no section without the
+  add-on; the case, stopped, went-ahead, USB and trend lines; the open high case in "Needs your
+  attention"; no name anywhere). The portal's Brief page and the e-mail render sections
+  generically, so it appears in both without a portal change.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.
