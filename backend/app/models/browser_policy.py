@@ -82,6 +82,8 @@ class DeviceBrowserPolicyState(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     results: Mapped[list] = mapped_column(JSON, nullable=False)
     reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # C3b: the USB drives Windows has installed on this PC: device ID, name, own serial or not.
+    drives: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
 
 
 class GuardEvent(Base):

@@ -36,9 +36,11 @@ public class BrowserPolicyWorkerTests
         public bool EventsAccepted = true;
 
         public Task<AgentBrowserPolicy?> GetBrowserPolicyAsync(string t, CancellationToken ct) { Fetches++; return Task.FromResult(Next); }
+        public readonly List<IReadOnlyList<SeenDrive>> Drives = [];
         public Task<bool> ReportBrowserPolicyAsync(string t, int v, IReadOnlyList<ApplyReport> r,
-                                                   IReadOnlyDictionary<string, int> closed, CancellationToken ct)
-        { Reports.Add((v, r)); Closed.Add(closed); return Task.FromResult(ReportAccepted); }
+                                                   IReadOnlyDictionary<string, int> closed, IReadOnlyList<SeenDrive> drives,
+                                                   CancellationToken ct)
+        { Reports.Add((v, r)); Closed.Add(closed); Drives.Add(drives); return Task.FromResult(ReportAccepted); }
         public Task<bool> SendGuardEventsAsync(string t, IReadOnlyList<QueuedGuardEvent> events, CancellationToken ct)
         { EventBatches.Add(events); return Task.FromResult(EventsAccepted); }
         public IReadOnlyList<AgentGuardApproval>? Approvals = [];
@@ -75,12 +77,35 @@ public class BrowserPolicyWorkerTests
 
     readonly List<IReadOnlyList<AgentGuardApproval>> _stored = [];
 
+    IReadOnlyList<SeenDrive> _drives = [];
+
     BrowserPolicyWorker Worker() => new(_enroll, _api, new SubscriptionState(),
         Options.Create(new AgentOptions()), NullLogger<BrowserPolicyWorker>.Instance)
     {
         Apply = p => { _applied.Add(p); return _result(p); },
         StoreApprovals = a => _stored.Add(a),
+        Drives = () => _drives,
     };
+
+    [Fact]
+    public async Task Drives_seen_are_reported_when_they_change_and_only_while_ai_guard_is_on()
+    {
+        var w = Worker();
+        var t0 = new DateTime(2026, 11, 19, 9, 0, 0, DateTimeKind.Utc);
+        _drives = [new(@"USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", "SanDisk Cruzer", true)];
+        _api.Next = Policy(1);
+        await w.RunOnceAsync(t0, default);
+        Assert.Equal("SanDisk Cruzer", Assert.Single(_api.Drives[^1]).Name);
+        await w.RunOnceAsync(t0.AddMinutes(1), default);
+        Assert.Single(_api.Reports);                                      // nothing new: nothing said
+        _drives = [.. _drives, new(@"USBSTOR\Disk&Ven_General&Prod_USB_Disk&Rev_2.00\7&1a2b3c&0", "General USB Disk", false)];
+        await w.RunOnceAsync(t0.AddMinutes(2), default);
+        Assert.Equal(2, _api.Drives[^1].Count);                           // a new drive: reported
+
+        _api.Next = new AgentBrowserPolicy(0, new AgentBrowserPolicyBody());   // AI Guard off
+        await w.RunOnceAsync(t0.AddHours(1), default);
+        Assert.Empty(_api.Drives[^1]);
+    }
 
     [Fact]
     public async Task Approvals_are_fetched_only_where_the_org_asks_for_them()

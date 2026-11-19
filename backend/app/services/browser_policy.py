@@ -93,7 +93,32 @@ OTHER_BROWSERS: dict[str, str] = {   # name → how its installed-app name start
     "Brave": "brave", "Opera": "opera", "Vivaldi": "vivaldi", "Yandex Browser": "yandex",
     "Tor Browser": "tor browser", "Chromium": "chromium", "Waterfox": "waterfox", "LibreWolf": "librewolf",
 }
-UsbMode = Literal["off", "read_only", "encrypted_only", "on_request", "block"]
+UsbMode = Literal["off", "read_only", "encrypted_only", "on_request", "block", "company_drives"]
+# C3b: a USB disk's Windows device instance ID, as the agent reports it. Never SCSI\ (internal disks).
+_DRIVE_ID = re.compile(r"^USBSTOR\\[A-Za-z0-9&_.\-]{1,200}\\[A-Za-z0-9&_.\-]{1,100}$")
+MAX_APPROVED_DRIVES = 100
+
+
+class ApprovedDrive(BaseModel):
+    """C3b: a company drive, approved by an admin, with the name they gave it."""
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(max_length=310)
+    name: str = Field(min_length=1, max_length=60)
+
+    @field_validator("id")
+    @classmethod
+    def _id(cls, v: str) -> str:
+        if not _DRIVE_ID.match(v):
+            raise ValueError("Not a USB drive's device ID")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = v.strip()
+        if not v or has_control(v):
+            raise ValueError("A drive's name must be plain text")
+        return v
 USB_WINDOW_MINUTES = (15, 480)   # shortest and longest write window IT can open
 OtherBrowser = Literal["Brave", "Opera", "Vivaldi", "Yandex Browser", "Tor Browser", "Chromium", "Waterfox",
                        "LibreWolf"]
@@ -179,6 +204,16 @@ class BrowserPolicyBody(BaseModel):
     # C3b: record what is copied onto USB drives, in counts, checked on the PC by the scanner that
     # has no network. Independent of usb_mode; off by default.
     usb_observe: bool = False
+    # C3b: in company_drives mode, the only USB drives that work; every other one is not installed.
+    usb_approved_drives: list[ApprovedDrive] = Field(default_factory=list, max_length=MAX_APPROVED_DRIVES)
+
+    @field_validator("usb_approved_drives")
+    @classmethod
+    def _drives(cls, v: list[ApprovedDrive]) -> list[ApprovedDrive]:
+        seen: dict[str, ApprovedDrive] = {}
+        for d in v:
+            seen.setdefault(d.id.upper(), d)
+        return list(seen.values())
 
     @field_validator("microsoft_tenant_id", "microsoft_policy_id")
     @classmethod
@@ -282,7 +317,7 @@ class BrowserResult(BaseModel):
     # "Scanner" is not a browser: it is E4's firewall block on the extension's native host.
     # Nor is "Windows": it is Windows' own tenant restrictions (D2 on the PC). "Usb" and
     # "UsbEncryption" are Windows' removable-storage and BitLocker To Go policies (C3).
-    browser: Literal["Chrome", "Edge", "Firefox", "Scanner", "Windows", "Usb", "UsbEncryption"]
+    browser: Literal["Chrome", "Edge", "Firefox", "Scanner", "Windows", "Usb", "UsbEncryption", "UsbDevices"]
     set: list[str] = Field(default_factory=list, max_length=50)
     repaired: list[str] = Field(default_factory=list, max_length=50)
     removed: list[str] = Field(default_factory=list, max_length=50)
@@ -301,10 +336,32 @@ class BrowserResult(BaseModel):
         return None if v is None else "".join(ch for ch in v if not unicodedata.category(ch).startswith("C"))
 
 
+class SeenDrive(BaseModel):
+    """C3b: a USB drive Windows has installed on the reporting PC."""
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(max_length=310)
+    name: str = Field(max_length=100)
+    unique_serial: bool = True
+
+    @field_validator("id")
+    @classmethod
+    def _id(cls, v: str) -> str:
+        if not _DRIVE_ID.match(v):
+            raise ValueError("Not a USB drive's device ID")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        # Device-supplied and shown to admins: control and invisible characters go.
+        return "".join(ch for ch in v if not unicodedata.category(ch).startswith("C")).strip() or "USB drive"
+
+
 class BrowserPolicyReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: int = Field(ge=0)
     results: list[BrowserResult] = Field(max_length=10)
+    drives: list[SeenDrive] = Field(default_factory=list, max_length=50)
     # D10: how many times each other browser was closed since the last report. Only known names.
     closed: dict[OtherBrowser, int] = Field(default_factory=dict)
 
@@ -558,12 +615,13 @@ async def record_report(session: AsyncSession, device: Device, report: BrowserPo
             update = [n for n in r.repaired if not n.startswith("user-level ")]
             r.set, r.repaired = r.set + update, [n for n in r.repaired if n.startswith("user-level ")]
     results = [r.model_dump() for r in report.results]
+    drives = [d.model_dump() for d in report.drives]
     if state is None:
         state = DeviceBrowserPolicyState(device_id=device.id, org_id=device.org_id, version=report.version,
-                                         results=results, reported_at=utcnow())
+                                         results=results, reported_at=utcnow(), drives=drives)
         session.add(state)
     else:
-        state.version, state.results, state.reported_at = report.version, results, utcnow()
+        state.version, state.results, state.reported_at, state.drives = report.version, results, utcnow(), drives
     if report.closed:
         await AuditService(session).record(
             org_id=device.org_id, actor_id=None, action="guard.other_browser_closed",
@@ -593,6 +651,26 @@ async def record_report(session: AsyncSession, device: Device, report: BrowserPo
                 message=message, link="/guard",
             )
     await session.commit()
+
+
+async def drives_seen(session: AsyncSession, org_id) -> list[dict]:
+    """C3b: every USB drive the org's PCs reported, with where it was seen and which policies
+    already approve it, so an admin can approve the company's own."""
+    approved: dict[str, list[str]] = {}
+    org = await session.get(OrgBrowserPolicy, org_id)
+    for scope, row in [("Everyone", org)] + [(name, g) for g, name in await group_policies(session, org_id)]:
+        for d in ((row.policy if row else None) or {}).get("usb_approved_drives", []):
+            approved.setdefault(d["id"].upper(), []).append(scope)
+    seen: dict[str, dict] = {}
+    for state, host in await device_states(session, org_id):
+        for d in state.drives or []:
+            entry = seen.setdefault(d["id"].upper(), {**d, "pcs": [], "last_seen": state.reported_at})
+            if host not in entry["pcs"]:
+                entry["pcs"].append(host)
+            entry["last_seen"] = max(entry["last_seen"], state.reported_at)
+    for key, entry in seen.items():
+        entry["approved_in"] = approved.get(key, [])
+    return sorted(seen.values(), key=lambda e: (bool(e["approved_in"]), e["name"].lower()))
 
 
 async def device_states(session: AsyncSession, org_id) -> list[tuple[DeviceBrowserPolicyState, str]]:

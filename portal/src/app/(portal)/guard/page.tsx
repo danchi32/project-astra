@@ -6,7 +6,7 @@ import { ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
   FINDING_KINDS, closeUsbWindow, deleteGroupPolicy, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices,
-  getGroupPolicies, getSiteCategories, openUsbWindow, putBrowserPolicy, putGroupPolicy, type BrowserPolicy,
+  getDrivesSeen, getGroupPolicies, getSiteCategories, openUsbWindow, putBrowserPolicy, putGroupPolicy, type BrowserPolicy,
   type DeviceBrowserState, type FindingKind,
 } from "@/lib/api/guard";
 import { listDeviceGroups } from "@/lib/api/grouping";
@@ -29,6 +29,7 @@ const SWITCHES: { key: keyof BrowserPolicy; label: string; help: string }[] = [
 // What a PC's report rows are, where they aren't a browser.
 const WHERE: Record<string, string> = {
   Scanner: "Scanner's network block", Windows: "Microsoft 365 on the PC", Usb: "USB drives", UsbEncryption: "USB encryption",
+  UsbDevices: "Company drives",
 };
 
 // C3: USB drives and phones.
@@ -39,8 +40,67 @@ const USB_MODES: { value: BrowserPolicy["usb_mode"]; label: string; help: string
     help: "Copying only onto drives encrypted with BitLocker To Go; phones read-only." },
   { value: "on_request", label: "Read-only, IT can allow writing for a while",
     help: "Read-only, until IT allows writing on one PC for a set time (in the PC list below). It ends by itself." },
+  { value: "company_drives", label: "Company drives only",
+    help: "Only the drives you approve below work; any other USB drive does not work at all. Phones read-only." },
   { value: "block", label: "Block", help: "No access to USB drives or phones at all." },
 ];
+
+/** C3b: the approved company drives, and the drives seen on the org's PCs to approve from. */
+function CompanyDrives({ form, setForm, canEdit }: {
+  form: BrowserPolicy; setForm: (f: BrowserPolicy) => void; canEdit: boolean;
+}) {
+  const { data: seen } = useQuery({ queryKey: ["drives-seen"], queryFn: getDrivesSeen, enabled: canEdit, retry: false });
+  const [names, setNames] = useState<Record<string, string>>({});
+  const muted = { color: "var(--text-secondary)" };
+  const box = { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" };
+  const approved = new Set(form.usb_approved_drives.map((d) => d.id.toUpperCase()));
+  const pending = (seen ?? []).filter((d) => !approved.has(d.id.toUpperCase()));
+  return (
+    <div className="rounded-lg p-3 space-y-3 text-sm" style={box}>
+      <div>
+        <div className="font-medium">Company drives ({form.usb_approved_drives.length})</div>
+        {!form.usb_approved_drives.length && (
+          <p className="text-xs" style={{ color: "#f59e0b" }}>None approved yet: no USB drive will work on these PCs.</p>
+        )}
+        {form.usb_approved_drives.map((d) => (
+          <div key={d.id} className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-medium">{d.name}</span>
+            <span className="font-mono truncate max-w-md" style={muted} title={d.id}>{d.id}</span>
+            {canEdit && (
+              <button className="underline" style={muted}
+                onClick={() => setForm({ ...form, usb_approved_drives: form.usb_approved_drives.filter((x) => x.id !== d.id) })}>
+                remove
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {canEdit && (
+        <div>
+          <div className="font-medium">Drives seen on your PCs</div>
+          <p className="text-xs" style={muted}>Plug a new company drive into any PC with SAVIO; it shows up here within the hour.</p>
+          {pending.map((d) => (
+            <div key={d.id} className="flex flex-wrap items-center gap-2 text-xs py-1">
+              <span>{d.name}</span>
+              <span style={muted}>on {d.pcs.join(", ")}</span>
+              {!d.unique_serial && <span style={{ color: "#f59e0b" }} title="Windows made its serial number up, so it only matches in the same USB port">no serial of its own</span>}
+              <input placeholder="Name, e.g. Accounts drive 1" maxLength={60} value={names[d.id] ?? ""}
+                onChange={(e) => setNames({ ...names, [d.id]: e.target.value })}
+                className="px-2 py-1 rounded text-xs outline-none" style={box} />
+              <button className="underline" style={{ color: "var(--accent)" }} disabled={!(names[d.id] ?? "").trim()}
+                onClick={() => setForm({ ...form, usb_approved_drives: [...form.usb_approved_drives,
+                  { id: d.id, name: (names[d.id] ?? "").trim() }] })}>
+                Approve
+              </button>
+            </div>
+          ))}
+          {seen && !pending.length && <p className="text-xs" style={muted}>No other drives seen.</p>}
+          <p className="text-xs" style={muted}>Approving or removing takes effect when you save the policy.</p>
+        </div>
+      )}
+    </div>
+  );
+}
 const USB_MINUTES = [[15, "15 minutes"], [30, "30 minutes"], [60, "1 hour"], [240, "4 hours"], [480, "8 hours"]] as const;
 
 /** C3: one PC's USB write window: when it ends, or a way to open one. */
@@ -267,6 +327,7 @@ export default function GuardPage() {
               in may need to be reconnected. If Group Policy already sets these on a PC, SAVIO leaves them alone and shows a conflict.
             </span>
           </label>
+          {form.usb_mode === "company_drives" && <CompanyDrives form={form} setForm={setForm} canEdit={isAdmin} />}
           <label className="flex items-start gap-3 text-sm" style={{ color: "var(--text-primary)" }}>
             <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={form.usb_observe}
               onChange={(e) => setForm({ ...form, usb_observe: e.target.checked })} />

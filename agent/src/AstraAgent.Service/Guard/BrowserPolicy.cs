@@ -75,7 +75,12 @@ public sealed record BrowserPolicy
     /// <summary>C3b: record what is copied onto USB drives, in counts (<see cref="UsbCopyWatcher"/>).
     /// Not a Windows setting: the writer ignores it, except to keep the scanner off the network.</summary>
     public bool UsbObserve { get; init; }
-    static readonly string[] UsbModes = ["off", "read_only", "encrypted_only", "on_request", "block"];
+    static readonly string[] UsbModes = ["off", "read_only", "encrypted_only", "on_request", "block", "company_drives"];
+    /// <summary>C3b: in company_drives mode, the USB drives that may be used (Windows device
+    /// instance IDs, as the PCs reported them). Every other USB drive is not installed.</summary>
+    public IReadOnlyList<string> UsbApprovedDrives { get; init; } = Array.Empty<string>();
+    public const int MaxApprovedDrives = 100;
+    static readonly Regex DriveId = new(@"^USBSTOR\\[A-Za-z0-9&_.\-]{1,200}\\[A-Za-z0-9&_.\-]{1,100}$", RegexOptions.CultureInvariant);
 
     /// <summary>Close <see cref="OtherBrowsers"/> as they start (<see cref="OtherBrowserBlocker"/>).
     /// Not a browser setting: the writer ignores it.</summary>
@@ -125,7 +130,9 @@ public sealed record BrowserPolicy
         // These become request headers: only IDs of the expected shape, never anything else.
         if (MicrosoftTenantId is not null != MicrosoftPolicyId is not null) problems.Add("Microsoft needs a tenant ID and a policy ID");
         if (MicrosoftOnWindows && MicrosoftTenantId is null) problems.Add("Windows tenant restrictions need the Microsoft tenant ID and policy ID");
-        if (!UsbModes.Contains(UsbMode)) problems.Add($"USB mode '{Trim(UsbMode)}' is not off, read_only, encrypted_only, on_request or block");
+        if (!UsbModes.Contains(UsbMode)) problems.Add($"USB mode '{Trim(UsbMode)}' is not off, read_only, encrypted_only, on_request, block or company_drives");
+        if (UsbApprovedDrives.Count > MaxApprovedDrives) problems.Add($"too many approved drives (max {MaxApprovedDrives})");
+        if (UsbApprovedDrives.Any(d => !DriveId.IsMatch(d ?? ""))) problems.Add("an approved drive is not a USB drive's device ID");
         if (new[] { MicrosoftTenantId, MicrosoftPolicyId }.Any(v => v is not null && !Uuid.IsMatch(v))) problems.Add("Microsoft ID is malformed");
         foreach (var (name, list) in new[] { ("Claude organization", ClaudeOrgIds), ("ChatGPT workspace", ChatGptWorkspaceIds) })
         {
@@ -145,7 +152,7 @@ public sealed record BrowserPolicy
 /// firewall block on the native host, reported beside the browsers it serves. Nor is
 /// <see cref="Windows"/>: it is Windows' own tenant restrictions setting (D2). <see cref="Usb"/> and
 /// <see cref="UsbEncryption"/> are Windows' removable-storage and BitLocker To Go policies (C3).</summary>
-public enum Browser { Chrome, Edge, Firefox, Scanner, Windows, Usb, UsbEncryption }
+public enum Browser { Chrome, Edge, Firefox, Scanner, Windows, Usb, UsbEncryption, UsbDevices }
 
 /// <summary>
 /// A browser's own name for each setting. Chromium policies are registry values, or list
@@ -268,6 +275,7 @@ public static class BrowserPolicyMap
                 foreach (var c in Phones) v[$@"{c}\Deny_Write"] = 1;
                 break;
             case "encrypted_only":   // drives through BitLocker (UsbEncryption); phones cannot be encrypted
+            case "company_drives":   // drives through device installation (UsbDevices); phones are not company drives
                 foreach (var c in Phones) v[$@"{c}\Deny_Write"] = 1;
                 break;
         }

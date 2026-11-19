@@ -34,6 +34,9 @@ public sealed record ApplyReport(
 /// setting that does not stick is an error, never a silent success, because the admin must
 /// not believe a lock is on when it is not.
 /// </summary>
+/// <summary>C3b: a USB drive Windows has installed on this PC.</summary>
+public sealed record SeenDrive(string Id, string Name, bool UniqueSerial);
+
 public static class BrowserPolicyWriter
 {
     const string OwnedValue = "Owned";
@@ -89,6 +92,10 @@ public static class BrowserPolicyWriter
             if (usb.Changed || usb.Error is not null || usb.Conflicts.Count > 0 || policy.UsbMode != "off")
                 reports.Add(usb);
         }
+        var devices = ApplyDeviceInstall(Registry.LocalMachine,
+                                         policy.UsbMode == "company_drives" ? policy.UsbApprovedDrives : null);
+        if (devices.Changed || devices.Error is not null || devices.Conflicts.Count > 0 || policy.UsbMode == "company_drives")
+            reports.Add(devices);
 
         // E4: while the scanner reads anything (a browser runs the extension, D5's file scan is
         // on, or C3b checks USB copies), it has no network.
@@ -184,6 +191,120 @@ public static class BrowserPolicyWriter
         {
             return new ApplyReport(browser, set, repaired, removed, conflicts, $"Could not write {browser} policy: {ex.Message}");
         }
+    }
+
+    // ── C3b: company drives only (Windows' Device Installation Restrictions) ──────────────────
+
+    public const string DeviceInstallPath = @"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions";
+    /// <summary>The compatible ID every USB mass-storage disk carries, and nothing else: an
+    /// internal SATA or NVMe disk is SCSI\Disk, so it can never be caught by this.</summary>
+    public const string UsbDiskId = @"USBSTOR\Disk";
+    static readonly string[] DeviceInstallNames = ["AllowDenyLayered", "AllowInstanceIDs", "DenyDeviceIDs", "DenyDeviceIDsRetroactive"];
+
+    /// <summary>
+    /// Company drives only: USB disks are not installed, except the approved ones (their exact
+    /// device instance IDs). "Layered evaluation" lets the specific allow win over the general
+    /// prevent; "retroactive" also removes a USB disk installed before, so a personal drive used
+    /// last week does not keep working. Keyboards, mice, phones and internal disks are untouched.
+    /// <paramref name="approved"/> null: not in this mode, so SAVIO's values go.
+    ///
+    /// Windows reads these as one policy, so all or nothing, as with Microsoft 365 on the PC: if
+    /// anything else already sets device installation restrictions here (Intune, a GPO), SAVIO
+    /// writes none of it and reports a conflict.
+    /// </summary>
+    public static ApplyReport ApplyDeviceInstall(RegistryKey root, IReadOnlyList<string>? approved)
+    {
+        try
+        {
+            var owned = ReadOwned(root, Browser.UsbDevices);
+            using (var current = root.OpenSubKey(DeviceInstallPath))
+            {
+                var present = (current?.GetValueNames() ?? []).Concat(current?.GetSubKeyNames() ?? []);
+                if (present.Any(n => !owned.Contains(n)))
+                    return new ApplyReport(Browser.UsbDevices, [], [], [], approved is null ? [] : DeviceInstallNames, null);
+                if (approved is null && owned.Count == 0)
+                    return new ApplyReport(Browser.UsbDevices, [], [], [], [], null);   // never used here
+                if (approved is not null && current is not null && HoldsDeviceInstall(current, approved))
+                    return new ApplyReport(Browser.UsbDevices, [], [], [], [], null);
+            }
+            using var key = root.CreateSubKey(DeviceInstallPath, writable: true);
+            foreach (var n in owned)
+            {
+                if (key.GetSubKeyNames().Contains(n, StringComparer.OrdinalIgnoreCase)) key.DeleteSubKeyTree(n, false);
+                key.DeleteValue(n, false);
+            }
+            if (approved is null)
+            {
+                WriteOwned(root, Browser.UsbDevices, []);
+                foreach (var path in new[] { DeviceInstallPath, DeviceInstallPath[..DeviceInstallPath.LastIndexOf('\\')] })
+                {
+                    using (var k = root.OpenSubKey(path))
+                        if (k is null || k.ValueCount + k.SubKeyCount > 0) break;
+                    root.DeleteSubKey(path, false);
+                }
+                return new ApplyReport(Browser.UsbDevices, [], [], owned.Order().ToList(), [], null);
+            }
+            key.SetValue("AllowDenyLayered", 1, RegistryValueKind.DWord);
+            key.SetValue("DenyDeviceIDs", 1, RegistryValueKind.DWord);
+            key.SetValue("DenyDeviceIDsRetroactive", 1, RegistryValueKind.DWord);
+            using (var deny = key.CreateSubKey("DenyDeviceIDs", writable: true))
+                deny.SetValue("1", UsbDiskId, RegistryValueKind.String);
+            if (approved.Count > 0)
+            {
+                key.SetValue("AllowInstanceIDs", 1, RegistryValueKind.DWord);
+                using var allow = key.CreateSubKey("AllowInstanceIDs", writable: true);
+                for (var i = 0; i < approved.Count; i++) allow.SetValue((i + 1).ToString(), approved[i], RegistryValueKind.String);
+            }
+            var written = DeviceInstallNames.Where(n => approved.Count > 0 || n != "AllowInstanceIDs").ToList();
+            WriteOwned(root, Browser.UsbDevices, new HashSet<string>(written, StringComparer.OrdinalIgnoreCase));
+            return new ApplyReport(Browser.UsbDevices, owned.Count == 0 ? written : [], owned.Count == 0 ? [] : written, [], [],
+                HoldsDeviceInstall(key, approved) ? null : "Did not stick (something else rewrites the device installation policy)");
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            return new ApplyReport(Browser.UsbDevices, [], [], [], [], $"Could not write the device installation policy: {ex.Message}");
+        }
+    }
+
+    static bool HoldsDeviceInstall(RegistryKey k, IReadOnlyList<string> approved)
+    {
+        bool One(string n) => k.GetValue(n) is int v && v == 1;
+        using var deny = k.OpenSubKey("DenyDeviceIDs");
+        using var allow = k.OpenSubKey("AllowInstanceIDs");
+        var denyOk = deny is { ValueCount: 1, SubKeyCount: 0 } && deny.GetValue("1") as string == UsbDiskId;
+        var allowOk = approved.Count == 0
+            ? allow is null && k.GetValue("AllowInstanceIDs") is null
+            : One("AllowInstanceIDs") && allow is not null && allow.ValueCount == approved.Count &&
+              approved.Select((id, i) => allow.GetValue((i + 1).ToString()) as string == id).All(x => x);
+        return One("AllowDenyLayered") && One("DenyDeviceIDs") && One("DenyDeviceIDsRetroactive") && denyOk && allowOk;
+    }
+
+    /// <summary>C3b: the USB drives ever installed on this PC (Windows keeps them under
+    /// Enum\USBSTOR), so an admin can approve the company's own. Device instance ID, the name
+    /// Windows shows, and whether the drive has a serial number of its own (Windows makes one up,
+    /// "7&…&0", for a drive that does not, and that one changes with the USB port).</summary>
+    public static IReadOnlyList<SeenDrive> SeenDrives(RegistryKey root)
+    {
+        var drives = new List<SeenDrive>();
+        try
+        {
+            using var usbstor = root.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\USBSTOR");
+            foreach (var device in usbstor?.GetSubKeyNames() ?? [])
+            {
+                if (!device.StartsWith("Disk&", StringComparison.OrdinalIgnoreCase)) continue;   // CD drives and the like
+                using var d = usbstor!.OpenSubKey(device);
+                foreach (var instance in d?.GetSubKeyNames() ?? [])
+                {
+                    using var i = d!.OpenSubKey(instance);
+                    var name = (i?.GetValue("FriendlyName") as string ?? device).Trim();
+                    drives.Add(new SeenDrive($@"USBSTOR\{device}\{instance}", name.Length > 100 ? name[..100] : name,
+                                             UniqueSerial: !(instance.Length > 1 && instance[1] == '&')));
+                    if (drives.Count >= 50) return drives;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException) { }
+        return drives;
     }
 
     /// <summary>C3: a policy key SAVIO has never used here is not even created; otherwise the

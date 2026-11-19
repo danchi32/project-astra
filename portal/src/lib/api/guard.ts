@@ -38,7 +38,9 @@ export interface BrowserPolicy {
   // D10: the agent closes browsers these settings don't reach, as they start.
   block_other_browsers: boolean;
   // C3: USB drives and phones, through Windows' own policies.
-  usb_mode: "off" | "read_only" | "encrypted_only" | "on_request" | "block";
+  usb_mode: "off" | "read_only" | "encrypted_only" | "on_request" | "block" | "company_drives";
+  // C3b: in company_drives mode, the only USB drives that work.
+  usb_approved_drives: { id: string; name: string }[];
   // C3b: record what is copied onto USB drives, in counts, checked on the PC.
   usb_observe: boolean;
 }
@@ -74,7 +76,7 @@ export const endGuardPilot = () =>
 
 export interface BrowserResult {
   // Scanner: E4's firewall block on the native host. Windows: its own tenant restrictions (Office apps).
-  browser: "Chrome" | "Edge" | "Firefox" | "Scanner" | "Windows" | "Usb" | "UsbEncryption";
+  browser: "Chrome" | "Edge" | "Firefox" | "Scanner" | "Windows" | "Usb" | "UsbEncryption" | "UsbDevices";
   set: string[];
   repaired: string[];
   removed: string[];
@@ -98,7 +100,19 @@ export interface DeviceBrowserState {
   usb_write_until: string | null;
 }
 
-export const openUsbWindow = (deviceId: string, minutes: number) =>
+// C3b: USB drives the org's PCs have used, and which policies already approve each.
+export interface DriveSeen {
+  id: string;
+  name: string;
+  unique_serial: boolean;   // false: Windows made the serial up, so it changes with the USB port
+  pcs: string[];
+  last_seen: string;
+  approved_in: string[];
+}
+
+export const getDrivesSeen = () => apiClient.get<DriveSeen[]>("/guard/drives").then((r) => r.data);
+
+export const openUsbWindow =(deviceId: string, minutes: number) =>
   apiClient.post<{ device_id: string; until: string }>(`/guard/devices/${deviceId}/usb-window`, { minutes }).then((r) => r.data);
 
 export const closeUsbWindow = (deviceId: string) => apiClient.delete(`/guard/devices/${deviceId}/usb-window`);

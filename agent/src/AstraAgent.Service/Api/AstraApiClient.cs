@@ -71,7 +71,7 @@ public interface IAstraApiClient
     /// was closed since the last report.</summary>
     Task<bool> ReportBrowserPolicyAsync(
         string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports,
-        IReadOnlyDictionary<string, int> closed, CancellationToken ct);
+        IReadOnlyDictionary<string, int> closed, IReadOnlyList<Guard.SeenDrive> drives, CancellationToken ct);
 
     /// <summary>E3: a batch of extension events (counts only). True when the backend has them,
     /// or refused them for good, so the caller can drop the batch.</summary>
@@ -307,7 +307,7 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
 
     public async Task<bool> ReportBrowserPolicyAsync(
         string deviceToken, int version, IReadOnlyList<Guard.ApplyReport> reports,
-        IReadOnlyDictionary<string, int> closed, CancellationToken ct)
+        IReadOnlyDictionary<string, int> closed, IReadOnlyList<Guard.SeenDrive> drives, CancellationToken ct)
     {
         var body = new Dictionary<string, object>
         {
@@ -323,6 +323,9 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         // Only when there is something: a backend from before D10's closing refuses the field.
         if (closed.Count > 0)
             body["closed"] = closed;
+        // C3b: likewise only when there are some, for the same reason.
+        if (drives.Count > 0)
+            body["drives"] = drives.Take(50).Select(d => new { id = d.Id, name = d.Name, unique_serial = d.UniqueSerial });
         using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/browser-policy/report")
         {
             Content = JsonContent.Create(body),

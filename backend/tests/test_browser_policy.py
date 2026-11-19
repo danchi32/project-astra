@@ -438,6 +438,40 @@ async def test_usb_modes_and_write_windows(client, admin_headers, user_headers, 
                               json={"minutes": 30})).status_code == 409
 
 
+async def test_company_drives(client, admin_headers, user_headers, session_factory, admin_user):
+    """C3b: PCs report the USB drives they have seen; an admin approves the company's own as part
+    of the policy (a new version), and PCs in company_drives mode get only those."""
+    await _guard_on(session_factory, admin_user.org_id)
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=POLICY)
+    _, h = await _enroll(client, admin_headers, "ACCOUNTS-PC")
+    cruzer = r"USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0"
+    generic = r"USBSTOR\Disk&Ven_General&Prod_USB_Disk&Rev_2.00\7&1a2b3c4d&0"
+    report = {"version": 1, "results": [], "drives": [
+        {"id": cruzer, "name": "SanDisk Cruzer USB Device", "unique_serial": True},
+        {"id": generic, "name": "General USB Disk\u202e", "unique_serial": False}]}
+    assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=report)).status_code == 204
+    bad = {**report, "drives": [{"id": r"SCSI\Disk&Ven_NVMe\5&1e9&0", "name": "x"}]}   # never an internal disk
+    assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=bad)).status_code == 422
+
+    seen = (await client.get("/api/v1/guard/drives", headers=admin_headers)).json()
+    assert {d["name"] for d in seen} == {"SanDisk Cruzer USB Device", "General USB Disk"}   # no invisible characters
+    assert all(d["pcs"] == ["ACCOUNTS-PC"] and d["approved_in"] == [] for d in seen)
+    assert (await client.get("/api/v1/guard/drives", headers=user_headers)).status_code == 403
+
+    body = {**POLICY, "usb_mode": "company_drives",
+            "usb_approved_drives": [{"id": cruzer, "name": " Accounts drive 1 "}, {"id": cruzer, "name": "dup"}]}
+    r = (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=body)).json()
+    assert r["version"] == 2 and r["policy"]["usb_approved_drives"] == [{"id": cruzer, "name": "Accounts drive 1"}]
+    served = (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]
+    assert served["usb_mode"] == "company_drives" and served["usb_approved_drives"][0]["id"] == cruzer
+    seen = {d["id"]: d for d in (await client.get("/api/v1/guard/drives", headers=admin_headers)).json()}
+    assert seen[cruzer]["approved_in"] == ["Everyone"] and seen[generic]["unique_serial"] is False
+
+    for bad_drive in ({"id": "C:\\Windows", "name": "x"}, {"id": cruzer, "name": ""}, {"id": cruzer, "name": "a\u202eb"}):
+        bad_body = {**body, "usb_approved_drives": [bad_drive]}
+        assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad_body)).status_code == 422
+
+
 async def test_tamper_reports_cannot_carry_prose_or_flood(client, admin_headers, session_factory, admin_user):
     """Review M1: report names are policy names, never a sentence, and a PC raises at most one
     tamper notification an hour (the audit keeps every one)."""

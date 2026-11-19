@@ -30,6 +30,10 @@ public sealed class BrowserPolicyWorker(
     /// <summary>The real writer. Tests replace it, so they never touch HKLM.</summary>
     internal Func<BrowserPolicy, IReadOnlyList<ApplyReport>> Apply { get; init; } = BrowserPolicyWriter.Apply;
 
+    /// <summary>C3b: the USB drives Windows has installed here. Tests replace it.</summary>
+    internal Func<IReadOnlyList<SeenDrive>> Drives { get; init; } =
+        () => BrowserPolicyWriter.SeenDrives(Microsoft.Win32.Registry.LocalMachine);
+
     /// <summary>D7: where approvals go for the native host. Tests replace it.</summary>
     internal Action<IReadOnlyList<AgentGuardApproval>> StoreApprovals { get; init; } = GuardApprovalStore.WriteMachine;
 
@@ -108,12 +112,15 @@ public sealed class BrowserPolicyWorker(
         }
 
         var reports = Apply(policy);
+        // C3b: the USB drives this PC has seen go with the report, while AI Guard is on, so an
+        // admin can approve the company's own.
+        var drives = _current.Version > 0 ? Drives() : [];
         var signature = $"{_current.Version}|" + string.Join("|", reports.Select(r =>
-            $"{r.Browser}:{string.Join(",", r.Conflicts.Order())}:{r.Error}"));
+            $"{r.Browser}:{string.Join(",", r.Conflicts.Order())}:{r.Error}")) + "|" + string.Join(",", drives.Select(d => d.Id));
         var closed = _closed.ToDictionary();
         if (reports.Any(r => r.Changed) || signature != _lastReported || closed.Count > 0)
         {
-            if (await api.ReportBrowserPolicyAsync(token, _current.Version, reports, closed, ct))
+            if (await api.ReportBrowserPolicyAsync(token, _current.Version, reports, closed, drives, ct))
             {
                 _lastReported = signature;
                 foreach (var (name, n) in closed)   // closes counted meanwhile stay for the next report

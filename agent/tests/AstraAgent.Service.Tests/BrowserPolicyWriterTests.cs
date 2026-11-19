@@ -412,6 +412,71 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     }
 
     [Fact]
+    public void Company_drives_only_allows_the_approved_and_never_touches_other_disks()
+    {
+        const string sandisk = @"USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0";
+        Assert.Empty(new BrowserPolicy { UsbMode = "company_drives", UsbApprovedDrives = [sandisk] }.Validate());
+        Assert.NotEmpty(new BrowserPolicy { UsbMode = "company_drives", UsbApprovedDrives = [@"SCSI\Disk&Ven_NVMe\5&1e9"] }.Validate());
+        Assert.NotEmpty(new BrowserPolicy { UsbApprovedDrives = ["USBSTOR\\x\\y\r\nevil"] }.Validate());
+        Assert.Equal(2, BrowserPolicyMap.Usb(new BrowserPolicy { UsbMode = "company_drives" }, DateTime.UtcNow).Count);   // phones read-only
+
+        // Never used: nothing created.
+        Assert.False(BrowserPolicyWriter.ApplyDeviceInstall(_root, null).Changed);
+        Assert.Null(_root.OpenSubKey(BrowserPolicyWriter.DeviceInstallPath));
+
+        var r = BrowserPolicyWriter.ApplyDeviceInstall(_root, [sandisk]);
+        Assert.Equal(["AllowDenyLayered", "AllowInstanceIDs", "DenyDeviceIDs", "DenyDeviceIDsRetroactive"], r.Set.Order());
+        using (var k = _root.OpenSubKey(BrowserPolicyWriter.DeviceInstallPath)!)
+        {
+            Assert.Equal(1, k.GetValue("AllowDenyLayered"));
+            Assert.Equal(1, k.GetValue("DenyDeviceIDsRetroactive"));
+            using var deny = k.OpenSubKey("DenyDeviceIDs")!;
+            Assert.Equal(@"USBSTOR\Disk", deny.GetValue("1"));                 // USB disks only, never SCSI\Disk
+            using var allow = k.OpenSubKey("AllowInstanceIDs")!;
+            Assert.Equal(sandisk, allow.GetValue("1"));
+        }
+        Assert.False(BrowserPolicyWriter.ApplyDeviceInstall(_root, [sandisk]).Changed);   // idempotent
+
+        // Someone removed the allow list: put back, reported.
+        using (var k = _root.OpenSubKey(BrowserPolicyWriter.DeviceInstallPath, true)!) k.DeleteSubKeyTree("AllowInstanceIDs");
+        Assert.NotEmpty(BrowserPolicyWriter.ApplyDeviceInstall(_root, [sandisk]).Repaired);
+        // No drive approved yet: every USB disk is held back, and no empty allow list is written.
+        BrowserPolicyWriter.ApplyDeviceInstall(_root, []);
+        using (var k = _root.OpenSubKey(BrowserPolicyWriter.DeviceInstallPath)!)
+            Assert.Null(k.OpenSubKey("AllowInstanceIDs"));
+
+        // Mode off: SAVIO's values go, with the keys they leave empty.
+        Assert.NotEmpty(BrowserPolicyWriter.ApplyDeviceInstall(_root, null).Removed);
+        Assert.Null(_root.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall"));
+
+        // An org's own device installation policy: all of it left alone, reported.
+        using (var gpo = _root.CreateSubKey(BrowserPolicyWriter.DeviceInstallPath, true)) gpo.SetValue("DenyRemovableDevices", 1);
+        var c = BrowserPolicyWriter.ApplyDeviceInstall(_root, [sandisk]);
+        Assert.NotEmpty(c.Conflicts);
+        Assert.False(c.Changed);
+        using (var k = _root.OpenSubKey(BrowserPolicyWriter.DeviceInstallPath)!)
+            Assert.Equal(["DenyRemovableDevices"], k.GetValueNames());
+    }
+
+    [Fact]
+    public void Drives_seen_are_read_from_windows_list_of_usb_disks()
+    {
+        using (var enumKey = _root.CreateSubKey(@"SYSTEM\CurrentControlSet\Enum\USBSTOR", true))
+        {
+            using (var d = enumKey.CreateSubKey(@"Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", true)) d.SetValue("FriendlyName", "SanDisk Cruzer USB Device");
+            using (var d = enumKey.CreateSubKey(@"Disk&Ven_General&Prod_USB_Disk&Rev_2.00\7&1a2b3c4d&0", true)) d.SetValue("FriendlyName", "General USB Disk");
+            using (var cd = enumKey.CreateSubKey(@"CdRom&Ven_Virtual&Prod_CD\123&0", true)) cd.SetValue("FriendlyName", "Virtual CD");
+        }
+        var seen = BrowserPolicyWriter.SeenDrives(_root);
+        Assert.Equal(2, seen.Count);                                                     // not the CD drive
+        var cruzer = seen.Single(s => s.Name.StartsWith("SanDisk"));
+        Assert.Equal(@"USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", cruzer.Id);
+        Assert.True(cruzer.UniqueSerial);
+        Assert.False(seen.Single(s => s.Name.StartsWith("General")).UniqueSerial);       // Windows made the serial up
+        Assert.Empty(new BrowserPolicy { UsbApprovedDrives = seen.Select(s => s.Id).ToList() }.Validate());
+    }
+
+    [Fact]
     public void Firefox_is_written_to_only_under_program_files()
     {
         // Review M4: a user-writable install folder is never written to as SYSTEM.

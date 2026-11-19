@@ -464,6 +464,26 @@ async def deny(
     return await _decide(session, actor, approval_id, False, 0, body.requested_at)
 
 
+# ── C3b: USB drives the PCs have seen, for approving company drives ─────────────────────────
+
+class DriveSeenRead(BaseModel):
+    id: str
+    name: str
+    unique_serial: bool
+    pcs: list[str]
+    last_seen: datetime
+    approved_in: list[str]   # "Everyone" and/or group names whose policy already approves it
+
+
+@router.get("/drives", response_model=list[DriveSeenRead],
+            summary="USB drives the organization's PCs have used, and where each is approved (admin)")
+async def drives_seen(
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> list[DriveSeenRead]:
+    return [DriveSeenRead(**d) for d in await browser_policy.drives_seen(session, actor.org_id)]
+
+
 # ── C3: USB write windows ─────────────────────────────────────────────────────────────────────
 
 class UsbWindowWrite(BaseModel):

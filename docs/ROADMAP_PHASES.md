@@ -1881,6 +1881,46 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 - **Not checked:** a real pen drive. That is the VM test.
 - **Next in C3b:** a person asking for a write window from the tray; company drives by serial.
 
+**C3b, part 2 as built (19 Nov, branch `phase-3`):** company drives only.
+- **Use case:** the company buys a few drives (Tally backups, files for the CA, a client
+  presentation) and only those work; a personal pendrive does not; a lost company drive is
+  removed from the list. The write window stays for one-off needs.
+- **Mode:** `usb_mode` "company_drives", with `usb_approved_drives` ({id, name}, at most 100) in
+  the policy itself, so approving or removing a drive is a new version (never mistaken for
+  tampering) and a group can have its own list. Phones are read-only in this mode.
+- **How (no driver):** Windows' Device Installation Restrictions (DeviceInstallation.admx, read
+  on this laptop) under `HKLM\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions`:
+  `AllowDenyLayered` = 1 (Windows 10 21H2+), `DenyDeviceIDs` = 1 with list `USBSTOR\Disk`,
+  `DenyDeviceIDsRetroactive` = 1 (a personal drive used before stops working too), and
+  `AllowInstanceIDs` = 1 with the approved drives' exact instance IDs. `USBSTOR\Disk` is the
+  compatible ID of USB mass-storage disks only: this laptop's own NVMe disk is `SCSI\Disk`
+  (checked), so internal disks, keyboards, mice and phones are never caught. The disk *class*
+  was deliberately not used: it would include internal disks.
+- **Writer:** one policy, all or nothing (as for Microsoft 365 on the PC): anything else under
+  Restrictions (Intune, a GPO) means SAVIO writes none of it and reports a conflict. Rewritten
+  when it drifts (repair), removed with its empty keys when the mode changes, untouched if never
+  used. Reported as "UsbDevices" ("Company drives").
+- **Drives seen:** the agent reads the USB disks Windows has installed
+  (`Enum\USBSTOR\Disk&…\<instance>`: ID, name, and whether the serial is the drive's own; Windows
+  makes one up, "7&…&0", for drives without one, and that one changes with the USB port), up to
+  50, and sends them with the policy report when they change, only while AI Guard is on
+  (migration 0099 keeps them per PC). `GET /guard/drives` lists them for admins with the PCs
+  they were seen on and the policies that approve them.
+- **Portal:** "Company drives only" in the USB setting opens the approved list (remove) and
+  "Drives seen on your PCs" (name it, Approve; saved with the policy). Warns when none is
+  approved ("no USB drive will work") and on drives with no serial of their own.
+- **Checked:** agent tests (the values written, `USBSTOR\Disk` only, idempotent, repair, no empty
+  allow list, removal with empty keys, someone else's restrictions left alone, drives read from a
+  sandbox Enum with the made-up-serial flag, CD drives skipped, IDs validated; the worker sending
+  drives on change and only while on); backend `test_company_drives` (reports, an internal disk
+  refused, names cleaned, admins only, approval as a new version with dedupe, served, approved
+  where, bad names and IDs refused). Agent suite 457. On screen against the local backend: a
+  made-up PC's two drives listed (one flagged "no serial of its own"), one approved as "Accounts
+  drive 1" and saved as version 20; the local policy then set back to off (version 21).
+- **Not checked:** Windows actually refusing an unapproved drive and accepting the approved one,
+  and the retroactive removal. That is the VM test, with two real pendrives.
+- **Next in C3b:** a person asking for a write window from the tray.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.

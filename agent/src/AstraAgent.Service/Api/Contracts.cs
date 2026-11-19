@@ -234,6 +234,9 @@ public sealed record AgentGuardApproval(
     [property: JsonPropertyName("channel")] string Channel,
     [property: JsonPropertyName("valid_until")] DateTimeOffset ValidUntil);
 
+/// <summary>Phase 3c · C3b: a company drive the org approved (its name is for the portal only).</summary>
+public sealed record AgentApprovedDrive([property: JsonPropertyName("id")] string Id);
+
 /// <summary>Phase 3c · C3: the USB write window IT opened for this PC, if any (null = none).</summary>
 public sealed record AgentUsbWindow([property: JsonPropertyName("until")] DateTimeOffset? Until);
 
@@ -272,7 +275,8 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("guard_read_pdfs")] bool GuardReadPdfs = false,
     [property: JsonPropertyName("microsoft_on_windows")] bool MicrosoftOnWindows = false,
     [property: JsonPropertyName("usb_mode")] string? UsbMode = null,
-    [property: JsonPropertyName("usb_observe")] bool UsbObserve = false)
+    [property: JsonPropertyName("usb_observe")] bool UsbObserve = false,
+    [property: JsonPropertyName("usb_approved_drives")] IReadOnlyList<AgentApprovedDrive>? UsbApprovedDrives = null)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -291,5 +295,6 @@ public sealed record AgentBrowserPolicyBody(
         SlackRequesterId = SlackRequesterId, SlackAllowedIds = SlackAllowedIds ?? [],
         BlockOtherBrowsers = BlockOtherBrowsers, ReadPdfs = GuardReadPdfs, MicrosoftOnWindows = MicrosoftOnWindows,
         UsbMode = UsbMode ?? "off", UsbObserve = UsbObserve,
+        UsbApprovedDrives = (UsbApprovedDrives ?? []).Select(d => d.Id).ToList(),
     };
 }
