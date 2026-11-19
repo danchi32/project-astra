@@ -9,21 +9,30 @@ An admin can dismiss a suggestion for good. A suggestion whose condition no long
 """
 from __future__ import annotations
 
+import hashlib
+import re
 from datetime import timedelta
 
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import GuardEvent, GuardSuggestionDismissal, User
+from app.models import DailyAppUsage, GuardEvent, GuardSuggestionDismissal, Organization, User
 from app.models.base import utcnow
 from app.services import browser_policy, guard_discovery, guard_sites
 from app.services.audit import AuditService
 from app.services.browser_policy import BrowserPolicyBody
+from app.services.entitlements import WORKFORCE_INSIGHTS, features_for
 
 WINDOW = timedelta(days=14)
 AI_SITES = list(browser_policy.SITE_CATEGORIES["ai_chat"][1])
 FOUND_KINDS = ("file_sharing", "personal_email", "paste_sites")
+# S3: an unproductive site worth blocking takes at least this many minutes a day across the
+# org, used by at least this many people; a neutral one is worth a second look at an hour.
+SINK_MINUTES, NEUTRAL_MINUTES, SINK_PEOPLE = 30, 60, 3
+# Not a browser-policy field: applying it adds Tracker overrides (domain → unproductive).
+TRACKER_UNPRODUCTIVE = "tracker_unproductive"
+_SITE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
 
 class SuggestionNotFound(LookupError):
@@ -39,7 +48,18 @@ def _is_ai(site: str) -> bool:
 
 
 def _plural(n: int, word: str) -> str:
+    if word == "person":
+        return f"{n:,} {'person' if n == 1 else 'people'}"
     return f"{n:,} {word}{'' if n == 1 else 's'}"
+
+
+def _hours(minutes: int) -> str:
+    return f"{minutes} minutes" if minutes < 90 else f"{minutes / 60:.1f} hours".replace(".0 ", " ")
+
+
+def _digest(items: list[str]) -> str:
+    """A suggestion keyed by its exact set, so a new set brings a new card after a dismissal."""
+    return hashlib.sha256(",".join(items).encode()).hexdigest()[:12]
 
 
 async def _evidence(session: AsyncSession, org_id) -> dict:
@@ -64,7 +84,33 @@ async def _evidence(session: AsyncSession, org_id) -> dict:
             entry[1] += n
     return {"events": events, "ai_events": ai, "event_contact_lists": event_lists,
             "file_contact_lists": disc["contact_lists"], "files": disc["files_with_findings"], "pcs": disc["pcs"],
-            "found": found}
+            "found": found, "time": await _time_sinks(session, org_id)}
+
+
+async def _time_sinks(session: AsyncSession, org_id) -> dict[str, dict]:
+    """S3: where the org's time goes on the web, from Tracker, only where the org also has Tracker.
+    Org totals per website over the window: minutes a day and how many people, by Tracker's
+    bucket. Never who."""
+    org = await session.get(Organization, org_id)
+    if org is None or WORKFORCE_INSIGHTS not in features_for(org.plan, org.entitlement_overrides):
+        return {}
+    since = (utcnow() - WINDOW).date()
+    rows = (await session.execute(
+        select(DailyAppUsage.label, DailyAppUsage.bucket, func.sum(DailyAppUsage.minutes),
+               func.count(func.distinct(DailyAppUsage.username)))
+        .where(DailyAppUsage.org_id == org_id, DailyAppUsage.day >= since)
+        .group_by(DailyAppUsage.label, DailyAppUsage.bucket))).all()
+    overridden = set(((org.workforce_categories or {}).get("domain") or {}).keys())
+    out: dict[str, dict] = {}
+    for label, bucket, minutes, people in rows:
+        site = (label or "").lower()
+        if not _SITE.match(site) or site.endswith(".exe"):
+            continue   # an app, not a website
+        # A site the admin already classed is theirs to decide; its stored days may lag behind.
+        e = out.setdefault(site, {"bucket": "overridden" if site in overridden else bucket, "per_day": 0, "people": 0})
+        e["per_day"] += round((minutes or 0) / WINDOW.days)
+        e["people"] = max(e["people"], people)
+    return out
 
 
 def _rules(p: BrowserPolicyBody, ev: dict, pilot: bool = False) -> list[dict]:
@@ -106,19 +152,45 @@ def _rules(p: BrowserPolicyBody, ev: dict, pilot: bool = False) -> list[dict]:
     fresh = sorted(h for h in ev.get("found", {})
                    if not any(h == b or h.endswith("." + b) for b in blocked))
     if fresh:
-        import hashlib
-
-        names = {"file_sharing": "file sharing", "personal_email": "personal e-mail", "paste_sites": "paste site"}
+        names ={"file_sharing": "file sharing", "personal_email": "personal e-mail", "paste_sites": "paste site"}
         times = sum(ev["found"][h][1] for h in fresh)
         out.append({
             # Keyed by the set, so a site found later brings a new card even after a dismissal.
-            "key": "block_found:" + hashlib.sha256(",".join(fresh).encode()).hexdigest()[:12],
+            "key": "block_found:" + _digest(fresh),
             "title": f"Block {_plural(len(fresh), 'risky site')} SAVIO found",
             "why": f"Not on any list, but SAVIO recognised {', '.join(fresh[:5])}{' and more' if len(fresh) > 5 else ''} "
                    f"as personal sites ({', '.join(sorted({names[ev['found'][h][0]] for h in fresh}))}), and sensitive "
                    f"data went to them {_plural(times, 'time')} in the last 14 days.",
             "patch": {"blocked_sites": fresh},
             "changes": [f"Block {h} ({names[ev['found'][h][0]]})" for h in fresh],
+        })
+
+    # S3 (with Tracker): websites that take a lot of the org's time. Org totals only.
+    time = ev.get("time", {})
+    sinks = sorted((s for s, t in time.items() if t["bucket"] == "unproductive" and t["per_day"] >= SINK_MINUTES
+                    and t["people"] >= SINK_PEOPLE and not any(s == b or s.endswith("." + b) for b in blocked)),
+                   key=lambda s: -time[s]["per_day"])[:10]
+    if sinks:
+        out.append({
+            "key": "block_time:" + _digest(sinks),
+            "title": f"Block {_plural(len(sinks), 'time-wasting site')}",
+            "why": "From Tracker, the last 14 days: " + "; ".join(
+                f"{s} takes {_hours(time[s]['per_day'])} a day across {_plural(time[s]['people'], 'person')}"
+                for s in sinks[:3]) + (" and more" if len(sinks) > 3 else "") + ".",
+            "patch": {"blocked_sites": sinks},
+            "changes": [f"Block {s}" for s in sinks],
+        })
+    neutral = sorted((s for s, t in time.items() if t["bucket"] == "neutral" and t["per_day"] >= NEUTRAL_MINUTES
+                      and t["people"] >= SINK_PEOPLE), key=lambda s: -time[s]["per_day"])[:10]
+    if neutral:
+        out.append({
+            "key": "unproductive:" + _digest(neutral),
+            "title": f"Count {_plural(len(neutral), 'site')} as unproductive?",
+            "why": "Tracker counts these as neutral, but they take a lot of time: " + "; ".join(
+                f"{s}, {_hours(time[s]['per_day'])} a day across {_plural(time[s]['people'], 'person')}"
+                for s in neutral[:3]) + (" and more" if len(neutral) > 3 else "") + ". Your call: they may be work.",
+            "patch": {TRACKER_UNPRODUCTIVE: neutral},
+            "changes": [f"Tracker: count {s} as unproductive" for s in neutral],
         })
 
     if extension and not p.incognito_off:
@@ -191,6 +263,22 @@ async def apply(session: AsyncSession, *, actor: User, key: str, seen_changes: l
     s = await _find(session, actor.org_id, key)
     if s["changes"] != seen_changes:
         raise SuggestionChanged("This suggestion changed since you looked at it. Review it again.")
+    if TRACKER_UNPRODUCTIVE in s["patch"]:
+        # S3: a Tracker override, not a browser setting. Added to the org's rules, audited the way
+        # Tracker's own settings page audits them; the browser policy is untouched.
+        org = await session.get(Organization, actor.org_id)
+        rules = dict(org.workforce_categories or {})
+        added = {d: "unproductive" for d in s["patch"][TRACKER_UNPRODUCTIVE]}
+        org.workforce_categories = {"domain": {**rules.get("domain", {}), **added}, "app": rules.get("app", {})}
+        audit = AuditService(session)
+        await audit.record(org_id=actor.org_id, actor_id=actor.id, action="workforce.categories.update",
+                           target_type="organization", target_id=str(actor.org_id),
+                           detail={"domain": added, "via": "AI Guard suggestion"})
+        await audit.record(org_id=actor.org_id, actor_id=actor.id, action="guard.suggestion_apply",
+                           target_type="organization", target_id=str(actor.org_id),
+                           detail={"suggestion": key, "changes": s["changes"]})
+        await session.commit()
+        return await browser_policy.get(session, actor.org_id)
     current = (await _current(session, actor.org_id)).model_dump()
     for field, value in s["patch"].items():
         current[field] = current[field] + [v for v in value if v not in current[field]] if isinstance(value, list) else value

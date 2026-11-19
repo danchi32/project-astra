@@ -1999,6 +1999,25 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 - **Not checked:** the real model's answers (no AI key locally, by design: no production secrets
   on this laptop). Worth a look on staging with a few real sites.
 
+**S3 as built (19 Nov, branch `phase-3`):** productivity suggestions, where the org has Tracker too.
+- **Data:** Tracker's `daily_app_usage` for the last 14 days, websites only (apps skipped), as
+  org totals per site: minutes a day and how many people. Never who: the cards name sites and
+  numbers only, in line with Tracker's red lines. Without the Tracker add-on: nothing.
+- **"Block N time-wasting sites":** sites Tracker counts as unproductive, 30+ minutes a day
+  across the org and 3+ people, not already blocked ("instagram.com takes 2.5 hours a day across
+  14 people"). Apply adds them to the blocked sites (audited, a new version).
+- **"Count N sites as unproductive?":** sites Tracker counts as neutral that still take an hour a
+  day across 3+ people, "your call: they may be work". Apply adds Tracker domain overrides
+  (audited as `workforce.categories.update`, "via AI Guard suggestion"); the browser policy is
+  untouched. A site the admin already classed is never suggested again, though its stored days
+  may lag until Tracker's next recompute.
+- Both are keyed by their set of sites, like S1's card.
+- **Checked:** `test_time_sinks_from_tracker_are_suggested_in_org_totals` (nothing without Tracker;
+  the block and the unproductive card with their numbers; two people is not enough; no name or app
+  in any card; applying one changes Tracker only, the other the policy; both gone after).
+- **Not in S3:** blocking only during work hours. Chrome and Edge have no time-of-day block list;
+  it would mean the agent switching the policy by the clock. Later, if asked for.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.

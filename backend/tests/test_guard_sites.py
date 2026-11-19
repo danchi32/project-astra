@@ -21,6 +21,62 @@ def _event(site, minutes_ago=5, **over):
     return {**e, **over}
 
 
+async def test_time_sinks_from_tracker_are_suggested_in_org_totals(client, admin_headers, session_factory, admin_user):
+    """S3: with Tracker on too, websites that take a lot of the org's time: block the unproductive
+    ones; count heavy 'neutral' ones as unproductive (a Tracker rule). Org totals only, never who."""
+    from datetime import date
+
+    from app.models import AuditLog, DailyAppUsage, Device, Organization
+
+    await _guard_on(session_factory, admin_user.org_id)
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=POLICY)
+    did, _ = await _enroll(client, admin_headers, "SALES-PC")
+
+    async def cards():
+        return {c["key"].split(":")[0]: c for c in (await client.get("/api/v1/guard/suggestions",
+                                                                       headers=admin_headers)).json()}
+
+    async with session_factory() as s:
+        device = await s.get(Device, __import__("uuid").UUID(did))
+        for day in range(3):
+            for who in ("asha", "ravi", "meena"):
+                for label, bucket, minutes in (("instagram.com", "unproductive", 50), ("news.example.com", "neutral", 120),
+                                               ("Microsoft Word", "productive", 300)):
+                    s.add(DailyAppUsage(device_id=device.id, org_id=admin_user.org_id, username=f"ACME\\{who}",
+                                        day=date.today() - timedelta(days=day), label=label, bucket=bucket, minutes=minutes))
+        for day in range(3):   # only two people: not enough to suggest
+            for who in ("asha", "ravi"):
+                s.add(DailyAppUsage(device_id=device.id, org_id=admin_user.org_id, username=f"ACME\\{who}",
+                                    day=date.today() - timedelta(days=day), label="youtube.com", bucket="unproductive",
+                                    minutes=200))
+        await s.commit()
+    assert "block_time" not in await cards()                 # Tracker not on for this org: nothing
+
+    async with session_factory() as s:
+        org = await s.get(Organization, admin_user.org_id)
+        org.entitlement_overrides = {**(org.entitlement_overrides or {}), "workforce_insights": True}
+        await s.commit()
+    c = await cards()
+    block, unproductive = c["block_time"], c["unproductive"]
+    assert block["changes"] == ["Block instagram.com"] and "across 3 people" in block["why"]
+    assert unproductive["changes"] == ["Tracker: count news.example.com as unproductive"]
+    for card in (block, unproductive):
+        assert not any(n in card["why"] for n in ("asha", "ravi", "meena", "Word"))   # never who, never an app
+
+    r = await client.post(f"/api/v1/guard/suggestions/{unproductive['key']}/apply", headers=admin_headers,
+                          json={"changes": unproductive["changes"]})
+    assert r.status_code == 200 and r.json()["version"] == 1                       # the browser policy is untouched
+    r = await client.post(f"/api/v1/guard/suggestions/{block['key']}/apply", headers=admin_headers,
+                          json={"changes": block["changes"]})
+    assert "instagram.com" in r.json()["policy"]["blocked_sites"]
+    assert not {"block_time", "unproductive"} & set(await cards())                   # done: both gone
+    async with session_factory() as s:
+        org = await s.get(Organization, admin_user.org_id)
+        assert org.workforce_categories["domain"] == {"news.example.com": "unproductive"}
+        audit = (await s.execute(select(AuditLog).where(AuditLog.action == "workforce.categories.update"))).scalars().one()
+        assert audit.detail["via"] == "AI Guard suggestion"
+
+
 def test_only_unknown_internet_sites_are_asked_about():
     known = {"sendbig.io": "file_sharing"}
     sites = ["chatgpt.com", "files.sendbig.io", "usb", "intranet", "dl.newshare.co.in", "app.newshare.co.in",
