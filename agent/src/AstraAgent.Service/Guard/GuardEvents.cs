@@ -270,6 +270,7 @@ public sealed class GuardEventPipeServer(GuardEventQueue queue, ILogger<GuardEve
         var e = GuardEvent.Parse(body);
         var taken = !string.IsNullOrEmpty(user) && user.Length <= 256   // not identified: cannot be attributed
                     && e is not null && e.Notable
+                    && e.Channel != "usb"   // C3b: only the service itself records USB copies
                     && queue.TryAdd(new QueuedGuardEvent(DateTime.UtcNow, user, e));
         try
         {

@@ -72,6 +72,9 @@ public sealed record BrowserPolicy
     /// <summary>C3: the end of a write window IT opened for this PC, in on_request mode. Not from
     /// the policy: the worker sets it, and the PC enforces the end by itself, online or not.</summary>
     public DateTime? UsbWriteUntil { get; init; }
+    /// <summary>C3b: record what is copied onto USB drives, in counts (<see cref="UsbCopyWatcher"/>).
+    /// Not a Windows setting: the writer ignores it, except to keep the scanner off the network.</summary>
+    public bool UsbObserve { get; init; }
     static readonly string[] UsbModes = ["off", "read_only", "encrypted_only", "on_request", "block"];
 
     /// <summary>Close <see cref="OtherBrowsers"/> as they start (<see cref="OtherBrowserBlocker"/>).

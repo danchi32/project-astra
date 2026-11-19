@@ -1856,6 +1856,31 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 - **C3b next:** observe what is copied to a drive (counts only, scanned by the host) as case
   events; a person asking for a window from the tray; company drives by serial number.
 
+**C3b, part 1 as built (19 Nov, branch `phase-3`):** what is copied onto USB drives.
+- **Switch:** `usb_observe` ("Record what is copied onto USB drives"), off by default, separate
+  from the USB mode.
+- **Agent:** `UsbCopyWatcher` lists removable drives every 3 s and watches each one. A file is
+  checked once it has been quiet for 5 s (the copy is done), in batches of up to 200, by the
+  native host's new `--scan` mode: the process E4 keeps off the network (its firewall rule now
+  also applies when only this switch is on). The host reads text, Word, Excel and (if chosen)
+  PDF, counts old Office, archives and unread PDFs as "could not check", skips photos and
+  programs, and returns one total. No names, paths or text leave it.
+- **Event:** one per batch, in the same fixed schema as the browser's: site and channel "usb",
+  counts, contact-list flag, keyword hits, "could not check". Credited to the person signed in
+  at the console. Only the service can make one: the pipe the browser side uses refuses
+  channel "usb".
+- **Cases:** a copy to a USB drive weighs like personal file sharing (3) and reads "copied to a
+  USB drive"; the Cases table names it "USB drive".
+- ponytail: the console user, not the copying process's owner (an RDP session's copy is
+  credited to whoever is at the console); upgrade path is the writer's token from an ETW file
+  trace. It sees after the fact; stopping is the USB mode's job.
+- **Checked:** agent `UsbCopyWatcherTests` (the host's scan on real files: totals, contact list,
+  keyword, the archive as could-not-check, the photo skipped, nothing named; settling and
+  batching; nothing recorded when clean, signed out or switched off) and the pipe refusing
+  "usb"; backend (taken, joins the case, weight and wording). Agent suite 454.
+- **Not checked:** a real pen drive. That is the VM test.
+- **Next in C3b:** a person asking for a write window from the tray; company drives by serial.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.

@@ -39,6 +39,8 @@ export interface BrowserPolicy {
   block_other_browsers: boolean;
   // C3: USB drives and phones, through Windows' own policies.
   usb_mode: "off" | "read_only" | "encrypted_only" | "on_request" | "block";
+  // C3b: record what is copied onto USB drives, in counts, checked on the PC.
+  usb_observe: boolean;
 }
 
 export const FINDING_KINDS = {

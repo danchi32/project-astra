@@ -21,6 +21,18 @@ if (args.Length > 0 && args[0] == "--discover")
     return 0;
 }
 
+// C3b: started by the SAVIO service with "--scan" for files copied to a USB drive. The request
+// (paths, keywords, whether to read PDFs) is JSON on stdin; one total comes back on stdout.
+if (args.Length > 0 && args[0] == "--scan")
+{
+    var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+    var request = JsonSerializer.Deserialize<FileScan.Request>(Console.In.ReadToEnd(), json);
+    if (request?.Paths is null) return 2;
+    await using var stdout = Console.OpenStandardOutput();
+    await JsonSerializer.SerializeAsync(stdout, FileScan.Run(request), json);
+    return 0;
+}
+
 // Started by Chrome / Edge / Firefox when the SAVIO extension connects. stdin/stdout carry the
 // native messaging frames; nothing else may be written to stdout, or the browser drops the
 // connection. Errors end the process quietly (exit 1) and the browser starts a fresh one.

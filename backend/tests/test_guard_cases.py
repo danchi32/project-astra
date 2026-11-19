@@ -50,6 +50,9 @@ def test_the_score_reads_the_whole_story():
     assert moved == round(plain * 1.5) and "files downloaded from crm.zoho.com" in s["reasons"]
     assert s["sites"][0]["origins"] == ["crm.zoho.com"]
     assert same_points == plain and not any("downloaded" in r for r in same["reasons"])
+    # C3b: a copy to a USB drive is as risky as personal file sharing, and says so in plain words.
+    usb_points, _, usb = guard_cases.score([_ev("usb", counts={"Pan": 50})], ignore, set())
+    assert usb_points == plain and usb["reasons"] == ["50 PANs", "copied to a USB drive"]
     hidden = guard_cases.score([_ev(action="redact", counts={"Pan": 20})], ignore, set())[0]
     spread = guard_cases.score([_ev(), _ev("claude.ai"), _ev("gemini.google.com")], ignore, set())
     assert hidden < 5 and "across 3 sites" in spread[2]["reasons"]
@@ -85,6 +88,13 @@ async def test_events_become_one_case_and_only_a_high_one_notifies(client, admin
         notes = (await s.execute(select(Notification))).scalars().all()
     assert len(notes) == 1 and notes[0].link == "/guard/cases"
     assert "ravi" not in notes[0].message.lower() and "RAVI-PC" not in notes[0].message   # seen by everyone
+
+    # C3b: the agent's USB copy events are taken and join the same person's case.
+    usb = [_event(5, site="usb", channel="usb", counts={"Aadhaar": 40})]
+    assert (await client.post("/api/v1/agent/guard/events", headers=h, json={"events": usb})).status_code == 204
+    case = (await client.get("/api/v1/guard/cases", headers=admin_headers)).json()["cases"][0]
+    assert "copied to a USB drive" in case["reasons"] and len(case["sites"]) == 3
+    assert next(s for s in case["sites"] if s["site"] == "usb")["new"] is False
 
     # Cases name people: admins only.
     assert (await client.get("/api/v1/guard/cases", headers=user_headers)).status_code == 403

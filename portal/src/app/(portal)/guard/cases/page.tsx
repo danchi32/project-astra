@@ -149,7 +149,7 @@ export default function GuardCasesPage() {
               <tbody>
                 {c.sites.map((s) => (
                   <tr key={s.site} style={{ color: "var(--text-primary)" }}>
-                    <td className="py-1 pr-3 font-mono">{s.site}{s.new && <span className="ml-1" style={{ color: "#f59e0b" }}>new</span>}</td>
+                    <td className="py-1 pr-3 font-mono">{s.site === "usb" ? "USB drive" : s.site}{s.new && <span className="ml-1" style={{ color: "#f59e0b" }}>new</span>}</td>
                     <td className="py-1 pr-3 font-mono" style={muted}>{s.origins?.length ? s.origins.join(", ") : "—"}</td>
                     <td className="py-1 pr-3">{s.events}</td>
                     <td className="py-1 pr-3">{s.items}</td>

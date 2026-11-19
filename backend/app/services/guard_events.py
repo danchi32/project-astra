@@ -43,7 +43,8 @@ class GuardEventIn(BaseModel):
     at: datetime
     windows_user: str = Field(min_length=1, max_length=256)
     site: str = Field(max_length=253)
-    channel: Literal["paste", "drop", "file", "submit"]
+    # "usb": files copied to a USB drive (C3b), recorded by the SAVIO service, not the browser.
+    channel: Literal["paste", "drop", "file", "submit", "usb"]
     mode: Literal["log", "warn", "justify", "redact", "approve", "block"]
     action: Literal["allow", "warn", "justify", "redact", "approve", "block"]
     counts: dict[FindingKind, int] = Field(default_factory=dict, max_length=7)

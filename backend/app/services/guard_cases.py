@@ -48,7 +48,8 @@ from app.services.notifications import NotificationService
 CASE_GAP = timedelta(hours=48)       # quiet this long and the next event starts a new case
 NEW_SITE = timedelta(days=7)         # a site first seen in the org this recently is "new"
 HIGH, MEDIUM = 40, 10
-RISKY = {"file_sharing": 3, "personal_email": 3, "paste_sites": 3, "ai_chat": 2, "messaging": 2, "social_media": 2}
+RISKY = {"file_sharing": 3, "personal_email": 3, "paste_sites": 3, "usb": 3, "ai_chat": 2, "messaging": 2,
+         "social_media": 2}
 LABELS = {
     "Aadhaar": "Aadhaar number", "Pan": "PAN", "Gstin": "GSTIN", "PaymentCard": "card number",
     "IndianMobile": "mobile number", "Email": "e-mail address", "BankAccount": "bank account number",
@@ -59,7 +60,9 @@ KIND_NAMES = {"file_sharing": "personal file sharing", "personal_email": "person
 
 
 def site_kind(host: str) -> str | None:
-    """The category a host (or its parent) is listed under, if any."""
+    """The category a host (or its parent) is listed under, if any. "usb" is a copy to a drive."""
+    if host == "usb":
+        return "usb"
     for key, (_, hosts) in SITE_CATEGORIES.items():
         if any(host == h or host.endswith("." + h) for h in hosts):
             return key
@@ -105,7 +108,7 @@ def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict
         for k, n in (e.counts or {}).items():
             if k not in ignore:
                 kinds[k] += n
-        s = sites.setdefault(e.site, {"site": e.site, "kind": kind, "new": e.site in new_sites, "events": 0,
+        s = sites.setdefault(e.site, {"site": e.site, "kind": kind, "new": e.site in new_sites and kind != "usb", "events": 0,
                                       "items": 0, "contact_lists": 0, "went_ahead": 0, "blocked": 0,
                                       "channels": [], "origins": []})
         s["events"] += 1
@@ -139,6 +142,9 @@ def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict
     if keyword_events:
         reasons.append("a restricted keyword" if keyword_events == 1 else f"restricted keywords {keyword_events} times")
     for s in ranked[:3]:
+        if s["site"] == "usb":
+            reasons.append("copied to a USB drive")
+            continue
         what = KIND_NAMES.get(s["kind"]) or ("a site new to your organization" if s["new"] else None)
         reasons.append(f"to {s['site']}" + (f" ({what})" if what else ""))
     if origins:

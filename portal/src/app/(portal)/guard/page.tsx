@@ -267,6 +267,17 @@ export default function GuardPage() {
               in may need to be reconnected. If Group Policy already sets these on a PC, SAVIO leaves them alone and shows a conflict.
             </span>
           </label>
+          <label className="flex items-start gap-3 text-sm" style={{ color: "var(--text-primary)" }}>
+            <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={form.usb_observe}
+              onChange={(e) => setForm({ ...form, usb_observe: e.target.checked })} />
+            <span>Record what is copied onto USB drives
+              <span className="block text-xs" style={muted}>
+                Each copy is checked on the PC once it finishes. You see what kind of data went onto a drive and who was signed
+                in, never the files&apos; names or contents; it joins that person&apos;s case. It does not stop the copy: the setting
+                above does that.
+              </span>
+            </span>
+          </label>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {([["blocked", "Blocked sites", "One per line, e.g. wetransfer.com. Covers subdomains."],
                ["allowed", "Always allowed", "Exceptions to the block list."],

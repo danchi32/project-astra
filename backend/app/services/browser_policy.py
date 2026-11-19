@@ -176,6 +176,9 @@ class BrowserPolicyBody(BaseModel):
     # read_only · encrypted_only (BitLocker To Go drives only) · on_request (read-only, except in
     # a write window IT opens for one PC) · block.
     usb_mode: UsbMode = "off"
+    # C3b: record what is copied onto USB drives, in counts, checked on the PC by the scanner that
+    # has no network. Independent of usb_mode; off by default.
+    usb_observe: bool = False
 
     @field_validator("microsoft_tenant_id", "microsoft_policy_id")
     @classmethod

@@ -117,6 +117,9 @@ public static class Discovery
         return root + (PiiScanner.Redact(below) ?? "\\[folder]");
     }
 
+    /// <summary>A file whose text this scanner reads (text-like, Word / Excel, PDF if chosen).</summary>
+    internal static bool Checkable(string ext, bool pdf) => TextExt.Contains(ext) || Documents.Readable(ext, pdf);
+
     /// <summary>The text of one file, or null if it is too big or not what its name says.</summary>
     internal static string? Text(string path, string ext, bool pdf = false)
     {

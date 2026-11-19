@@ -31,7 +31,8 @@ public sealed record GuardEvent(
     /// <summary>Largest message accepted on the pipe. A real event is about 200 bytes.</summary>
     public const int MaxBytes = 2048;
 
-    public static readonly string[] Channels = ["paste", "drop", "file", "submit"];
+    /// <summary>"usb": files copied to a USB drive (C3b), seen by the service, not the browser.</summary>
+    public static readonly string[] Channels = ["paste", "drop", "file", "submit", "usb"];
     public static readonly string[] Modes = ["log", "warn", "justify", "redact", "approve", "block"];
     public static readonly string[] Actions = ["allow", "warn", "justify", "redact", "approve", "block"];
     /// <summary>D7: what the person did after a prompt. "requested" asks IT for an approval;

@@ -131,6 +131,11 @@ public class GuardEventTests
         // Junk, or an ordinary paste with nothing found: not taken.
         Assert.False(await Send(server, B("""{"text":"hello"}"""), TokenImpersonationLevel.Identification));
         Assert.Equal(2, q.Count);
+        // C3b: only the service records USB copies; the browser side cannot make one up.
+        var usb = Valid.Replace("chatgpt.com", "usb").Replace("\"paste\"", "\"usb\"");
+        Assert.NotNull(GuardEvent.Parse(B(usb)));
+        Assert.False(await Send(server, B(usb), TokenImpersonationLevel.Identification));
+        Assert.Equal(2, q.Count);
     }
 
     static QueuedGuardEvent At(DateTime t) => new(t, @"PC\asha", GuardEvent.Parse(B(Valid))!);

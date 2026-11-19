@@ -90,11 +90,11 @@ public static class BrowserPolicyWriter
                 reports.Add(usb);
         }
 
-        // E4: while the scanner reads anything (a browser runs the extension, or D5's file scan
-        // is on), it has no network.
+        // E4: while the scanner reads anything (a browser runs the extension, D5's file scan is
+        // on, or C3b checks USB copies), it has no network.
         var exe = Path.Combine(AppContext.BaseDirectory, NativeHostRegistration.HostExe);
         var forced = ((policy.ChromeExtensionId ?? policy.EdgeExtensionId ?? policy.FirefoxExtensionId) is not null
-                      || policy.DiscoveryEnabled)
+                      || policy.DiscoveryEnabled || policy.UsbObserve)
                      && File.Exists(exe);
         var scanner = ScannerFirewallReport(forced ? exe : null);
         if (forced || scanner.Changed || scanner.Error is not null) reports.Add(scanner);

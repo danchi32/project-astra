@@ -271,7 +271,8 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("block_other_browsers")] bool BlockOtherBrowsers = false,
     [property: JsonPropertyName("guard_read_pdfs")] bool GuardReadPdfs = false,
     [property: JsonPropertyName("microsoft_on_windows")] bool MicrosoftOnWindows = false,
-    [property: JsonPropertyName("usb_mode")] string? UsbMode = null)
+    [property: JsonPropertyName("usb_mode")] string? UsbMode = null,
+    [property: JsonPropertyName("usb_observe")] bool UsbObserve = false)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -289,6 +290,6 @@ public sealed record AgentBrowserPolicyBody(
         ClaudeOrgIds = ClaudeOrgIds ?? [], ChatGptWorkspaceIds = ChatGptWorkspaceIds ?? [],
         SlackRequesterId = SlackRequesterId, SlackAllowedIds = SlackAllowedIds ?? [],
         BlockOtherBrowsers = BlockOtherBrowsers, ReadPdfs = GuardReadPdfs, MicrosoftOnWindows = MicrosoftOnWindows,
-        UsbMode = UsbMode ?? "off",
+        UsbMode = UsbMode ?? "off", UsbObserve = UsbObserve,
     };
 }
