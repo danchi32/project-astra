@@ -27,7 +27,7 @@ from app.services.exceptions import ConflictError
 from app.services.recommendations import RecommendationService
 from app.services.reports import ReportService
 
-PERIOD_DAYS = {"day": 1, "week": 7}
+PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "quarter": 90}   # month / quarter: J3's board report
 SILENT_AFTER = timedelta(hours=24)
 WARRANTY_SOON_DAYS = 30
 MAX_EMAILS_PER_HOUR = 5
@@ -35,6 +35,7 @@ MAX_EMAILS_PER_HOUR = 5
 # Sentence templates.
 T = {
     "title_day": "Your IT today", "title_week": "Your IT this week",
+    "title_month": "Your IT this month", "title_quarter": "Your IT this quarter",
     "fleet": "Computers", "security": "Security", "healing": "Fixed by SAVIO",
     "attention": "Needs your attention", "next": "Recommended next",
     "devices": "{n} computers, {online} online now.",

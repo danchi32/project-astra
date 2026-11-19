@@ -2095,6 +2095,25 @@ is where S1's AI site categories plug in.
   needed", closed, and its timeline.
 - **Needs the VM test:** a real scan reporting `old` (agent change; released with the phase).
 
+**J3 and J4 as built (19 Nov, branch `phase-3`):** printable pages from SAVIO's own records
+(browser print-to-PDF, as L1), behind the same entitlement as the rest of Reports.
+- **J3 Board report** (`GET /reports/board?days=30|90`, staff; Reports → Board report): a month
+  or a quarter on one page. Tiles (IT health as in L1, fixed by SAVIO and hours, ₹ saved,
+  DPDP readiness and breach records with AI Guard), the top five risks from the health check
+  with what to do, and the brief's sections for the period (J1 gains "month" and "quarter").
+  Counts only, never a person's name, so technicians can print it.
+- **J4 Compliance pack** (`GET /reports/compliance-pack?days=30|90`, admin; Reports →
+  Compliance pack): endpoint security per check and per PC (F1, USB posture), who can do what
+  (active users by role, staff by name, accounts switched off), the record of changes (audit log
+  counts by action) and, with AI Guard, data protection (the twelve DPDP items with evidence, the
+  contact, the retention list and the period's breach records). The admin ticks which parts go
+  in. A fixed line says it is evidence, not a certificate, and claims no standard is met.
+- **Checked:** `test_board_pack` (month / quarter, other periods refused, users refused; tiles
+  and sections; AI Guard numbers only when entitled, and no name in the report; the pack admin
+  only, PCs, roles, staff, change counts, data protection with the breach record). On screen
+  against the local backend: both pages with live data, the part switches, and the links on
+  Reports.
+
 ---
 
 ## Phase 4 — Smart Guard advanced + lifecycle
