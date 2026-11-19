@@ -182,6 +182,34 @@ class GuardCase(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class GuardIncident(Base):
+    """Phase 3b · I1: a breach record — what happened, when it was found, whose data, and the steps
+    taken, each with when and by whom. Often started from a case. `steps` maps a step key
+    (`guard_incidents.STEPS`) to {"state": done | not_needed, "at", "by", "note"}. Admin-written
+    words about an incident, never file contents."""
+
+    __tablename__ = "guard_incidents"
+    __table_args__ = (Index("ix_guard_incidents_org_status", "org_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("guard_cases.id", ondelete="SET NULL"), nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    what_happened: Mapped[str] = mapped_column(String(4000), nullable=False, default="")
+    found_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    kinds: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    people_affected: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="open")   # open | closed
+    steps: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    opened_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class GuardQuietSite(Base):
     """Phase 3c · C1: a site IT said is expected (the firm's own file share, a client portal).
     Its events are still recorded and shown under "What was found"; they just never raise a

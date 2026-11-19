@@ -110,6 +110,39 @@ export default function DpdpPage() {
             </div>
           </div>
 
+          {data.retention.length > 0 && (
+            <div id="retention" className="rounded-xl p-4 space-y-2" style={panel}>
+              <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Still needed? Old personal data to review</h2>
+              <p className="text-xs" style={muted}>
+                Files with personal data nobody has changed in over two years, by folder. Ask the owner whether each is still
+                needed: delete what is not, and move what must be kept to a restricted archive.
+              </p>
+              <table className="w-full text-xs">
+                <thead><tr>{["PC", "Folder", "Old files", "With personal data", "Contact lists"].map((h) => (
+                  <th key={h} className="text-left py-1 pr-3 uppercase whitespace-nowrap" style={muted}>{h}</th>))}</tr></thead>
+                <tbody>
+                  {data.retention.map((r) => (
+                    <tr key={`${r.hostname}${r.path}`} style={{ color: "var(--text-primary)" }}>
+                      <td className="py-1 pr-3">{r.hostname}</td>
+                      <td className="py-1 pr-3 font-mono break-all">{r.path}</td>
+                      <td className="py-1 pr-3">{r.old.toLocaleString()}</td>
+                      <td className="py-1 pr-3">{r.files_with_findings.toLocaleString()}</td>
+                      <td className="py-1 pr-3">{r.contact_lists.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="rounded-xl p-4 flex flex-wrap items-center gap-3 text-sm" style={{ ...panel, color: "var(--text-primary)" }}>
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold">If personal data gets out</h2>
+              <p className="text-xs" style={muted}>Write it down the moment it is found and work through the steps; the record prints as an incident report.</p>
+            </div>
+            <Link href="/guard/incidents" className="text-xs underline" style={{ color: "var(--accent)" }}>Breach records</Link>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-xl p-4 space-y-1 text-sm" style={{ ...panel, color: "var(--text-primary)" }}>
               <h2 className="text-sm font-semibold">Personal data kept on PCs</h2>

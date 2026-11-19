@@ -95,6 +95,7 @@ public sealed class DiscoveryWorker(
             roots.Any(root => f.Path.Equals(root, StringComparison.OrdinalIgnoreCase) ||
                               f.Path.StartsWith(root.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) &&
             f.Files >= f.FilesWithFindings && f.FilesWithFindings >= 0 && f.ContactLists >= 0 &&
+            f.Old >= 0 && f.Old <= f.FilesWithFindings &&
             f.Counts.All(kv => GuardEvent.Kinds.Contains(kv.Key) && kv.Value >= 0));
 
     static async Task<DiscoveryReport?> RunHostAsync(IReadOnlyList<string> roots, bool pdf, CancellationToken ct)

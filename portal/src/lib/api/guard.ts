@@ -115,6 +115,8 @@ export interface DpdpReadiness {
   done: number;
   total: number;
   items: DpdpItem[];
+  // Folders with the most files of personal data unchanged for two years: review these first.
+  retention: { hostname: string; path: string; old: number; files_with_findings: number; contact_lists: number }[];
   map: {
     on_pcs: { pcs: number; files: number; contact_lists: number; kinds: Record<string, number> };
     leaving: { events: number; kinds: Record<string, number>; where: Record<string, number> };
@@ -127,6 +129,50 @@ export interface DpdpReadiness {
 export const getDpdp = () => apiClient.get<DpdpReadiness>("/guard/dpdp").then((r) => r.data);
 export const setPrivacyContact = (name: string, email: string) =>
   apiClient.put("/guard/dpdp/contact", { name: name || null, email: email || null });
+
+// I1: breach records (the breach workflow; the record page prints as the incident report, J7).
+export type IncidentStepKey = "contain" | "assess" | "counsel" | "board" | "people" | "fix";
+export interface IncidentStep {
+  key: IncidentStepKey;
+  title: string;
+  help: string;
+  optional: boolean;                       // reporting: can be "not needed" on counsel's advice
+  state: "done" | "not_needed" | null;
+  at: string | null;
+  by: string | null;
+  note: string | null;
+}
+export interface Incident {
+  id: string;
+  case_id: string | null;
+  title: string;
+  what_happened: string;
+  found_at: string;
+  kinds: FindingKind[];
+  people_affected: number | null;
+  status: "open" | "closed";
+  opened_at: string;
+  closed_at: string | null;
+  steps: IncidentStep[];
+}
+export interface IncidentDetail extends Incident {
+  case: { id: string; windows_user: string; opened_at: string; level: string } | null;
+  timeline: { at: string; by: string | null; action: string; detail: Record<string, unknown> | null }[];
+}
+export interface IncidentFacts {
+  title: string;
+  what_happened: string;
+  found_at: string;
+  kinds: FindingKind[];
+  people_affected: number | null;
+}
+export const getIncidents = () => apiClient.get<Incident[]>("/guard/incidents").then((r) => r.data);
+export const getIncident = (id: string) => apiClient.get<IncidentDetail>(`/guard/incidents/${id}`).then((r) => r.data);
+export const openIncident = (body: IncidentFacts & { case_id?: string | null }) =>
+  apiClient.post<Incident>("/guard/incidents", body).then((r) => r.data);
+export const updateIncident = (id: string, body: Partial<IncidentFacts> & {
+  step?: { key: IncidentStepKey; state: "done" | "not_needed" | null; note?: string | null }; closed?: boolean;
+}) => apiClient.patch<Incident>(`/guard/incidents/${id}`, body).then((r) => r.data);
 
 // C3b: USB drives the org's PCs have used, and which policies already approve each.
 export interface DriveSeen {

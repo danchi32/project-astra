@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,14 @@ class DiscoveryFolderIn(BaseModel):
     files_with_findings: int = Field(ge=0, le=1_000_000)
     counts: dict[FindingKind, int] = Field(default_factory=dict, max_length=7)
     contact_lists: int = Field(default=0, ge=0, le=1_000_000)
+    # I1: files with findings unchanged for two years. None from agents before it was counted.
+    old: int | None = Field(default=None, ge=0, le=1_000_000)
+
+    @model_validator(mode="after")
+    def _old(self):
+        if self.old is not None and self.old > self.files_with_findings:
+            raise ValueError("more old files than files with findings")
+        return self
 
     @field_validator("path")
     @classmethod
@@ -67,7 +75,7 @@ async def ingest(session: AsyncSession, device: Device, body: DiscoveryIn) -> bo
     """This PC's map, replacing the last. Dropped (but accepted) without the add-on."""
     if not await entitled(session, device.org_id):
         return False
-    folders = [f.model_dump() for f in body.folders]
+    folders = [f.model_dump(exclude_none=True) for f in body.folders]   # no "old" key: not counted
     row = await session.get(GuardDiscovery, device.id)
     if row is None:
         session.add(GuardDiscovery(device_id=device.id, org_id=device.org_id, scanned_at=body.scanned_at,

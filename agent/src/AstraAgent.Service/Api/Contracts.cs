@@ -216,7 +216,8 @@ public sealed record DiscoveryFolder(
     [property: JsonPropertyName("files")] int Files,
     [property: JsonPropertyName("files_with_findings")] int FilesWithFindings,
     [property: JsonPropertyName("counts")] Dictionary<string, int> Counts,
-    [property: JsonPropertyName("contact_lists")] int ContactLists);
+    [property: JsonPropertyName("contact_lists")] int ContactLists,
+    [property: JsonPropertyName("old")] int Old = 0);   // I1: files with findings unchanged for 2 years
 
 /// <summary>Phase 3 · D5: what the native host's file scan found on this PC.</summary>
 public sealed record DiscoveryReport(

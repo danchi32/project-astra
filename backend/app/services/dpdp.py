@@ -27,6 +27,10 @@ DISCLAIMER = ("This shows what SAVIO's own records say about your safeguards. It
               "what the DPDP Act and Rules require of your organisation with your counsel.")
 MAP_FRESH = timedelta(days=8)
 CASE_STALE = timedelta(days=7)
+# Retention: at most this share of files with personal data may be untouched for two years (the
+# agent's Discovery.OldAfter), and the folders with the most such files are listed for review.
+OLD_SHARE = 0.1
+RETENTION_TOP = 10
 # F1 checks that are safeguards for personal data on PCs, and the share of PCs that should pass.
 SAFEGUARDS = (("bitlocker", "Personal data on PCs is encrypted", "BitLocker on the system drive", 0.9),
               ("defender", "PCs have working antivirus", "Microsoft Defender running", 0.9),
@@ -56,7 +60,21 @@ async def readiness(session: AsyncSession, org_id) -> dict:
         else "Turn on the weekly check of where sensitive files are kept." if not p.discovery_enabled
         else "The weekly check has not reported in the last week.", "/guard/discovery"))
 
-    # 2-5. Safeguards on the PCs, from the security checks.
+    # 2. Old personal data is cleared out: from the folders whose PCs count file ages.
+    aged = [(d["hostname"], f) for d in disc["devices"] for f in d["folders"] if "old" in f]
+    old = sum(f["old"] for _, f in aged)
+    counted = sum(f["files_with_findings"] for _, f in aged)
+    items.append(_item(
+        "retention", "Personal data is not kept longer than needed",
+        "Data nobody needs any more is risk with no use: clearing it out is the cheapest protection there is.",
+        bool(aged) and old <= OLD_SHARE * counted,
+        f"{old:,} of {counted:,} files with personal data have not changed in over two years." if aged
+        else "No PC has reported the age of its files yet (it needs the latest agent).", "/guard/dpdp#retention"))
+    retention = sorted(({"hostname": h, "path": f["path"], "old": f["old"], "contact_lists": f.get("contact_lists", 0),
+                         "files_with_findings": f["files_with_findings"]} for h, f in aged if f["old"]),
+                       key=lambda r: (-r["old"], r["hostname"], r["path"]))[:RETENTION_TOP]
+
+    # 3-6. Safeguards on the PCs, from the security checks.
     rows = await ComplianceService(session).evaluate_all(org_id=org_id)
     for key, title, label, share in SAFEGUARDS:
         results = [c.status for r in rows for c in r.checks if c.key == key and c.status in ("pass", "fail")]
@@ -66,7 +84,7 @@ async def readiness(session: AsyncSession, org_id) -> dict:
                            f"{label}: {passed} of {len(results)} PCs." if results else "No PC has reported this yet.",
                            "/compliance"))
 
-    # 6. Data leaving through the browser is checked.
+    # 7. Data leaving through the browser is checked.
     extension = (p.chrome_extension_id or p.edge_extension_id or p.firefox_extension_id) is not None
     acting = extension and p.guard_mode != "log"
     items.append(_item(
@@ -76,13 +94,13 @@ async def readiness(session: AsyncSession, org_id) -> dict:
         else "The extension only records so far (choose a mode in the browser policy)." if extension
         else "The SAVIO extension is not set up yet.", "/guard"))
 
-    # 7. USB drives.
+    # 8. USB drives.
     usb = p.usb_mode != "off" or p.usb_observe
     items.append(_item("usb", "Copying to USB drives is controlled",
                        "A pendrive is the easiest way for a client list to leave the office.", usb,
                        "USB drives are controlled or recorded." if usb else "USB drives are left as they are.", "/guard"))
 
-    # 8. Company accounts only.
+    # 9. Company accounts only.
     accounts = bool(p.google_allowed_domains or p.microsoft_tenant_id or p.claude_org_ids or p.chatgpt_workspace_ids
                     or p.slack_requester_id)
     items.append(_item("accounts", "Work data stays in company accounts",
@@ -90,7 +108,7 @@ async def readiness(session: AsyncSession, org_id) -> dict:
                        "Sign-in is limited to your organisation's accounts." if accounts
                        else "People can sign in to personal accounts at work.", "/guard"))
 
-    # 9. Cases are looked at.
+    # 10. Cases are looked at.
     stale = await session.scalar(select(func.count()).select_from(GuardCase).where(
         GuardCase.org_id == org_id, GuardCase.status == "open", GuardCase.level == "high",
         GuardCase.opened_at <= now - CASE_STALE))
@@ -99,7 +117,7 @@ async def readiness(session: AsyncSession, org_id) -> dict:
                        "No high-risk case has waited over a week." if not stale
                        else f"{stale} high-risk case(s) open for over a week.", "/guard/cases"))
 
-    # 10. A named contact.
+    # 11. A named contact.
     settings = await SettingsService(session).ensure(org_id)
     contact = bool(settings.privacy_contact_name and settings.privacy_contact_email)
     items.append(_item("contact", "Someone is named for privacy complaints and breaches",
@@ -107,7 +125,7 @@ async def readiness(session: AsyncSession, org_id) -> dict:
                        f"{settings.privacy_contact_name} ({settings.privacy_contact_email})." if contact
                        else "Name the person below.", "/guard/dpdp"))
 
-    # 11. A record of who did what.
+    # 12. A record of who did what.
     items.append(_item("records", "Who did what is recorded",
                        "Showing what was done, and by whom, is part of answering for personal data.", True,
                        "SAVIO keeps an audit log of every change and action, and AI Guard's events for 180 days.",
@@ -116,7 +134,7 @@ async def readiness(session: AsyncSession, org_id) -> dict:
     done = sum(1 for i in items if i["status"] == "done")
     return {
         "score": round(100 * done / len(items)), "done": done, "total": len(items),
-        "items": items, "map": await data_map(session, org_id, disc),
+        "items": items, "retention": retention, "map": await data_map(session, org_id, disc),
         "contact": {"name": settings.privacy_contact_name, "email": settings.privacy_contact_email},
         "disclaimer": DISCLAIMER, "generated_at": now,
     }

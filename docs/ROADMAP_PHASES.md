@@ -2068,6 +2068,33 @@ is where S1's AI site categories plug in.
   the local backend: 36% with seven to-dos and their evidence, then 45% once a contact was saved.
 - **Next in I1:** retention suggestions and the breach workflow (with J7, the incident report).
 
+**I1, slice 2 as built (19 Nov, branch `phase-3`):** retention suggestions and the breach workflow.
+- **Retention:** the weekly file map (D5) now counts, per folder, the files with personal data
+  not written to in two years (`old`; a count, never a date or a name). The agent checks it is
+  no more than the files with findings, and so does the backend; agents before this send none
+  and their folders are left out, not counted as zero. DPDP readiness gains a twelfth item (done
+  when at most 10% are old) and a "Still needed?" list of the ten folders with the most, by PC,
+  for the owner to delete or move to a restricted archive.
+- **Breach records:** AI Guard → Breach records (`/guard/incidents`, admin), started on their own
+  or from a case ("Treat as a possible breach"). Facts (title, what happened, when found, data
+  involved, about how many people) and six steps: stop it, work out what and whose, ask counsel,
+  report to the Board *if counsel says so*, tell the people affected *if counsel says so*, fix the
+  cause. Each step records when, by whom and a note; only the two reporting steps can be "not
+  needed", and the record closes only when every step is settled. No deadlines are stated: the
+  clock is time since it was found. Every change is audited (`dpdp.incident_open` /
+  `dpdp.incident_update`) and the audit entries are the record's timeline. Migration 0102.
+- **J7 incident report:** the record page printed (browser print-to-PDF, as L1): facts, the case,
+  the steps, the timeline and the not-legal-advice line.
+- **Checked:** `test_guard_incidents` (bad text, future time, unknown kind, extra field, another
+  org's case refused; steps with who and notes; "not needed" only for reporting; no closing
+  before every step; reopen; timeline in order with names; another org's record is a 404;
+  admins only), `test_dpdp` (the retention item and list) and `test_guard_discovery` (the old
+  count kept or absent, and refused when impossible); agent `DiscoveryTests` (an old letter
+  counted; an impossible count not sent). On screen against the local backend: 12 items with
+  the retention list; a record started from a high case, steps settled with a note and "not
+  needed", closed, and its timeline.
+- **Needs the VM test:** a real scan reporting `old` (agent change; released with the phase).
+
 ---
 
 ## Phase 4 — Smart Guard advanced + lifecycle

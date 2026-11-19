@@ -4,7 +4,7 @@ Behind the `ai_guard` entitlement, which no plan includes: an operator turns it 
 organization. Editing is admin-only and audited. Staff can read the status.
 """
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -301,6 +301,7 @@ class DiscoveryFolderRead(BaseModel):
     files_with_findings: int
     counts: dict[str, int]
     contact_lists: int
+    old: int | None = None   # I1: files with findings unchanged for two years (None: not counted)
 
 
 class DiscoveryDeviceRead(BaseModel):
@@ -477,11 +478,20 @@ class DpdpItem(BaseModel):
     link: str
 
 
+class RetentionRead(BaseModel):
+    hostname: str
+    path: str
+    old: int
+    files_with_findings: int
+    contact_lists: int
+
+
 class DpdpRead(BaseModel):
     score: int
     done: int
     total: int
     items: list[DpdpItem]
+    retention: list[RetentionRead]
     map: dict
     contact: dict
     disclaimer: str
@@ -523,6 +533,180 @@ async def set_privacy_contact(
     from app.services import dpdp
 
     await dpdp.set_contact(session, actor=actor, name=body.name, email=body.email)
+
+
+# ── I1: breach records (the breach workflow; J7 prints one) ─────────────────────────────────
+
+StepKey = Literal["contain", "assess", "counsel", "board", "people", "fix"]   # guard_incidents.STEPS
+
+
+def _plain(v: str | None, lines: bool = False) -> str | None:
+    """Admin text shown on screens and printed: no control or invisible characters (new lines
+    allowed where a paragraph is expected)."""
+    if v is None:
+        return None
+    v = v.replace("\r\n", "\n").strip()
+    if browser_policy.has_control(v.replace("\n", "") if lines else v):
+        raise ValueError("must be plain text")
+    return v
+
+
+class IncidentStep(BaseModel):
+    key: StepKey
+    title: str
+    help: str
+    optional: bool
+    state: Literal["done", "not_needed"] | None = None
+    at: datetime | None = None
+    by: str | None = None
+    note: str | None = None
+
+
+class IncidentRead(BaseModel):
+    id: uuid.UUID
+    case_id: uuid.UUID | None
+    title: str
+    what_happened: str
+    found_at: datetime
+    kinds: list[str]
+    people_affected: int | None
+    status: Literal["open", "closed"]
+    opened_at: datetime
+    closed_at: datetime | None
+    steps: list[IncidentStep]
+
+
+class IncidentDetail(IncidentRead):
+    case: dict | None
+    timeline: list[dict]
+
+
+class IncidentFacts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+    what_happened: str = Field(default="", max_length=4000)
+    found_at: datetime
+    kinds: list[browser_policy.FindingKind] = Field(default_factory=list, max_length=7)
+    people_affected: int | None = Field(default=None, ge=0, le=100_000_000)
+
+    @field_validator("title")
+    @classmethod
+    def _title(cls, v: str) -> str:
+        v = _plain(v)
+        if not v:
+            raise ValueError("A title is needed")
+        return v
+
+    @field_validator("what_happened")
+    @classmethod
+    def _what(cls, v: str) -> str:
+        return _plain(v, lines=True)
+
+    @field_validator("found_at")
+    @classmethod
+    def _found(cls, v: datetime) -> datetime:
+        v = v if v.tzinfo else v.replace(tzinfo=UTC)
+        if v > datetime.now(UTC) + timedelta(minutes=5):
+            raise ValueError("found_at is in the future")
+        return v
+
+    @field_validator("kinds")
+    @classmethod
+    def _kinds(cls, v: list[str]) -> list[str]:
+        return list(dict.fromkeys(v))
+
+
+class IncidentOpen(IncidentFacts):
+    case_id: uuid.UUID | None = None
+
+
+class StepWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: StepKey
+    state: Literal["done", "not_needed"] | None
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("note")
+    @classmethod
+    def _note(cls, v: str | None) -> str | None:
+        return _plain(v, lines=True) or None
+
+
+class IncidentPatch(BaseModel):
+    """Any of the facts, one step, and/or closing (true) or reopening (false)."""
+    model_config = ConfigDict(extra="forbid")
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    what_happened: str | None = Field(default=None, max_length=4000)
+    found_at: datetime | None = None
+    kinds: list[browser_policy.FindingKind] | None = Field(default=None, max_length=7)
+    people_affected: int | None = Field(default=None, ge=0, le=100_000_000)
+    step: StepWrite | None = None
+    closed: bool | None = None
+
+    @field_validator("title", "what_happened", "found_at", "kinds")
+    @classmethod
+    def _same_rules(cls, v, info):
+        # The same checks as when opening; None means "not given" here and is refused later.
+        if v is None:
+            return None
+        return {"title": IncidentFacts._title, "what_happened": IncidentFacts._what,
+                "found_at": IncidentFacts._found, "kinds": IncidentFacts._kinds}[info.field_name](v)
+
+
+@router.get("/incidents", response_model=list[IncidentRead],
+            summary="I1: the organization's breach records, open first (admin)")
+async def list_incidents(
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> list[IncidentRead]:
+    from app.services import guard_incidents
+
+    return [IncidentRead(**r) for r in await guard_incidents.list_for(session, actor.org_id)]
+
+
+@router.post("/incidents", response_model=IncidentRead, status_code=status.HTTP_201_CREATED,
+             summary="I1: start a breach record, from a case or on its own (admin; audited)")
+async def open_incident(
+    body: IncidentOpen,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> IncidentRead:
+    from app.services import guard_incidents
+
+    row = await guard_incidents.open_(session, actor=actor, **body.model_dump())
+    return IncidentRead(**guard_incidents.read(row))
+
+
+@router.get("/incidents/{incident_id}", response_model=IncidentDetail,
+            summary="I1: one breach record with its case and its timeline (admin)")
+async def get_incident(
+    incident_id: uuid.UUID,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> IncidentDetail:
+    from app.services import guard_incidents
+
+    row = await guard_incidents.get(session, actor.org_id, incident_id)
+    return IncidentDetail(**await guard_incidents.detail(session, row))
+
+
+@router.patch("/incidents/{incident_id}", response_model=IncidentRead,
+              summary="I1: edit a breach record's facts, settle a step, close or reopen it (admin; audited)")
+async def update_incident(
+    incident_id: uuid.UUID,
+    body: IncidentPatch,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> IncidentRead:
+    from app.services import guard_incidents
+
+    row = await guard_incidents.get(session, actor.org_id, incident_id)
+    fields = body.model_dump(exclude_unset=True, exclude={"step", "closed"})
+    if any(v is None for k, v in fields.items() if k != "people_affected"):
+        raise HTTPException(422, "Only the number of people can be cleared")
+    row = await guard_incidents.update(session, actor=actor, row=row, fields=fields,
+                                       step=body.step.model_dump() if body.step else None, close=body.closed)
+    return IncidentRead(**guard_incidents.read(row))
 
 
 # ── C3b: USB drives the PCs have seen, for approving company drives ─────────────────────────

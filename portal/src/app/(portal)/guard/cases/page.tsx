@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import {
@@ -228,6 +229,9 @@ export default function GuardCasesPage() {
           </div>
 
           {c.status === "open" && <CaseActions c={c} />}
+          <Link href={`/guard/incidents?case=${c.id}`} className="block text-xs underline" style={{ color: "var(--accent)" }}>
+            Treat as a possible breach: start a breach record
+          </Link>
           {c.status === "open" && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <button disabled={busy === c.id} onClick={() => close(c, "handled")}

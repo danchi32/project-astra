@@ -70,6 +70,8 @@ public sealed class DiscoveryTests : IDisposable
     public void Maps_folders_with_counts_and_nothing_else()
     {
         Tree();
+        // I1: the letter has not been touched for three years; the others are new.
+        File.SetLastWriteTimeUtc(Path.Combine(Docs, "letter.docx"), DateTime.UtcNow.AddYears(-3));
         var r = Discovery.Run([Docs], TimeSpan.Zero);
         Assert.True(r.Ok);
         Assert.Equal(4, r.FilesScanned);                       // kyc.csv, notes.txt, letter.docx, sheet.xlsx
@@ -84,6 +86,8 @@ public sealed class DiscoveryTests : IDisposable
         Assert.Equal(2, docs.FilesWithFindings);               // the letter and the sheet
         Assert.Equal(1, docs.Counts["Pan"]);
         Assert.Equal(1, docs.Counts["PaymentCard"]);
+        Assert.Equal(1, docs.Old);                             // the letter: old, with findings
+        Assert.Equal(0, clients.Old);
 
         var json = JsonSerializer.Serialize(r);
         foreach (var leak in new[] { "ABCPE1234F", "kyc.csv", "letter.docx", "Asha", "98765" })
@@ -184,6 +188,13 @@ public sealed class DiscoveryTests : IDisposable
         var (w2, api2, _) = Worker(enabled: true, unknownKind);
         Assert.False(await w2.RunOnceAsync(t, default));
         Assert.Empty(api2.Discoveries);
+
+        // I1: more old files than files with findings cannot be true.
+        var tooOld = new DiscoveryReport(true, 1, 0, false,
+            [new DiscoveryFolder(Docs, 1, 1, new() { ["Pan"] = 1 }, 0, Old: 2)]);
+        var (w4, api4, _) = Worker(enabled: true, tooOld);
+        Assert.False(await w4.RunOnceAsync(t, default));
+        Assert.Empty(api4.Discoveries);
 
         var (w3, api3, scans3) = Worker(enabled: true);
         api3.DiscoveryAccepted = false;                                                  // backend down

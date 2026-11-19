@@ -35,7 +35,12 @@ public static class Discovery
     const FileAttributes Skip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint |
                                 FileAttributes.Offline | (FileAttributes)0x40000 | (FileAttributes)0x400000;
 
-    public sealed record Folder(string Path, int Files, int FilesWithFindings, Dictionary<string, int> Counts, int ContactLists);
+    /// <summary>I1: a file with findings not written to for this long counts as <c>Old</c>, the
+    /// start of a retention suggestion ("still needed?"). Only the count leaves, never a date.</summary>
+    public static readonly TimeSpan OldAfter = TimeSpan.FromDays(730);
+
+    public sealed record Folder(string Path, int Files, int FilesWithFindings, Dictionary<string, int> Counts, int ContactLists,
+                                int Old = 0);
 
     public sealed record Result(bool Ok, int FilesScanned, int FilesSkipped, bool Truncated, IReadOnlyList<Folder> Folders);
 
@@ -45,6 +50,7 @@ public static class Discovery
         var folders = new Dictionary<string, Folder>(StringComparer.OrdinalIgnoreCase);
         int scanned = 0, skipped = 0;
         bool truncated = false;
+        var oldBefore = DateTime.UtcNow - OldAfter;
         var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = Skip, RecurseSubdirectories = false };
 
         // Each folder remembers the root it was found under, so its path can be reported as the
@@ -93,7 +99,8 @@ public static class Discovery
                 {
                     foreach (var (kind, n) in r.Counts.Where(kv => kv.Value > 0))
                         f.Counts[kind.ToString()] = f.Counts.GetValueOrDefault(kind.ToString()) + n;
-                    f = f with { FilesWithFindings = f.FilesWithFindings + 1, ContactLists = f.ContactLists + (r.ContactList ? 1 : 0) };
+                    f = f with { FilesWithFindings = f.FilesWithFindings + 1, ContactLists = f.ContactLists + (r.ContactList ? 1 : 0),
+                                 Old = f.Old + (File.GetLastWriteTimeUtc(file) < oldBefore ? 1 : 0) };
                 }
                 folders[dir] = f;
                 if (pause > TimeSpan.Zero) Thread.Sleep(pause);

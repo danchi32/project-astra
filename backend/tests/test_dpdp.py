@@ -16,8 +16,10 @@ async def test_readiness_score_tasks_and_map(client, admin_headers, user_headers
 
     r = (await client.get("/api/v1/guard/dpdp", headers=admin_headers)).json()
     items = {i["key"]: i for i in r["items"]}
-    assert set(items) == {"data_map", "bitlocker", "defender", "firewall", "patch", "dlp", "usb", "accounts",
-                          "cases", "contact", "records"}
+    assert set(items) == {"data_map", "retention", "bitlocker", "defender", "firewall", "patch", "dlp", "usb",
+                          "accounts", "cases", "contact", "records"}
+    assert items["retention"]["status"] == "todo" and "latest agent" in items["retention"]["detail"]
+    assert r["retention"] == []
     assert items["records"]["status"] == "done" and items["cases"]["status"] == "done"
     assert items["data_map"]["status"] == "todo" and "Turn on" in items["data_map"]["detail"]
     assert items["contact"]["status"] == "todo" and items["dlp"]["link"] == "/guard"
@@ -30,7 +32,7 @@ async def test_readiness_score_tasks_and_map(client, admin_headers, user_headers
         s.add(GuardDiscovery(device_id=uuid.UUID(did), org_id=admin_user.org_id, scanned_at=datetime.now(UTC),
                              files_scanned=900, files_skipped=0, truncated=False,
                              folders=[{"path": r"C:\Users\a\Documents\Clients", "files": 40, "files_with_findings": 12,
-                                       "counts": {"Pan": 30}, "contact_lists": 2}]))
+                                       "counts": {"Pan": 30}, "contact_lists": 2, "old": 9}]))
         await s.commit()
     await client.post("/api/v1/guard/browser-policy/end-pilot", headers=admin_headers)
     await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={
@@ -50,6 +52,10 @@ async def test_readiness_score_tasks_and_map(client, admin_headers, user_headers
     for key in ("data_map", "dlp", "usb", "accounts", "contact"):
         assert items[key]["status"] == "done", items[key]
     assert items["data_map"]["detail"].startswith("12 files with personal data on 1 PCs")
+    # Retention: 9 of 12 untouched for two years is too many, and the folder is listed for review.
+    assert items["retention"]["status"] == "todo" and items["retention"]["detail"].startswith("9 of 12 files")
+    assert r2["retention"] == [{"hostname": "ACCOUNTS-PC", "path": r"C:\Users\a\Documents\Clients", "old": 9,
+                                "files_with_findings": 12, "contact_lists": 2}]
     assert r2["contact"] == {"name": "Asha Rao", "email": "dpo@acme.in"} and r2["score"] > r["score"]
     m = r2["map"]
     assert m["on_pcs"]["kinds"] == {"Pan": 30} and m["on_pcs"]["contact_lists"] == 2

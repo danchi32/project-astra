@@ -46,8 +46,17 @@ async def test_the_schema_is_fixed(client, admin_headers, session_factory, admin
                 _map(folders=[{**folder, "path": "a\nb"}]),
                 _map(folders=[{**folder, "path": "x" * 401}]),
                 _map(folders=[folder] * 501),
+                _map(folders=[{**folder, "old": 10}]),                         # I1: more old than found
+                _map(folders=[{**folder, "old": -1}]),
                 {**_map(), "sample": "ABCPE1234F"}):
         assert (await client.post("/api/v1/agent/guard/discovery", headers=h, json=bad)).status_code == 422
+    # I1: the old-file count is kept when sent, and absent (not counted) when an older agent sends none.
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**POLICY, "discovery_enabled": True})
+    other = _map()["folders"][1]
+    assert (await client.post("/api/v1/agent/guard/discovery", headers=h,
+                              json=_map(folders=[{**folder, "old": 3}, other]))).status_code == 204
+    got = (await client.get("/api/v1/guard/discovery", headers=admin_headers)).json()["devices"][0]["folders"]
+    assert [f["old"] for f in got] == [3, None]
 
 
 async def test_without_the_add_on_and_roles(client, admin_headers, session_factory, admin_user, org):
