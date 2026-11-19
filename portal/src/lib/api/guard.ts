@@ -191,6 +191,7 @@ export interface GuardCaseSite {
   went_ahead: number;
   blocked: number;
   channels: string[];
+  origins: string[];     // C2: where its files were downloaded from (host names)
 }
 
 export interface GuardCase {

@@ -41,6 +41,15 @@ def test_the_score_reads_the_whole_story():
     # E-mail addresses only (ignored by policy), or nothing checkable: not part of any story.
     assert guard_cases.score([_ev(counts={"Email": 9})], ignore, set())[2]["events"] == 0
     # Hidden by redaction counts for little; several places add up.
+    # C2: a file downloaded from another system weighs more and is named; the same site is not "moving".
+    plain = guard_cases.score([_ev("wetransfer.com", counts={"Pan": 50})], ignore, set())[0]
+    moved, _, s = guard_cases.score([SimpleNamespace(**vars(_ev("wetransfer.com", counts={"Pan": 50})),
+                                                     origin="crm.zoho.com")], ignore, set())
+    same_points, _, same = guard_cases.score([SimpleNamespace(**vars(_ev("wetransfer.com", counts={"Pan": 50})),
+                                                              origin="dl.wetransfer.com")], ignore, set())
+    assert moved == round(plain * 1.5) and "files downloaded from crm.zoho.com" in s["reasons"]
+    assert s["sites"][0]["origins"] == ["crm.zoho.com"]
+    assert same_points == plain and not any("downloaded" in r for r in same["reasons"])
     hidden = guard_cases.score([_ev(action="redact", counts={"Pan": 20})], ignore, set())[0]
     spread = guard_cases.score([_ev(), _ev("claude.ai"), _ev("gemini.google.com")], ignore, set())
     assert hidden < 5 and "across 3 sites" in spread[2]["reasons"]
@@ -61,12 +70,17 @@ async def test_events_become_one_case_and_only_a_high_one_notifies(client, admin
 
     # The same person keeps going: the same case grows, and turns high once.
     big = [_event(10, site="wetransfer.com", channel="file", mode="warn", action="warn", outcome="proceeded",
-                  counts={"Pan": 230}, contact_list=True)]
+                  counts={"Pan": 230}, contact_list=True, origin="crm.zoho.com")]
+    bad_origin = [{**big[0], "origin": "crm.zoho.com/export/clients.csv"}]
+    assert (await client.post("/api/v1/agent/guard/events", headers=h, json={"events": bad_origin})).status_code == 422
     for _ in range(2):
         await client.post("/api/v1/agent/guard/events", headers=h, json={"events": big})
     r = (await client.get("/api/v1/guard/cases", headers=admin_headers)).json()
     case = r["cases"][0]
     assert len(r["cases"]) == 1 and case["level"] == "high" and case["sites"][0]["site"] == "wetransfer.com"
+    assert case["sites"][0]["origins"] == ["crm.zoho.com"] and "files downloaded from crm.zoho.com" in case["reasons"]
+    events = (await client.get("/api/v1/guard/events", headers=admin_headers)).json()
+    assert {e["origin"] for e in events} == {None, "crm.zoho.com"}
     async with session_factory() as s:
         notes = (await s.execute(select(Notification))).scalars().all()
     assert len(notes) == 1 and notes[0].link == "/guard/cases"

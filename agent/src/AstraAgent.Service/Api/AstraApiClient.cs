@@ -328,13 +328,19 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             Content = JsonContent.Create(new
             {
-                events = events.Select(q => new
+                events = events.Select(q =>
                 {
-                    at = q.At, windows_user = q.WindowsUser,
-                    site = q.Event.Site, channel = q.Event.Channel, mode = q.Event.Mode, action = q.Event.Action,
-                    counts = q.Event.Counts, contact_list = q.Event.ContactList,
-                    keyword_hits = q.Event.KeywordHits, unknown = q.Event.Unknown,
-                    outcome = q.Event.Outcome, reason = q.Event.Reason,
+                    var e = new Dictionary<string, object?>
+                    {
+                        ["at"] = q.At, ["windows_user"] = q.WindowsUser,
+                        ["site"] = q.Event.Site, ["channel"] = q.Event.Channel, ["mode"] = q.Event.Mode,
+                        ["action"] = q.Event.Action, ["counts"] = q.Event.Counts, ["contact_list"] = q.Event.ContactList,
+                        ["keyword_hits"] = q.Event.KeywordHits, ["unknown"] = q.Event.Unknown,
+                        ["outcome"] = q.Event.Outcome, ["reason"] = q.Event.Reason,
+                    };
+                    // C2: only when known, so a backend from before C2 never sees the field.
+                    if (q.Event.Origin is not null) e["origin"] = q.Event.Origin;
+                    return e;
                 }),
             }),
         };

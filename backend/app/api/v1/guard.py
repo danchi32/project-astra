@@ -256,6 +256,7 @@ class GuardEventRead(BaseModel):
     unknown: bool
     outcome: str | None
     reason: str | None
+    origin: str | None = None   # C2: where an uploaded file was downloaded from
 
 
 @router.get("/events/summary", response_model=GuardEventSummary,
@@ -280,7 +281,8 @@ async def list_guard_events(
     return [GuardEventRead(id=e.id, occurred_at=e.occurred_at, device_id=e.device_id, hostname=host,
                            windows_user=e.windows_user, site=e.site, channel=e.channel, mode=e.mode,
                            action=e.action, counts=e.counts, contact_list=e.contact_list,
-                           keyword_hits=e.keyword_hits, unknown=e.unknown, outcome=e.outcome, reason=e.reason)
+                           keyword_hits=e.keyword_hits, unknown=e.unknown, outcome=e.outcome, reason=e.reason,
+                           origin=e.origin)
             for e, host in await guard_events.recent(session, actor.org_id, days, limit, offset)]
 
 
@@ -468,6 +470,7 @@ class CaseSite(BaseModel):
     went_ahead: int
     blocked: int
     channels: list[str]
+    origins: list[str] = Field(default_factory=list)   # C2: where its files were downloaded from
 
 
 class CaseRead(BaseModel):

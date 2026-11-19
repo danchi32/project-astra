@@ -14,7 +14,8 @@ counts), never content.
   how it ended: went ahead after a warning 3, nothing stopped it (record-only) 2, asked IT or
   stopped by SAVIO 1, hidden or stopped by the person 0.5. Where: personal file sharing, personal
   e-mail and paste sites 3; AI chat, messaging and social media 2; a site new to the org this
-  week 2; anything else 1. Items are capped at 500 an event.
+  week 2; anything else 1. Items are capped at 500 an event. ×1.5 when the file was downloaded
+  from another site (C2): data moving from one system to another.
 - Plus 5 for every extra site in the same case.
 - High from 40, medium from 10.
 
@@ -65,6 +66,11 @@ def site_kind(host: str) -> str | None:
     return None
 
 
+def _same_place(a: str, b: str) -> bool:
+    """A download and an upload on the same site (or one inside the other) is not data moving."""
+    return a == b or a.endswith("." + b) or b.endswith("." + a)
+
+
 def _how(e) -> float:
     if e.outcome == "proceeded" and e.action in ("warn", "justify"):
         return 3
@@ -85,20 +91,27 @@ def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict
     kinds: dict[str, int] = defaultdict(int)
     sites: dict[str, dict] = {}
     went_ahead = blocked = contact_lists = keyword_events = 0
+    origins: dict[str, int] = {}
     for e in events:
         items = _items(e, ignore)
         if not (items or e.contact_list or e.keyword_hits):
             continue   # e-mail addresses only, or could not be checked: not part of a story
         kind = site_kind(e.site)
         where = RISKY.get(kind, 2 if e.site in new_sites else 1)
-        total += _how(e) * where * (1 + min(items, 500) / 50 + 5 * e.contact_list + 2 * (e.keyword_hits > 0))
+        origin = getattr(e, "origin", None)
+        moved = origin is not None and not _same_place(origin, e.site)
+        total += (_how(e) * where * (1.5 if moved else 1)
+                  * (1 + min(items, 500) / 50 + 5 * e.contact_list + 2 * (e.keyword_hits > 0)))
         for k, n in (e.counts or {}).items():
             if k not in ignore:
                 kinds[k] += n
         s = sites.setdefault(e.site, {"site": e.site, "kind": kind, "new": e.site in new_sites, "events": 0,
                                       "items": 0, "contact_lists": 0, "went_ahead": 0, "blocked": 0,
-                                      "channels": []})
+                                      "channels": [], "origins": []})
         s["events"] += 1
+        if moved and origin not in s["origins"]:
+            s["origins"].append(origin)
+            origins[origin] = origins.get(origin, 0) + 1
         s["items"] += items
         s["contact_lists"] += e.contact_list
         if e.channel not in s["channels"]:
@@ -128,6 +141,9 @@ def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict
     for s in ranked[:3]:
         what = KIND_NAMES.get(s["kind"]) or ("a site new to your organization" if s["new"] else None)
         reasons.append(f"to {s['site']}" + (f" ({what})" if what else ""))
+    if origins:
+        top = sorted(origins, key=lambda o: (-origins[o], o))[:2]
+        reasons.append("files downloaded from " + " and ".join(top))
     if went_ahead:
         reasons.append("went ahead after a warning" + (f" {went_ahead} times" if went_ahead > 1 else ""))
     if blocked:

@@ -76,6 +76,10 @@
     document.execCommand("insertText", false, text);
   }
 
+  // C2: name and size only, for the background to look up where a file was downloaded from.
+  // They never go into an event.
+  const meta = (files) => files.map((f) => ({ name: f.name, size: f.size }));
+
   function base64(buffer) {
     const bytes = new Uint8Array(buffer);
     let s = "";
@@ -124,7 +128,7 @@
     const files = [...(e.clipboardData?.files ?? [])];
     const text = e.clipboardData?.getData("text/plain") ?? "";
     if (text.length < MIN_TEXT && !files.length) return;
-    const withFiles = (f) => ({ text: [text, f.text].join("\n"), unreadable: f.unreadable, docs: f.docs });
+    const withFiles = (f) => ({ text: [text, f.text].join("\n"), unreadable: f.unreadable, docs: f.docs, files: meta(files) });
     if (mode === "log") {
       filesText(files).then((f) => check("paste", withFiles(f)));
       return;
@@ -156,7 +160,7 @@
       e.stopImmediatePropagation();
     }
     const f = await filesText(files);
-    const what = { text: [text, f.text].join("\n"), unreadable: f.unreadable, docs: f.docs };
+    const what = { text: [text, f.text].join("\n"), unreadable: f.unreadable, docs: f.docs, files: meta(files) };
     if (mode === "log") { check("drop", what); return; }
     if (await allowed("drop", what) && text) insert(e.target, text);
     // A dropped file is not re-dropped: the person can attach it again through the file picker.
@@ -173,13 +177,13 @@
     const chosen = [...input.files];
     const f = await filesText(chosen);
     if (mode === "log") {
-      if (f.text || f.docs.length || f.unreadable) check("file", { text: f.text, unreadable: f.unreadable, docs: f.docs });
+      if (f.text || f.docs.length || f.unreadable) check("file", { text: f.text, unreadable: f.unreadable, docs: f.docs, files: meta(chosen) });
       return;
     }
     // In redact mode each text file is a part that can be rewritten; elsewhere it is plain text.
     const what = mode === "redact"
-      ? { text: "", parts: f.parts, unreadable: f.unreadable, docs: f.docs }
-      : { text: f.text, unreadable: f.unreadable, docs: f.docs };
+      ? { text: "", parts: f.parts, unreadable: f.unreadable, docs: f.docs, files: meta(chosen) }
+      : { text: f.text, unreadable: f.unreadable, docs: f.docs, files: meta(chosen) };
     const out = await handled("file", what);
     if (out !== null) {
       if (out.parts && out.parts !== what.parts) {

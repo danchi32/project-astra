@@ -1,7 +1,31 @@
 // Phase 3 · D3: run with `node --test extension/test/`. No dependencies.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide, fromHost, hostOf, isWatched, mergeScans, readPolicy, toEvent, withOutcome, DEFAULT_POLICY, REASONS } from "../decide.js";
+import {
+  decide, downloadOrigin, fromHost, hostOf, isWatched, mergeScans, originFor, readPolicy, toEvent, withOutcome,
+  DEFAULT_POLICY, REASONS,
+} from "../decide.js";
+
+test("where a download came from, and which upload it is: the host only", () => {
+  assert.equal(downloadOrigin({ finalUrl: "https://crm.zoho.com/export?id=7", url: "https://x.in/redirect" }), "crm.zoho.com");
+  assert.equal(downloadOrigin({ url: "blob:https://mail.google.com/9b1c" }), "mail.google.com");
+  assert.equal(downloadOrigin({ url: "data:text/csv;base64,QQ==", referrer: "https://app.tally.in/report" }), "app.tally.in");
+  assert.equal(downloadOrigin({ url: "data:text/csv;base64,QQ==" }), "");
+
+  const downloads = [{ name: "clients.xlsx", size: 100, origin: "old.example.com" },
+                     { name: "clients.xlsx", size: 100, origin: "crm.zoho.com" },
+                     { name: "notes.txt", size: 5, origin: "drive.google.com" }];
+  assert.equal(originFor([{ name: "clients.xlsx", size: 100 }], downloads), "crm.zoho.com");   // the latest
+  assert.equal(originFor([{ name: "clients.xlsx", size: 101 }], downloads), null);             // edited since
+  assert.equal(originFor([{ name: "photo.jpg", size: 1 }, { name: "notes.txt", size: 5 }], downloads), "drive.google.com");
+  assert.equal(originFor([{ name: "a", size: 1 }], [{ name: "a", size: 1, origin: "not a host" }]), null);
+
+  const p = readPolicy({ mode: "warn" });
+  const scan = fromHost({ ok: true, counts: { Pan: 3 } });
+  assert.equal(toEvent(p, "wetransfer.com", "file", scan, decide(p, scan, "file"), "crm.zoho.com").origin, "crm.zoho.com");
+  assert.equal("origin" in toEvent(p, "wetransfer.com", "file", scan, decide(p, scan, "file")), false);
+  assert.equal("origin" in toEvent(p, "wetransfer.com", "file", scan, decide(p, scan, "file"), "C:\\Users\\a\\x.xlsx"), false);
+});
 
 test("scans of an upload's parts add up, and one unknown part makes the whole unknown", () => {
   const a = fromHost({ ok: true, counts: { Pan: 1 }, keyword_hits: [0] });

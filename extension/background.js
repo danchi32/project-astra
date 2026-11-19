@@ -6,7 +6,10 @@
 // E3: when something was found (or could not be checked), the event (counts only, in the fixed
 // shape the agent accepts) goes back through the host to the SAVIO service, which sends it on
 // to the org's portal. A local copy of the last 200 is kept here as well.
-import { REASONS, decide, fromHost, hostOf, isWatched, mergeScans, readPolicy, toEvent, withOutcome } from "./decide.js";
+import {
+  DOWNLOAD_DAYS, MAX_DOWNLOADS, REASONS, decide, downloadOrigin, fromHost, hostOf, isWatched, mergeScans, originFor,
+  readPolicy, toEvent, withOutcome,
+} from "./decide.js";
 import { accountRules } from "./accounts.js";
 
 const HOST = "com.savio.guard";
@@ -27,6 +30,36 @@ async function syncAccounts() {
 chrome.runtime.onStartup.addListener(syncAccounts);
 chrome.runtime.onInstalled.addListener(syncAccounts);
 chrome.storage.onChanged.addListener((_, area) => { if (area === "managed") syncAccounts(); });
+
+// C2: where files came from. Each finished download's name, size and site are kept here, in the
+// browser's own local storage (the browser keeps its download history anyway), for 30 days, at
+// most 500. When a file is uploaded, dropped or pasted, only the matching site goes into the
+// event, never the file's name.
+chrome.downloads?.onChanged.addListener(async (delta) => {
+  if (delta.state?.current !== "complete") return;
+  try {
+    const [item] = await chrome.downloads.search({ id: delta.id });
+    const origin = downloadOrigin(item);
+    if (!item || !origin) return;
+    const name = String(item.filename ?? "").split(/[\\/]/).pop();
+    const { downloads = [] } = await chrome.storage.local.get("downloads");
+    const since = Date.now() - DOWNLOAD_DAYS * 86_400_000;
+    downloads.push({ name, size: item.fileSize, origin, at: Date.now() });
+    await chrome.storage.local.set({ downloads: downloads.filter((d) => d.at >= since).slice(-MAX_DOWNLOADS) });
+  } catch {
+    // Without it the event simply has no origin.
+  }
+});
+
+async function fileOrigin(files) {
+  if (!Array.isArray(files) || !files.length) return null;
+  const meta = files.slice(0, 20).filter((f) => typeof f?.name === "string" && f.name.length <= 255 && Number.isInteger(f?.size));
+  try {
+    return originFor(meta, (await chrome.storage.local.get("downloads")).downloads);
+  } catch {
+    return null;
+  }
+}
 
 async function policy() {
   try {
@@ -75,7 +108,12 @@ async function approved(site, channel) {
 
 async function record(event) {
   try {
-    await chrome.runtime.sendNativeMessage(HOST, { type: "event", event });
+    const r = await chrome.runtime.sendNativeMessage(HOST, { type: "event", event });
+    if (r?.ok === false && r.error === "malformed event" && event.origin) {
+      // A SAVIO agent from before C2 refuses the field: the event still counts without it.
+      const { origin, ...older } = event;
+      await chrome.runtime.sendNativeMessage(HOST, { type: "event", event: older });
+    }
   } catch {
     // The service is not reachable; the local copy below still has it.
   }
@@ -154,7 +192,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // policy's): nothing to rewrite, so the person is asked.
       result = { ...result, action: "warn" };
     }
-    const event = toEvent(p, host, msg.kind, scanned, result);
+    const event = toEvent(p, host, msg.kind, scanned, result, await fileOrigin(msg.files));
     if (event && result.action === "approve" && await approved(host, msg.kind)) {
       // IT approved this person, site and channel for now: through, and recorded as such.
       sendResponse({ ...result, action: "allow" });

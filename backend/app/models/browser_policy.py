@@ -113,6 +113,9 @@ class GuardEvent(Base):
     # D7: the person's answer to a warn / justify prompt, and the reason code they picked.
     outcome: Mapped[str | None] = mapped_column(String(10), nullable=True)
     reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # C2: the site an uploaded file was downloaded from, when the browser saw the download. A
+    # host name only, never a file name.
+    origin: Mapped[str | None] = mapped_column(String(253), nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 

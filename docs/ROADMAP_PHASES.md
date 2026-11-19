@@ -1763,7 +1763,7 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 | Module | Definition |
 |---|---|
 | **C1 Cases, not alerts** | Events are joined into one case per person while they keep coming (48 h). Each case gets a severity from the whole story (how much, what kind, where to, went ahead after a warning, how many places) and the reasons in plain words. Only high-severity cases notify, once per case; the rest wait on the Cases page. IT closes a case as "expected" (optionally "stop raising cases for this site") or "handled"; quiet sites are counted, never hidden. |
-| **C2 File origin** | Read Windows' Mark of the Web (where a file was downloaded from) on uploads and copies: "this Excel came from your CRM". Feeds C1's severity. |
+| **C2 File origin** | Where an uploaded file was downloaded from: "this Excel came from your CRM". Feeds C1's severity. (Built from the browser's downloads, not Mark of the Web; see below.) |
 | **C3 Smart USB** | Observe; warn after copy; read-only; company drives only (serial allowlist); encrypted only (BitLocker To Go); **write window on request** (read-only by default; a person asks, IT or the policy opens 30 minutes, everything copied is checked and logged; reuses D7 approvals); block. Per-file "block only sensitive files" needs a signed minifilter driver: later. |
 | **C4 SAVIO acts** | A case offers the fix: USB off on that PC, sign the session out, disable the account, IT approval for that person, through the existing tiers and audit. |
 | **C5 Adaptive strictness** | Controls tighten for one person as their cases rise (warn → approval → block); a resignation flag starts 30 days of watch. Needs the privacy review and the lawyer (with D8). |
@@ -1799,6 +1799,30 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
   closed as handled from the page.
 - **Not yet:** a daily digest of medium and low cases (needs the J6 alert channels); events
   older than an open case's start (an offline laptop) stay out of it.
+
+**C2 as built (19 Nov, branch `phase-3`):** where an uploaded file came from.
+- **Not Mark of the Web:** a browser never tells a page or an extension the path of a file being
+  uploaded, so the file's Zone.Identifier can't be read at upload time. Instead the extension
+  sees the downloads themselves (`downloads` permission): each finished download's file name,
+  size and site, kept in the browser's own local storage for 30 days (at most 500). A blob: or
+  data: download is credited to the page it came from.
+- **Matching:** when files are uploaded, dropped or pasted, the most recent download with the
+  same name and size gives the site (`originFor`). An edited file (other size) has none.
+- **What leaves the browser:** the site only, as `origin` on the event, a host name checked by
+  the extension, the agent's `GuardEvent`, and the backend (migration 0097). Never the file name.
+- **Old and new together:** the agent sends `origin` only when it has one; the extension, if
+  an agent from before C2 refuses the event, sends it again without the field.
+- **Cases:** a file downloaded from another site weighs ×1.5 (the same site or one inside it
+  does not count), the site's row shows "Came from", and the reasons say "files downloaded from
+  crm.zoho.com". "What was found" rows carry `origin` too.
+- **Checked:** extension tests (download origin for normal, blob and data downloads; the latest
+  same-name-and-size match; host only; a recorded download then an upload carrying the site and
+  not the name; the resend for an older agent), agent `GuardEvent` (host only, left out when
+  unknown), backend (refused when not a host, stored, shown, the ×1.5 and the reason). Agent
+  suite 449, extension 22.
+- **Not checked:** in a real browser with real downloads. That is the VM test.
+- **Mark of the Web still has a use:** in the weekly file map (D5) and for USB copies (C3),
+  where the agent does see the file on disk. Done with C3.
 
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting

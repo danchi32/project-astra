@@ -59,6 +59,19 @@ public class GuardEventTests
     }
 
     [Fact]
+    public void Origin_is_a_host_name_or_nothing_and_is_not_sent_when_unknown()
+    {
+        // C2: where an uploaded file was downloaded from. A host name only, never a path or a file name.
+        var withOrigin = Valid.Replace("\"unknown\":false", "\"unknown\":false,\"origin\":\"crm.zoho.com\"");
+        Assert.Equal("crm.zoho.com", GuardEvent.Parse(B(withOrigin))!.Origin);
+        Assert.Null(GuardEvent.Parse(B(withOrigin.Replace("crm.zoho.com", "crm.zoho.com/export/clients.xlsx"))));
+        Assert.Null(GuardEvent.Parse(B(withOrigin.Replace("crm.zoho.com", "clients list.xlsx"))));
+        // Without one, the field is left out entirely: an older service or backend never sees it.
+        Assert.DoesNotContain("origin", Encoding.UTF8.GetString(GuardEvent.Parse(B(Valid))!.ToJson()));
+        Assert.Contains("\"origin\":\"crm.zoho.com\"", Encoding.UTF8.GetString(GuardEvent.Parse(B(withOrigin))!.ToJson()));
+    }
+
+    [Fact]
     public async Task The_host_forwards_only_the_fixed_shape()
     {
         var forwarded = new List<GuardEvent>();

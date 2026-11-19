@@ -8,7 +8,8 @@ namespace AstraAgent.Guard;
 /// Phase 3 · E3 / E4: one thing the browser extension saw, as it travels from the native host
 /// to the SAVIO service and on to the backend.
 ///
-/// The schema is fixed and has no free-text field: a host name, three words from short lists,
+/// The schema is fixed and has no free-text field: a host name (and, C2, the host a file was
+/// downloaded from, when the browser knows it), three words from short lists,
 /// counts per kind of finding, and flags. Unknown properties are refused, not ignored, so
 /// nothing can be added to this message without changing this file. It never carries the
 /// text that was checked, not even a piece of it. Who did it is not in here either: the service
@@ -24,7 +25,8 @@ public sealed record GuardEvent(
     int KeywordHits,
     bool Unknown,
     string? Outcome = null,
-    string? Reason = null)
+    string? Reason = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Origin = null)
 {
     /// <summary>Largest message accepted on the pipe. A real event is about 200 bytes.</summary>
     public const int MaxBytes = 2048;
@@ -58,6 +60,7 @@ public sealed record GuardEvent(
         Counts is not null && Counts.Count <= Kinds.Length &&
         Counts.All(kv => Kinds.Contains(kv.Key) && kv.Value is >= 0 and <= 1_000_000) &&
         KeywordHits is >= 0 and <= 200 &&
+        (Origin is null || Host.IsMatch(Origin)) &&
         OutcomeFits();
 
     /// <summary>An outcome only after a prompt; a reason only for going ahead after "justify".</summary>

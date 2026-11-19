@@ -59,9 +59,9 @@ const CHANNELS = ["paste", "drop", "file", "submit"];
  * a host name, the channel, the mode and the decision, counts and flags. Never the text.
  * Null when there is nothing worth recording: an ordinary paste with nothing found.
  */
-export function toEvent(policy, site, channel, scan, result) {
+export function toEvent(policy, site, channel, scan, result, origin = null) {
   const host = hostOf(site);
-  if (!/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(host) || !CHANNELS.includes(channel)) return null;
+  if (!HOST.test(host) || !CHANNELS.includes(channel)) return null;
   const counts = {};
   for (const [kind, n] of Object.entries(scan?.counts ?? {})) if (Number.isInteger(n) && n > 0) counts[kind] = n;
   const event = {
@@ -72,8 +72,40 @@ export function toEvent(policy, site, channel, scan, result) {
     outcome: null,   // D7: "proceeded" / "cancelled" once a warn or justify prompt is answered
     reason: null,
   };
+  // C2: where the file came from, as a host name only, and only when known.
+  const from = hostOf(origin ?? "");
+  if (HOST.test(from)) event.origin = from;
   const notable = event.unknown || event.contact_list || event.keyword_hits > 0 || Object.keys(counts).length > 0;
   return notable ? event : null;
+}
+
+const HOST = /^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/;
+export const MAX_DOWNLOADS = 500;
+export const DOWNLOAD_DAYS = 30;
+
+/**
+ * C2: the site a download came from: its final URL's host, or for a file a page built itself
+ * (blob: or data:) the page it was on. "" when there is none.
+ */
+export function downloadOrigin(item) {
+  const url = String(item?.finalUrl || item?.url || "");
+  if (/^(blob|data|filesystem):/i.test(url)) {
+    const inner = url.replace(/^blob:/i, "");
+    return /^https?:/i.test(inner) ? hostOf(inner) : hostOf(item?.referrer ?? "");
+  }
+  return hostOf(url);
+}
+
+/**
+ * C2: the site the first of these files was downloaded from, if the browser saw it downloaded:
+ * the most recent download of the same name and size. Only the host ever leaves this module.
+ */
+export function originFor(files, downloads) {
+  for (const f of files ?? []) {
+    const hit = [...(downloads ?? [])].reverse().find((d) => d.name === f.name && d.size === f.size);
+    if (hit && HOST.test(hit.origin ?? "")) return hit.origin;
+  }
+  return null;
 }
 
 /**

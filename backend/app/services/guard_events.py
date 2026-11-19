@@ -54,6 +54,8 @@ class GuardEventIn(BaseModel):
     # is an approval asked for; "proceeded" after "approve" means an approval was in force.
     outcome: Literal["proceeded", "cancelled", "requested"] | None = None
     reason: Reason | None = None
+    # C2: where an uploaded file was downloaded from. A host name only.
+    origin: str | None = Field(default=None, max_length=253)
 
     @model_validator(mode="after")
     def _outcome_fits(self) -> GuardEventIn:
@@ -77,11 +79,11 @@ class GuardEventIn(BaseModel):
     def _utc(cls, v: datetime) -> datetime:
         return v if v.tzinfo else v.replace(tzinfo=UTC)
 
-    @field_validator("site")
+    @field_validator("site", "origin")
     @classmethod
-    def _site(cls, v: str) -> str:
-        if not _HOST.match(v):
-            raise ValueError("site must be a host name")
+    def _site(cls, v: str | None) -> str | None:
+        if v is not None and not _HOST.match(v):
+            raise ValueError("must be a host name")
         return v
 
     @field_validator("windows_user")
@@ -122,7 +124,7 @@ async def ingest(session: AsyncSession, device: Device, batch: GuardEventBatch) 
         org_id=device.org_id, device_id=device.id, occurred_at=e.at, windows_user=e.windows_user,
         site=e.site, channel=e.channel, mode=e.mode, action=e.action, counts=e.counts,
         contact_list=e.contact_list, keyword_hits=e.keyword_hits, unknown=e.unknown,
-        outcome=e.outcome, reason=e.reason, received_at=now,
+        outcome=e.outcome, reason=e.reason, origin=e.origin, received_at=now,
     ) for e in kept)
     # Retention, pruned per device on ingest, as telemetry and workforce samples are.
     await session.execute(delete(GuardEvent).where(GuardEvent.device_id == device.id, GuardEvent.occurred_at < oldest))
