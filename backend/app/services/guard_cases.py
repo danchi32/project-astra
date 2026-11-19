@@ -19,8 +19,9 @@ counts), never content.
 - Plus 5 for every extra site in the same case.
 - High from 40, medium from 10.
 
-ponytail: site risk comes from the fixed categories in `browser_policy.SITE_CATEGORIES`. The
-upgrade path is S1, the AI's own site categories, plugged in at `site_kind`.
+Site risk comes from the fixed categories in `browser_policy.SITE_CATEGORIES` and, for a site
+they do not know, from what SAVIO's AI named it (S1, `guard_sites`): a work tool or "something
+else" weighs 1 and is not counted as new.
 """
 from __future__ import annotations
 
@@ -42,8 +43,8 @@ from app.models import (
     User,
 )
 from app.models.base import as_utc, utcnow
+from app.services import guard_sites
 from app.services.audit import AuditService
-from app.services.browser_policy import SITE_CATEGORIES
 from app.services.notifications import NotificationService
 
 CASE_GAP = timedelta(hours=48)       # quiet this long and the next event starts a new case
@@ -57,17 +58,16 @@ LABELS = {
 }
 # As they read inside a sentence ("to wetransfer.com (personal file sharing)").
 KIND_NAMES = {"file_sharing": "personal file sharing", "personal_email": "personal e-mail", "ai_chat": "AI chat",
-              "messaging": "messaging on the web", "social_media": "social media", "paste_sites": "a paste site"}
+              "messaging": "messaging on the web", "social_media": "social media", "paste_sites": "a paste site",
+              "business": "a business tool"}
 
 
-def site_kind(host: str) -> str | None:
-    """The category a host (or its parent) is listed under, if any. "usb" is a copy to a drive."""
+def site_kind(host: str, known: dict[str, str] | None = None) -> tuple[str | None, str | None]:
+    """(kind, where from) for a host: "usb" is a copy to a drive; then the fixed list ("list"),
+    then what SAVIO's AI said about a site the list does not know ("ai", S1)."""
     if host == "usb":
-        return "usb"
-    for key, (_, hosts) in SITE_CATEGORIES.items():
-        if any(host == h or host.endswith("." + h) for h in hosts):
-            return key
-    return None
+        return "usb", "list"
+    return guard_sites.kind_of(host, known)
 
 
 def _same_place(a: str, b: str) -> bool:
@@ -89,7 +89,7 @@ def _items(e, ignore: set[str]) -> int:
     return sum(n for k, n in (e.counts or {}).items() if k not in ignore)
 
 
-def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict]:
+def score(events, ignore: set[str], new_sites: set[str], known: dict[str, str] | None = None) -> tuple[int, str, dict]:
     """The case's score, level and summary from its events. Pure, so it is tested directly."""
     total = 0.0
     kinds: dict[str, int] = defaultdict(int)
@@ -100,8 +100,9 @@ def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict
         items = _items(e, ignore)
         if not (items or e.contact_list or e.keyword_hits):
             continue   # e-mail addresses only, or could not be checked: not part of a story
-        kind = site_kind(e.site)
-        where = RISKY.get(kind, 2 if e.site in new_sites else 1)
+        kind, source = site_kind(e.site, known)
+        # A site SAVIO knows is a work tool, or nothing in particular, is not "new and unknown".
+        where = RISKY.get(kind) or (1 if kind in ("business", "other") else 2 if e.site in new_sites else 1)
         origin = getattr(e, "origin", None)
         moved = origin is not None and not _same_place(origin, e.site)
         total += (_how(e) * where * (1.5 if moved else 1)
@@ -109,7 +110,8 @@ def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict
         for k, n in (e.counts or {}).items():
             if k not in ignore:
                 kinds[k] += n
-        s = sites.setdefault(e.site, {"site": e.site, "kind": kind, "new": e.site in new_sites and kind != "usb", "events": 0,
+        s = sites.setdefault(e.site, {"site": e.site, "kind": kind, "kind_source": source,
+                                      "new": e.site in new_sites and kind != "usb", "events": 0,
                                       "items": 0, "contact_lists": 0, "went_ahead": 0, "blocked": 0,
                                       "channels": [], "origins": []})
         s["events"] += 1
@@ -146,7 +148,9 @@ def score(events, ignore: set[str], new_sites: set[str]) -> tuple[int, str, dict
         if s["site"] == "usb":
             reasons.append("copied to a USB drive")
             continue
-        what = KIND_NAMES.get(s["kind"]) or ("a site new to your organization" if s["new"] else None)
+        what = KIND_NAMES.get(s["kind"]) or ("a site new to your organization" if s["new"] and not s["kind"] else None)
+        if what and s.get("kind_source") == "ai":
+            what += ", recognised by SAVIO"
         reasons.append(f"to {s['site']}" + (f" ({what})" if what else ""))
     if origins:
         top = sorted(origins, key=lambda o: (-origins[o], o))[:2]
@@ -204,7 +208,7 @@ async def update(session: AsyncSession, org_id, windows_user: str, earliest_new)
             GuardEvent.org_id == org_id, GuardEvent.site.in_({e.site for e in events}))
         .group_by(GuardEvent.site))).all())
     new_sites = {s for s, t in first_seen.items() if as_utc(t) >= utcnow() - NEW_SITE}
-    points, level, summary = score(events, ignore, new_sites)
+    points, level, summary = score(events, ignore, new_sites, await guard_sites.learned(session))
     if not summary["events"]:
         return case
     devices = (await session.execute(select(Device.hostname).where(

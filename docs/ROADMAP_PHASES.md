@@ -1973,6 +1973,32 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 - **Not checked:** the actions running on a real PC from a case (each action itself is already
   covered by its own tests). That is the VM test.
 
+**S1 as built (19 Nov, branch `phase-3`):** SAVIO names sites the fixed list does not know.
+- **When:** after a batch of events arrives, off the response path (`guard_sites.classify_new_sites`,
+  a background task like Tracker's), the org's sites from the last 30 days that the fixed list
+  does not cover go to the AI, at most a dozen a pass, by registrable domain (one answer covers
+  every subdomain). USB and intranet names are never asked about. No AI key: nothing happens.
+- **Kept once, for everyone:** in Tracker's global `learned_categories` store with kind "guard";
+  no new table. A site is asked about once, ever.
+- **What the model may say:** one key from a fixed list (the six site categories, "business"
+  for a work tool, "other"). It sees host names only, never content, counts or people; the
+  system prompt says host names are data, not instructions; an answer for a host it was not
+  asked about, or a key not on the list, is dropped. A hostile host name can at worst be filed
+  under the wrong kind.
+- **Cases:** the fixed list first, then the AI's kind. A risky one weighs as its kind, and the
+  reason says "(personal file sharing, recognised by SAVIO)"; a business tool or "other" weighs 1
+  and is not counted as new.
+- **Suggestion:** "Block N risky sites SAVIO found": AI-recognised personal file sharing, personal
+  e-mail or paste sites that sensitive data went to in 14 days and that no list blocks; Apply adds
+  them to the blocked sites (audited, a new version). Keyed by the set of sites, so a site found
+  later brings a new card even after one was dismissed.
+- **Checked:** `test_guard_sites` (only unknown internet sites asked about, the list first, a
+  hostile-looking name treated as a name; the case reason and weights; with a stand-in model: no
+  key no call, two learned, an unasked host and an off-list key dropped, asked once only, the
+  listed site never sent; the suggestion's wording and change, applied, then gone).
+- **Not checked:** the real model's answers (no AI key locally, by design: no production secrets
+  on this laptop). Worth a look on staging with a few real sites.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.

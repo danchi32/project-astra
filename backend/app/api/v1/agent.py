@@ -392,6 +392,7 @@ async def agent_browser_policy_report(
 )
 async def agent_guard_events(
     body: GuardEventBatch,
+    background: BackgroundTasks,
     device: Device = Depends(get_rate_limited_device),
     session: AsyncSession = Depends(get_db),
 ) -> None:
@@ -399,7 +400,21 @@ async def agent_guard_events(
     org does not have AI Guard, so the agent does not keep retrying."""
     from app.services import guard_events
 
-    await guard_events.ingest(session, device, body)
+    if await guard_events.ingest(session, device, body):
+        # S1: name any site the fixed list does not know, off the response path.
+        background.add_task(_classify_guard_sites_bg, device.org_id)
+
+
+async def _classify_guard_sites_bg(org_id: uuid.UUID) -> None:
+    """S1 in its own session; a failure must never reach the agent."""
+    from app.core.database import SessionLocal
+    from app.services.guard_sites import classify_new_sites
+
+    try:
+        async with SessionLocal() as session:
+            await classify_new_sites(session, org_id)
+    except Exception:
+        logger.exception("guard AI site classification failed for org %s", org_id)
 
 
 @router.post(

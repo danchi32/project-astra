@@ -17,12 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import GuardEvent, GuardSuggestionDismissal, User
 from app.models.base import utcnow
-from app.services import browser_policy, guard_discovery
+from app.services import browser_policy, guard_discovery, guard_sites
 from app.services.audit import AuditService
 from app.services.browser_policy import BrowserPolicyBody
 
 WINDOW = timedelta(days=14)
 AI_SITES = list(browser_policy.SITE_CATEGORIES["ai_chat"][1])
+FOUND_KINDS = ("file_sharing", "personal_email", "paste_sites")
 
 
 class SuggestionNotFound(LookupError):
@@ -52,8 +53,18 @@ async def _evidence(session: AsyncSession, org_id) -> dict:
     ai = sum(n for site, _, n in rows if _is_ai(site))
     event_lists = sum(n for _, contact, n in rows if contact)
     disc = await guard_discovery.for_org(session, org_id)
+    # S1: risky sites SAVIO's AI recognised (the fixed list does not know them), by registrable
+    # domain, with how many times data went there.
+    known = await guard_sites.learned(session)
+    found: dict[str, list] = {}
+    for site, _, n in rows:
+        kind, source = guard_sites.kind_of(site, known)
+        if source == "ai" and kind in FOUND_KINDS:
+            entry = found.setdefault(guard_sites.registrable(site), [kind, 0])
+            entry[1] += n
     return {"events": events, "ai_events": ai, "event_contact_lists": event_lists,
-            "file_contact_lists": disc["contact_lists"], "files": disc["files_with_findings"], "pcs": disc["pcs"]}
+            "file_contact_lists": disc["contact_lists"], "files": disc["files_with_findings"], "pcs": disc["pcs"],
+            "found": found}
 
 
 def _rules(p: BrowserPolicyBody, ev: dict, pilot: bool = False) -> list[dict]:
@@ -87,6 +98,27 @@ def _rules(p: BrowserPolicyBody, ev: dict, pilot: bool = False) -> list[dict]:
             "patch": {"blocked_categories": ["file_sharing"]},
             "changes": ["Block the category: Personal file-sharing (WeTransfer, Mega and "
                         + f"{len(browser_policy.SITE_CATEGORIES['file_sharing'][1]) - 2} more)"],
+        })
+
+    # S1: sites the fixed list does not know, that SAVIO's AI recognised as personal file sharing,
+    # personal e-mail or paste sites, which people sent sensitive data to and which are not blocked.
+    blocked = set(p.blocked_sites) | set(browser_policy.category_hosts(p.blocked_categories))
+    fresh = sorted(h for h in ev.get("found", {})
+                   if not any(h == b or h.endswith("." + b) for b in blocked))
+    if fresh:
+        import hashlib
+
+        names = {"file_sharing": "file sharing", "personal_email": "personal e-mail", "paste_sites": "paste site"}
+        times = sum(ev["found"][h][1] for h in fresh)
+        out.append({
+            # Keyed by the set, so a site found later brings a new card even after a dismissal.
+            "key": "block_found:" + hashlib.sha256(",".join(fresh).encode()).hexdigest()[:12],
+            "title": f"Block {_plural(len(fresh), 'risky site')} SAVIO found",
+            "why": f"Not on any list, but SAVIO recognised {', '.join(fresh[:5])}{' and more' if len(fresh) > 5 else ''} "
+                   f"as personal sites ({', '.join(sorted({names[ev['found'][h][0]] for h in fresh}))}), and sensitive "
+                   f"data went to them {_plural(times, 'time')} in the last 14 days.",
+            "patch": {"blocked_sites": fresh},
+            "changes": [f"Block {h} ({names[ev['found'][h][0]]})" for h in fresh],
         })
 
     if extension and not p.incognito_off:
