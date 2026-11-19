@@ -1824,6 +1824,38 @@ incident first. SAVIO's answer is to read the pattern, rank it, explain it, and 
 - **Mark of the Web still has a use:** in the weekly file map (D5) and for USB copies (C3),
   where the agent does see the file on disk. Done with C3.
 
+**C3a as built (19 Nov, branch `phase-3`):** USB drives and phones by Windows' own policies.
+- **Modes** (`usb_mode` on the browser policy, so per group too): off (default; SAVIO leaves
+  USB alone) · read-only · encrypted drives only · read-only with IT write windows · block.
+- **How:** the Removable Storage Access policies and BitLocker's, names and values read from the
+  ADMX templates on this laptop (RemovableStorage.admx, VolumeEncryption.admx):
+  - read-only: `Deny_Write` = 1 under `HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices\`
+    for removable disks `{53f5630d-…}` and the two phone/camera (WPD) classes `{6AC27878-…}`,
+    `{F33FDC04-…}`;
+  - block: `Deny_All` = 1 there;
+  - encrypted only: `RDVDenyWriteAccess` = 1 under
+    `HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FVE` (BitLocker To Go), phones read-only.
+- **Writer:** the same owned-names writer as the browsers, reported as "Usb" and
+  "UsbEncryption": an org's own GPO for any of these is a conflict, never overwritten; a key
+  SAVIO has never used is not even created.
+- **Write windows:** in "read-only, IT can allow writing" mode, an admin opens a window for one
+  PC (15 minutes to 8 hours) from the PC list, or ends it early; audited
+  (`guard.usb_window_open` / `_close`, migration 0098). Only PCs in that mode ask for it, every
+  cycle, so it arrives within a minute. The PC keeps the end time and puts read-only back by
+  itself, online or not; the values go and come back as "removed" / "set", never as tampering.
+  A window is not served once the PC's policy leaves that mode.
+- **Checked:** agent tests (each mode's values, inside and outside a window, nothing created when
+  unused, the window going and coming back without a tamper flag, a GPO's value left alone; the
+  worker asking only in that mode, keeping the last end when the backend is unreachable, closing
+  early); backend `test_usb_modes_and_write_windows` (validation, 409 outside the mode, bounds,
+  roles, served to that PC only, PC list, not served after the mode changes, audit). Agent suite
+  451. On screen against the local backend: the mode saved as version 19, a window opened on a
+  made-up PC ("USB writing allowed until 2:54 AM") and ended early.
+- **Not checked:** Windows honouring these on a real drive, and whether a drive already plugged
+  in needs reconnecting. That is the VM test.
+- **C3b next:** observe what is copied to a drive (counts only, scanned by the host) as case
+  events; a person asking for a window from the tray; company drives by serial number.
+
 S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
 learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
 is where S1's AI site categories plug in.

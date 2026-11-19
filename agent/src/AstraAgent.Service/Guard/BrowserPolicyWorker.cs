@@ -46,6 +46,7 @@ public sealed class BrowserPolicyWorker(
     public void CountClosed(string browser) => _closed.AddOrUpdate(browser, 1, (_, n) => n + 1);
 
     private bool _approvalsMayBeStored = true;   // from a previous run, until the first cycle clears them
+    private DateTime? _usbWriteUntil;
     private string? _currentFor;
     private DateTime _nextFetch = DateTime.MinValue;
     private string? _lastReported;
@@ -92,7 +93,21 @@ public sealed class BrowserPolicyWorker(
         if (_current is null)
             return;   // never heard from the backend: there is nothing to apply or remove
 
-        var reports = Apply(_current.Policy.ToPolicy());
+        var policy = _current.Policy.ToPolicy();
+        if (policy.UsbMode == "on_request")
+        {
+            // C3: only a PC in this mode asks, every cycle, so a window IT opens reaches it within a
+            // minute. Unreachable: keep the last known end, which the PC enforces by itself.
+            if (await api.GetUsbWindowAsync(token, ct) is { } window)
+                _usbWriteUntil = window.Until?.UtcDateTime;
+            policy = policy with { UsbWriteUntil = _usbWriteUntil };
+        }
+        else
+        {
+            _usbWriteUntil = null;
+        }
+
+        var reports = Apply(policy);
         var signature = $"{_current.Version}|" + string.Join("|", reports.Select(r =>
             $"{r.Browser}:{string.Join(",", r.Conflicts.Order())}:{r.Error}"));
         var closed = _closed.ToDictionary();

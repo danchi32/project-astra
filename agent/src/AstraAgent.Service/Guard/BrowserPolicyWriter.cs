@@ -43,6 +43,8 @@ public static class BrowserPolicyWriter
         Browser.Chrome => @"SOFTWARE\Policies\Google\Chrome",
         Browser.Edge => @"SOFTWARE\Policies\Microsoft\Edge",
         Browser.Windows => WindowsPayloadPath,   // plain registry values too: the same writer serves it
+        Browser.Usb => @"SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices",
+        Browser.UsbEncryption => @"SYSTEM\CurrentControlSet\Policies\Microsoft\FVE",
         _ => throw new ArgumentException("not a registry policy target", nameof(b)),
     };
 
@@ -80,6 +82,13 @@ public static class BrowserPolicyWriter
         var windows = ApplyWindows(Registry.LocalMachine, BrowserPolicyMap.Windows(policy));
         if (windows.Changed || windows.Error is not null || windows.Conflicts.Count > 0 || policy.MicrosoftOnWindows)
             reports.Add(windows);
+        foreach (var (target, desired) in new[] { (Browser.Usb, BrowserPolicyMap.Usb(policy, DateTime.UtcNow)),
+                                                  (Browser.UsbEncryption, BrowserPolicyMap.UsbEncryption(policy)) })
+        {
+            var usb = ApplyIfUsed(Registry.LocalMachine, target, desired);
+            if (usb.Changed || usb.Error is not null || usb.Conflicts.Count > 0 || policy.UsbMode != "off")
+                reports.Add(usb);
+        }
 
         // E4: while the scanner reads anything (a browser runs the extension, or D5's file scan
         // is on), it has no network.
@@ -175,6 +184,22 @@ public static class BrowserPolicyWriter
         {
             return new ApplyReport(browser, set, repaired, removed, conflicts, $"Could not write {browser} policy: {ex.Message}");
         }
+    }
+
+    /// <summary>C3: a policy key SAVIO has never used here is not even created; otherwise the
+    /// Chrome / Edge writer (owned names, conflicts, repair, read-back) applies it.</summary>
+    public static ApplyReport ApplyIfUsed(RegistryKey root, Browser target, IReadOnlyDictionary<string, object> desired)
+    {
+        try
+        {
+            if (desired.Count == 0 && ReadOwned(root, target).Count == 0)
+                return new ApplyReport(target, [], [], [], [], null);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        {
+            return new ApplyReport(target, [], [], [], [], $"Could not read {target} policy: {ex.Message}");
+        }
+        return ApplyChromium(root, target, desired);
     }
 
     /// <summary>

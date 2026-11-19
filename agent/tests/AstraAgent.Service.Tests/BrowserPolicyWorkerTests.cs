@@ -49,6 +49,10 @@ public class BrowserPolicyWorkerTests
         public bool DiscoveryAccepted = true;
         public Task<bool> SendDiscoveryAsync(string t, DateTime at, DiscoveryReport r, CancellationToken ct)
         { Discoveries.Add(r); return Task.FromResult(DiscoveryAccepted); }
+        public AgentUsbWindow? UsbWindow = new(null);
+        public int UsbWindowFetches;
+        public Task<AgentUsbWindow?> GetUsbWindowAsync(string t, CancellationToken ct)
+        { UsbWindowFetches++; return Task.FromResult(UsbWindow); }
 
         public Task<EnrollResponse?> EnrollAsync(EnrollRequest request, CancellationToken ct) => throw new NotSupportedException();
         public Task<HeartbeatResult> HeartbeatAsync(string token, HeartbeatRequest request, CancellationToken ct) => throw new NotSupportedException();
@@ -164,6 +168,31 @@ public class BrowserPolicyWorkerTests
         Assert.False(last.IncognitoOff);
         Assert.Empty(last.BlockedSites);
         Assert.Equal(0, _api.Reports[^1].Version);
+    }
+
+    [Fact]
+    public async Task A_usb_write_window_is_asked_for_only_on_request_and_ends_by_itself()
+    {
+        var w = Worker();
+        var t0 = new DateTime(2026, 11, 19, 9, 0, 0, DateTimeKind.Utc);
+        _api.Next = new AgentBrowserPolicy(1, new AgentBrowserPolicyBody(UsbMode: "read_only"));
+        await w.RunOnceAsync(t0, default);
+        Assert.Equal(0, _api.UsbWindowFetches);                          // no extra call outside on_request
+
+        var until = DateTimeOffset.UtcNow.AddMinutes(30);
+        _api.Next = new AgentBrowserPolicy(2, new AgentBrowserPolicyBody(UsbMode: "on_request"));
+        _api.UsbWindow = new(until);
+        await w.RunOnceAsync(t0.AddHours(1), default);
+        Assert.Equal(until.UtcDateTime, _applied[^1].UsbWriteUntil);
+        Assert.Empty(BrowserPolicyMap.Usb(_applied[^1], DateTime.UtcNow));         // writing allowed now
+        Assert.NotEmpty(BrowserPolicyMap.Usb(_applied[^1], until.UtcDateTime.AddSeconds(1)));   // and not after, offline or not
+
+        _api.UsbWindow = null;                                            // backend unreachable: keep what is known
+        await w.RunOnceAsync(t0.AddHours(1).AddMinutes(1), default);
+        Assert.Equal(until.UtcDateTime, _applied[^1].UsbWriteUntil);
+        _api.UsbWindow = new(null);                                       // IT closed it early
+        await w.RunOnceAsync(t0.AddHours(1).AddMinutes(2), default);
+        Assert.Null(_applied[^1].UsbWriteUntil);
     }
 
     [Fact]

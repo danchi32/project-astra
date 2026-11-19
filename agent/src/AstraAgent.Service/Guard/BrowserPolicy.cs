@@ -65,6 +65,15 @@ public sealed record BrowserPolicy
     public IReadOnlyList<string> SlackAllowedIds { get; init; } = Array.Empty<string>();
     public const int MaxAccountIds = 50;
 
+    /// <summary>C3: USB drives and phones. off (SAVIO leaves them alone) · read_only · encrypted_only
+    /// (writing only to BitLocker To Go drives) · on_request (read-only, except during a write
+    /// window IT opens for this PC) · block (no access at all).</summary>
+    public string UsbMode { get; init; } = "off";
+    /// <summary>C3: the end of a write window IT opened for this PC, in on_request mode. Not from
+    /// the policy: the worker sets it, and the PC enforces the end by itself, online or not.</summary>
+    public DateTime? UsbWriteUntil { get; init; }
+    static readonly string[] UsbModes = ["off", "read_only", "encrypted_only", "on_request", "block"];
+
     /// <summary>Close <see cref="OtherBrowsers"/> as they start (<see cref="OtherBrowserBlocker"/>).
     /// Not a browser setting: the writer ignores it.</summary>
     public bool BlockOtherBrowsers { get; init; }
@@ -113,6 +122,7 @@ public sealed record BrowserPolicy
         // These become request headers: only IDs of the expected shape, never anything else.
         if (MicrosoftTenantId is not null != MicrosoftPolicyId is not null) problems.Add("Microsoft needs a tenant ID and a policy ID");
         if (MicrosoftOnWindows && MicrosoftTenantId is null) problems.Add("Windows tenant restrictions need the Microsoft tenant ID and policy ID");
+        if (!UsbModes.Contains(UsbMode)) problems.Add($"USB mode '{Trim(UsbMode)}' is not off, read_only, encrypted_only, on_request or block");
         if (new[] { MicrosoftTenantId, MicrosoftPolicyId }.Any(v => v is not null && !Uuid.IsMatch(v))) problems.Add("Microsoft ID is malformed");
         foreach (var (name, list) in new[] { ("Claude organization", ClaudeOrgIds), ("ChatGPT workspace", ChatGptWorkspaceIds) })
         {
@@ -130,8 +140,9 @@ public sealed record BrowserPolicy
 
 /// <summary>Where a report comes from. <see cref="Scanner"/> is not a browser: it is E4's
 /// firewall block on the native host, reported beside the browsers it serves. Nor is
-/// <see cref="Windows"/>: it is Windows' own tenant restrictions setting (D2).</summary>
-public enum Browser { Chrome, Edge, Firefox, Scanner, Windows }
+/// <see cref="Windows"/>: it is Windows' own tenant restrictions setting (D2). <see cref="Usb"/> and
+/// <see cref="UsbEncryption"/> are Windows' removable-storage and BitLocker To Go policies (C3).</summary>
+public enum Browser { Chrome, Edge, Firefox, Scanner, Windows, Usb, UsbEncryption }
 
 /// <summary>
 /// A browser's own name for each setting. Chromium policies are registry values, or list
@@ -234,6 +245,39 @@ public static class BrowserPolicyMap
     /// read by Office apps and Edge. Only the two IDs. Never <c>enforceFirewall</c>: Microsoft warns
     /// that without a matching App Control policy it cuts every app off from Microsoft's services.
     /// </summary>
+    // Windows' Removable Storage Access classes (RemovableStorage.admx): removable disks, and the
+    // two classes phones and cameras use (WPD/MTP), which a "USB" rule must cover too.
+    const string Disks = "{53f5630d-b6bf-11d0-94f2-00a0c91efb8b}";
+    static readonly string[] Phones = ["{6AC27878-A6FA-4155-BA85-F98F491D4F33}", "{F33FDC04-D1AC-4E8E-9A30-19BBD4B108AE}"];
+
+    /// <summary>C3: values under HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices.</summary>
+    public static IReadOnlyDictionary<string, object> Usb(BrowserPolicy p, DateTime nowUtc)
+    {
+        var mode = p.UsbMode != "on_request" ? p.UsbMode : p.UsbWriteUntil > nowUtc ? "off" : "read_only";
+        var v = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        switch (mode)
+        {
+            case "block":
+                v["Deny_All"] = 1;
+                break;
+            case "read_only":
+                v[$@"{Disks}\Deny_Write"] = 1;
+                foreach (var c in Phones) v[$@"{c}\Deny_Write"] = 1;
+                break;
+            case "encrypted_only":   // drives through BitLocker (UsbEncryption); phones cannot be encrypted
+                foreach (var c in Phones) v[$@"{c}\Deny_Write"] = 1;
+                break;
+        }
+        return v;
+    }
+
+    /// <summary>C3: "Deny write access to removable drives not protected by BitLocker"
+    /// (VolumeEncryption.admx), under HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FVE.</summary>
+    public static IReadOnlyDictionary<string, object> UsbEncryption(BrowserPolicy p) =>
+        p.UsbMode == "encrypted_only"
+            ? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { ["RDVDenyWriteAccess"] = 1 }
+            : new Dictionary<string, object>();
+
     public static IReadOnlyDictionary<string, object> Windows(BrowserPolicy p) =>
         p.MicrosoftOnWindows && p.MicrosoftTenantId is { } tid && p.MicrosoftPolicyId is { } pid
             ? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { ["tenantid"] = tid, ["policyid"] = pid }

@@ -37,6 +37,8 @@ export interface BrowserPolicy {
   slack_allowed_ids: string[];
   // D10: the agent closes browsers these settings don't reach, as they start.
   block_other_browsers: boolean;
+  // C3: USB drives and phones, through Windows' own policies.
+  usb_mode: "off" | "read_only" | "encrypted_only" | "on_request" | "block";
 }
 
 export const FINDING_KINDS = {
@@ -70,7 +72,7 @@ export const endGuardPilot = () =>
 
 export interface BrowserResult {
   // Scanner: E4's firewall block on the native host. Windows: its own tenant restrictions (Office apps).
-  browser: "Chrome" | "Edge" | "Firefox" | "Scanner" | "Windows";
+  browser: "Chrome" | "Edge" | "Firefox" | "Scanner" | "Windows" | "Usb" | "UsbEncryption";
   set: string[];
   repaired: string[];
   removed: string[];
@@ -89,7 +91,15 @@ export interface DeviceBrowserState {
   policy_version: number;
   // D10: browsers the policy doesn't reach that are installed on this PC (from its app inventory).
   other_browsers: string[];
+  // C3: this PC's USB mode, and until when IT let it write to USB drives ("write on request").
+  usb_mode: BrowserPolicy["usb_mode"];
+  usb_write_until: string | null;
 }
+
+export const openUsbWindow = (deviceId: string, minutes: number) =>
+  apiClient.post<{ device_id: string; until: string }>(`/guard/devices/${deviceId}/usb-window`, { minutes }).then((r) => r.data);
+
+export const closeUsbWindow = (deviceId: string) => apiClient.delete(`/guard/devices/${deviceId}/usb-window`);
 
 // D1: a device group's own policy. A PC in several groups gets the lowest priority number's.
 export interface GroupPolicy {

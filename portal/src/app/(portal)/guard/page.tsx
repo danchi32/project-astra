@@ -5,8 +5,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  FINDING_KINDS, deleteGroupPolicy, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices, getGroupPolicies,
-  getSiteCategories, putBrowserPolicy, putGroupPolicy, type BrowserPolicy, type FindingKind,
+  FINDING_KINDS, closeUsbWindow, deleteGroupPolicy, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices,
+  getGroupPolicies, getSiteCategories, openUsbWindow, putBrowserPolicy, putGroupPolicy, type BrowserPolicy,
+  type DeviceBrowserState, type FindingKind,
 } from "@/lib/api/guard";
 import { listDeviceGroups } from "@/lib/api/grouping";
 import { isUpgradeRequired } from "@/components/upgrade-required";
@@ -26,7 +27,55 @@ const SWITCHES: { key: keyof BrowserPolicy; label: string; help: string }[] = [
 ];
 
 // What a PC's report rows are, where they aren't a browser.
-const WHERE: Record<string, string> = { Scanner: "Scanner's network block", Windows: "Microsoft 365 on the PC" };
+const WHERE: Record<string, string> = {
+  Scanner: "Scanner's network block", Windows: "Microsoft 365 on the PC", Usb: "USB drives", UsbEncryption: "USB encryption",
+};
+
+// C3: USB drives and phones.
+const USB_MODES: { value: BrowserPolicy["usb_mode"]; label: string; help: string }[] = [
+  { value: "off", label: "Leave as they are", help: "SAVIO does not change anything about USB drives." },
+  { value: "read_only", label: "Read-only", help: "Files can be opened from a drive or phone, never copied onto one." },
+  { value: "encrypted_only", label: "Encrypted drives only",
+    help: "Copying only onto drives encrypted with BitLocker To Go; phones read-only." },
+  { value: "on_request", label: "Read-only, IT can allow writing for a while",
+    help: "Read-only, until IT allows writing on one PC for a set time (in the PC list below). It ends by itself." },
+  { value: "block", label: "Block", help: "No access to USB drives or phones at all." },
+];
+const USB_MINUTES = [[15, "15 minutes"], [30, "30 minutes"], [60, "1 hour"], [240, "4 hours"], [480, "8 hours"]] as const;
+
+/** C3: one PC's USB write window: when it ends, or a way to open one. */
+function UsbWindow({ device, canEdit }: { device: DeviceBrowserState; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const [minutes, setMinutes] = useState(30);
+  const [error, setError] = useState<string | null>(null);
+  const muted = { color: "var(--text-secondary)" };
+  async function run(f: () => Promise<unknown>) {
+    setError(null);
+    try { await f(); await qc.invalidateQueries({ queryKey: ["browser-policy-devices"] }); }
+    catch (e) { setError(apiErrorMessage(e, "Could not change it.")); }
+  }
+  const open = device.usb_write_until && new Date(device.usb_write_until) > new Date();
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      {open ? (
+        <>
+          <span style={{ color: "#f59e0b" }}>USB writing allowed until {new Date(device.usb_write_until!).toLocaleTimeString()}</span>
+          {canEdit && <button className="underline" style={muted} onClick={() => run(() => closeUsbWindow(device.device_id))}>end now</button>}
+        </>
+      ) : canEdit ? (
+        <>
+          <select aria-label="For how long" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}
+            className="px-1 py-0.5 rounded text-xs" style={{ background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+            {USB_MINUTES.map(([m, label]) => <option key={m} value={m}>{label}</option>)}
+          </select>
+          <button className="underline" style={{ color: "var(--accent)" }}
+            onClick={() => run(() => openUsbWindow(device.device_id, minutes))}>Allow USB writing</button>
+        </>
+      ) : <span style={muted}>USB read-only</span>}
+      {error && <span style={{ color: "#ef4444" }}>{error}</span>}
+    </div>
+  );
+}
 
 const lines = (s: string) => s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
 
@@ -206,6 +255,18 @@ export default function GuardPage() {
               <span>{s.label}<span className="block text-xs" style={muted}>{s.help}</span></span>
             </label>
           ))}
+          <label className="block text-sm space-y-1" style={{ color: "var(--text-primary)" }}>
+            <span>USB drives and phones</span>
+            <select disabled={!isAdmin} value={form.usb_mode}
+              onChange={(e) => setForm({ ...form, usb_mode: e.target.value as BrowserPolicy["usb_mode"] })}
+              className="block w-full md:w-96 px-3 py-2 rounded-lg text-sm outline-none" style={input}>
+              {USB_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+            <span className="block text-xs" style={muted}>
+              {USB_MODES.find((m) => m.value === form.usb_mode)?.help} Uses Windows&apos; own settings; a drive already plugged
+              in may need to be reconnected. If Group Policy already sets these on a PC, SAVIO leaves them alone and shows a conflict.
+            </span>
+          </label>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {([["blocked", "Blocked sites", "One per line, e.g. wetransfer.com. Covers subdomains."],
                ["allowed", "Always allowed", "Exceptions to the block list."],
@@ -436,6 +497,7 @@ export default function GuardPage() {
                           </Link>
                         </div>
                       )}
+                      {d.usb_mode === "on_request" && <UsbWindow device={d} canEdit={isAdmin} />}
                     </td>
                     <td className="px-4 py-2 text-xs" style={muted}>{new Date(d.reported_at).toLocaleString()}</td>
                   </tr>

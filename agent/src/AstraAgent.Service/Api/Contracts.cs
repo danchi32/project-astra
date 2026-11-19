@@ -234,6 +234,9 @@ public sealed record AgentGuardApproval(
     [property: JsonPropertyName("channel")] string Channel,
     [property: JsonPropertyName("valid_until")] DateTimeOffset ValidUntil);
 
+/// <summary>Phase 3c · C3: the USB write window IT opened for this PC, if any (null = none).</summary>
+public sealed record AgentUsbWindow([property: JsonPropertyName("until")] DateTimeOffset? Until);
+
 /// <summary>Phase 3 · D10: the browser policy the backend serves this device. Version 0 with an
 /// empty policy means "none": the org has no AI Guard, or never set one, and the agent removes
 /// whatever it set before.</summary>
@@ -267,7 +270,8 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("slack_allowed_ids")] IReadOnlyList<string>? SlackAllowedIds = null,
     [property: JsonPropertyName("block_other_browsers")] bool BlockOtherBrowsers = false,
     [property: JsonPropertyName("guard_read_pdfs")] bool GuardReadPdfs = false,
-    [property: JsonPropertyName("microsoft_on_windows")] bool MicrosoftOnWindows = false)
+    [property: JsonPropertyName("microsoft_on_windows")] bool MicrosoftOnWindows = false,
+    [property: JsonPropertyName("usb_mode")] string? UsbMode = null)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -285,5 +289,6 @@ public sealed record AgentBrowserPolicyBody(
         ClaudeOrgIds = ClaudeOrgIds ?? [], ChatGptWorkspaceIds = ChatGptWorkspaceIds ?? [],
         SlackRequesterId = SlackRequesterId, SlackAllowedIds = SlackAllowedIds ?? [],
         BlockOtherBrowsers = BlockOtherBrowsers, ReadPdfs = GuardReadPdfs, MicrosoftOnWindows = MicrosoftOnWindows,
+        UsbMode = UsbMode ?? "off",
     };
 }

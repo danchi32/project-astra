@@ -83,6 +83,10 @@ public interface IAstraApiClient
 
     /// <summary>D5: this PC's map of where sensitive files are (folder counts only).</summary>
     Task<bool> SendDiscoveryAsync(string deviceToken, DateTime scannedAtUtc, DiscoveryReport report, CancellationToken ct);
+
+    /// <summary>C3: the USB write window open for this PC. Null on any failure (keep what is
+    /// known; a window ends at its own time anyway).</summary>
+    Task<AgentUsbWindow?> GetUsbWindowAsync(string deviceToken, CancellationToken ct);
 }
 
 public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logger) : IAstraApiClient
@@ -265,6 +269,21 @@ public sealed class AstraApiClient(HttpClient http, ILogger<AstraApiClient> logg
         {
             logger.LogWarning(ex, "Heartbeat succeeded but its body could not be parsed");
             return HeartbeatResult.From(HeartbeatStatus.Ok);
+        }
+    }
+
+    public async Task<AgentUsbWindow?> GetUsbWindowAsync(string deviceToken, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, "/api/v1/agent/usb-window");
+        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", deviceToken);
+        try
+        {
+            var response = await http.SendAsync(message, ct);
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<AgentUsbWindow>(ct) : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return null;
         }
     }
 

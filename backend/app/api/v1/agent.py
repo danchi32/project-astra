@@ -428,3 +428,16 @@ async def agent_guard_approvals(
     from app.services import guard_approvals
 
     return await guard_approvals.for_device(session, device)
+
+
+@router.get(
+    "/usb-window",
+    summary="C3: the USB write window IT opened for this device, if any (agent only)",
+)
+async def agent_usb_window(
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.services import browser_policy
+
+    return {"until": await browser_policy.usb_window(session, device)}

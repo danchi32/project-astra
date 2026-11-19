@@ -24,6 +24,7 @@ from app.models import (
     DeviceGroup,
     DeviceGroupMember,
     GroupBrowserPolicy,
+    GuardUsbWindow,
     Notification,
     NotificationCategory,
     NotificationSeverity,
@@ -92,6 +93,8 @@ OTHER_BROWSERS: dict[str, str] = {   # name → how its installed-app name start
     "Brave": "brave", "Opera": "opera", "Vivaldi": "vivaldi", "Yandex Browser": "yandex",
     "Tor Browser": "tor browser", "Chromium": "chromium", "Waterfox": "waterfox", "LibreWolf": "librewolf",
 }
+UsbMode = Literal["off", "read_only", "encrypted_only", "on_request", "block"]
+USB_WINDOW_MINUTES = (15, 480)   # shortest and longest write window IT can open
 OtherBrowser = Literal["Brave", "Opera", "Vivaldi", "Yandex Browser", "Tor Browser", "Chromium", "Waterfox",
                        "LibreWolf"]
 
@@ -169,6 +172,10 @@ class BrowserPolicyBody(BaseModel):
     # D10: the agent closes any of OTHER_BROWSERS as it starts, and tells the person why. Removing
     # one stays the admin-only "Uninstall software" action, PC by PC.
     block_other_browsers: bool = False
+    # C3: USB drives and phones, through Windows' own policies. off (SAVIO leaves them alone) ·
+    # read_only · encrypted_only (BitLocker To Go drives only) · on_request (read-only, except in
+    # a write window IT opens for one PC) · block.
+    usb_mode: UsbMode = "off"
 
     @field_validator("microsoft_tenant_id", "microsoft_policy_id")
     @classmethod
@@ -270,8 +277,9 @@ class BrowserPolicyBody(BaseModel):
 class BrowserResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # "Scanner" is not a browser: it is E4's firewall block on the extension's native host.
-    # Nor is "Windows": it is Windows' own tenant restrictions (D2 on the PC).
-    browser: Literal["Chrome", "Edge", "Firefox", "Scanner", "Windows"]
+    # Nor is "Windows": it is Windows' own tenant restrictions (D2 on the PC). "Usb" and
+    # "UsbEncryption" are Windows' removable-storage and BitLocker To Go policies (C3).
+    browser: Literal["Chrome", "Edge", "Firefox", "Scanner", "Windows", "Usb", "UsbEncryption"]
     set: list[str] = Field(default_factory=list, max_length=50)
     repaired: list[str] = Field(default_factory=list, max_length=50)
     removed: list[str] = Field(default_factory=list, max_length=50)
@@ -478,6 +486,59 @@ async def for_device(session: AsyncSession, device: Device) -> dict:
     policy = {k: v for k, v in row.policy.items() if k != "blocked_categories"}
     policy["blocked_sites"] = list(dict.fromkeys([*policy.get("blocked_sites", []), *(row.category_hosts or [])]))
     return {"version": row.version, "policy": policy}
+
+
+# ── C3: USB write windows ───────────────────────────────────────────────────────────────────
+
+class NotOnRequest(ValueError):
+    """A write window only means something on a PC whose policy is "write on request"."""
+
+
+async def usb_window(session: AsyncSession, device: Device) -> datetime | None:
+    """When this PC may write to USB drives until, if IT opened a window and its policy still asks."""
+    row = await session.get(GuardUsbWindow, device.id)
+    if row is None or as_utc(row.until) <= utcnow():
+        return None
+    return row.until if (await for_device(session, device))["policy"].get("usb_mode") == "on_request" else None
+
+
+async def open_usb_window(session: AsyncSession, *, actor: User, device_id, minutes: int) -> GuardUsbWindow:
+    device = await session.get(Device, device_id)
+    if device is None or device.org_id != actor.org_id:
+        raise LookupError("No such PC.")
+    if (await for_device(session, device))["policy"].get("usb_mode") != "on_request":
+        raise NotOnRequest(f"{device.hostname} is not in 'write on request' mode, so there is nothing to open.")
+    row = await session.get(GuardUsbWindow, device.id)
+    until = utcnow() + timedelta(minutes=minutes)
+    if row is None:
+        row = GuardUsbWindow(device_id=device.id, org_id=device.org_id, until=until)
+        session.add(row)
+    row.until, row.opened_by_user_id, row.opened_at = until, actor.id, utcnow()
+    await AuditService(session).record(
+        org_id=actor.org_id, actor_id=actor.id, action="guard.usb_window_open", target_type="device",
+        target_id=str(device.id), detail={"device": device.hostname, "minutes": minutes},
+    )
+    await session.commit()
+    return row
+
+
+async def close_usb_window(session: AsyncSession, *, actor: User, device_id) -> None:
+    row = await session.get(GuardUsbWindow, device_id)
+    if row is None or row.org_id != actor.org_id:
+        raise LookupError("No window is open on that PC.")
+    device = await session.get(Device, device_id)
+    await session.delete(row)
+    await AuditService(session).record(
+        org_id=actor.org_id, actor_id=actor.id, action="guard.usb_window_close", target_type="device",
+        target_id=str(device_id), detail={"device": device.hostname if device else None},
+    )
+    await session.commit()
+
+
+async def usb_windows(session: AsyncSession, org_id) -> dict:
+    """Device id → until, for windows still open."""
+    rows = (await session.execute(select(GuardUsbWindow).where(GuardUsbWindow.org_id == org_id))).scalars()
+    return {r.device_id: r.until for r in rows if as_utc(r.until) > utcnow()}
 
 
 async def record_report(session: AsyncSession, device: Device, report: BrowserPolicyReport) -> None:

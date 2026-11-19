@@ -16,6 +16,7 @@ from app.models.browser_policy import (
     GuardEvent,
     GuardQuietSite,
     GuardSuggestionDismissal,
+    GuardUsbWindow,
     OrgBrowserPolicy,
 )
 from app.models.webhook_event import WebhookEvent
@@ -131,6 +132,7 @@ __all__ = [
     "GuardEvent",
     "GuardQuietSite",
     "GuardSuggestionDismissal",
+    "GuardUsbWindow",
     "OrgBrowserPolicy",
     "DeviceLocalAccount",
     "DeviceService",

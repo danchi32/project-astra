@@ -54,6 +54,10 @@ class DeviceBrowserState(BaseModel):
     policy_version: int = 0
     # D10: browsers the policy does not reach that are installed here, from the app inventory.
     other_browsers: list[str] = Field(default_factory=list)
+    # C3: this PC's USB mode (from its own policy), and until when it may write to USB drives, if
+    # IT opened a window ("write on request").
+    usb_mode: str = "off"
+    usb_write_until: datetime | None = None
 
 
 @router.get("/browser-policy", response_model=BrowserPolicyRead,
@@ -130,13 +134,16 @@ async def browser_policy_devices(
                    or_(*(func.lower(DeviceInstalledApp.name).like(p + "%")
                          for p in browser_policy.OTHER_BROWSERS.values()))))).all():
         apps.setdefault(did, []).append(app)
+    windows = await browser_policy.usb_windows(session, actor.org_id)
     out = []
     for s, host in states:
         name, row = groups.get(s.device_id, (None, org))
         out.append(DeviceBrowserState(device_id=s.device_id, hostname=host, version=s.version,
                                       results=[BrowserResult(**r) for r in s.results], reported_at=s.reported_at,
                                       policy_group=name, policy_version=row.version if row else 0,
-                                      other_browsers=browser_policy.other_browsers(apps.get(s.device_id, []))))
+                                      other_browsers=browser_policy.other_browsers(apps.get(s.device_id, [])),
+                                      usb_mode=((row.policy if row else None) or {}).get("usb_mode", "off"),
+                                      usb_write_until=windows.get(s.device_id)))
     return out
 
 
@@ -455,6 +462,48 @@ async def deny(
     session: AsyncSession = Depends(get_db),
 ) -> GuardApprovalRead:
     return await _decide(session, actor, approval_id, False, 0, body.requested_at)
+
+
+# ── C3: USB write windows ─────────────────────────────────────────────────────────────────────
+
+class UsbWindowWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    minutes: int = Field(ge=browser_policy.USB_WINDOW_MINUTES[0], le=browser_policy.USB_WINDOW_MINUTES[1])
+
+
+class UsbWindowRead(BaseModel):
+    device_id: uuid.UUID
+    until: datetime
+
+
+@router.post("/devices/{device_id}/usb-window", response_model=UsbWindowRead,
+             summary="Let one PC write to USB drives for a while, in 'write on request' mode (admin; audited)")
+async def open_usb_window(
+    device_id: uuid.UUID,
+    body: UsbWindowWrite,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> UsbWindowRead:
+    try:
+        row = await browser_policy.open_usb_window(session, actor=actor, device_id=device_id, minutes=body.minutes)
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such PC.") from None
+    except browser_policy.NotOnRequest as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    return UsbWindowRead(device_id=row.device_id, until=row.until)
+
+
+@router.delete("/devices/{device_id}/usb-window", status_code=status.HTTP_204_NO_CONTENT,
+               summary="End a USB write window early (admin; audited)")
+async def close_usb_window(
+    device_id: uuid.UUID,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await browser_policy.close_usb_window(session, actor=actor, device_id=device_id)
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No window is open on that PC.") from None
 
 
 # ── C1: cases, not alerts ─────────────────────────────────────────────────────────────────────

@@ -395,6 +395,49 @@ async def test_other_browsers(client, admin_headers, session_factory, admin_user
         assert len((await s.execute(select(AuditLog).where(AuditLog.action == "guard.other_browser_closed"))).all()) == 1
 
 
+async def test_usb_modes_and_write_windows(client, admin_headers, user_headers, session_factory, admin_user):
+    """C3: a USB mode on the policy, and in 'write on request' a window IT opens for one PC,
+    served to that PC only, ended early or by time, audited."""
+    await _guard_on(session_factory, admin_user.org_id)
+    assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers,
+                             json={**POLICY, "usb_mode": "everything"})).status_code == 422
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**POLICY, "usb_mode": "read_only"})
+    did, h = await _enroll(client, admin_headers, "USB-PC")
+    other, h2 = await _enroll(client, admin_headers, "OTHER-PC")
+    assert (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]["usb_mode"] == "read_only"
+
+    # Not in 'write on request': there is no window to open.
+    url = f"/api/v1/guard/devices/{did}/usb-window"
+    assert (await client.post(url, headers=admin_headers, json={"minutes": 30})).status_code == 409
+
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**POLICY, "usb_mode": "on_request"})
+    assert (await client.get("/api/v1/agent/usb-window", headers=h)).json() == {"until": None}
+    for bad in ({"minutes": 5}, {"minutes": 481}, {"minutes": 30, "user": "x"}):
+        assert (await client.post(url, headers=admin_headers, json=bad)).status_code == 422
+    assert (await client.post(url, headers=user_headers, json={"minutes": 30})).status_code == 403
+    opened = (await client.post(url, headers=admin_headers, json={"minutes": 30})).json()
+    assert (await client.get("/api/v1/agent/usb-window", headers=h)).json()["until"] is not None
+    assert (await client.get("/api/v1/agent/usb-window", headers=h2)).json() == {"until": None}   # that PC only
+
+    await client.post("/api/v1/agent/browser-policy/report", headers=h, json={"version": 2, "results": [
+        {"browser": "Usb", "removed": [r"{53f5630d-b6bf-11d0-94f2-00a0c91efb8b}\Deny_Write"]}]})
+    row = next(d for d in (await client.get("/api/v1/guard/browser-policy/devices", headers=admin_headers)).json()
+               if d["hostname"] == "USB-PC")
+    assert row["usb_write_until"].rstrip("Z") == opened["until"].rstrip("Z") and row["results"][0]["browser"] == "Usb"
+    assert row["usb_mode"] == "on_request"
+
+    # Back to read-only for everyone: a window still on the books is not served.
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={**POLICY, "usb_mode": "read_only"})
+    assert (await client.get("/api/v1/agent/usb-window", headers=h)).json() == {"until": None}
+    assert (await client.delete(url, headers=admin_headers)).status_code == 204
+    assert (await client.delete(url, headers=admin_headers)).status_code == 404
+    async with session_factory() as s:
+        actions = [a.action for a in (await s.execute(select(AuditLog))).scalars()]
+    assert "guard.usb_window_open" in actions and "guard.usb_window_close" in actions
+    assert (await client.post(f"/api/v1/guard/devices/{other}/usb-window", headers=admin_headers,
+                              json={"minutes": 30})).status_code == 409
+
+
 async def test_tamper_reports_cannot_carry_prose_or_flood(client, admin_headers, session_factory, admin_user):
     """Review M1: report names are policy names, never a sentence, and a PC raises at most one
     tamper notification an hour (the audit keeps every one)."""

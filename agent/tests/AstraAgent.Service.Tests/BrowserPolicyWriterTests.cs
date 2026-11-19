@@ -377,6 +377,41 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     }
 
     [Fact]
+    public void Usb_modes_are_windows_own_policies_and_unused_keys_are_never_created()
+    {
+        var now = new DateTime(2026, 11, 19, 9, 0, 0, DateTimeKind.Utc);
+        BrowserPolicy Mode(string m, DateTime? until = null) => new() { UsbMode = m, UsbWriteUntil = until };
+        Assert.NotEmpty(Mode("everything").Validate());
+        Assert.Empty(BrowserPolicyMap.Usb(Mode("off"), now));
+        Assert.Equal(["Deny_All"], BrowserPolicyMap.Usb(Mode("block"), now).Keys);
+        var readOnly = BrowserPolicyMap.Usb(Mode("read_only"), now);
+        Assert.Equal(3, readOnly.Count);                                                  // drives and both phone classes
+        Assert.Contains(@"{53f5630d-b6bf-11d0-94f2-00a0c91efb8b}\Deny_Write", readOnly.Keys);
+        Assert.Equal(readOnly.Keys, BrowserPolicyMap.Usb(Mode("on_request"), now).Keys);  // read-only outside a window
+        Assert.Empty(BrowserPolicyMap.Usb(Mode("on_request", now.AddMinutes(5)), now));   // writing inside it
+        Assert.Equal(2, BrowserPolicyMap.Usb(Mode("encrypted_only"), now).Count);         // phones; drives via BitLocker
+        Assert.Equal(["RDVDenyWriteAccess"], BrowserPolicyMap.UsbEncryption(Mode("encrypted_only")).Keys);
+        Assert.Empty(BrowserPolicyMap.UsbEncryption(Mode("block")));
+
+        // Never used: nothing is created, not even the key.
+        Assert.False(BrowserPolicyWriter.ApplyIfUsed(_root, Browser.UsbEncryption, BrowserPolicyMap.UsbEncryption(Mode("off"))).Changed);
+        Assert.Null(_root.OpenSubKey(BrowserPolicyWriter.ChromiumPolicyPath(Browser.UsbEncryption)));
+
+        var r = BrowserPolicyWriter.ApplyIfUsed(_root, Browser.Usb, readOnly);
+        Assert.Equal(3, r.Set.Count);
+        using (var k = _root.OpenSubKey($@"{BrowserPolicyWriter.ChromiumPolicyPath(Browser.Usb)}\{{53f5630d-b6bf-11d0-94f2-00a0c91efb8b}}")!)
+            Assert.Equal(1, k.GetValue("Deny_Write"));
+        // A window opens: the values go; it ends: they come back as set, not as tampering.
+        Assert.Equal(3, BrowserPolicyWriter.ApplyIfUsed(_root, Browser.Usb, BrowserPolicyMap.Usb(Mode("on_request", now.AddMinutes(5)), now)).Removed.Count);
+        var back = BrowserPolicyWriter.ApplyIfUsed(_root, Browser.Usb, BrowserPolicyMap.Usb(Mode("on_request", now.AddMinutes(5)), now.AddMinutes(6)));
+        Assert.Equal(3, back.Set.Count);
+        Assert.Empty(back.Repaired);
+        // An org's own GPO already setting one: left alone and reported.
+        using (var gpo = _root.CreateSubKey($@"{BrowserPolicyWriter.ChromiumPolicyPath(Browser.Usb)}", true)) gpo.SetValue("Deny_All", 0);
+        Assert.Equal(["Deny_All"], BrowserPolicyWriter.ApplyIfUsed(_root, Browser.Usb, BrowserPolicyMap.Usb(Mode("block"), now)).Conflicts);
+    }
+
+    [Fact]
     public void Firefox_is_written_to_only_under_program_files()
     {
         // Review M4: a user-writable install folder is never written to as SYSTEM.

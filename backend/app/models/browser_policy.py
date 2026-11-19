@@ -197,6 +197,23 @@ class GuardQuietSite(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
+class GuardUsbWindow(Base):
+    """Phase 3c · C3: IT let one PC write to USB drives until a time, in "write on request" mode.
+    One per PC; opening again replaces it. The PC enforces the end by itself."""
+
+    __tablename__ = "guard_usb_windows"
+
+    device_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("devices.id", ondelete="CASCADE"), primary_key=True
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(GUID, nullable=False, index=True)
+    until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    opened_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
 class GuardApproval(Base):
     """Phase 3 · D7: a person asked IT to let one thing through: one Windows account, one PC,
     one site, one channel (paste / drop / file / submit). An admin approves it for a set time
