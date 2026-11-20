@@ -120,16 +120,32 @@ export function Sidebar() {
   }, []);
   const inViewAs = viewAsActive || !!me?.view_as;
 
-  // Groups the user has expanded by hand, on top of the one that auto-opens for the active route.
+  // Groups the user opened or closed by hand. A group without a choice here is open only while
+  // one of its pages is the current one. The user's click always wins, so the current page's
+  // group can be collapsed too.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const toggle = (label: string) =>
-    setOpenGroups((o) => ({ ...o, [label]: !o[label] }));
+  const toggle = (label: string, expanded: boolean) =>
+    setOpenGroups((o) => ({ ...o, [label]: !expanded }));
 
   // Prefix-active: the page itself or anything beneath it (so a detail page keeps its parent lit).
   // "/platform" is matched exactly so its sub-pages don't also light up the Overview entry.
   const isActive = (href: string) =>
     // A group's own page whose siblings live beneath it is lit only on itself.
     href === "/platform" || href === "/guard" ? pathname === href : pathname === href || pathname.startsWith(href + "/");
+
+  // Going to a page inside a group opens that group again, even if it was collapsed earlier.
+  useEffect(() => {
+    const here = [...ORG_NAV, ...PLATFORM_NAV].filter(
+      (e): e is NavGroup => "group" in e && e.children.some((c) => isActive(c.href)));
+    if (here.length) {
+      setOpenGroups((o) => {
+        const next = { ...o };
+        for (const g of here) delete next[g.group];
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const platform = me?.is_platform_admin && !inViewAs;
   const nav: NavEntry[] = platform
@@ -174,12 +190,13 @@ export function Sidebar() {
     }
 
     const groupActive = g.children.some((c) => isActive(c.href));
-    const expanded = groupActive || !!openGroups[g.group];
+    const expanded = openGroups[g.group] ?? groupActive;
     const Chevron = expanded ? ChevronDown : ChevronRight;
     return (
       <div key={g.group}>
         <button
-          onClick={() => toggle(g.group)}
+          onClick={() => toggle(g.group, expanded)}
+          aria-expanded={expanded}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
           style={linkStyle(groupActive)}
         >
