@@ -100,6 +100,7 @@ UsbMode = Literal["off", "read_only", "encrypted_only", "on_request", "block", "
 # before; the agent translates the old form. Never SCSI\Disk: that is how internal disks look.
 _DRIVE_ID = re.compile(r"^(USB\\VID_[0-9A-Fa-f]{4}&PID_[0-9A-Fa-f]{4}|USBSTOR\\[A-Za-z0-9&_.\-]{1,200})\\[A-Za-z0-9&_.\-]{1,100}$")
 MAX_APPROVED_DRIVES = 100
+MAX_ALLOWED_EXTENSIONS = 50
 
 
 class ApprovedDrive(BaseModel):
@@ -201,6 +202,10 @@ class BrowserPolicyBody(BaseModel):
     chatgpt_workspace_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
     slack_requester_id: str | None = None       # the org's own workspace or org ID
     slack_allowed_ids: list[str] = Field(default_factory=list, max_length=MAX_ACCOUNT_IDS)
+    # Security review 3b M2: with a company-accounts rule set, a browser running SAVIO's extension
+    # also has private windows and guest mode off and every other extension blocked, except these
+    # (Chrome / Edge IDs for those browsers, Firefox IDs for Firefox). Enforced on the PC.
+    extension_allowlist: list[str] = Field(default_factory=list, max_length=MAX_ALLOWED_EXTENSIONS)
     # D10: the agent closes any of OTHER_BROWSERS as it starts, and tells the person why. Removing
     # one stays the admin-only "Uninstall software" action, PC by PC.
     block_other_browsers: bool = False
@@ -248,6 +253,14 @@ class BrowserPolicyBody(BaseModel):
     @classmethod
     def _slack(cls, v: list[str]) -> list[str]:
         return _slack_ids(v)
+
+    @field_validator("extension_allowlist")
+    @classmethod
+    def _allowed_extensions(cls, v: list[str]) -> list[str]:
+        out = list(dict.fromkeys(x.strip() for x in v if x.strip()))
+        if bad := next((x for x in out if not (_CHROMIUM_ID.match(x) or _FIREFOX_ID.match(x))), None):
+            raise ValueError(f"'{bad[:40]}' is not a Chrome, Edge or Firefox extension ID")
+        return out
 
     @field_validator("guard_ignore_kinds", "blocked_categories")
     @classmethod

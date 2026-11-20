@@ -35,6 +35,7 @@ export interface BrowserPolicy {
   chatgpt_workspace_ids: string[];
   slack_requester_id: string | null;
   slack_allowed_ids: string[];
+  extension_allowlist?: string[];   // 3b M2: allowed while company accounts lock the browser
   // D10: the agent closes browsers these settings don't reach, as they start.
   block_other_browsers: boolean;
   // C3: USB drives and phones, through Windows' own policies.

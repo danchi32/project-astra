@@ -146,6 +146,41 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     };
 
     [Fact]
+    public void Company_accounts_lock_private_windows_and_other_extensions_except_the_allowed()
+    {
+        // Review 3b M2: company accounts are headers SAVIO's extension adds, so a private window
+        // or a header-editing extension got round them.
+        const string pwdManager = "nngceckbapebfimnlniiiahkandclblb";
+        var locked = Guarded with
+        {
+            ClaudeOrgIds = ["aaaabbbb-0000-cccc-1111-dddd2222eeee"],
+            ExtensionAllowlist = [pwdManager, "{446900e4-71c2-419f-a6a7-df9c091e268b}"],
+            FirefoxExtensionId = "guard@savio.example", FirefoxExtensionUrl = "https://example.com/g.xpi",
+        };
+        var chrome = BrowserPolicyMap.Chromium(locked, Browser.Chrome);
+        Assert.Equal(1, chrome["IncognitoModeAvailability"]);
+        Assert.Equal(0, chrome["BrowserGuestModeEnabled"]);
+        Assert.Equal(new[] { "*" }, chrome["ExtensionInstallBlocklist"]);
+        Assert.Equal(new[] { ChromeId, pwdManager }, chrome["ExtensionInstallAllowlist"]);   // SAVIO's own first; no Firefox ID
+        Assert.Equal(1, BrowserPolicyMap.Chromium(locked with { EdgeExtensionId = ChromeId }, Browser.Edge)["InPrivateModeAvailability"]);
+
+        var fx = BrowserPolicyMap.Firefox(locked);
+        Assert.Equal(true, fx["DisablePrivateBrowsing"]);
+        var settings = (Dictionary<string, object>)fx["ExtensionSettings"];
+        Assert.Equal("blocked", ((Dictionary<string, object>)settings["*"])["installation_mode"]);
+        Assert.Equal("force_installed", ((Dictionary<string, object>)settings["guard@savio.example"])["installation_mode"]);
+        Assert.Equal("allowed", ((Dictionary<string, object>)settings["{446900e4-71c2-419f-a6a7-df9c091e268b}"])["installation_mode"]);
+        Assert.False(settings.ContainsKey(pwdManager));                                     // a Chrome ID means nothing to Firefox
+
+        // Without company accounts, or without SAVIO's extension in that browser: nothing locked.
+        Assert.False(BrowserPolicyMap.Chromium(Guarded, Browser.Chrome).ContainsKey("ExtensionInstallBlocklist"));
+        Assert.False(BrowserPolicyMap.Chromium(locked with { ChromeExtensionId = null }, Browser.Chrome).ContainsKey("ExtensionInstallBlocklist"));
+        Assert.Empty(locked.Validate());
+        Assert.NotEmpty((locked with { ExtensionAllowlist = ["not an id"] }).Validate());
+        Assert.NotEmpty((locked with { ExtensionAllowlist = Enumerable.Repeat(pwdManager, 51).ToList() }).Validate());
+    }
+
+    [Fact]
     public void Reading_pdfs_is_written_as_a_dword_and_kept()
     {
         // Found in the live test (19 Nov): readPdf is a boolean, which the writer did not know, so

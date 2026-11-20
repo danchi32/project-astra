@@ -2229,6 +2229,16 @@ agent, the extension (with the host code it calls), and the backend with the por
     it was started.
   - **Tray hand-off:** a self-contained build starts the live copy's own exe instead of itself.
   - **Portal:** says a change reaches each PC within the hour.
+- **Batch 2, part 2 (20 Nov): company accounts hardened (review M2, the user's choice: block
+  other extensions, with an allowed list).** With a company-accounts rule SAVIO's extension
+  enforces (Microsoft in the browser, Claude, ChatGPT, Slack) and SAVIO's extension in a browser:
+  Chrome and Edge get private windows and guest mode off, `ExtensionInstallBlocklist ["*"]` and
+  `ExtensionInstallAllowlist` of SAVIO's extension plus the admin's Chrome/Edge IDs; Firefox gets
+  private browsing off and every extension blocked except SAVIO's and the admin's Firefox IDs.
+  New policy field `extension_allowlist` (50 IDs, Chrome/Edge or Firefox form, checked in the
+  backend and on the PC); the portal explains what turning company accounts on does. Live on
+  this laptop: the other extensions in every Chrome profile blocked, SAVIO Guard still on,
+  incognito refused; all of it removed again when the rule was taken off.
 - **Batch 2, still to do:**
   - **Agent H2:** company-drives mode misses USB 3 (UASP) drives and SD cards. Needs blocking
     by `USB\Class_08` and approval by the USB parent ID.

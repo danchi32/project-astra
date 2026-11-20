@@ -172,7 +172,7 @@ export default function GuardPage() {
   const shown = scope === "org" ? data?.policy : (groupPolicy?.policy ?? data?.policy);
   const [form, setForm] = useState<BrowserPolicy | null>(null);
   const [text, setText] = useState({ blocked: "", allowed: "", google: "", watched: "", keywords: "",
-                                     claude: "", chatgpt: "", slack: "" });
+                                     claude: "", chatgpt: "", slack: "", extensions: "" });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -182,7 +182,8 @@ export default function GuardPage() {
     setText({ blocked: shown.blocked_sites.join("\n"), allowed: shown.allowed_sites.join("\n"),
               google: shown.google_allowed_domains.join("\n"), watched: shown.guard_watched_sites.join("\n"),
               keywords: shown.guard_keywords.join("\n"), claude: shown.claude_org_ids.join("\n"),
-              chatgpt: shown.chatgpt_workspace_ids.join("\n"), slack: shown.slack_allowed_ids.join("\n") });
+              chatgpt: shown.chatgpt_workspace_ids.join("\n"), slack: shown.slack_allowed_ids.join("\n"),
+              extensions: (shown.extension_allowlist ?? []).join("\n") });
   }, [shown]);
 
   function pick(next: string) {
@@ -217,7 +218,7 @@ export default function GuardPage() {
                      // Keywords may contain commas ("Q3, final"): one per line only.
                      guard_keywords: text.keywords.split("\n").map((x) => x.trim()).filter(Boolean),
                      claude_org_ids: lines(text.claude), chatgpt_workspace_ids: lines(text.chatgpt),
-                     slack_allowed_ids: lines(text.slack) };
+                     slack_allowed_ids: lines(text.slack), extension_allowlist: lines(text.extensions) };
       if (scope === "org") {
         const r = await putBrowserPolicy(body);
         qc.setQueryData(["browser-policy"], r);
@@ -495,7 +496,12 @@ export default function GuardPage() {
               ))}
               {([["slack", "Slack: allowed workspace and org IDs", "One per line, your own included."],
                  ["claude", "Claude: allowed organization IDs", "One per line, from Claude's admin settings."],
-                 ["chatgpt", "ChatGPT: allowed workspace IDs", "One per line, from the ChatGPT Enterprise admin settings."]] as const).map(([k, label, help]) => (
+                 ["chatgpt", "ChatGPT: allowed workspace IDs", "One per line, from the ChatGPT Enterprise admin settings."],
+                 ["extensions", "Other extensions allowed",
+                  "With Microsoft 365, Claude, ChatGPT or Slack set here, private windows and guest mode are off and every other " +
+                  "browser extension is blocked on these PCs (another extension could undo these rules), except the ones listed: " +
+                  "one ID per line. Chrome and Edge IDs are 32 letters, from the extension's page in the web store; Firefox IDs " +
+                  "look like name@example.com."]] as const).map(([k, label, help]) => (
                 <label key={k} className="text-xs space-y-1" style={muted}>
                   <span className="font-medium">{label}</span>
                   <textarea rows={3} disabled={!isAdmin} value={text[k]} onChange={(e) => setText({ ...text, [k]: e.target.value })}

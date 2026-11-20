@@ -532,3 +532,22 @@ async def test_reports_from_an_org_without_the_add_on_are_dropped(client, admin_
     assert (await client.post("/api/v1/agent/browser-policy/report", headers=h, json=r)).status_code == 204
     async with session_factory() as s:
         assert (await s.execute(select(Notification))).scalars().first() is None
+
+
+async def test_extensions_allowed_while_company_accounts_lock_the_browser(client, admin_headers, session_factory, admin_user):
+    """Security review 3b M2: the admin lists the extensions that stay allowed when company accounts
+    lock the browser; Chrome / Edge and Firefox IDs only, served to the PC as they are."""
+    await _guard_on(session_factory, admin_user.org_id)
+    _, h = await _enroll(client, admin_headers, "LOCK-PC")
+    pm = "nngceckbapebfimnlniiiahkandclblb"
+    body = {**POLICY, "claude_org_ids": ["aaaabbbb-0000-cccc-1111-dddd2222eeee"],
+            "chrome_extension_id": "abcdefghijklmnopabcdefghijklmnop",
+            "extension_allowlist": [pm, " {446900e4-71c2-419f-a6a7-df9c091e268b} ", pm, "1password@agilebits.com"]}
+    r = await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=body)
+    assert r.status_code == 200
+    assert r.json()["policy"]["extension_allowlist"] == [pm, "{446900e4-71c2-419f-a6a7-df9c091e268b}", "1password@agilebits.com"]
+    served = (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]
+    assert served["extension_allowlist"][0] == pm
+    for bad in (["not an id"], ["javascript:alert(1)"], [pm] * 51):
+        assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers,
+                                 json={**body, "extension_allowlist": bad})).status_code == 422, bad

@@ -277,7 +277,8 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("microsoft_on_windows")] bool MicrosoftOnWindows = false,
     [property: JsonPropertyName("usb_mode")] string? UsbMode = null,
     [property: JsonPropertyName("usb_observe")] bool UsbObserve = false,
-    [property: JsonPropertyName("usb_approved_drives")] IReadOnlyList<AgentApprovedDrive>? UsbApprovedDrives = null)
+    [property: JsonPropertyName("usb_approved_drives")] IReadOnlyList<AgentApprovedDrive>? UsbApprovedDrives = null,
+    [property: JsonPropertyName("extension_allowlist")] IReadOnlyList<string>? ExtensionAllowlist = null)
 {
     // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
     public Guard.BrowserPolicy ToPolicy() => new()
@@ -297,5 +298,6 @@ public sealed record AgentBrowserPolicyBody(
         BlockOtherBrowsers = BlockOtherBrowsers, ReadPdfs = GuardReadPdfs, MicrosoftOnWindows = MicrosoftOnWindows,
         UsbMode = UsbMode ?? "off", UsbObserve = UsbObserve,
         UsbApprovedDrives = (UsbApprovedDrives ?? []).Select(d => d.Id).ToList(),
+        ExtensionAllowlist = ExtensionAllowlist ?? [],
     };
 }

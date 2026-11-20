@@ -65,6 +65,18 @@ public sealed record BrowserPolicy
     public IReadOnlyList<string> SlackAllowedIds { get; init; } = Array.Empty<string>();
     public const int MaxAccountIds = 50;
 
+    /// <summary>Security review 3b M2: company accounts are enforced by SAVIO's extension, so a
+    /// private window (no extension) or another extension that edits request headers gets round
+    /// them. With any of them set, a browser that runs SAVIO's extension also has private windows
+    /// and guest mode off and every other extension blocked, except these: Chrome / Edge IDs (32
+    /// letters a–p) apply to Chrome and Edge, Firefox IDs (name@domain or {GUID}) to Firefox.</summary>
+    public IReadOnlyList<string> ExtensionAllowlist { get; init; } = Array.Empty<string>();
+    public const int MaxAllowedExtensions = 50;
+
+    /// <summary>A company-accounts rule SAVIO's extension enforces is set.</summary>
+    public bool CompanyAccountsLocked =>
+        MicrosoftTenantId is not null || ClaudeOrgIds.Count > 0 || ChatGptWorkspaceIds.Count > 0 || SlackRequesterId is not null;
+
     /// <summary>C3: USB drives and phones. off (SAVIO leaves them alone) · read_only · encrypted_only
     /// (writing only to BitLocker To Go drives) · on_request (read-only, except during a write
     /// window IT opens for this PC) · block (no access at all).</summary>
@@ -148,6 +160,9 @@ public sealed record BrowserPolicy
         if (SlackRequesterId is not null != SlackAllowedIds.Count > 0) problems.Add("Slack needs the org's own ID and the allowed IDs");
         if (SlackAllowedIds.Count > MaxAccountIds) problems.Add($"too many Slack IDs (max {MaxAccountIds})");
         if (SlackAllowedIds.Append(SlackRequesterId ?? "T0000000").Any(v => !SlackId.IsMatch(v ?? ""))) problems.Add("Slack ID is malformed");
+        if (ExtensionAllowlist.Count > MaxAllowedExtensions) problems.Add($"too many allowed extensions (max {MaxAllowedExtensions})");
+        if (ExtensionAllowlist.Any(x => !ChromiumId.IsMatch(x ?? "") && !FirefoxId.IsMatch(x ?? "")))
+            problems.Add("an allowed extension ID is not a Chrome, Edge or Firefox extension ID");
         return problems;
     }
 
@@ -197,9 +212,21 @@ public static class BrowserPolicyMap
             // com.savio.guard under HKCU, which the browser prefers, and answer "nothing found"
             // to every check (security review H1).
             v["NativeMessagingUserLevelHosts"] = 0;
+            if (p.CompanyAccountsLocked)
+            {
+                // Review 3b M2: no window without SAVIO's extension, and no other extension that
+                // could strip the company-accounts headers, except those the admin allows.
+                v[edge ? "InPrivateModeAvailability" : "IncognitoModeAvailability"] = 1;
+                v["BrowserGuestModeEnabled"] = 0;
+                v["ExtensionInstallBlocklist"] = new[] { "*" };
+                v["ExtensionInstallAllowlist"] = p.ExtensionAllowlist.Where(x => ChromiumIdRx.IsMatch(x))
+                                                  .Prepend(id).Distinct().ToArray();
+            }
         }
         return v;
     }
+
+    static readonly System.Text.RegularExpressions.Regex ChromiumIdRx = new("^[a-p]{32}$");
 
     /// <summary>D3: the extension's managed settings, named as in extension/managed_schema.json.</summary>
     static Dictionary<string, object> GuardSettings(BrowserPolicy p)
@@ -240,15 +267,24 @@ public static class BrowserPolicyMap
         if (p.GoogleAllowedDomains.Count > 0) v["AllowedDomainsForApps"] = string.Join(",", p.GoogleAllowedDomains);
         if (p.FirefoxExtensionId is not null && (p.FirefoxExtensionUrl is not null || p.ManualInstall))
         {
+            var settings = new Dictionary<string, object>(StringComparer.Ordinal);
             if (!p.ManualInstall)
-                v["ExtensionSettings"] = new Dictionary<string, object>
+                settings[p.FirefoxExtensionId] = new Dictionary<string, object>
                 {
-                    [p.FirefoxExtensionId] = new Dictionary<string, object>
-                    {
-                        ["installation_mode"] = "force_installed",
-                        ["install_url"] = p.FirefoxExtensionUrl!,
-                    },
+                    ["installation_mode"] = "force_installed",
+                    ["install_url"] = p.FirefoxExtensionUrl!,
                 };
+            if (p.CompanyAccountsLocked)
+            {
+                // Review 3b M2: no private window without SAVIO's extension, and every other
+                // extension blocked except the Firefox IDs the admin allows.
+                v["DisablePrivateBrowsing"] = true;
+                settings["*"] = new Dictionary<string, object> { ["installation_mode"] = "blocked" };
+                settings.TryAdd(p.FirefoxExtensionId, new Dictionary<string, object> { ["installation_mode"] = "allowed" });
+                foreach (var x in p.ExtensionAllowlist.Where(x => !ChromiumIdRx.IsMatch(x)))
+                    settings.TryAdd(x, new Dictionary<string, object> { ["installation_mode"] = "allowed" });
+            }
+            if (settings.Count > 0) v["ExtensionSettings"] = settings;
             v[$@"3rdparty\Extensions\{p.FirefoxExtensionId}"] = GuardSettings(p);
         }
         return v;
