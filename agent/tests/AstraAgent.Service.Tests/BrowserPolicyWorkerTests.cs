@@ -82,6 +82,9 @@ public class BrowserPolicyWorkerTests
     readonly List<IReadOnlyList<AgentGuardApproval>> _stored = [];
 
     IReadOnlyList<SeenDrive> _drives = [];
+    readonly List<string> _reapplied = [];
+    int _refused;
+    readonly string _usbFile = Path.Combine(Path.GetTempPath(), "savio-usb-" + Guid.NewGuid().ToString("N"));
 
     BrowserPolicyWorker Worker() => new(_enroll, _api, new SubscriptionState(),
         Options.Create(new AgentOptions()), NullLogger<BrowserPolicyWorker>.Instance)
@@ -89,7 +92,39 @@ public class BrowserPolicyWorkerTests
         Apply = p => { _applied.Add(p); return _result(p); },
         StoreApprovals = a => _stored.Add(a),
         Drives = () => _drives,
+        ReapplyUsb = p => { _reapplied.Add(BrowserPolicyWorker.UsbKey(p, DateTime.MaxValue)); return _refused; },
+        UsbAppliedFile = _usbFile,   // never the real USB drives or state of the PC running the tests
     };
+
+    [Fact]
+    public async Task A_changed_usb_rule_reinstalls_the_drives_once_and_says_which_refused()
+    {
+        // Live test (19 Nov): Windows applies USB rules at install, so a changed rule must reach
+        // drives already plugged in; once per change, not every cycle or every restart.
+        var t0 = new DateTime(2026, 11, 20, 9, 0, 0, DateTimeKind.Utc);
+        AgentBrowserPolicy Usb(int v, string mode, params string[] drives) =>
+            new(v, new AgentBrowserPolicyBody(UsbMode: mode, UsbApprovedDrives: drives.Select(d => new AgentApprovedDrive(d)).ToList()));
+        var w = Worker();
+        _api.Next = Usb(1, "off");
+        await w.RunOnceAsync(t0, default);
+        Assert.Empty(_reapplied);                                         // a new install with USB off: nothing to do
+
+        _api.Next = Usb(2, "read_only");
+        await w.RunOnceAsync(t0.AddHours(1), default);
+        await w.RunOnceAsync(t0.AddHours(1).AddMinutes(1), default);
+        Assert.Equal(["read_only"], _reapplied);                          // once
+
+        Worker();                                                         // a service restart
+        var w2 = Worker();
+        await w2.RunOnceAsync(t0.AddHours(2), default);
+        Assert.Single(_reapplied);                                        // remembered across the restart
+
+        _refused = 1;
+        _api.Next = Usb(3, "company_drives", @"USB\VID_0781&PID_5567\4C530001");
+        await w2.RunOnceAsync(t0.AddHours(3), default);
+        Assert.Equal(2, _reapplied.Count);
+        Assert.Contains(_api.Reports[^1].Reports, r => r.Browser == Browser.UsbDevices && r.Error!.Contains("in use"));
+    }
 
     [Fact]
     public async Task Drives_seen_are_reported_when_they_change_and_only_while_ai_guard_is_on()

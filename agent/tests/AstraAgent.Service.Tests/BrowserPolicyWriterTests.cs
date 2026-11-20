@@ -449,7 +449,7 @@ public sealed class BrowserPolicyWriterTests : IDisposable
             Assert.Equal(1, k.GetValue("AllowDenyLayered"));
             Assert.Equal(1, k.GetValue("DenyDeviceIDsRetroactive"));
             using var deny = k.OpenSubKey("DenyDeviceIDs")!;
-            Assert.Equal(@"USBSTOR\Disk", deny.GetValue("1"));                 // USB disks only, never SCSI\Disk
+            Assert.Equal(@"USB\Class_08", deny.GetValue("1"));                 // USB storage interfaces (UASP too), never SCSI\Disk
             using var allow = k.OpenSubKey("AllowInstanceIDs")!;
             Assert.Equal(sandisk, allow.GetValue("1"));
         }
@@ -477,23 +477,58 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     }
 
     [Fact]
-    public void Drives_seen_are_read_from_windows_list_of_usb_disks()
+    public void Drives_seen_are_usb_storage_interfaces_including_usb3_uasp_drives()
     {
-        using (var enumKey = _root.CreateSubKey(@"SYSTEM\CurrentControlSet\Enum\USBSTOR", true))
-        {
-            using (var d = enumKey.CreateSubKey(@"Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", true)) d.SetValue("FriendlyName", "SanDisk Cruzer USB Device");
-            using (var d = enumKey.CreateSubKey(@"Disk&Ven_General&Prod_USB_Disk&Rev_2.00\7&1a2b3c4d&0", true)) d.SetValue("FriendlyName", "General USB Disk");
-            using (var cd = enumKey.CreateSubKey(@"CdRom&Ven_Virtual&Prod_CD\123&0", true)) cd.SetValue("FriendlyName", "Virtual CD");
+        // Security review 3b H2: a USB 3 drive using UASP has its disk under SCSI, not USBSTOR, so
+        // drives are listed (and approved) by their USB interface, whichever driver serves it.
+        void Usb(string id, string service, string? container) {
+            using var k = _root.CreateSubKey($@"SYSTEM\CurrentControlSet\Enum\USB\{id}", true);
+            k.SetValue("Service", service);
+            k.SetValue("DeviceDesc", "@usbstor.inf,%usbstor.devicedesc%;USB Mass Storage Device");
+            if (container is not null) k.SetValue("ContainerID", container);
         }
+        void Disk(string bus, string id, string name, string container) {
+            using var k = _root.CreateSubKey($@"SYSTEM\CurrentControlSet\Enum\{bus}\{id}", true);
+            k.SetValue("FriendlyName", name);
+            k.SetValue("ContainerID", container);
+        }
+        Usb(@"VID_0781&PID_5567\4C530001", "USBSTOR", "{c1}");
+        Usb(@"VID_04E8&PID_4001\S4UASP01", "UASPStor", "{c2}");
+        Usb(@"VID_1234&PID_5678\5&2a3b4c&0&1", "USBSTOR", null);
+        Usb(@"VID_046D&PID_C52B\MOUSE1", "HidUsb", null);                                // a mouse: not storage
+        // A drive Windows refused a driver (blocked by this very policy) has no Service, only its
+        // compatible IDs: it must still be listed, to be approved and reinstalled (live test).
+        using (var blocked = _root.CreateSubKey(@"SYSTEM\CurrentControlSet\Enum\USB\VID_23A5&PID_3379\FC2117B8669A0638", true))
+        {
+            blocked.SetValue("CompatibleIDs", new[] { @"USB\COMPAT_VID_23A5&Class_08", @"USB\Class_08&SubClass_06&Prot_50", @"USB\Class_08" },
+                             Microsoft.Win32.RegistryValueKind.MultiString);
+            blocked.SetValue("DeviceDesc", "Disk 3.0");
+        }
+        Disk("USBSTOR", @"Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", "SanDisk Cruzer USB Device", "{c1}");
+        Disk("SCSI", @"Disk&Ven_Samsung&Prod_PSSD_T7\7&abc&0&000000", "Samsung PSSD T7 SCSI Disk Device", "{c2}");
+
         var seen = BrowserPolicyWriter.SeenDrives(_root);
-        Assert.Equal(2, seen.Count);                                                     // not the CD drive
-        var cruzer = seen.Single(s => s.Name.StartsWith("SanDisk"));
-        Assert.Equal(@"USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", cruzer.Id);
-        Assert.True(cruzer.UniqueSerial);
-        Assert.False(seen.Single(s => s.Name.StartsWith("General")).UniqueSerial);       // Windows made the serial up
+        Assert.Equal(4, seen.Count);
+        Assert.Equal("Disk 3.0", seen.Single(s => s.Id == @"USB\VID_23A5&PID_3379\FC2117B8669A0638").Name);
+        Assert.Equal("SanDisk Cruzer USB Device", seen.Single(s => s.Id == @"USB\VID_0781&PID_5567\4C530001").Name);
+        var uasp = seen.Single(s => s.Id == @"USB\VID_04E8&PID_4001\S4UASP01");
+        Assert.Equal("Samsung PSSD T7 SCSI Disk Device", uasp.Name);
+        Assert.True(uasp.UniqueSerial);
+        var generic = seen.Single(s => s.Id.Contains("5678"));
+        Assert.False(generic.UniqueSerial);                                              // Windows made the serial up
+        Assert.Equal("USB Mass Storage Device", generic.Name);
+
         // Every drive with a serial of its own can be approved; a made-up one cannot (review 3b L2).
         Assert.Empty(new BrowserPolicy { UsbApprovedDrives = seen.Where(s => s.UniqueSerial).Select(s => s.Id).ToList() }.Validate());
         Assert.NotEmpty(new BrowserPolicy { UsbApprovedDrives = seen.Where(s => !s.UniqueSerial).Select(s => s.Id).ToList() }.Validate());
+
+        // An approval made before 3b names the disk; it is translated to its USB interface here,
+        // and one never seen on this PC is left out.
+        var policy = new BrowserPolicy { UsbMode = "company_drives", UsbApprovedDrives =
+            [@"USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer&Rev_1.00\4C530001&0", @"USB\VID_04E8&PID_4001\S4UASP01",
+             @"USBSTOR\Disk&Ven_Other&Prod_X&Rev_1\NEVERSEEN&0"] };
+        Assert.Equal([@"USB\VID_0781&PID_5567\4C530001", @"USB\VID_04E8&PID_4001\S4UASP01"],
+                     BrowserPolicyWriter.AllowIds(_root, policy));
     }
 
     [Fact]

@@ -328,8 +328,9 @@ export default function GuardPage() {
               {USB_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
             <span className="block text-xs" style={muted}>
-              {USB_MODES.find((m) => m.value === form.usb_mode)?.help} Uses Windows&apos; own settings; a drive already plugged
-              in may need to be reconnected. If Group Policy already sets these on a PC, SAVIO leaves them alone and shows a conflict.
+              {USB_MODES.find((m) => m.value === form.usb_mode)?.help} Uses Windows&apos; own settings. A change reaches each PC
+              within the hour, and drives already plugged in are reconnected then; one with files open keeps the old rule until
+              it is unplugged. If Group Policy already sets these on a PC, SAVIO leaves them alone and shows a conflict.
             </span>
           </label>
           {form.usb_mode === "company_drives" && <CompanyDrives form={form} setForm={setForm} canEdit={isAdmin} />}

@@ -496,7 +496,14 @@ async def test_company_drives(client, admin_headers, user_headers, session_facto
     seen = {d["id"]: d for d in (await client.get("/api/v1/guard/drives", headers=admin_headers)).json()}
     assert seen[cruzer]["approved_in"] == ["Everyone"] and seen[generic]["unique_serial"] is False
 
+    # 3b: drives by their USB interface (USB 3 UASP drives too), and the old disk form still accepted.
+    uasp = r"USB\VID_04E8&PID_4001\S4UASP01"
+    ok = (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json={
+        **body, "usb_approved_drives": [{"id": uasp, "name": "Samsung T7"}, {"id": cruzer, "name": "Cruzer"}]})).json()
+    assert [d["id"] for d in ok["policy"]["usb_approved_drives"]] == [uasp, cruzer]
     for bad_drive in ({"id": "C:\\Windows", "name": "x"}, {"id": cruzer, "name": ""}, {"id": cruzer, "name": "a\u202eb"},
+                      {"id": r"USB\VID_1234&PID_5678\5&2a3b4c&0&1", "name": "No serial"},
+                      {"id": r"SCSI\Disk&Ven_NVMe\5&1e9&0", "name": "Internal"},
                       {"id": generic, "name": "No serial"}):   # review 3b L2: a made-up ID stands for no one drive
         bad_body = {**body, "usb_approved_drives": [bad_drive]}
         assert (await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=bad_body)).status_code == 422

@@ -55,11 +55,15 @@ public static class TrayBootstrap
     private static void LaunchLive(string liveDll)
     {
         // Relaunch through the same dotnet host that is running us (ProcessPath is dotnet.exe).
+        // A self-contained build runs as AstraAgent.Tray.exe instead; passing the dll to that exe
+        // started the seed again, which handed off again, forever (live test, 19 Nov). Then the
+        // live copy's own exe is started.
         var host = Environment.ProcessPath ?? "dotnet";
+        var viaDotnet = Path.GetFileNameWithoutExtension(host).Equals("dotnet", StringComparison.OrdinalIgnoreCase);
         Process.Start(new ProcessStartInfo
         {
-            FileName = host,
-            Arguments = $"\"{liveDll}\"",
+            FileName = viaDotnet ? host : Path.Combine(TrayPaths.LiveDir, Path.GetFileName(host)),
+            Arguments = viaDotnet ? $"\"{liveDll}\"" : "",
             WorkingDirectory = TrayPaths.LiveDir,
             UseShellExecute = false,
         });

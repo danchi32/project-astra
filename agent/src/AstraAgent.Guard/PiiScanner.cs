@@ -73,6 +73,7 @@ public static class PiiScanner
 
     static readonly string[] AadhaarWords = { "aadhaar", "aadhar", "adhaar", "uidai", "uid", "आधार" };
     static readonly string[] CardWords = { "card", "visa", "mastercard", "rupay", "amex", "cvv", "expiry", "exp" };
+    static readonly string[] AccountWords = { "account", "a/c", "acct", "acc no", "acc. no" };
 
     public static ScanResult Scan(string? text, IReadOnlyList<string>? keywords = null)
     {
@@ -139,7 +140,8 @@ public static class PiiScanner
             foreach (var line in text.Split('\n'))
             {
                 if (line.Length <= 2000 && IfscRx.IsMatch(line))
-                    foreach (Match m in AccountRx.Matches(line)) Add(Finding.BankAccount, offset + m.Index, m.Length, "[account number]");
+                    foreach (Match m in AccountRx.Matches(line))
+                        if (AccountAt(text, offset + m.Index)) Add(Finding.BankAccount, offset + m.Index, m.Length, "[account number]");
                 offset += line.Length + 1;
             }
             if (keywords is not null)
@@ -176,7 +178,7 @@ public static class PiiScanner
         var digits = Digits(m.Groups["n"].Value);
         if (digits.Length != 12 || !Verhoeff(digits)) return false;
         bool formatted = m.Groups["sep"].Value.Length > 0;
-        return formatted || NearWord(text, m.Index, m.Length, AadhaarWords);
+        return formatted || NearWord(text, m.Index, m.Length, AadhaarWords) || InColumn(text, m.Index, AadhaarWords);
     }
 
     static bool IsCard(Match m, string text)
@@ -185,16 +187,54 @@ public static class PiiScanner
         if (digits.Length is < 13 or > 19 || digits[0] is < '2' or > '6') return false;
         if (digits.All(c => c == digits[0]) || !Luhn(digits)) return false;
         bool formatted = digits.Length != m.Value.Length;
-        return formatted || NearWord(text, m.Index, m.Length, CardWords);
+        return formatted || NearWord(text, m.Index, m.Length, CardWords) || InColumn(text, m.Index, CardWords);
+    }
+
+    /// <summary>
+    /// Security review (3b) H4: in a table (a spreadsheet, a CSV export) the word that says what a
+    /// number is sits in the column's heading, rows away, never within <see cref="ContextWindow"/>.
+    /// So a number also counts when its column's heading has the word. A table here is a block
+    /// (sheets are split by a form feed) whose first line has two or more cells split by a tab,
+    /// a comma or a semicolon; the column is the number of those before the number on its line.
+    /// ponytail: a delimiter inside a quoted CSV cell shifts the count for that row. Upgrade path:
+    /// a real CSV reader when that shows up in practice.
+    /// </summary>
+    static bool InColumn(string text, int index, string[] words) =>
+        Cell(text, index) is { } c && c.Col < c.Headings.Length && Has(c.Headings[c.Col], words);
+
+    /// <summary>On an IFSC line, a number is an account number. In a table that has an account
+    /// column, only the numbers in that column are (an Aadhaar beside it is not).</summary>
+    static bool AccountAt(string text, int index) =>
+        Cell(text, index) is not { } c || !c.Headings.Any(h => Has(h, AccountWords)) ||
+        (c.Col < c.Headings.Length && Has(c.Headings[c.Col], AccountWords));
+
+    static bool Has(string s, string[] words) => words.Any(w => s.Contains(w, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The headings of the table <paramref name="index"/> is in, and its column; null
+    /// when it is not in one.</summary>
+    static (string[] Headings, int Col)? Cell(string text, int index)
+    {
+        int blockStart = text.LastIndexOf('\f', Math.Max(0, index - 1)) + 1;
+        while (blockStart < index && text[blockStart] is '\n' or '\r') blockStart++;
+        int headerEnd = text.IndexOf('\n', blockStart);
+        if (headerEnd < 0 || headerEnd >= index || headerEnd - blockStart > 4000) return null;
+        var header = text[blockStart..headerEnd];
+        char sep = header.Contains('\t') ? '\t' : header.Contains(',') ? ',' : header.Contains(';') ? ';' : '\0';
+        if (sep == '\0') return null;
+        int lineStart = text.LastIndexOf('\n', Math.Max(0, index - 1)) + 1;
+        int col = 0;
+        for (int i = lineStart; i < index; i++) if (text[i] == sep) col++;
+        return (header.Split(sep), col);
     }
 
     static int CountBankAccounts(string text)
     {
-        int n = 0;
+        int n = 0, offset = 0;
         foreach (var line in text.Split('\n'))
         {
-            if (line.Length > 2000 || !IfscRx.IsMatch(line)) continue;
-            n += AccountRx.Matches(line).Count;
+            if (line.Length <= 2000 && IfscRx.IsMatch(line))
+                n += AccountRx.Matches(line).Count(m => AccountAt(text, offset + m.Index));
+            offset += line.Length + 1;
         }
         return n;
     }

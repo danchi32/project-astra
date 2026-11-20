@@ -35,6 +35,31 @@ public class PiiScannerTests
     }
 
     [Fact]
+    public void A_column_heading_gives_a_bare_number_its_meaning()
+    {
+        // Security review 3b H4: an HR export has "Aadhaar" once, in the heading, and bare numbers
+        // below it. Only the numbers under that heading count; the same kind of number under
+        // "Order ID" does not.
+        var ids = Enumerable.Range(0, 5).Select(i => ValidAadhaar($"2345678901{i}")).ToList();
+        var other = ValidAadhaar("34567890123");
+        foreach (var sep in new[] { ",", "\t", ";" })
+        {
+            var rows = string.Join("\n", ids.Select((a, i) => $"Person {i}{sep}{a}{sep}{other}"));
+            var text = $"Name{sep}Aadhaar No{sep}Order ID\n{rows}";
+            Assert.Equal(5, PiiScanner.Scan(text).Counts[Finding.Aadhaar]);
+            var redacted = PiiScanner.Redact(text)!;
+            Assert.DoesNotContain(ids[3], redacted);
+            Assert.Contains(other, redacted);                       // not under the heading: left as is
+        }
+        // A sheet is a block: the next sheet's heading decides for its own rows.
+        var pad = new string('x', 60);   // keeps the numbers away from any word, so only the heading decides
+        var two = $"Name,Aadhaar\n{pad},{ids[0]}\f\nName,Order ID\n{pad},{ids[1]}";
+        Assert.Equal(1, PiiScanner.Scan(two).Counts[Finding.Aadhaar]);
+        // Plain prose with a number far from any word is still not counted.
+        Assert.Equal(0, PiiScanner.Scan($"Invoice {other} paid in full, thank you").Counts[Finding.Aadhaar]);
+    }
+
+    [Fact]
     public void Finds_each_kind_in_ordinary_text()
     {
         var aadhaar = ValidAadhaar("23456789012");

@@ -34,6 +34,52 @@ public sealed class BrowserPolicyWorker(
     internal Func<IReadOnlyList<SeenDrive>> Drives { get; init; } =
         () => BrowserPolicyWriter.SeenDrives(Microsoft.Win32.Registry.LocalMachine);
 
+    /// <summary>Reinstalls the USB drives a changed USB policy affects; returns how many refused.
+    /// Tests replace it.</summary>
+    internal Func<BrowserPolicy, int> ReapplyUsb { get; init; } = DriveReapply;
+
+    /// <summary>Where the last applied USB key is kept. Tests replace it.</summary>
+    internal string UsbAppliedFile { get; init; } = Path.Combine(Security.SecureDirectory.StateRoot, "usb-applied.txt");
+
+    private string? _usbApplied;
+
+    /// <summary>What decides which rule a USB drive gets: the mode, the approved drives (company
+    /// drives) and whether a write window is open (on request).</summary>
+    internal static string UsbKey(BrowserPolicy p, DateTime nowUtc) => p.UsbMode switch
+    {
+        "company_drives" => "company_drives|" + string.Join(",", p.UsbApprovedDrives.Select(d => d.ToUpperInvariant()).Order()),
+        "on_request" => p.UsbWriteUntil > nowUtc ? "on_request|open" : "on_request|closed",
+        var m => m,
+    };
+
+    /// <summary>Every USB drive plugged in, except an approved company drive that already works.</summary>
+    static int DriveReapply(BrowserPolicy p)
+    {
+        var root = Microsoft.Win32.Registry.LocalMachine;
+        var allow = p.UsbMode == "company_drives" ? BrowserPolicyWriter.AllowIds(root, p) : [];
+        return UsbStorage.Reinstall(UsbStorage.Known(root).Select(d => d.Id)
+            .Where(id => !(allow.Contains(id, StringComparer.OrdinalIgnoreCase) && UsbStorage.Working(id))));
+    }
+
+    /// <summary>The last key applied. With none (a new install), "off": a PC that never had a
+    /// USB rule has nothing to reinstall.</summary>
+    string ReadUsbApplied()
+    {
+        try { return File.Exists(UsbAppliedFile) ? File.ReadAllText(UsbAppliedFile).Trim() : "off"; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return "off"; }
+    }
+
+    void SaveUsbApplied(string key)
+    {
+        try
+        {
+            if (UsbAppliedFile.StartsWith(Security.SecureDirectory.StateRoot, StringComparison.OrdinalIgnoreCase))
+                Security.SecureDirectory.Ensure(Security.SecureDirectory.StateRoot);
+            File.WriteAllText(UsbAppliedFile, key);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
     /// <summary>D7: where approvals go for the native host. Tests replace it.</summary>
     internal Action<IReadOnlyList<AgentGuardApproval>> StoreApprovals { get; init; } = GuardApprovalStore.WriteMachine;
 
@@ -115,6 +161,19 @@ public sealed class BrowserPolicyWorker(
         }
 
         var reports = Apply(policy);
+        // Live test (19 Nov): Windows applies USB rules to a drive when it is installed, so a
+        // drive already in keeps the old rule. When the USB part of the policy changes, the drives
+        // it affects are reinstalled; one with files open refuses and is reported.
+        var usbKey = UsbKey(policy, nowUtc);
+        if (usbKey != (_usbApplied ??= ReadUsbApplied()))
+        {
+            var refused = ReapplyUsb(policy);
+            _usbApplied = usbKey;
+            SaveUsbApplied(usbKey);
+            if (refused > 0)
+                reports = [.. reports, new ApplyReport(Browser.UsbDevices, [], [], [], [],
+                    $"{refused} USB drive(s) were in use, so they keep the previous rule until they are unplugged.")];
+        }
         // C3b: the USB drives this PC has seen go with the report, while AI Guard is on, so an
         // admin can approve the company's own.
         var drives = _current.Version > 0 ? Drives() : [];

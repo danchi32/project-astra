@@ -22,7 +22,8 @@ public class UsbRequestPipeTests
     {
         var policy = new BrowserPolicyWorker(new BrowserPolicyWorkerTests.Enrollment(), _api, new SubscriptionState(),
             Options.Create(new AgentOptions()), NullLogger<BrowserPolicyWorker>.Instance)
-        { Apply = _ => [], StoreApprovals = _ => { }, Drives = () => [] };
+        { Apply = _ => [], StoreApprovals = _ => { }, Drives = () => [], ReapplyUsb = _ => 0,
+          UsbAppliedFile = Path.Combine(Path.GetTempPath(), "savio-usb-" + Guid.NewGuid().ToString("N")) };
         _api.Next = new AgentBrowserPolicy(3, new AgentBrowserPolicyBody(UsbMode: usbMode));
         _api.UsbWindow = new(windowUntil);
         await policy.RunOnceAsync(_now, default);

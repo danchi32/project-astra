@@ -44,6 +44,33 @@ public sealed class DocumentsTests : IDisposable
     }
 
     [Fact]
+    public void An_hr_export_in_excel_is_read_as_rows_so_headings_and_ifsc_count()
+    {
+        // Security review 3b H4: headings are shared strings, numbers are bare cells. Read part by
+        // part, the numbers lost their headings and the IFSC its account, and the sheet scanned clean.
+        string Aadhaar(int i) { for (int c = 0; c < 10; c++) if (AstraAgent.Guard.PiiScanner.Verhoeff($"2345678901{i}{c}")) return $"2345678901{i}{c}"; throw new InvalidOperationException(); }
+        var shared = new[] { "Name", "Aadhaar", "IFSC", "Account", "Asha", "Ravi", "HDFC0001234" };
+        var sst = "<sst>" + string.Concat(shared.Select(s => $"<si><t>{s}</t></si>")) + "</sst>";
+        string Row(int r, int name, int i) =>
+            $"<row r=\"{r}\"><c r=\"A{r}\" t=\"s\"><v>{name}</v></c><c r=\"B{r}\"><v>{Aadhaar(i)}</v></c>" +
+            $"<c r=\"C{r}\" t=\"s\"><v>6</v></c><c r=\"D{r}\"><v>5010012345678{i}</v></c></row>";
+        var sheet = "<worksheet><sheetData><row r=\"1\">" +
+                    string.Concat(Enumerable.Range(0, 4).Select(i => $"<c r=\"{(char)('A' + i)}1\" t=\"s\"><v>{i}</v></c>")) +
+                    "</row>" + Row(2, 4, 1) + Row(3, 5, 2) + "</sheetData></worksheet>";
+        var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var w = new StreamWriter(zip.CreateEntry("xl/sharedStrings.xml").Open())) w.Write(sst);
+            using (var w = new StreamWriter(zip.CreateEntry("xl/worksheets/sheet1.xml").Open())) w.Write(sheet);
+        }
+        var text = Documents.Text(ms.ToArray(), ".xlsx", pdf: false)!;
+        Assert.Contains("Name\tAadhaar\tIFSC\tAccount\n", text);
+        var r = AstraAgent.Guard.PiiScanner.Scan(text);
+        Assert.Equal(2, r.Counts[AstraAgent.Guard.Finding.Aadhaar]);
+        Assert.Equal(2, r.Counts[AstraAgent.Guard.Finding.BankAccount]);
+    }
+
+    [Fact]
     public void A_pdf_is_read_only_when_the_org_chose_it()
     {
         var pdf = Pdf("Invoice for Asha", "PAN ABCPE1234F", "Card 4111 1111 1111 1111");

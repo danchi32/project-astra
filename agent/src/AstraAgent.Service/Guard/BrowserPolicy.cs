@@ -80,7 +80,9 @@ public sealed record BrowserPolicy
     /// instance IDs, as the PCs reported them). Every other USB drive is not installed.</summary>
     public IReadOnlyList<string> UsbApprovedDrives { get; init; } = Array.Empty<string>();
     public const int MaxApprovedDrives = 100;
-    static readonly Regex DriveId = new(@"^USBSTOR\\[A-Za-z0-9&_.\-]{1,200}\\[A-Za-z0-9&_.\-]{1,100}$", RegexOptions.CultureInvariant);
+    // A drive's USB interface (3b), or its disk as approved before (translated on the PC).
+    static readonly Regex DriveId = new(@"^(USB\\VID_[0-9A-Fa-f]{4}&PID_[0-9A-Fa-f]{4}|USBSTOR\\[A-Za-z0-9&_.\-]{1,200})\\[A-Za-z0-9&_.\-]{1,100}$",
+                                        RegexOptions.CultureInvariant);
 
     /// <summary>Close <see cref="OtherBrowsers"/> as they start (<see cref="OtherBrowserBlocker"/>).
     /// Not a browser setting: the writer ignores it.</summary>

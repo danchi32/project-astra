@@ -2,6 +2,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using AstraAgent.GuardHost;
 
+// Security review (3b) M1: whatever started this process, a file it reads cannot take the PC's memory.
+MemoryCap.Apply();
+
 // D5: started by the SAVIO service with "--discover <root>…" to map where sensitive files are.
 // Browsers start this exe with an extension origin or a manifest path as the first argument,
 // never "--discover". The result (folder paths and counts, no file names, no text) is one JSON

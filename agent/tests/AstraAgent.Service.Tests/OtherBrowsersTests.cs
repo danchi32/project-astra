@@ -42,6 +42,8 @@ public class OtherBrowsersTests
     {
         Apply = _ => [],
         StoreApprovals = _ => { },
+        ReapplyUsb = _ => 0,   // never the real USB drives of the PC running the tests
+        UsbAppliedFile = Path.Combine(Path.GetTempPath(), "savio-usb-" + Guid.NewGuid().ToString("N")),
     };
 
     OtherBrowserBlocker Blocker(BrowserPolicyWorker policy) => new(policy, _subscription, NullLogger<OtherBrowserBlocker>.Instance)

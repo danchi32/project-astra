@@ -96,7 +96,9 @@ OTHER_BROWSERS: dict[str, str] = {   # name → how its installed-app name start
 }
 UsbMode = Literal["off", "read_only", "encrypted_only", "on_request", "block", "company_drives"]
 # C3b: a USB disk's Windows device instance ID, as the agent reports it. Never SCSI\ (internal disks).
-_DRIVE_ID = re.compile(r"^USBSTOR\\[A-Za-z0-9&_.\-]{1,200}\\[A-Za-z0-9&_.\-]{1,100}$")
+# A drive's USB storage interface (3b: covers USB 3 drives using UASP), or its disk as approved
+# before; the agent translates the old form. Never SCSI\Disk: that is how internal disks look.
+_DRIVE_ID = re.compile(r"^(USB\\VID_[0-9A-Fa-f]{4}&PID_[0-9A-Fa-f]{4}|USBSTOR\\[A-Za-z0-9&_.\-]{1,200})\\[A-Za-z0-9&_.\-]{1,100}$")
 MAX_APPROVED_DRIVES = 100
 
 

@@ -93,7 +93,7 @@ public static class BrowserPolicyWriter
                 reports.Add(usb);
         }
         var devices = ApplyDeviceInstall(Registry.LocalMachine,
-                                         policy.UsbMode == "company_drives" ? policy.UsbApprovedDrives : null);
+                                         policy.UsbMode == "company_drives" ? AllowIds(Registry.LocalMachine, policy) : null);
         if (devices.Changed || devices.Error is not null || devices.Conflicts.Count > 0 || policy.UsbMode == "company_drives")
             reports.Add(devices);
 
@@ -199,9 +199,10 @@ public static class BrowserPolicyWriter
     // ── C3b: company drives only (Windows' Device Installation Restrictions) ──────────────────
 
     public const string DeviceInstallPath = @"SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions";
-    /// <summary>The compatible ID every USB mass-storage disk carries, and nothing else: an
-    /// internal SATA or NVMe disk is SCSI\Disk, so it can never be caught by this.</summary>
-    public const string UsbDiskId = @"USBSTOR\Disk";
+    /// <summary>The compatible ID of every USB mass-storage interface, whether its disk shows up
+    /// under USBSTOR or, for a USB 3 drive using UASP, under SCSI (security review 3b H2). An
+    /// internal SATA or NVMe disk has no USB interface, so it can never be caught by this.</summary>
+    public const string UsbDiskId = UsbStorage.InterfaceClass;
     static readonly string[] DeviceInstallNames = ["AllowDenyLayered", "AllowInstanceIDs", "DenyDeviceIDs", "DenyDeviceIDsRetroactive"];
 
     /// <summary>
@@ -282,11 +283,21 @@ public static class BrowserPolicyWriter
         return One("AllowDenyLayered") && One("DenyDeviceIDs") && One("DenyDeviceIDsRetroactive") && denyOk && allowOk;
     }
 
-    /// <summary>C3b: the USB drives ever installed on this PC (Windows keeps them under
-    /// Enum\USBSTOR), so an admin can approve the company's own. Device instance ID, the name
-    /// Windows shows, and whether the drive has a serial number of its own (Windows makes one up,
-    /// "7&…&0", for a drive that does not, and that one changes with the USB port).</summary>
-    public static IReadOnlyList<SeenDrive> SeenDrives(RegistryKey root)
+    /// <summary>The IDs to allow for the approved drives: each one's USB interface. An approval
+    /// made before 3b names the disk and is translated here; one never seen on this PC is left
+    /// out (it could not be allowed by its disk ID either).</summary>
+    public static IReadOnlyList<string> AllowIds(RegistryKey root, BrowserPolicy policy) =>
+        policy.UsbApprovedDrives.Select(d => UsbStorage.UsbIdFor(root, d)).OfType<string>()
+              .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>C3b: the USB drives ever installed on this PC, by their USB interface (USB 3 drives
+    /// using UASP too), so an admin can approve the company's own. The ID, the name Windows shows,
+    /// and whether the drive has a serial number of its own (Windows makes one up, "5&amp;…&amp;0",
+    /// for a drive that does not, and that one changes with the USB port).</summary>
+    public static IReadOnlyList<SeenDrive> SeenDrives(RegistryKey root) => UsbStorage.Known(root);
+
+    /// <summary>Before 3b, drives by their disk under Enum\USBSTOR: what an older approval names.</summary>
+    internal static IReadOnlyList<SeenDrive> SeenDisks(RegistryKey root)
     {
         var drives = new List<SeenDrive>();
         try

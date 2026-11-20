@@ -2209,7 +2209,27 @@ agent, the extension (with the host code it calls), and the backend with the por
       refuse to relaunch itself.
   - **Not tested here:** the USB link test (the pendrive is FAT32); USB hard drives; closing
     other browsers (none installed).
-- **Batch 2, with the VM test (not done):**
+- **Batch 2, part 1 (20 Nov, tested on this laptop):**
+  - **Excel and CSV headings (review H4):** .xlsx is read as rows (shared strings back in their
+    cells, a tab between cells, a form feed between sheets; text no cell shows is scanned too),
+    and a bare number counts as Aadhaar or a card when its column's heading says so; in a table
+    with an account column only that column's numbers are account numbers. Live: a made-up HR
+    sheet copied to USB was recorded as 5 Aadhaar and 5 bank accounts (it scanned clean before).
+  - **USB 3 drives (review H2):** company drives block the USB mass-storage interface
+    (`USB\Class_08`), which serves UASP drives too, and approve a drive by its USB ID
+    (`USB\VID_xxxx&PID_yyyy\serial`); drives are recognised by their compatible IDs, so one Windows
+    refused is still listed. Approvals made before name the disk and are translated on the PC.
+    Agent, backend and portal accept both forms. SD cards in a PCIe reader are not covered.
+  - **USB rules apply now (live finding):** when the USB mode, the approved drives or the write
+    window changes, the agent reinstalls the drives it affects (safe removal first: a drive with
+    files open refuses and is reported, keeping the old rule until unplugged). Kept per PC, so a
+    restart does not redo it and a new install with USB off touches nothing. Live: unapproved
+    drive gone, approved drive back, read-only and back to off, all without unplugging.
+  - **Memory limit (review M1):** the scanner puts itself in a job object capped at 1 GB however
+    it was started.
+  - **Tray hand-off:** a self-contained build starts the live copy's own exe instead of itself.
+  - **Portal:** says a change reaches each PC within the hour.
+- **Batch 2, still to do:**
   - **Agent H2:** company-drives mode misses USB 3 (UASP) drives and SD cards. Needs blocking
     by `USB\Class_08` and approval by the USB parent ID.
   - **Extension H4:** in .xlsx files, number cells lose the column headings their detectors
