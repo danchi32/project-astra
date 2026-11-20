@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using AstraAgent.Service.Security;
 using AstraAgent.Service.Workforce;
@@ -36,6 +37,32 @@ public sealed class TrayApplicationContext : ApplicationContext
             + "and active time) are recorded. No keystrokes, screenshots or screen recording.",
     };
     private readonly System.Windows.Forms.Timer _trackingTimer = new() { Interval = 60_000 };
+
+    // C3b: "Ask IT to allow USB writing", shown only where the org's policy takes requests.
+    private const string UsbAskText = "Ask IT to allow USB writing…";
+    private readonly ToolStripMenuItem _usbItem = new(UsbAskText) { Visible = false };
+
+    private async Task RefreshUsbItemAsync()
+    {
+        var status = await UsbRequest.StatusAsync();
+        if (status is null || status == "off")
+        {
+            _usbItem.Visible = false;
+            return;
+        }
+        _usbItem.Visible = true;
+        if (status.StartsWith("open:") && DateTime.TryParse(status["open:".Length..], null,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var until))
+        {
+            _usbItem.Text = $"USB writing allowed until {until.ToLocalTime():t}";
+            _usbItem.Enabled = false;
+        }
+        else
+        {
+            _usbItem.Text = UsbAskText;
+            _usbItem.Enabled = true;
+        }
+    }
     private bool _trackingOn;
 
     /// <summary>The Technomate brand mark, embedded in this assembly. Falls back to a system
@@ -93,6 +120,18 @@ public sealed class TrayApplicationContext : ApplicationContext
             _icon?.ShowBalloonTip(10000, "SAVIO — Fix my internet", result,
                 result.StartsWith("Fixed") || result.Contains("looks fine") ? ToolTipIcon.Info : ToolTipIcon.Warning);
         });
+        // C3b: only on a PC whose USB drives are read-only with IT write windows; the service
+        // says which, each time the menu opens.
+        menu.Items.Add(_usbItem);
+        _usbItem.Click += async (_, _) =>
+        {
+            var reason = UsbRequest.PickReason();
+            if (reason is null) return;
+            var result = await UsbRequest.RequestAsync(reason);
+            _icon?.ShowBalloonTip(10000, "SAVIO — USB writing", result,
+                result.StartsWith("Request sent") ? ToolTipIcon.Info : ToolTipIcon.Warning);
+        };
+        menu.Opening += async (_, _) => await RefreshUsbItemAsync();
         menu.Items.Add(_trackingItem);
         menu.Items.Add(_trackingSeparator);
         menu.Items.Add(new ToolStripSeparator());

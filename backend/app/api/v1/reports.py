@@ -3,7 +3,7 @@ import io
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -163,6 +163,86 @@ async def email_brief(
 
     sent, to = await brief.send(session, actor=actor, period=body.period)
     return BriefEmailed(sent=sent, to=to)
+
+
+# ── J3 Board report and J4 Compliance pack (printable; see services/board_pack.py) ──────────
+
+class BoardKpis(BaseModel):
+    devices: int
+    health_score: int
+    fixed_unattended: int
+    hours_saved: float
+    inr_saved: int | None
+    dpdp_score: int | None        # None: no AI Guard
+    breaches_found: int | None
+    breaches_open: int | None
+
+
+class BoardRisk(BaseModel):
+    title: str
+    severity: str
+    count: int
+    advice: str
+
+
+class BoardReport(BaseModel):
+    organization: str
+    period_days: Literal[30, 90]
+    since: datetime
+    generated_at: datetime
+    title: str
+    headline: str
+    kpis: BoardKpis
+    sections: list[BriefSection]
+    risks: list[BoardRisk]
+    footer: str
+
+
+class CompliancePack(BaseModel):
+    organization: str
+    period_days: Literal[30, 90]
+    since: datetime
+    generated_at: datetime
+    security: dict[str, Any]
+    access: dict[str, Any]
+    changes: dict[str, Any]
+    data_protection: dict[str, Any] | None    # None: no AI Guard
+    disclaimer: str
+
+
+def _period(days: int) -> None:
+    # A query value arrives as text, which a Literal[30, 90] will not take; checked here instead.
+    if days not in (30, 90):
+        raise HTTPException(422, "days must be 30 or 90")
+
+
+@router.get("/board", response_model=BoardReport,
+            summary="J3 board report: a month or quarter on one printable page; counts only, no names (staff)")
+async def board_report(
+    days: int = Query(default=30, description="30 (a month) or 90 (a quarter)"),
+    actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
+    session: AsyncSession = Depends(get_db),
+) -> BoardReport:
+    from app.services import board_pack
+
+    _period(days)
+
+    return BoardReport(**await board_pack.board(session, actor=actor, days=days))
+
+
+@router.get("/compliance-pack", response_model=CompliancePack,
+            summary="J4 compliance pack: endpoint security, access, changes and data protection evidence (admin)")
+async def compliance_pack(
+    days: int = Query(default=90, description="30 (a month) or 90 (a quarter)"),
+    # Admin only: it names staff and PCs, and data protection is an admin page.
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> CompliancePack:
+    from app.services import board_pack
+
+    _period(days)
+
+    return CompliancePack(**await board_pack.pack(session, actor=actor, days=days))
 
 
 @router.get("/remediation/export", summary="Remediation activity report (CSV)")

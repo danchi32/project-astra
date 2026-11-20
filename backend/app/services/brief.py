@@ -27,7 +27,7 @@ from app.services.exceptions import ConflictError
 from app.services.recommendations import RecommendationService
 from app.services.reports import ReportService
 
-PERIOD_DAYS = {"day": 1, "week": 7}
+PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "quarter": 90}   # month / quarter: J3's board report
 SILENT_AFTER = timedelta(hours=24)
 WARRANTY_SOON_DAYS = 30
 MAX_EMAILS_PER_HOUR = 5
@@ -35,6 +35,7 @@ MAX_EMAILS_PER_HOUR = 5
 # Sentence templates.
 T = {
     "title_day": "Your IT today", "title_week": "Your IT this week",
+    "title_month": "Your IT this month", "title_quarter": "Your IT this quarter",
     "fleet": "Computers", "security": "Security", "healing": "Fixed by SAVIO",
     "attention": "Needs your attention", "next": "Recommended next",
     "devices": "{n} computers, {online} online now.",
@@ -59,6 +60,20 @@ T = {
     "headline_attention": "{fixed} fixed automatically; {attention} thing(s) need your attention.",
     "footer": "Every number here comes from SAVIO's own records for this period.",
     "risk": {"high": "high risk", "medium": "medium risk", "low": "low risk"},
+    # S5: AI Guard. Counts only; never a person's name.
+    "guard": "AI Guard",
+    "cases": "{n} case(s) opened: {high} high, {medium} medium, {low} low.",
+    "cases_none": "No new cases: nobody's handling of sensitive data stood out.",
+    "stopped": "Sensitive data was stopped {blocked} time(s) and hidden {hidden} time(s).",
+    "went_ahead": "People went ahead after a warning {n} time(s).",
+    "trend_up": "That is {n} more event(s) with sensitive data than the period before.",
+    "trend_down": "That is {n} fewer event(s) with sensitive data than the period before.",
+    "usb": "{n} copy(ies) to USB drives held sensitive data.",
+    "closed": "Other browsers were closed {n} time(s).",
+    "recognised": "SAVIO recognised {n} new site(s) your people used.",
+    "suggests": "SAVIO suggests: {title}.",
+    "high_open": "{n} high-risk AI Guard case(s) are open (AI Guard → Cases).",
+    "requests": "{n} request(s) are waiting for IT approval in AI Guard.",
 }
 
 
@@ -116,6 +131,8 @@ async def build(session: AsyncSession, *, actor: User, period: str) -> dict:
                           ("halted", halted, {}), ("warranty", warranty, {"days": WARRANTY_SOON_DAYS})):
         if n:
             attention.append(t[key].format(n=n, **extra))
+    guard, guard_attention = await _guard(session, org_id, since, days)
+    attention += guard_attention
     next_steps = [f"{t['rec'].format(title=r.title, count=(r.evidence or {}).get('count', 0))} · "
                   f"{t['risk'].get(r.risk, r.risk)}" for r in recs[:3]]
 
@@ -127,6 +144,8 @@ async def build(session: AsyncSession, *, actor: User, period: str) -> dict:
         {"key": "healing", "title": t["healing"], "lines": healing},
         {"key": "attention", "title": t["attention"], "lines": attention or [t["nothing"]]},
     ]
+    if guard:
+        sections.insert(3, {"key": "guard", "title": t["guard"], "lines": guard})
     if next_steps:
         sections.append({"key": "next", "title": t["next"], "lines": next_steps})
     return {
@@ -134,6 +153,63 @@ async def build(session: AsyncSession, *, actor: User, period: str) -> dict:
         "title": t[f"title_{period}"], "headline": headline, "sections": sections,
         "footer": t["footer"],
     }
+
+
+async def _guard(session: AsyncSession, org_id, since, days: int) -> tuple[list[str], list[str]]:
+    """S5: the period in AI Guard, for an org that has it. (lines, attention lines). Counts only:
+    the brief also goes to technicians, and cases name people, so it never does."""
+    from app.models import GuardApproval, GuardCase, GuardEvent, LearnedCategory
+    from app.services import guard_approvals, guard_events, guard_sites, guard_suggestions
+    from app.services.browser_policy import entitled
+
+    if not await entitled(session, org_id):
+        return [], []
+    t = T
+    lines: list[str] = []
+    levels = dict((await session.execute(select(GuardCase.level, func.count()).where(
+        GuardCase.org_id == org_id, GuardCase.opened_at >= since).group_by(GuardCase.level))).all())
+    opened = sum(levels.values())
+    lines.append(t["cases"].format(n=opened, high=levels.get("high", 0), medium=levels.get("medium", 0),
+                                   low=levels.get("low", 0)) if opened else t["cases_none"])
+    s = await guard_events.summary(session, org_id, days)
+    if s["blocked"] or s["redacted"]:
+        lines.append(t["stopped"].format(blocked=s["blocked"], hidden=s["redacted"]))
+    if s["went_ahead"]:
+        lines.append(t["went_ahead"].format(n=s["went_ahead"]))
+    before = (await guard_events.summary(session, org_id, days * 2))["total"] - s["total"]
+    if s["total"] != before and (s["total"] or before):
+        diff = s["total"] - before
+        lines.append(t["trend_up" if diff > 0 else "trend_down"].format(n=abs(diff)))
+    usb = await session.scalar(select(func.count()).select_from(GuardEvent).where(
+        GuardEvent.org_id == org_id, GuardEvent.channel == "usb", GuardEvent.occurred_at >= since))
+    if usb:
+        lines.append(t["usb"].format(n=usb))
+    closed = sum(sum((a.detail or {}).get("closed", {}).values()) for a in (await session.execute(
+        select(AuditLog).where(AuditLog.org_id == org_id, AuditLog.action == "guard.other_browser_closed",
+                               AuditLog.created_at >= since))).scalars())
+    if closed:
+        lines.append(t["closed"].format(n=closed))
+    sites = set((await session.execute(select(GuardEvent.site).where(
+        GuardEvent.org_id == org_id, GuardEvent.occurred_at >= since).distinct())).scalars())
+    learned_now = set((await session.execute(select(LearnedCategory.key).where(
+        LearnedCategory.kind == guard_sites.LEARNED_KIND, LearnedCategory.created_at >= since))).scalars())
+    recognised = {guard_sites.registrable(x) for x in sites} & learned_now
+    if recognised:
+        lines.append(t["recognised"].format(n=len(recognised)))
+    for card in (await guard_suggestions.suggestions(session, org_id))[:2]:
+        lines.append(t["suggests"].format(title=card["title"]))
+
+    attention: list[str] = []
+    high_open = await session.scalar(select(func.count()).select_from(GuardCase).where(
+        GuardCase.org_id == org_id, GuardCase.status == "open", GuardCase.level == "high"))
+    if high_open:
+        attention.append(t["high_open"].format(n=high_open))
+    waiting = await session.scalar(select(func.count()).select_from(GuardApproval).where(
+        GuardApproval.org_id == org_id, GuardApproval.status == "pending",
+        GuardApproval.requested_at >= utcnow() - guard_approvals.PENDING_FOR))
+    if waiting:
+        attention.append(t["requests"].format(n=waiting))
+    return lines, attention
 
 
 def render_html(brief: dict) -> str:

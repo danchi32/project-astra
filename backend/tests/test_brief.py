@@ -85,6 +85,40 @@ async def test_weekly_brief_counts_the_week(client, admin_headers, session_facto
     assert _lines(b, "healing")[0] == "2 problem(s) fixed with nobody needing to step in."
 
 
+async def test_weekly_brief_has_an_ai_guard_section_in_counts(client, admin_headers, session_factory, admin_user):
+    """S5: with AI Guard, the brief says what happened there in counts, and what needs a look,
+    never naming anyone."""
+    from datetime import UTC, datetime
+
+    from tests.test_browser_policy import POLICY, _enroll, _guard_on
+
+    b = (await client.get("/api/v1/reports/brief?period=week", headers=admin_headers)).json()
+    assert not any(s["key"] == "guard" for s in b["sections"])            # no AI Guard: no section
+
+    await _guard_on(session_factory, admin_user.org_id)
+    await client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=POLICY)
+    _, h = await _enroll(client, admin_headers, "RAVI-PC")
+    now = datetime.now(UTC).isoformat()
+    ev = {"at": now, "windows_user": r"ACME\ravi", "channel": "file", "mode": "warn", "action": "warn",
+          "outcome": "proceeded", "contact_list": True, "keyword_hits": 0, "unknown": False}
+    await client.post("/api/v1/agent/guard/events", headers=h, json={"events": [
+        {**ev, "site": "wetransfer.com", "counts": {"Pan": 300}},
+        {**ev, "site": "usb", "channel": "usb", "mode": "log", "action": "allow", "outcome": None,
+         "counts": {"Aadhaar": 20}, "contact_list": False},
+        {**ev, "site": "chatgpt.com", "mode": "block", "action": "block", "outcome": None, "counts": {"Pan": 2},
+         "contact_list": False}]})
+    b = (await client.get("/api/v1/reports/brief?period=week", headers=admin_headers)).json()
+    guard = next(s for s in b["sections"] if s["key"] == "guard")["lines"]
+    assert guard[0] == "1 case(s) opened: 1 high, 0 medium, 0 low."
+    assert "Sensitive data was stopped 1 time(s) and hidden 0 time(s)." in guard
+    assert "People went ahead after a warning 1 time(s)." in guard
+    assert "1 copy(ies) to USB drives held sensitive data." in guard
+    assert "That is 3 more event(s) with sensitive data than the period before." in guard
+    attention = next(s for s in b["sections"] if s["key"] == "attention")["lines"]
+    assert "1 high-risk AI Guard case(s) are open (AI Guard → Cases)." in attention
+    assert "ravi" not in str(b).lower()                                       # never who
+
+
 async def test_unknown_period_is_refused(client, admin_headers):
     assert (await client.get("/api/v1/reports/brief?period=month", headers=admin_headers)).status_code == 422
 

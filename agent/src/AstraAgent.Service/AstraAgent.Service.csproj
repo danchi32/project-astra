@@ -23,6 +23,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Phase 3 · E3: the GuardEvent schema, shared with the native host. No dependencies, no I/O. -->
+    <ProjectReference Include="..\AstraAgent.Guard\AstraAgent.Guard.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
@@ -30,5 +35,15 @@
     <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
+
+  <!-- Phase 3 · D3: the browser extension's native host (savio-guard-host.exe) ships beside the
+       service. It is published into the same folder, with the same runtime and self-contained
+       setting, by every publish of this project: the release workflow, Build-AstraAgent.ps1 and
+       -BuildFromSource alike. No packaging script needs to know it exists. The service registers it
+       with the browsers only when the org's AI Guard policy asks for the extension. -->
+  <Target Name="PublishGuardHost" AfterTargets="Publish">
+    <MSBuild Projects="..\AstraAgent.GuardHost\AstraAgent.GuardHost.csproj" Targets="Restore;Publish"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(PublishDir);Version=$(Version);_GuardHostPublish=true" />
+  </Target>
 
 </Project>

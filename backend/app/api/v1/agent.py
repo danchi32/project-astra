@@ -2,13 +2,16 @@ import logging
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import uuid
 
 from app.api.deps import get_rate_limited_device, get_rate_limited_device_any_status
+from app.services.browser_policy import BrowserPolicyReport
+from app.services.guard_discovery import DiscoveryIn
+from app.services.guard_events import GuardEventBatch
 from app.core.database import get_db
 from app.models import Device
 from app.schemas.conversations import (
@@ -352,3 +355,140 @@ async def bitlocker_keys(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Key escrow is not configured on this server; try again later.")
 
+
+@router.get(
+    "/browser-policy",
+    summary="The browser policy this device should apply (agent only; empty without AI Guard)",
+)
+async def agent_browser_policy(
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.services import browser_policy
+
+    return await browser_policy.for_device(session, device)
+
+
+@router.post(
+    "/browser-policy/report",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Report what applying the browser policy did on this device (agent only)",
+)
+async def agent_browser_policy_report(
+    body: BrowserPolicyReport,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """The device reports only for itself: the device comes from its token, never the body."""
+    from app.services import browser_policy
+
+    await browser_policy.record_report(session, device, body)
+
+
+@router.post(
+    "/guard/events",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="E3: what the browser extension saw on this device, counts only (agent only)",
+)
+async def agent_guard_events(
+    body: GuardEventBatch,
+    background: BackgroundTasks,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Fixed schema, no free text; unknown fields are refused. Dropped (but accepted) when the
+    org does not have AI Guard, so the agent does not keep retrying."""
+    from app.services import guard_events
+
+    if await guard_events.ingest(session, device, body):
+        # S1: name any site the fixed list does not know, off the response path.
+        background.add_task(_classify_guard_sites_bg, device.org_id)
+
+
+async def _classify_guard_sites_bg(org_id: uuid.UUID) -> None:
+    """S1 in its own session; a failure must never reach the agent."""
+    from app.core.database import SessionLocal
+    from app.services.guard_sites import classify_new_sites
+
+    try:
+        async with SessionLocal() as session:
+            await classify_new_sites(session, org_id)
+    except Exception:
+        logger.exception("guard AI site classification failed for org %s", org_id)
+
+
+@router.post(
+    "/guard/discovery",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="D5: this device's map of where sensitive files are, folder counts only (agent only)",
+)
+async def agent_guard_discovery(
+    body: DiscoveryIn,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    from app.services import guard_discovery
+
+    await guard_discovery.ingest(session, device, body)
+
+
+@router.get(
+    "/guard/approvals",
+    summary="D7: approvals in force on this device now (agent only; empty without AI Guard)",
+)
+async def agent_guard_approvals(
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    from app.services import guard_approvals
+
+    return await guard_approvals.for_device(session, device)
+
+
+class UsbRequestIn(BaseModel):
+    """C3b: the tray's request, through the service, which takes the person from Windows."""
+    model_config = ConfigDict(extra="forbid")
+    windows_user: str = Field(min_length=1, max_length=256)
+    reason: Literal["client_or_ca", "backup", "presentation", "other"]
+
+    @field_validator("windows_user")
+    @classmethod
+    def _user(cls, v: str) -> str:
+        from app.services.guard_events import GuardEventIn
+
+        return GuardEventIn._user(v)
+
+
+@router.post(
+    "/usb-request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="C3b: the person at this PC asks IT for a USB write window (agent only)",
+    responses={409: {"description": "This PC's policy does not take USB requests"},
+               429: {"description": "This PC already has as many requests waiting as it may"}},
+)
+async def agent_usb_request(
+    body: UsbRequestIn,
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.services import browser_policy, guard_approvals
+
+    if (await browser_policy.for_device(session, device))["policy"].get("usb_mode") != "on_request":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This PC's policy does not take USB requests.")
+    if await guard_approvals.request_usb(session, device, body.windows_user, body.reason) is None:
+        # Its own status, so the Tray does not tell the person it was sent (review 3b L3).
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many requests are waiting for IT on this PC.")
+    return {"status": "requested"}
+
+
+@router.get(
+    "/usb-window",
+    summary="C3: the USB write window IT opened for this device, if any (agent only)",
+)
+async def agent_usb_window(
+    device: Device = Depends(get_rate_limited_device),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from app.services import browser_policy
+
+    return {"until": await browser_policy.usb_window(session, device)}

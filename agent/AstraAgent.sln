@@ -8,6 +8,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{797C038E-C79
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraAgent.Tray", "src\AstraAgent.Tray\AstraAgent.Tray.csproj", "{779E119B-F18C-426B-9E84-BC813AB0941A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraAgent.Guard", "src\AstraAgent.Guard\AstraAgent.Guard.csproj", "{B5D7421D-706E-42BD-B7A9-5022A0718D9E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AstraAgent.GuardHost", "src\AstraAgent.GuardHost\AstraAgent.GuardHost.csproj", "{B2E39A0E-56E1-4BB7-ACD5-F4ADE8FEBE33}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,8 +30,18 @@ Global
 		{779E119B-F18C-426B-9E84-BC813AB0941A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{779E119B-F18C-426B-9E84-BC813AB0941A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{779E119B-F18C-426B-9E84-BC813AB0941A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B5D7421D-706E-42BD-B7A9-5022A0718D9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5D7421D-706E-42BD-B7A9-5022A0718D9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B5D7421D-706E-42BD-B7A9-5022A0718D9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B5D7421D-706E-42BD-B7A9-5022A0718D9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2E39A0E-56E1-4BB7-ACD5-F4ADE8FEBE33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2E39A0E-56E1-4BB7-ACD5-F4ADE8FEBE33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2E39A0E-56E1-4BB7-ACD5-F4ADE8FEBE33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2E39A0E-56E1-4BB7-ACD5-F4ADE8FEBE33}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{779E119B-F18C-426B-9E84-BC813AB0941A} = {797C038E-C799-4A4B-9ED8-42ADDD822191}
+		{B5D7421D-706E-42BD-B7A9-5022A0718D9E} = {797C038E-C799-4A4B-9ED8-42ADDD822191}
+		{B2E39A0E-56E1-4BB7-ACD5-F4ADE8FEBE33} = {797C038E-C799-4A4B-9ED8-42ADDD822191}
 	EndGlobalSection
 EndGlobal

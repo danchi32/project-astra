@@ -69,6 +69,17 @@ REMOTE_CONTROL = "remote_control"
 #: not the prompt, not a nav link — is what authorises the data to be collected and read.
 WORKFORCE_INSIGHTS = "workforce_insights"
 
+#: Phase 3 · AI Smart Guard (browser lock-down, DLP). Like Workforce Insights it is in no plan:
+#: it changes how employees' browsers behave, so it arrives only when an operator turns it on
+#: for one named organization (`entitlement_overrides`), never as part of a tier bought for
+#: something else.
+AI_GUARD = "ai_guard"
+
+#: Phase 3b · I4 Client-Audit Pack: a client's security questionnaire answered from SAVIO's
+#: evidence by the AI. A paid add-on (roadmap §7), so in no plan: an operator turns it on per
+#: organization, and every questionnaire costs model calls.
+AUDIT_PACK = "audit_pack"
+
 # ── Plans ──────────────────────────────────────────────────────────────────
 
 ESSENTIAL = "essential"

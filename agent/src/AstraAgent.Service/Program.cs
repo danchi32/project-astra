@@ -34,7 +34,11 @@ builder.Services.AddHttpClient<IAstraApiClient, AstraApiClient>((provider, http)
 // ProxyUrl) so the LocalSystem service works on locked-down networks — globally, all orgs.
 .ConfigurePrimaryHttpMessageHandler(provider =>
     AstraAgent.Service.Net.ProxyHttp.CreateHandler(
-        provider.GetRequiredService<IOptions<AgentOptions>>().Value.ProxyUrl));
+        provider.GetRequiredService<IOptions<AgentOptions>>().Value.ProxyUrl))
+// E3: the Outbound Ledger, a readable local copy of every request (secrets left out).
+.AddHttpMessageHandler<OutboundLedgerHandler>();
+builder.Services.AddSingleton(_ => new OutboundLedger());
+builder.Services.AddTransient<OutboundLedgerHandler>();
 
 builder.Services.AddSingleton<ICpuCollector, CpuCollector>();
 builder.Services.AddSingleton<IMemoryCollector, MemoryCollector>();
@@ -63,6 +67,17 @@ builder.Services.AddSingleton<AstraAgent.Service.Remediation.ISystemTaskRunner,
                               AstraAgent.Service.Remediation.SystemTaskRunner>();
 builder.Services.AddHostedService<HeartbeatWorker>();
 builder.Services.AddHostedService<TelemetryWorker>();
+// One instance: D5's file scan reads the policy this worker last fetched.
+builder.Services.AddSingleton<AstraAgent.Service.Guard.BrowserPolicyWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AstraAgent.Service.Guard.BrowserPolicyWorker>());
+builder.Services.AddHostedService<AstraAgent.Service.Guard.DiscoveryWorker>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.OtherBrowserBlocker>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.UsbCopyWatcher>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.UsbRequestPipeServer>();
+// E3: events from the browser extension, via the native host, to the backend (counts only).
+builder.Services.AddSingleton(_ => AstraAgent.Service.Guard.GuardEventQueue.OnDisk());
+builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventPipeServer>();
+builder.Services.AddHostedService<AstraAgent.Service.Guard.GuardEventUploader>();
 builder.Services.AddHostedService<UpdateWorker>();
 // Offline self-heal (B1) and the Tray's "Fix my internet" (B2) share one doctor, so the
 // two can never run network fixes at the same time.

@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard, Monitor, Users, Radar, Boxes,
   BookOpen, Zap, BarChart3, Shield, ShieldCheck,
-  CreditCard, Building2, ScrollText, LifeBuoy, Bot, Clock, Lock,
+  CreditCard, Building2, ScrollText, LifeBuoy, Bot, Clock, Lock, ShieldAlert,
   ChevronRight, ChevronDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
@@ -69,6 +69,13 @@ const ORG_NAV: NavEntry[] = [
   ] },
   { group: "Tracker", icon: Clock, feature: "workforce_insights", lockedHref: "/tracker",
     children: TRACKER_SUBNAV },
+  { group: "AI Guard", icon: ShieldAlert, feature: "ai_guard", lockedHref: "/guard",
+    children: [{ href: "/guard/cases", label: "Cases" }, { href: "/guard", label: "Browser policy" },
+                { href: "/guard/events", label: "What was found" },
+                { href: "/guard/approvals", label: "Approvals" },
+                { href: "/guard/discovery", label: "Where data lives" },
+                { href: "/guard/dpdp", label: "DPDP readiness" },
+                { href: "/guard/incidents", label: "Breach records" }] },
   // The rest of the common pages.
   { href: "/reports", icon: BarChart3, label: "Reports" },
   { href: "/audit", icon: Shield, label: "Audit Logs" },
@@ -121,7 +128,8 @@ export function Sidebar() {
   // Prefix-active: the page itself or anything beneath it (so a detail page keeps its parent lit).
   // "/platform" is matched exactly so its sub-pages don't also light up the Overview entry.
   const isActive = (href: string) =>
-    href === "/platform" ? pathname === "/platform" : pathname === href || pathname.startsWith(href + "/");
+    // A group's own page whose siblings live beneath it is lit only on itself.
+    href === "/platform" || href === "/guard" ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 
   const platform = me?.is_platform_admin && !inViewAs;
   const nav: NavEntry[] = platform

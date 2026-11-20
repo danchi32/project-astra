@@ -987,20 +987,1057 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
   policies (Chrome/Edge registry, Firefox `policies.json`): force-install extension,
   incognito off, developer mode off, URL block/allow by category and group; unsupported
   browsers blocked or uninstalled per policy.
+  - **As built, slice 1, agent writer (17 Nov, branch `phase-3`, not pushed):**
+    `agent/src/AstraAgent.Service/Guard/`.
+  - **`BrowserPolicy`** is the browser-neutral model. Every field is off by default:
+    incognito off, extension developer mode off, all dev tools off, new profiles and guest
+    off, blocked / allowed sites (host names), Google allowed domains (D2), and the
+    extension's store IDs. `Validate()` refuses bad hosts, IDs and non-https URLs before
+    anything is written.
+  - **`BrowserPolicyMap`** gives each browser's own names:
+    - Chrome: `IncognitoModeAvailability`, `BrowserAddPersonEnabled`;
+    - Edge: `InPrivateModeAvailability`, `BrowserAddProfileEnabled`;
+    - shared: `ExtensionDeveloperModeSettings`, `URLBlocklist` / `URLAllowlist`,
+      `AllowedDomainsForApps`, `ExtensionInstallForcelist` with each store's update URL;
+    - Firefox: `DisablePrivateBrowsing`, `DisableDeveloperTools`, `WebsiteFilter` match
+      patterns, `ExtensionSettings` force_installed.
+  - **`BrowserPolicyWriter`** owns only what it wrote. The names it set are recorded under
+    `HKLM\SOFTWARE\SAVIO\BrowserPolicy\<browser>` (and `savio-owned.json` for Firefox),
+    and only those are changed or removed.
+    - A policy someone else already sets, such as an org's GPO, is reported as a
+      **conflict** and never overwritten. That covers this laptop's existing
+      `LocalNetworkAccessAllowedForUrls`.
+    - Re-applying is idempotent. Tampering is **repaired and reported**; a local admin
+      can't be stopped, only noticed.
+    - Every write is read back, and one that doesn't stick is an error.
+    - Firefox's policies.json is merged, never replaced. An unreadable file is left
+      untouched, and writes are atomic.
+  - **Checked:** `BrowserPolicyWriterTests` (12), against the real registry under a
+    throwaway HKCU key (never HKLM) and a temp folder:
+    - apply and idempotency;
+    - a foreign policy kept, with a conflict reported;
+    - tamper repaired;
+    - shrink removes only what SAVIO set;
+    - Edge names;
+    - validation;
+    - Firefox merge;
+    - broken Firefox file left alone.
+  - All 382 agent tests pass, and the real browser keys were untouched.
+  - **As built, slice 2, end to end (17 Nov):**
+    - **Backend:** new entitlement `ai_guard` (in no plan; an operator switches it on per
+      org) and migration `0087`, with two tables:
+      - `org_browser_policies`: one per org, with a version that goes up on each change;
+      - `device_browser_policy_states`: each PC's last report.
+    - **Admin endpoints:**
+      - `GET`/`PUT /guard/browser-policy`. Editing is admin-only, staff can read, and
+        changes are audited with the fields that changed.
+      - `GET /guard/browser-policy/devices`.
+      - Validation matches the agent's, and sites are normalised and de-duplicated.
+    - **Agent endpoints:**
+      - `GET /agent/browser-policy`. An org without `ai_guard` gets version 0 and an empty
+        policy, so its PCs remove what SAVIO set.
+      - `POST /agent/browser-policy/report`. The device comes from its token. A *repaired*
+        entry (tamper) is audited and raises a "Browser policy tampered" notification.
+    - **Agent:** `BrowserPolicyWorker`.
+      - It fetches hourly and applies every heartbeat cycle, so a removed lock is back
+        within a minute.
+      - It reports when something changed, or when the version, conflicts or errors
+        differ.
+      - A failed fetch **keeps** the last policy and retries in 5 minutes. Only the
+        backend's explicit "version 0, empty" removes it.
+    - **Portal:**
+      - AI Guard → Browser policy: the switches, blocked / allowed sites and Google
+        domains, plus a per-PC table showing the version (with an "older" marker),
+        errors, and conflicts ("set elsewhere, left alone").
+      - An AI Guard toggle on the operator's org page.
+    - **Checked:**
+      - `test_browser_policy.py` (5): 402 without the add-on, version and audit,
+        validation, roles, reports and tamper notification.
+      - `BrowserPolicyWorkerTests` (4): cadence, unreachable backend, add-on off,
+        re-enrolment.
+      - All 386 agent tests pass. Migration checked up / down / up on Postgres with a
+        write.
+      - Checked on screen against the local backend, with a made-up device report: the
+        policy is saved, version 2 comes from the portal, and the PC row shows "older", the
+        Firefox error and the conflict.
+    - **The agent was not run against this laptop's browsers:** it would change your Chrome
+      and Edge. That is the VM test.
+  - **Then a live VM test (Spike 2):** which of these policies Chrome and Edge honour on a
+    PC not joined to a domain.
+  - **As built, slice 3, blocking by category (18 Nov):**
+    - **Six categories,** fixed in `browser_policy.SITE_CATEGORIES`: personal file-sharing,
+      personal e-mail, AI chat, messaging on the web, social media and paste sites.
+      - Each names the personal service, never a shared parent that businesses also use:
+        `outlook.live.com`, not `live.com`; `web.whatsapp.com`, not `whatsapp.com`.
+      - Gmail and Drive are not in the list; D2's Google domains handle them.
+    - **Choosing:** an admin ticks categories (`blocked_categories`) under the blocked sites.
+      "Always allowed" still wins, for example linkedin.com for a sales team.
+    - **Served as one block list:** the PC gets the typed sites plus each category's hosts,
+      de-duplicated, with at most 500 in total, checked when the policy is saved. The agent
+      did not change.
+    - **The hosts are copied when saved** (`category_hosts`, migration 0094). A list changed
+      in a later release reaches a PC only when the policy is saved again, as a new version.
+      The PC is never served words nobody saved, and the version-based tamper check stays
+      right.
+    - **Suggestion:** "Block personal file-sharing sites" now ticks the category instead of
+      adding six hosts.
+    - **Checked:**
+      - `test_blocking_by_category`: the category list, the merge and de-duplication, the
+        category not sent to the PC, allowed sites kept, a changed list served only after a
+        save (as version 2), the 500 limit, an unknown category refused;
+      - the suggestion tests;
+      - migration 0094 up/down/up, with an existing row given an empty list;
+      - on screen: two categories ticked and saved as version 14, with 21 hosts stored.
+  - **As built, slice 4, company accounts beyond Google (18 Nov, Spike 1 answered):**
+    - **The finding:** these services enforce "own accounts only" themselves when a request
+      carries their header. The vendors assume a TLS-inspecting proxy adds it; an extension
+      can add it instead. Checked live in a throwaway Chrome profile:
+      - every header reached the server as set, including `sec-` ones (echoed by
+        httpbin.org);
+      - Microsoft's sign-in read `sec-Restrict-Tenant-Access-Policy` at once and refused a
+        made-up tenant (AADSTS1000107);
+      - ChatGPT and Claude showed nothing to a signed-out visitor: their check applies when
+        someone signs in to a workspace or organization, which needs a real account (the pilot);
+      - the older Microsoft header (`Restrict-Access-To-Tenants`) acts only at sign-in, so the
+        newer tenant restrictions v2 is used instead.
+    - **Services and headers** (each from the vendor's own docs):
+
+      | Service | Header | Sent to |
+      |---|---|---|
+      | Microsoft 365 | `sec-Restrict-Tenant-Access-Policy: <tenant>:<policy>` (tenant restrictions v2) | login.microsoftonline.com, login.microsoft.com, login.windows.net, login.live.com |
+      | Claude | `anthropic-allowed-org-ids` | claude.ai, claude.com, anthropic.com |
+      | ChatGPT Enterprise | `ChatGPT-Allowed-Workspace-Id` | chatgpt.com, chat.openai.com |
+      | Slack (Business+ / Enterprise) | `X-Slack-Allowed-Workspaces-Requester`, `X-Slack-Allowed-Workspaces` | slack.com |
+
+      Dropbox was dropped: its header name is not published.
+    - **Policy:** `microsoft_tenant_id` + `microsoft_policy_id`, `claude_org_ids`,
+      `chatgpt_workspace_ids`, `slack_requester_id` + `slack_allowed_ids`.
+      - Only IDs of the right shape are accepted, at most 50 per service, and the pairs come
+        both or neither. This is checked by the backend, by the agent, and again by the
+        extension, because these become request headers.
+      - Without the extension the IDs are refused, so the setting is never silently off.
+    - **Agent:** passes them to the extension as managed settings, only when set.
+    - **Extension:** `accounts.js` turns the settings into `declarativeNetRequest` rules that
+      *set* (never append) each header on that service's domains only. The service worker
+      keeps them in step with the policy: at start, on install, and whenever the managed
+      settings change. The manifest gains `declarativeNetRequest`, and its description says so.
+    - **Portal:** a "Company accounts only" section with where to find each ID.
+    - **Checked:**
+      - backend `test_company_accounts_only`;
+      - agent `Company_account_ids_go_to_the_extension_only_when_set_and_only_as_ids`
+        (a smuggled `\r\n` header is refused);
+      - extension `accounts.test.mjs` (3);
+      - live: the real extension started with no rules, Chrome accepted the generated rules,
+        and Microsoft read the header;
+      - on screen: the refusal without an extension ID, and saved IDs shown back.
+    - **Not checked:**
+      - that the rules are cleared when the extension restarts with no policy: the service
+        worker went to sleep before it could be read;
+      - each service blocking a real personal account: that needs the org's own accounts.
+    - **Limit:** an extension can only cover the browser. A desktop app (Teams, Slack,
+      ChatGPT) does not pass through it. Windows' own tenant restrictions v2 setting covers
+      Microsoft's apps; it is a later step.
+  - **As built, slice 5, a policy per device group (18 Nov):**
+    - **Shape:** the org's policy stays the default for everyone. An admin can give a device
+      group a complete policy of its own, which starts as a copy of the default
+      (`group_browser_policies`, migration 0095).
+    - **One policy per PC, never a merge.** Groups overlap, so a PC in several groups with a
+      policy gets the one with the lowest priority number (ties: group name). A PC in none
+      gets the default. The agent did not change.
+    - **Version numbers are never reused.** One sequence per org (`org_browser_policies.seq`)
+      numbers every saved change, the default's or a group's. A number therefore names exactly
+      one policy's content.
+      - A PC moved into or out of a group, or a group policy removed, always reports a new
+        version, so the tamper check counts it as an update.
+      - Re-ranking changes which policy a PC gets without a new number, because each number
+        already names its content.
+    - **The same rules as the default:** the E8 pilot holds group policies to record-only
+      too, categories are copied on save, and every change is audited
+      (`guard.group_policy_update` / `_delete`). A group policy needs the default to exist
+      first.
+    - **Deleting the group** removes its policy (cascade), and its PCs go back to the
+      default.
+    - **Portal:**
+      - "Policy for: Everyone · <groups>" above the form, which then edits that group's policy;
+      - "+ A policy for a group…" for groups without one;
+      - a priority box and "Remove this group's policy";
+      - the PC table gains a Policy column, and "older" now compares a PC with its own
+        policy.
+    - **Checked:**
+      - `test_group_policies`: needs the default first, the pilot, the winner by priority,
+        re-ranking without a new version, the default taking the next number, the PC row's
+        policy, technician refused, removal sending PCs back, 404s, the audit;
+      - migration 0095 up/down/up, with an existing row given `seq` = its version;
+      - on screen: Sales team given a copy plus "Social media", saved as version 16 after the
+        default's 15, and "Everyone" still showing the default.
+  - **As built, slice 6, other browsers (18 Nov):** the last D1/D2 piece. Nothing above
+    reaches a browser other than Chrome, Edge and Firefox.
+    - **Which:** Brave, Opera (and GX), Vivaldi, Yandex, Tor Browser, Chromium, Waterfox,
+      LibreWolf. A fixed list in the agent (`OtherBrowsers.cs`) and the backend
+      (`OTHER_BROWSERS`), kept in step.
+    - **Seen:** the PC table shows "Other browsers installed: …" from each PC's app inventory
+      (machine and per-user installs), linking to the PC. No agent change was needed for this.
+    - **Closed:** a policy switch, "Close other browsers" (`block_other_browsers`, off by
+      default). The agent's `OtherBrowserBlocker` checks running processes every 2 s and closes
+      a match:
+      - a match needs the exe name *and* the browser's name in the file's company, product or
+        path, so Google Chrome, an unrelated `browser.exe`, or a file it cannot read is left
+        alone;
+      - the person gets a Windows message, at most once a minute per browser and session, naming
+        the browser and saying to use Chrome, Edge or Firefox (fixed text, never from the server);
+      - one start counts once, however many processes it has. Counts go with the next policy
+        report (`closed`, sent only when there are some, so an older backend never sees the
+        field), are kept if the report fails, and the backend audits each report as
+        `guard.other_browser_closed`. Only known names are accepted.
+    - **Not automatic: uninstall.** Removing one stays the admin-only "Uninstall software" action
+      from the PC's Software tab, decided by a person. That action removes machine-wide installs
+      only; most of these browsers install per user by default, so closing is what reaches them.
+    - Not held by the E8 pilot, like blocked sites: the pilot is about the extension's mode.
+    - **Checked:** `test_other_browsers` (served, listed from inventory without matching
+      "Operations Manager", audited, a zero dropped, unknown names refused); agent
+      `OtherBrowsersTests` (11 match cases including Chrome, Firefox and an unknown
+      `browser.exe` left alone; closed only when asked, once per start, one notice a minute,
+      reported once, kept after a failed report, nothing while dormant); agent suite 440; on
+      screen against the local backend: a PC with Opera GX and Brave in its inventory showed
+      both, and the switch saved as version 17.
+    - **Not checked:** closing a real Opera on a PC. The process list, kill and notice were
+      replaced in tests; that is a VM test.
+  - **As built, slice 7, Microsoft 365 on the PC (18 Nov):** company-account-only for the
+    desktop apps, not only the browser. The extension's header (slice 4) covers browsers;
+    Outlook, Teams, Word and the rest sign in outside them.
+    - **How:** Windows' own tenant restrictions v2, the Group Policy "Cloud Policy Details"
+      (`TenantRestrictions.admx`, shipped with Windows): `tenantid` and `policyid` as strings
+      under `HKLM\SOFTWARE\Policies\Microsoft\Windows\TenantRestrictions\Payload`. Value names
+      and types read from the ADMX on this laptop. Per Microsoft it covers all Office apps,
+      UWP apps, and Edge with every site in it, for sign-in and for SharePoint, Exchange and
+      Graph data; not Chrome, Firefox or .NET apps (the extension covers the browsers).
+      Windows 11, or Windows 10 2004 or later with KB5006738. Microsoft still calls the Windows
+      method "preview".
+    - **Switch:** `microsoft_on_windows` ("Microsoft 365 on the PC too"), off by default,
+      using the two IDs already on the form. It needs no extension; the other services still
+      do.
+    - **Never `enforceFirewall`:** Microsoft warns that without a matching App Control policy it
+      cuts every app off from Microsoft's endpoints. Hostnames and IP ranges are left blank,
+      as Microsoft's own test steps say.
+    - **Writer:** the registry writer Chrome and Edge use (ownership list under
+      `SOFTWARE\SAVIO\BrowserPolicy\Windows`, repair, read-back), reported as "Windows". The
+      payload is one policy, so all or nothing: if Intune or a GPO already sets any part of it,
+      SAVIO writes none of it and shows a conflict. Turned off: SAVIO's values and the keys
+      they leave empty are removed.
+    - **Risk, said on the page:** a wrong ID stops Office signing in on every PC that gets it;
+      try it on one group first (slice 5).
+    - **Checked:** agent test against a throwaway HKCU key (nothing created when unused, the two
+      strings, no `enforceFirewall`, repair, removal with empty keys pruned, someone else's
+      payload left alone and reported); backend (needs the IDs, no extension needed, served,
+      a "Windows" report row kept); agent suite 448; on screen against the local backend:
+      switched on and saved as version 18.
+    - **Not checked:** Windows actually enforcing it. Not on this laptop: a test tenant ID
+      would stop its real Office sign-ins. That is the VM test, with a real Entra tenant
+      (Event Viewer → Microsoft → Windows → TenantRestrictions → Operational).
 - **D3 Extension + native host** 🔒: MV3 extension intercepts paste, file input,
   drag-and-drop, form submit on watched sites; talks only to the local agent via native
   messaging (policy offline, device identity).
+  - **As built, slice 1 (16 Nov, branch `phase-3`):**
+    - **Native host:** `agent/src/AstraAgent.GuardHost`, an exe called
+      `savio-guard-host.exe` that speaks Chrome/Firefox native messaging (4-byte length + JSON,
+      16 MiB cap) and wraps the D4 scanner. It answers with counts, the contact-list flag and
+      keyword *indexes* only, never the text. Anything other than a scan request is refused;
+      a malformed or oversized frame ends the connection.
+    - **Extension:** `extension/`, MV3, one codebase for Chrome, Edge and Firefox. The
+      content script catches paste, drop, file choice and form submit (capture phase); the
+      service worker asks the host; `decide.js` turns the answer into allow / warn / block. It
+      keeps the last 200 events, counts only, in local storage.
+    - **Safe defaults:** log-only unless the admin chooses otherwise; e-mail addresses are
+      counted but never acted on; a scanner that cannot be reached or timed out is never
+      "clean", and warns rather than blocks.
+  - **As built, slice 2 (16 Nov):**
+    - **Shipped with the agent:** a `PublishGuardHost` target in the service project
+      publishes the host into the same folder, so the release workflow, the installer build and
+      `-BuildFromSource` all carry it without a script change. Checked with a publish to a
+      temp folder.
+    - **Settings from the portal:** mode, sites to check, restricted keywords and
+      count-but-ignore kinds are part of the browser policy (`guard_*` fields), validated in
+      the backend and again on the PC. The audit records which fields changed, never the
+      keywords.
+    - **Handed to the extension as managed policy:** Chrome and Edge under
+      `3rdparty\extensions\<id>\policy`, Firefox under `3rdparty.Extensions.<id>` in
+      policies.json. The writer now handles nested policy names: it owns only our extension's
+      branch, leaves other extensions' 3rdparty settings alone, prunes what it emptied, and
+      treats settings someone else wrote for our ID as a conflict.
+    - **Host registration:** while the policy forces the extension in, the agent registers
+      `com.savio.guard` for that browser (HKLM NativeMessagingHosts → a manifest naming the
+      exe and the one extension allowed to start it). The manifests sit in the install folder,
+      where only administrators can write. Removed when the extension no longer is; repointed
+      if someone changes it; an error if the exe is missing.
+    - **Checked:** writer tests for 3rdparty (beside another vendor's, drift, conflict,
+      pruning, Firefox), guard-setting validation, host registration (manifest contents,
+      repoint repaired, removal), backend validation and audit. Nothing was written to this
+      laptop's HKLM or real browsers.
+  - **Not yet:** store listing (extension IDs), a live browser test on the VM, sending the
+    extension's events to the backend (E3), and the D7 dialogs.
 - **E4 Scanner isolation** 🔒: content analysis runs in a separate process with outbound
   network blocked by firewall rule; it talks to the agent over a fixed schema with **no
   free-text field** (category, counts, site, action, hashes of files only).
+  - **As built (17 Nov, branch `phase-3`):**
+    - **The fixed schema** is E3's `GuardEvent`: unknown fields are refused at the host, the
+      service and the backend.
+    - **The scanner process** is `savio-guard-host.exe`, started by the browser, with no
+      network code.
+    - **New, `ScannerFirewall`:**
+      - two Windows Firewall rules block that exe outbound and inbound, on every profile,
+        while any browser is made to run the extension;
+      - checked every cycle; a deleted or switched-off rule is put back and reported, and
+        every write is read back;
+      - when no extension is forced, only SAVIO's two rules are removed;
+      - set through Windows Firewall's own COM interface (HNetCfg.FwPolicy2), not netsh text.
+    - **SAVIO never turns the firewall on.** That is the organization's setting, as in
+      FirewallRemediation. When Windows Firewall is off, or another firewall is registered,
+      the rules are kept and the report says plainly that the block is not enforced (and
+      where to set it instead).
+    - **Reports:** reported as "Scanner" beside the browsers. The portal's per-PC status
+      shows "Scanner's network block: …".
+    - **Checked:**
+      - `ScannerFirewallTests` (4) against an in-memory rule list: both directions and all
+        profiles, idempotent, case-blind paths, repair of a deleted or disabled rule,
+        "did not stick", the not-enforced message, and only our rules removed;
+      - the COM property names were read (only read) on this laptop. Its firewall was not
+        changed.
+  - **Not yet:** a live run on the VM (the rules set by the real service, and a test that the
+    host really cannot connect).
 - **E3 Outbound Ledger:** readable local copy of everything the agent sends + portal page.
+  - **As built, slice 1, the event path (17 Nov, branch `phase-3`):**
+    - **What travels:** the extension → its native host → the service's pipe
+      `SAVIO.GuardEvents` → `POST /agent/guard/events` → AI Guard → "What was found".
+    - **Schema:** fixed, `AstraAgent.Guard.GuardEvent`. It holds a host name, channel, mode,
+      decision, counts per kind, a contact-list flag, a keyword-hit count and a could-not-check
+      flag. Unknown fields are refused at the host, the service and the backend, so text cannot
+      ride along under another name. The host builds the event from those fields, never from
+      the raw message.
+    - **Only notable events:** something found, or could not check. An ordinary paste is not
+      recorded at all.
+    - **Who:** the service takes the person from Windows. The host connects at Identification
+      level, and an anonymous client is refused. The host writes only to a pipe owned by
+      SYSTEM (same ACL as Fix-my-internet), so another user's squatting pipe gets nothing.
+    - **Bounds:**
+      - at most 120 events a minute and 5,000 queued;
+      - batches of up to 500, sent every minute;
+      - kept until the backend has them;
+      - a 422 is dropped rather than retried forever.
+    - **ponytail:** the queue is in memory, so a service restart loses what was not sent.
+      Upgrade path: an append-only file in the service's data folder.
+    - **Backend:** table `guard_events` (migration 0088); events kept 180 days, pruned per
+      device on ingest. Clock errors are dropped. An org without `ai_guard` has its events
+      accepted and dropped.
+    - **Who can read:** summary and list are **admin only**, because they name people.
+    - **Bug fixed on the way:** the host answers `contact_list` / `keyword_hits`, and the
+      extension was reading camelCase names. Contact lists and keywords never triggered a
+      warn or block. `fromHost()` now reads the host's shape, and a test covers it.
+    - **Checked:**
+      - `GuardEventTests` (5), including a real pipe: the user comes from Windows, an
+        anonymous client is refused, junk is dropped;
+      - extension tests (8);
+      - backend `test_guard_events` (5);
+      - migration 0088 up/down/up on Postgres with a real write, and no model drift;
+      - the page on screen, with sample events, against the local backend.
+  - **As built, slice 2, the ledger (17 Nov):**
+    - **Outbound Ledger:** a handler on the agent's API client writes one JSON line per
+      request (time, method, path, status, bytes, body). The bytes recorded are the bytes
+      sent: the body is buffered once.
+    - **Where it lives:** `state\ledger\ledger-YYYY-MM-DD.jsonl` beside the install folder,
+      readable by SYSTEM and Administrators only, kept 14 days. Bodies stop after 20 MB a
+      day; lines carry on.
+    - **Never written:**
+      - headers, so never the device token;
+      - the BitLocker escrow body: the line records the call and its size only;
+      - any property named like a password, token or secret;
+      - any string shaped like a recovery password, wherever it sits.
+    - **Robustness:** a failed request is still written down (status empty). The ledger fails
+      closed on a folder it cannot lock down and never blocks a request.
+    - **Persistent event queue:** `state\guard-events.jsonl` is appended as events arrive,
+      rewritten when the backend takes a batch, and read back and re-checked line by line on
+      start. A torn or edited line is skipped. This replaces slice 1's in-memory ponytail.
+    - **Checked:**
+      - `OutboundLedgerTests` (4): bytes match, the escrow body and secrets never reach disk,
+        a failure is recorded, pruning;
+      - a queue restart test;
+      - all 408 agent tests.
+  - **Not yet:**
+    - the outcome after a warning (went ahead or not), which comes with D7;
+    - a portal view of what each PC sent;
+    - the remote-support (MeshCentral) traffic and update downloads, which do not go through
+      the API client and so are not in the ledger.
 - **D4 Detectors:** Aadhaar (Verhoeff), PAN, GSTIN, card (Luhn), +91 mobile, email,
   IFSC+account; bulk/structured "contact list" detection; admin keywords.
+  - **As built (16 Nov, branch `phase-3`, not pushed):** new library
+    `agent/src/AstraAgent.Guard`. It has no dependencies and does no I/O, so the E4 isolated
+    scanner process can host it.
+  - **`PiiScanner.Scan(text, keywords)`** returns counts per finding, a contact-list flag,
+    keyword hits *by index*, and Truncated / Incomplete flags. **It returns no text from the
+    input**, which is the E4 contract: it says what kind of thing it saw and how much,
+    never the thing.
+  - **Checks beyond the pattern:**
+    - Aadhaar: Verhoeff check digit.
+    - GSTIN: check character.
+    - Cards: Luhn; must start with 2–6; all-same digits rejected.
+    - Bank account: an account number counts only on a line that also has an IFSC code.
+  - **False-positive guard (Spike 3):** an unformatted 12-digit Aadhaar or 16-digit card
+    counts only with a context word within 40 characters ("aadhaar", "uid", "आधार", "card",
+    "visa", "cvv", …), because order and invoice numbers look exactly like them. The
+    formatted forms (4-4-4, 4-4-4-4) count on their own.
+  - **Safety:**
+    - Digits are ASCII only: .NET's `\d` would also match Devanagari digits.
+    - Every regex has a 500 ms timeout; a timed-out scan is reported Incomplete, never
+      clean.
+    - Input is capped at 5M characters, and a capped scan is flagged Truncated.
+    - Admin keywords are matched literally (escaped), as whole words, at most 200.
+  - **Checked:** `PiiScannerTests` (14):
+    - published checksum examples;
+    - each kind found in ordinary text;
+    - bare digit runs needing context;
+    - six look-alikes not reported;
+    - Devanagari digits ignored;
+    - contact list against prose;
+    - keyword semantics;
+    - no input text in the serialised result;
+    - the size cap.
+  - All 323 agent tests on the `phase-3` base pass.
+  - **Speed:** Spike 3 measured these patterns on one core: 10 KB in 5 ms, 1 MB in 55 ms,
+    about 50 MB of memory.
+  - **Not yet:** false-positive rates on real business documents (needs pilot samples), and
+    wiring it into the extension and native host (D3/E4).
 - **D5 Zero-config discovery:** low-priority scheduled file scan → sensitivity map by folder
   (counts only) → suggested policies for the admin to approve.
-- **D7 Coaching:** warn / justify / block dialogs in-page, Hindi + English.
+  - **As built, slice 1, the map (17 Nov, branch `phase-3`):**
+    - **Switch:** "Find where sensitive files are kept" on the Browser policy page
+      (`discovery_enabled`). Off until an admin turns it on; AI Guard only.
+    - **Where the scan runs:** `savio-guard-host.exe --discover <folders>`, started by the
+      service at idle priority. This is the process E4 keeps off the network, and E4's
+      firewall rules now also apply whenever discovery is on. File contents are read only
+      there.
+    - **What it reads:** text-like files and Word / Excel (`.docx` / `.xlsx`, unzipped with
+      the standard library), up to 20 MB each, at most 50,000 files a run.
+    - **What it skips:**
+      - cloud-only OneDrive placeholders (reading one would download it);
+      - hidden, system and linked entries;
+      - AppData, dot-folders and dependency folders;
+      - a zip entry larger than its limit, by its declared size.
+    - **Where it looks:** each real account's Desktop, Documents, Downloads and OneDrive
+      folders, taken from the registry's ProfileList.
+    - **What leaves:** one line per folder where something was found (path, files read,
+      files with findings, counts per kind, contact lists). No file names, no text. The
+      service checks every path lies inside a folder it asked about, and every kind is known.
+    - **When:** weekly, remembered across restarts; a failed run is tried again 30 minutes
+      later.
+    - **Backend:** `guard_discoveries` (migration 0091), one row per PC, replaced by each
+      scan. Fixed schema, unknown fields refused. Admin only, because folder paths name people.
+    - **Portal:** AI Guard → Where data lives: totals, a filter by PC, and folders sorted by
+      files with findings.
+    - **Checked:**
+      - `DiscoveryTests` (4) on a temp tree: CSV, Word and Excel found; hidden, cloud-only,
+        AppData, `.git`, `node_modules` and a fake .docx skipped; no file name or text in
+        the output; size cap; weekly, off when switched off, retried on failure; a path
+        outside the asked folders or an unknown kind refused;
+      - the built host's `--discover` run on a temp folder gave the expected JSON;
+      - backend `test_guard_discovery` (3);
+      - migration 0091 up/down/up with no model drift;
+      - on screen with two sample PCs.
+  - **As built, slice 2, suggestions (17 Nov):**
+    - **Six fixed rules** in `guard_suggestions.py`, each from the org's own evidence (the
+      D5 map and the last 14 days of E3 events) and its current policy:
+      - leave record-only: "redact" if most findings were on AI chat sites, else "warn";
+      - block personal file-sharing sites when contact lists turn up;
+      - turn off private windows when the extension is forced (it does not run there);
+      - turn off extension developer mode when the extension is forced;
+      - add the AI chat sites to a "sites to check" list that leaves them out;
+      - turn on the file check when the browser shows sensitive data.
+    - **Each card says why, in numbers,** and exactly what it will change.
+    - **Apply** goes through the same audited policy update as the Browser policy page, plus
+      `guard.suggestion_apply`. Lists are added to, never replaced. A suggestion that no
+      longer holds is refused (404) and stops showing.
+    - **Dismiss** hides it for good (`guard_suggestion_dismissals`, migration 0092), audited.
+    - **Admin only.** Shown at the top of "Where data lives".
+    - **Checked:**
+      - `test_guard_suggestions` (4): nothing seen means nothing suggested; each rule's
+        evidence and wording; apply adds to the lists, bumps the version, is audited and
+        clears the card; dismiss; roles;
+      - migration 0092 up/down/up with no model drift;
+      - on screen, "Block personal file-sharing sites" applied: policy version 4, the
+        existing blocked sites kept and the new ones added.
+  - **Not yet:** a live run on the VM. (PDF text: done 18 Nov, see "Redact for forms and
+    files" under D7.)
+- **D7 Coaching:** warn / justify / block dialogs in-page, English only (no Hindi anywhere,
+  decided 17 Nov).
+  - **As built (17 Nov, branch `phase-3`):**
+    - **SAVIO's own prompts:** `extension/dialog.js` replaces `confirm()` / `alert()`. It
+      lives in a **closed** shadow root, so the page cannot see inside, restyle it or press its
+      buttons. Only real clicks and keys count. Checked in the browser: the page's own
+      synthetic Escape, Enter and click did nothing.
+    - **Safe by default:** the safe button has the focus, so Enter never sends. Escape
+      cancels. If a page removes the prompt, the held action simply never happens.
+    - **Looks:** light and dark; scrolls on a short window.
+    - **New mode "justify":** to go ahead, the person picks a reason from a fixed list
+      (client asked, manager approved, test data, own information, other work reason). It is
+      a list, not a text box, because the event schema has no free-text field (E4) and that
+      does not bend here. A scanner that could not check still only warns.
+    - **The answer is recorded:** a warn or justify event is held until the person answers,
+      then sent once with `outcome` (proceeded / cancelled) and the `reason` code. The rules
+      are checked in the extension, the agent and the backend: a reason only when going
+      ahead after justify, never otherwise.
+    - **Backend and portal:**
+      - migration 0089 adds `outcome` and `reason`;
+      - the summary counts "went ahead anyway", "stopped" and each reason;
+      - "What was found" shows them per event;
+      - the browser policy page offers "Ask for a reason".
+    - **Fixed on the way:** the extension's store description said nothing is sent to
+      SAVIO's servers. That stopped being true with E3; it now says what is sent (kind and
+      where, never the text).
+    - **English only:** no Hindi anywhere in the product (decided 17 Nov). Every string sits
+      in one table in `dialog.js`.
+  - **Redact (17 Nov):**
+    - **Mode "Hide the sensitive parts":** a paste goes in with each finding replaced by a
+      label (`[PAN]`, `[Aadhaar]`, `[card number]`, `[restricted]`, …), and a small notice
+      says so.
+    - **How:** the scanner's `Redact()` uses exactly the checks `Scan()` uses. A bare order
+      number with no context word stays as it is, in both. Kinds the policy ignores are kept.
+    - **Where it applies:** only a paste could be rewritten at first; forms and text files
+      followed on 18 Nov (below).
+    - **When it cannot redact** (over 5M characters, or a timeout), it warns rather than
+      pasting unchecked text.
+    - **The redacted text** goes back only to the browser on that PC, never into an event.
+  - **Redact for forms and files, and documents read (18 Nov):**
+    - **Forms:** in redact mode, a form's text fields (text and search inputs, text areas) go
+      ahead with findings replaced. They are set the way a page's framework expects (the
+      native setter plus an input event), so a React form sends the new value too. The form's
+      other values (selects, hidden, e-mail, number…) are the fixed rest. Passwords are never
+      read.
+    - **Text files chosen for upload:** each file with a finding is swapped for a copy, same
+      name and type, with the findings replaced.
+    - **The rule that keeps "hidden" honest:** what cannot be rewritten (a form's other fields,
+      a Word or PDF file, pasted or dropped files) must be clean, or could-not-check counts as
+      not clean. Otherwise the person is asked (warn) instead of being told it was hidden.
+      A drop still always warns.
+    - **Documents are read now:** Word and Excel uploads (`.docx` / `.xlsx`) go to the native
+      host as base64 (`scan_file`), which reads them in memory with the same code as the
+      weekly map (`Documents.cs`) and answers with counts only. Old `.doc` / `.xls`,
+      PowerPoint and archives are still "could not check". Up to 5 MB a file, 20 MB a check.
+    - **PDF, the admin's choice:** "Read the text inside PDFs" (`guard_read_pdfs`, off by
+      default) on the policy page. It covers uploads (the extension's `readPdf`) and the
+      weekly map (`--pdf`). Off: an uploaded PDF is "could not check" and the map skips PDFs.
+      - Parser: **PdfPig 0.1.16** (Apache-2.0, pure .NET, no dependencies of its own; NuGet
+        id `PdfPig`). Chosen because a PDF cannot be read without a parser, and this one
+        brings no native code into the process that reads other people's files.
+      - At most 500 pages, 10 seconds, and the scanner's character cap. Encrypted, broken,
+        or slower than that: "could not check". It runs in the host, which E4 keeps off the
+        network.
+      - ponytail: an overrunning parse is abandoned, not stopped (PdfPig has no
+        cancellation). For an upload the host process ends with the check; in the weekly
+        map it can keep a core busy until the run ends. Upgrade path: one child process per
+        PDF, killed at the limit.
+    - **Checked:**
+      - agent `DocumentsTests` (7): a real PDF made with PdfPig read only when chosen; files
+        that are not what their name says, too big, or old Word are null; the host answers a
+        PDF or Word upload with counts and no text, refuses broken data; the weekly map reads
+        a PDF only with `--pdf`. `readPdf` reaches the extension only when on. Agent suite 447.
+      - extension `background.test.mjs` (2), with a fake browser and host: each part
+        redacted; a PAN in the fixed rest or in a PDF means warn; a form sent without its
+        parts warns; a paste is still rewritten whole; documents read by the host; an
+        unreadable one is unknown. `decide` / `mergeScans` tests. Extension suite 20.
+      - backend: the switch is off by default and served to the PC.
+      - in a page, in the browser pane, with the extension's APIs faked and real typing and
+        clicks: the site's own submit handler received `Client PAN [PAN]` with the other
+        fields untouched, and a PAN in a hidden field led to the prompt, and nothing was
+        sent when it was cancelled.
+    - **Not checked:** the file swap in a real browser (a file can only be chosen through the
+      operating system's dialog), and the whole thing with the real host in Chrome. Both are
+      the VM test.
+  - **Approvals (17 Nov):**
+    - **Mode "Needs IT approval":** the prompt offers "Ask IT for approval" or "Don't". A
+      request is an event with `outcome: requested`. The backend turns it into a
+      `guard_approvals` row (migration 0090) and notifies the admins.
+    - **Deciding:** admins approve, for 15 minutes to 8 hours, or deny, under AI Guard →
+      Approvals. Every decision is audited. A request unanswered for a day expires.
+    - **What an approval covers:** that Windows account, that PC, that site, that channel,
+      until that time. Nothing wider.
+    - **How it reaches the PC:**
+      - only PCs whose policy is in approve mode fetch approvals, every cycle, so no other
+        PC makes an extra call;
+      - the service writes them to `HKLM\SOFTWARE\SAVIO\GuardApprovals\<SID>`, a key only
+        that account can read, with no inherited "Users: read";
+      - a standard user cannot write there, so cannot approve themselves;
+      - the host checks it, and the person tries again and goes through, recorded as
+        "went ahead with IT's approval".
+    - **Checked:**
+      - backend `test_guard_approvals` (3): dedupe, approve and serve, audit, other PC gets
+        nothing, deny, expiry, bounds, roles;
+      - agent: store per account, the key's ACL, the host's site / channel / time check, and
+        the worker fetching only in approve mode;
+      - migration 0090 up/down/up with no model drift;
+      - on screen: a request appeared under Approvals, was approved for 1 hour, and the
+        PC's endpoint served it. The prompt and both notices were checked on a test page.
+  - **Not yet:**
+    - a live run with the real service writing HKLM and the host reading it (needs the VM);
+    - redacting files and forms.
 - Actions available: log, warn, justify, redact (where supported), block. Default for a new
   org: **log-only for 14 days** (the pilot mode, E8).
+  - **As built, E8 (18 Nov, branch `phase-3`):**
+    - **When it starts:** the pilot begins when an org first saves its browser policy, and
+      lasts 14 days (`org_browser_policies.pilot_until`, migration 0093). Policies saved
+      before it existed have no pilot.
+    - **What it holds:** until then, the backend refuses any mode but "Record only" (409).
+      This covers the policy page and the suggestions alike, so it is enforced in code, not
+      only in the UI.
+    - **How it ends:** by the date, or when an admin presses "End the pilot now" (audited
+      `guard.pilot_end`). Nothing switches on by itself: the mode stays "Record only" until an
+      admin picks one. The "Ask people before…" suggestion is held back during the pilot, and
+      it is the card that greets its end, with the 14 days' numbers.
+    - **Portal:** a notice above the modes gives the end date and the days left, and the other
+      modes are greyed out until the pilot ends.
+    - **Checked:**
+      - `test_a_new_org_only_records_for_14_days`: refused before and during the pilot, agent
+        served "log", ends by date with nothing switched on, ended early by an admin only,
+        audited;
+      - suggestions: the record-only card is hidden during the pilot;
+      - migration 0093 up/down/up, with a pre-existing policy row kept and given no pilot;
+      - on screen, light and dark: the notice, the greyed modes, and "End the pilot now"
+        (modes enabled, audit row written).
+
+#### 3a security review (17 Nov)
+Three `security-reviewer` passes: the agent, the extension, and the backend with the portal.
+Each finding was checked against the code before it was fixed.
+
+- **Fixed: agent**
+  - **C1:** the Outbound Ledger wrote the generated local-account passwords ("Temporary
+    password: …") to disk. A password written into any sentence is now redacted in the ledger.
+  - **H1:** a user's own `com.savio.guard` under HKCU would win over SAVIO's host.
+    - `NativeMessagingUserLevelHosts=0` for Chrome and Edge.
+    - Firefox has no such policy, so per-user registrations are removed from signed-in
+      hives every cycle and reported as tampering.
+  - **M1:** discovery re-checks every folder for a junction or symlink right before opening
+    it, roots included.
+  - **M2:**
+    - the event pipe always keeps an instance listening, with up to 4 at once;
+    - a 0.5 s read timeout;
+    - a per-account limit of 60 events a minute.
+  - **M3:** folder names below the root go through redaction before they leave the scanner.
+  - **M4:** Firefox's `distribution\` is written to only under Program Files with no link on
+    the way; otherwise the report says to use Group Policy.
+  - **L1:** zip parts are read through a bounded buffer.
+  - **L2:** discovery folders are passed on stdin, so there is no 32K command-line limit.
+  - **L4:** the approvals parent key cannot be listed by users.
+- **Fixed: backend**
+  - **H1:** the "Approval requested" notification no longer names anyone. Notifications
+    reach every role, while who asked for what is for admins only.
+  - **M1:**
+    - `windows_user` must be an account name, with no control or invisible characters;
+    - report names are limited to policy-name characters;
+    - tamper notifications come at most once per PC an hour;
+    - reports from an org without AI Guard are dropped.
+  - **M2:**
+    - events older than 14 days are refused;
+    - a per-PC daily cap of 5,000;
+    - at most 20 open requests per PC, with retention, and pending requests listed first.
+  - **M3:** a decision must quote the request's `requested_at`. A request that changed since
+    the admin looked is refused, and the update matches only a still-pending row, so two
+    admins cannot both win.
+  - **L1:** technicians do not see restricted keywords.
+  - **L2:** the policy and report bodies refuse unknown fields; keywords refuse invisible
+    characters.
+  - **L3:** Apply must quote the changes the admin saw; a policy made invalid is a 409; a
+    double dismiss is harmless.
+  - **L4:** a forced Firefox extension may come only from addons.mozilla.org.
+  - **L5:** discovery `scanned_at` cannot be in the future; paths refuse invisible characters.
+- **Fixed: extension**
+  - **H1:** a file choice is stopped synchronously, before the site sees the files.
+  - **H3:** about:blank, srcdoc and blob frames are covered, and the host comes from the
+    sender's origin.
+  - **M1:** listeners are on `window` in the capture phase.
+  - **M2:** pasted files are checked.
+  - **M3:** unreadable documents are "could not check", never clean.
+  - **M4:** host names are normalized (case, trailing dot, `*.`, URL, punycode).
+  - **M5:** pending events are held in the background and only an id comes back, once.
+  - **M6:** only trusted events count.
+  - **L1:**
+    - the prompt is a top-layer `<dialog>`, so page CSS cannot hide it;
+    - clicks in its first 0.4 s are ignored;
+    - removing it means "no".
+  - **L2:** a WeakSet replaces the DOM flag.
+  - **L3:** mode changes reach open tabs.
+  - **L4:** form text is read with `FormData` and re-submitted with its submitter.
+  - **L6:** counts are limited to known kinds.
+  - **Manifest:** the description is qualified.
+- **Known limits, documented:**
+  - Text a page's own script sends (fetch / XHR / WebSocket), `form.submit()`, clipboard-API
+    reads, DevTools and other browsers are outside what an in-page extension sees.
+  - Binary formats are "could not check", not scanned.
+  - A page that opens its own modal after SAVIO's could sit above it in the top layer.
+  - The Firefox per-user host is removed within a cycle, not prevented; Chrome and Edge
+    refuse it by policy.
+  - Discovery still runs as full SYSTEM. A restricted token is the upgrade path.
+  - Chromium policy ownership is by name: a later GPO for a name SAVIO set is repaired over
+    (review L3, agent).
+  - The firewall rules match by name.
+- **Still to check live, on the VM:** the user-level host refusal in each browser, the
+  pipe under a hostile local user, junction swaps during discovery, and the firewall block.
+
+#### 3a live test on the dev laptop (17 Nov, instead of the VM)
+The phase-3 agent was installed on the dev laptop (LANCE, Windows 11, LocalSystem service, the
+local backend) with the owner's go-ahead, run against real Chrome, Edge and Firefox, then
+removed and the 0.15.0 agent put back.
+
+- **Worked:**
+  - **D10:** policies written to HKLM for Chrome and Edge and to Firefox's `policies.json`.
+    The other tool's `LocalNetworkAccessAllowedForUrls` was left alone and never owned.
+  - **Chrome honoured the policies:**
+    - wetransfer.com was blocked ("Your organization doesn't allow you to view this site");
+    - DevTools off refused remote debugging;
+    - developer mode off stopped an unpacked extension;
+    - `chrome://policy` listed the policies.
+  - **Policy changes:** removed policies were removed. An empty policy removed everything
+    SAVIO set: policies, 3rdparty settings, host registrations, firewall rules, approvals,
+    and the Firefox keys with `savio-owned.json`.
+  - **D3:** the native host was registered for Chrome and Firefox only (Edge had no
+    extension ID). The installed `savio-guard-host.exe`, driven as Chrome drives it, scanned
+    to counts, redacted, refused smuggled text and unknown requests.
+  - **E3:** events went host → SYSTEM pipe → service → backend, attributed to `LANCE\Danish`
+    by Windows. The queue file emptied after upload.
+  - **Ledger:** 486 lines, no Bearer token, no device token, no unredacted password;
+    SYSTEM / Administrators only.
+  - **D7:** a request reached Approvals. Once approved, the host said yes for that site and
+    channel only, within a cycle. The per-account key was readable by that account alone,
+    and the parent key was not listable by users.
+  - **H1 (security review):** fake per-user `com.savio.guard` registrations planted in the
+    real hive were removed within a cycle, reported as `repaired: user-level
+    com.savio.guard`, and raised a "Browser policy tampered" notification.
+  - **E4:** both firewall rules were set on the host exe. The laptop's Windows Firewall is
+    off on all profiles, and the report said so ("not enforced … SAVIO leaves the firewall
+    setting to you").
+  - **D5:** the weekly scan ran: 36 files read, 2 skipped, 2 folders with findings,
+    counts only.
+- **Found and fixed:** a LocalSystem service could not identify an event's sender.
+  Impersonating an Identification-level client of another account failed; the unit tests ran
+  as one account and could not show it.
+  - The service now takes the account from the client process's own token, named by the
+    kernel (`GetNamedPipeClientProcessId`).
+  - The pipe now carries a length, the event and a one-byte answer, so the host knows
+    whether it was taken.
+- **Learned about testing from the Claude app:** registry writes made from inside it are
+  virtualised (MSIX), so they reach neither the browsers nor the service. Test keys were
+  planted as SYSTEM instead.
+- **The extension in real Chrome (manual install):** Chrome refuses an unpacked copy of a
+  force-listed ID ("blocked by the administrator"), so the policy gained `extension_install`:
+  `store` (default) or `manual`. Manual writes everything except the force-install entry, needs
+  developer mode, and has no Firefox install URL. With it, a keyed unpacked copy in a
+  throwaway profile:
+  - read its managed settings and reached the native host;
+  - warn: the prompt appeared; "proceeded" and "cancelled" reached the backend;
+  - justify: the reasons prompt appeared;
+  - redact: "PAN [PAN], card [card number], re [restricted]" was pasted, with the notice;
+  - block: the "SAVIO blocked this" dialog appeared.
+- **Found and fixed in the extension test:** every guard-mode change was reported as
+  tampering ("changed on this PC and put back"), which alerted the admin. The agent cannot tell
+  the org's new value from someone else's. The backend now treats repairs in the first report
+  of a new version as an update. It keeps each PC's last version, so this holds across agent
+  restarts. A planted user-level host is still tampering.
+- **Learned:** an open Chrome re-reads policy on its own 15-minute timer (seen at 17:38, 17:53
+  and 18:08). With the agent's hourly fetch, a mode change reaches an open browser within about
+  75 minutes. A forced Windows policy refresh (`RefreshPolicyEx`) did not shorten this, so the
+  agent does not call it. `chrome://policy` → "Reload policies" applies a change at once.
+- **Not covered here:**
+  - the store-installed extension, which needs the store listing;
+  - a host that really cannot connect, because the firewall is off on this laptop;
+  - a junction swap during a scan.
+- **Left on the laptop:**
+  - an empty Firefox `policies.json` (`{"policies": {}}`), which has no effect;
+  - the agent's admin-only `state` files from the test (ledger, `discovery-last.txt`,
+    `p3test`);
+  - the backup of the 0.15.0 agent, `C:\Program Files\Astra\Agent.bak-p3test` (delete as
+    admin).
+  - The 0.15.0 agent is running again.
+
+### 3c — Smart Guard: what makes it more than a DLP (decided 18 Nov, before 3b)
+Why: a list-and-policy DLP is what the market sells, and it drowns IT in alerts. The Cloud
+Security Alliance's 2026 survey (433 IT/security people): 54% triage alerts that are mostly false
+positives; 9 in 10 felt alert fatigue; only 16% of those who lost data had DLP stop the biggest
+incident first. SAVIO's answer is to read the pattern, rank it, explain it, and act on it.
+
+| Module | Definition |
+|---|---|
+| **C1 Cases, not alerts** | Events are joined into one case per person while they keep coming (48 h). Each case gets a severity from the whole story (how much, what kind, where to, went ahead after a warning, how many places) and the reasons in plain words. Only high-severity cases notify, once per case; the rest wait on the Cases page. IT closes a case as "expected" (optionally "stop raising cases for this site") or "handled"; quiet sites are counted, never hidden. |
+| **C2 File origin** | Where an uploaded file was downloaded from: "this Excel came from your CRM". Feeds C1's severity. (Built from the browser's downloads, not Mark of the Web; see below.) |
+| **C3 Smart USB** | Observe; warn after copy; read-only; company drives only (serial allowlist); encrypted only (BitLocker To Go); **write window on request** (read-only by default; a person asks, IT or the policy opens 30 minutes, everything copied is checked and logged; reuses D7 approvals); block. Per-file "block only sensitive files" needs a signed minifilter driver: later. |
+| **C4 SAVIO acts** | A case offers the fix: USB off on that PC, sign the session out, disable the account, IT approval for that person, through the existing tiers and audit. |
+| **C5 Adaptive strictness** | Controls tighten for one person as their cases rise (warn → approval → block); a resignation flag starts 30 days of watch. Needs the privacy review and the lawyer (with D8). |
+
+**C1 as built (18 Nov, branch `phase-3`):**
+- **Cases:** `guard_cases` + `guard_quiet_sites` (migration 0096). Every event batch updates
+  each person's open case (`guard_cases.update`, called from ingest). A case stays open while
+  events keep coming within 48 h; after that the next event starts a new one. A closed case is
+  never reopened. Events with only ignored kinds (e-mail by default) or nothing checkable are
+  not part of a story.
+- **Score:** fixed code in `guard_cases.score`, explained in its docstring: how it ended (went
+  ahead after a warning 3, record-only 2, blocked or asked IT 1, hidden or stopped 0.5) × where
+  (personal file sharing, personal e-mail, paste sites 3; AI chat, messaging, social 2; a site
+  new to the org this week 2; else 1) × (1 + items/50 + 5 for a contact list + 2 for a keyword),
+  plus 5 per extra site. High ≥ 40, medium ≥ 10. The reasons are written from the same numbers
+  ("350 PANs…", "to wetransfer.com (personal file sharing)", "went ahead after a warning 2
+  times", "across 3 sites").
+- **Noise:** only a high case notifies, once. Notifications are seen by the whole org, so the
+  message names no person and no PC; the case is on the Cases page, admins only.
+- **Closing:** "Handled", or "Expected (normal work)" with an optional quiet site (only a
+  site in that case). A quiet site's events are still stored and shown under "What was found",
+  and counted on the Cases page ("N events in 30 days, not raised"); undo is one click. All
+  audited (`guard.case_close`, `guard.quiet_site_remove`).
+- **Portal:** AI Guard → Cases (first in the group): open / closed, counts by level, quiet
+  sites, each case with its reasons and a per-site table. Fixed on the way: "Browser policy"
+  was lit in the sidebar on every AI Guard page.
+- **Checked:** `test_guard_cases` (3): the score on its own (low, high, medium with a new site,
+  ignored kinds, redaction, spread); one case growing to high with one notification naming no
+  one, admins only; a new case after 48 h, closing rules, quiet sites kept and counted, undo,
+  audit. On screen against the local backend with a made-up PC: three events from one person
+  (personal mail with a contact list, WeTransfer after warnings, a blocked ChatGPT paste) became
+  one high case scored 153 with those reasons; another person's two small pastes one low case,
+  closed as handled from the page.
+- **Not yet:** a daily digest of medium and low cases (needs the J6 alert channels); events
+  older than an open case's start (an offline laptop) stay out of it.
+
+**C2 as built (19 Nov, branch `phase-3`):** where an uploaded file came from.
+- **Not Mark of the Web:** a browser never tells a page or an extension the path of a file being
+  uploaded, so the file's Zone.Identifier can't be read at upload time. Instead the extension
+  sees the downloads themselves (`downloads` permission): each finished download's file name,
+  size and site, kept in the browser's own local storage for 30 days (at most 500). A blob: or
+  data: download is credited to the page it came from.
+- **Matching:** when files are uploaded, dropped or pasted, the most recent download with the
+  same name and size gives the site (`originFor`). An edited file (other size) has none.
+- **What leaves the browser:** the site only, as `origin` on the event, a host name checked by
+  the extension, the agent's `GuardEvent`, and the backend (migration 0097). Never the file name.
+- **Old and new together:** the agent sends `origin` only when it has one; the extension, if
+  an agent from before C2 refuses the event, sends it again without the field.
+- **Cases:** a file downloaded from another site weighs ×1.5 (the same site or one inside it
+  does not count), the site's row shows "Came from", and the reasons say "files downloaded from
+  crm.zoho.com". "What was found" rows carry `origin` too.
+- **Checked:** extension tests (download origin for normal, blob and data downloads; the latest
+  same-name-and-size match; host only; a recorded download then an upload carrying the site and
+  not the name; the resend for an older agent), agent `GuardEvent` (host only, left out when
+  unknown), backend (refused when not a host, stored, shown, the ×1.5 and the reason). Agent
+  suite 449, extension 22.
+- **Not checked:** in a real browser with real downloads. That is the VM test.
+- **Mark of the Web still has a use:** in the weekly file map (D5) and for USB copies (C3),
+  where the agent does see the file on disk. Done with C3.
+
+**C3a as built (19 Nov, branch `phase-3`):** USB drives and phones by Windows' own policies.
+- **Modes** (`usb_mode` on the browser policy, so per group too): off (default; SAVIO leaves
+  USB alone) · read-only · encrypted drives only · read-only with IT write windows · block.
+- **How:** the Removable Storage Access policies and BitLocker's, names and values read from the
+  ADMX templates on this laptop (RemovableStorage.admx, VolumeEncryption.admx):
+  - read-only: `Deny_Write` = 1 under `HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices\`
+    for removable disks `{53f5630d-…}` and the two phone/camera (WPD) classes `{6AC27878-…}`,
+    `{F33FDC04-…}`;
+  - block: `Deny_All` = 1 there;
+  - encrypted only: `RDVDenyWriteAccess` = 1 under
+    `HKLM\SYSTEM\CurrentControlSet\Policies\Microsoft\FVE` (BitLocker To Go), phones read-only.
+- **Writer:** the same owned-names writer as the browsers, reported as "Usb" and
+  "UsbEncryption": an org's own GPO for any of these is a conflict, never overwritten; a key
+  SAVIO has never used is not even created.
+- **Write windows:** in "read-only, IT can allow writing" mode, an admin opens a window for one
+  PC (15 minutes to 8 hours) from the PC list, or ends it early; audited
+  (`guard.usb_window_open` / `_close`, migration 0098). Only PCs in that mode ask for it, every
+  cycle, so it arrives within a minute. The PC keeps the end time and puts read-only back by
+  itself, online or not; the values go and come back as "removed" / "set", never as tampering.
+  A window is not served once the PC's policy leaves that mode.
+- **Checked:** agent tests (each mode's values, inside and outside a window, nothing created when
+  unused, the window going and coming back without a tamper flag, a GPO's value left alone; the
+  worker asking only in that mode, keeping the last end when the backend is unreachable, closing
+  early); backend `test_usb_modes_and_write_windows` (validation, 409 outside the mode, bounds,
+  roles, served to that PC only, PC list, not served after the mode changes, audit). Agent suite
+  451. On screen against the local backend: the mode saved as version 19, a window opened on a
+  made-up PC ("USB writing allowed until 2:54 AM") and ended early.
+- **Not checked:** Windows honouring these on a real drive, and whether a drive already plugged
+  in needs reconnecting. That is the VM test.
+- **C3b next:** observe what is copied to a drive (counts only, scanned by the host) as case
+  events; a person asking for a window from the tray; company drives by serial number.
+
+**C3b, part 1 as built (19 Nov, branch `phase-3`):** what is copied onto USB drives.
+- **Switch:** `usb_observe` ("Record what is copied onto USB drives"), off by default, separate
+  from the USB mode.
+- **Agent:** `UsbCopyWatcher` lists removable drives every 3 s and watches each one. A file is
+  checked once it has been quiet for 5 s (the copy is done), in batches of up to 200, by the
+  native host's new `--scan` mode: the process E4 keeps off the network (its firewall rule now
+  also applies when only this switch is on). The host reads text, Word, Excel and (if chosen)
+  PDF, counts old Office, archives and unread PDFs as "could not check", skips photos and
+  programs, and returns one total. No names, paths or text leave it.
+- **Event:** one per batch, in the same fixed schema as the browser's: site and channel "usb",
+  counts, contact-list flag, keyword hits, "could not check". Credited to the person signed in
+  at the console. Only the service can make one: the pipe the browser side uses refuses
+  channel "usb".
+- **Cases:** a copy to a USB drive weighs like personal file sharing (3) and reads "copied to a
+  USB drive"; the Cases table names it "USB drive".
+- ponytail: the console user, not the copying process's owner (an RDP session's copy is
+  credited to whoever is at the console); upgrade path is the writer's token from an ETW file
+  trace. It sees after the fact; stopping is the USB mode's job.
+- **Checked:** agent `UsbCopyWatcherTests` (the host's scan on real files: totals, contact list,
+  keyword, the archive as could-not-check, the photo skipped, nothing named; settling and
+  batching; nothing recorded when clean, signed out or switched off) and the pipe refusing
+  "usb"; backend (taken, joins the case, weight and wording). Agent suite 454.
+- **Not checked:** a real pen drive. That is the VM test.
+- **Next in C3b:** a person asking for a write window from the tray; company drives by serial.
+
+**C3b, part 2 as built (19 Nov, branch `phase-3`):** company drives only.
+- **Use case:** the company buys a few drives (Tally backups, files for the CA, a client
+  presentation) and only those work; a personal pendrive does not; a lost company drive is
+  removed from the list. The write window stays for one-off needs.
+- **Mode:** `usb_mode` "company_drives", with `usb_approved_drives` ({id, name}, at most 100) in
+  the policy itself, so approving or removing a drive is a new version (never mistaken for
+  tampering) and a group can have its own list. Phones are read-only in this mode.
+- **How (no driver):** Windows' Device Installation Restrictions (DeviceInstallation.admx, read
+  on this laptop) under `HKLM\SOFTWARE\Policies\Microsoft\Windows\DeviceInstall\Restrictions`:
+  `AllowDenyLayered` = 1 (Windows 10 21H2+), `DenyDeviceIDs` = 1 with list `USBSTOR\Disk`,
+  `DenyDeviceIDsRetroactive` = 1 (a personal drive used before stops working too), and
+  `AllowInstanceIDs` = 1 with the approved drives' exact instance IDs. `USBSTOR\Disk` is the
+  compatible ID of USB mass-storage disks only: this laptop's own NVMe disk is `SCSI\Disk`
+  (checked), so internal disks, keyboards, mice and phones are never caught. The disk *class*
+  was deliberately not used: it would include internal disks.
+- **Writer:** one policy, all or nothing (as for Microsoft 365 on the PC): anything else under
+  Restrictions (Intune, a GPO) means SAVIO writes none of it and reports a conflict. Rewritten
+  when it drifts (repair), removed with its empty keys when the mode changes, untouched if never
+  used. Reported as "UsbDevices" ("Company drives").
+- **Drives seen:** the agent reads the USB disks Windows has installed
+  (`Enum\USBSTOR\Disk&…\<instance>`: ID, name, and whether the serial is the drive's own; Windows
+  makes one up, "7&…&0", for drives without one, and that one changes with the USB port), up to
+  50, and sends them with the policy report when they change, only while AI Guard is on
+  (migration 0099 keeps them per PC). `GET /guard/drives` lists them for admins with the PCs
+  they were seen on and the policies that approve them.
+- **Portal:** "Company drives only" in the USB setting opens the approved list (remove) and
+  "Drives seen on your PCs" (name it, Approve; saved with the policy). Warns when none is
+  approved ("no USB drive will work") and on drives with no serial of their own.
+- **Checked:** agent tests (the values written, `USBSTOR\Disk` only, idempotent, repair, no empty
+  allow list, removal with empty keys, someone else's restrictions left alone, drives read from a
+  sandbox Enum with the made-up-serial flag, CD drives skipped, IDs validated; the worker sending
+  drives on change and only while on); backend `test_company_drives` (reports, an internal disk
+  refused, names cleaned, admins only, approval as a new version with dedupe, served, approved
+  where, bad names and IDs refused). Agent suite 457. On screen against the local backend: a
+  made-up PC's two drives listed (one flagged "no serial of its own"), one approved as "Accounts
+  drive 1" and saved as version 20; the local policy then set back to off (version 21).
+- **Not checked:** Windows actually refusing an unapproved drive and accepting the approved one,
+  and the retroactive removal. That is the VM test, with two real pendrives.
+- **Next in C3b:** a person asking for a write window from the tray.
+
+**C3b, part 3 as built (19 Nov, branch `phase-3`):** asking IT for USB writing from the tray.
+- **Tray:** "Ask IT to allow USB writing…" appears only on a PC whose policy is "read-only, IT can
+  allow writing" (the tray asks the service each time the menu opens); while a window is open it
+  reads "USB writing allowed until 14:30". The person picks a reason from a fixed list (files for
+  a client, CA or auditor · a company backup · a presentation or meeting · another work reason),
+  never typed text, and gets a balloon saying whether it was sent.
+- **Service:** a new local pipe, `SAVIO.UsbRequest`, with two requests (`status`,
+  `request:<reason>`), the same rules as Fix-my-internet (SYSTEM-owned, signed-in people only,
+  no network; the tray refuses a pipe not owned by SYSTEM). Who asks is read from the client
+  process's own token, as for the browser's events, never from the message.
+- **Backend:** `POST /agent/usb-request` (409 unless the PC's own policy is on_request). It is an
+  approval request with channel "usb" and the reason code (migration 0100), in the same queue,
+  limits and notification ("…approve USB writing on their PC", naming nobody). Approving it for N
+  minutes opens that PC's write window until then; it is not served to the browser's host as a
+  site approval.
+- **Portal:** Approvals shows "wants to copy files onto USB drives · Reason: …"; "What was found"
+  now names the "usb" channel ("Copied to USB"), which part 1 had left unlabelled.
+- **Checked:** agent `UsbRequestPipeTests` (status per mode and window; a listed reason only; the
+  person from Windows over a real pipe; nothing sent outside the mode, while open, or without a
+  person; unreachable backend), tray builds; backend `test_usb_requests_from_the_tray` (409
+  outside the mode, bad reason / account / extra field refused, asked twice is one request,
+  reason shown, notification naming nobody, approving opens the window, not a site approval).
+  Agent suite 460. On screen against the local backend: a made-up PC in a group whose own policy
+  is "write on request" asked (reason: a presentation); the request showed on Approvals with its
+  reason and was approved for 30 minutes.
+- **Not checked:** the tray menu and dialog on a real desktop with the real service. That is the
+  VM test.
+
+**C4 as built (19 Nov, branch `phase-3`):** SAVIO acts on a case.
+- **What it offers,** per PC the case happened on (`GET /guard/cases/{id}/actions`, admin):
+  block USB storage there; tell the person to stop (a message on their screen, text editable);
+  lock their screen; sign them out (unsaved work lost, said in the label); disable their
+  account on that PC. All existing remediation actions, nothing new on the agent.
+- **Only what can be done now:** the session actions need the person signed in on that PC
+  (their session ID from the PC's own session list), else "ravi is not signed in on CASE-DEMO
+  now"; disabling is offered only for a local account (DOMAIN = the PC's name), else "a domain
+  or Microsoft account: disable it in Active Directory or Entra"; USB block not if already
+  blocked.
+- **Through the existing tiers:** the portal runs each with the ordinary remediation endpoint,
+  the admin clicking being the approver, after a confirm step; tier rules, audit and the
+  Remediation page apply unchanged. The task's reason names the case ("AI Guard case: 300
+  PANs to wetransfer.com"). The AI is never handed these: they are an admin's choice on a
+  case (lock and message stay operator-only).
+- **Checked:** `test_a_case_offers_fixes_through_the_existing_tiers` (the five actions; lock not
+  offered until the person is signed in, then with their session ID; the default message;
+  admins only; one run through `/remediations` with approve; a domain account's disable refused
+  with the reason). On screen against the local backend: the made-up CASE-DEMO case listed
+  "Block USB storage on CASE-DEMO" and "Disable ravi's account", the session actions marked
+  "not signed in", and the USB block sent after the confirm step.
+- **Not checked:** the actions running on a real PC from a case (each action itself is already
+  covered by its own tests). That is the VM test.
+
+**S1 as built (19 Nov, branch `phase-3`):** SAVIO names sites the fixed list does not know.
+- **When:** after a batch of events arrives, off the response path (`guard_sites.classify_new_sites`,
+  a background task like Tracker's), the org's sites from the last 30 days that the fixed list
+  does not cover go to the AI, at most a dozen a pass, by registrable domain (one answer covers
+  every subdomain). USB and intranet names are never asked about. No AI key: nothing happens.
+- **Kept once, for everyone:** in Tracker's global `learned_categories` store with kind "guard";
+  no new table. A site is asked about once, ever.
+- **What the model may say:** one key from a fixed list (the six site categories, "business"
+  for a work tool, "other"). It sees host names only, never content, counts or people; the
+  system prompt says host names are data, not instructions; an answer for a host it was not
+  asked about, or a key not on the list, is dropped. A hostile host name can at worst be filed
+  under the wrong kind.
+- **Cases:** the fixed list first, then the AI's kind. A risky one weighs as its kind, and the
+  reason says "(personal file sharing, recognised by SAVIO)"; a business tool or "other" weighs 1
+  and is not counted as new.
+- **Suggestion:** "Block N risky sites SAVIO found": AI-recognised personal file sharing, personal
+  e-mail or paste sites that sensitive data went to in 14 days and that no list blocks; Apply adds
+  them to the blocked sites (audited, a new version). Keyed by the set of sites, so a site found
+  later brings a new card even after one was dismissed.
+- **Checked:** `test_guard_sites` (only unknown internet sites asked about, the list first, a
+  hostile-looking name treated as a name; the case reason and weights; with a stand-in model: no
+  key no call, two learned, an unasked host and an off-list key dropped, asked once only, the
+  listed site never sent; the suggestion's wording and change, applied, then gone).
+- **Not checked:** the real model's answers (no AI key locally, by design: no production secrets
+  on this laptop). Worth a look on staging with a few real sites.
+
+**S3 as built (19 Nov, branch `phase-3`):** productivity suggestions, where the org has Tracker too.
+- **Data:** Tracker's `daily_app_usage` for the last 14 days, websites only (apps skipped), as
+  org totals per site: minutes a day and how many people. Never who: the cards name sites and
+  numbers only, in line with Tracker's red lines. Without the Tracker add-on: nothing.
+- **"Block N time-wasting sites":** sites Tracker counts as unproductive, 30+ minutes a day
+  across the org and 3+ people, not already blocked ("instagram.com takes 2.5 hours a day across
+  14 people"). Apply adds them to the blocked sites (audited, a new version).
+- **"Count N sites as unproductive?":** sites Tracker counts as neutral that still take an hour a
+  day across 3+ people, "your call: they may be work". Apply adds Tracker domain overrides
+  (audited as `workforce.categories.update`, "via AI Guard suggestion"); the browser policy is
+  untouched. A site the admin already classed is never suggested again, though its stored days
+  may lag until Tracker's next recompute.
+- Both are keyed by their set of sites, like S1's card.
+- **Checked:** `test_time_sinks_from_tracker_are_suggested_in_org_totals` (nothing without Tracker;
+  the block and the unproductive card with their numbers; two people is not enough; no name or app
+  in any card; applying one changes Tracker only, the other the policy; both gone after).
+- **Not in S3:** blocking only during work hours. Chrome and Edge have no time-of-day block list;
+  it would mean the agent switching the policy by the clock. Later, if asked for.
+
+**S5 as built (19 Nov, branch `phase-3`):** the AI Guard part of the owner's brief.
+- **Where:** J1's brief (Reports → Brief, Today / This week, "Email it to me") gains an "AI Guard"
+  section when the org has the add-on; nothing new to schedule, and a scheduler can still call
+  `build` / `send` unchanged.
+- **Lines, all counts from SAVIO's records, no sentence written by a model:** cases opened by
+  level (or "nobody's handling of sensitive data stood out"); how often sensitive data was
+  stopped or hidden; how often people went ahead after a warning; the change against the period
+  before; USB copies with sensitive data; other browsers closed; sites SAVIO newly recognised;
+  SAVIO's top two suggestions.
+- **Needs your attention:** high cases still open; requests waiting for IT.
+- **Never who:** technicians read and e-mail the brief too, and cases name people, so no person
+  is named.
+- **Checked:** `test_weekly_brief_has_an_ai_guard_section_in_counts` (no section without the
+  add-on; the case, stopped, went-ahead, USB and trend lines; the open high case in "Needs your
+  attention"; no name anywhere). The portal's Brief page and the e-mail render sections
+  generically, so it appears in both without a portal change.
+
+S1–S5 (AI site intelligence, pattern suggestions, productivity suggestions with Tracker,
+learning from the admin, weekly brief) fold into C1–C4 as they are built: C1's site weighting
+is where S1's AI site categories plug in.
 
 ### 3b — Compliance packs
 - **I1 DPDP Autopilot:** data map (from D5), safeguards evidence (F1), retention
@@ -1010,6 +2047,229 @@ lawyer review of docs + DLP/employee-monitoring opinion; employee notice templat
   evidence tools with citations; unanswerable rows marked as gaps with a fix link.
 - **J3 Board report, J4 Compliance packs, J7 Incident report:** print-styled pages (same
   approach as L1).
+
+**I1, slice 1 as built (19 Nov, branch `phase-3`):** DPDP readiness from SAVIO's own records.
+- **Where:** AI Guard → DPDP readiness (`GET /guard/dpdp`, admin; behind the AI Guard add-on).
+- **Score and tasks:** the share of eleven items in place, each with SAVIO's evidence in numbers
+  and a link to where it is fixed: the weekly file map has run in the last 8 days; BitLocker,
+  Defender and the firewall on 90% of PCs and updates on 80% (F1's checks); the extension in place
+  and acting (past record-only); USB controlled or recorded; company accounts only; no high-risk
+  case open over a week; a named privacy and breach contact; and the audit log (always in place).
+- **Data map:** personal data kept on PCs by kind (D5's totals, contact lists), and where it went
+  in 30 days by kind of destination (personal file sharing, AI chat, USB…, using S1's kinds).
+- **Contact:** `PUT /guard/dpdp/contact` (name, e-mail; validated, audited as
+  `dpdp.contact_update`), kept in organization settings (migration 0101).
+- **No legal claims:** each item says why it matters in plain words; the page and the answer carry
+  a fixed line that this is not legal advice and the Act's and Rules' requirements are for the
+  org's counsel to confirm. Obligations and timelines stay out until the lawyer has confirmed them.
+- **Checked:** `test_dpdp` (the eleven items; done/to-do from real records; a map, a name, the
+  extension acting, USB and company accounts turning items done; the map's kinds and
+  destinations; bad name / e-mail / extra field refused; admins only; audit). On screen against
+  the local backend: 36% with seven to-dos and their evidence, then 45% once a contact was saved.
+- **Next in I1:** retention suggestions and the breach workflow (with J7, the incident report).
+
+**I1, slice 2 as built (19 Nov, branch `phase-3`):** retention suggestions and the breach workflow.
+- **Retention:** the weekly file map (D5) now counts, per folder, the files with personal data
+  not written to in two years (`old`; a count, never a date or a name). The agent checks it is
+  no more than the files with findings, and so does the backend; agents before this send none
+  and their folders are left out, not counted as zero. DPDP readiness gains a twelfth item (done
+  when at most 10% are old) and a "Still needed?" list of the ten folders with the most, by PC,
+  for the owner to delete or move to a restricted archive.
+- **Breach records:** AI Guard → Breach records (`/guard/incidents`, admin), started on their own
+  or from a case ("Treat as a possible breach"). Facts (title, what happened, when found, data
+  involved, about how many people) and six steps: stop it, work out what and whose, ask counsel,
+  report to the Board *if counsel says so*, tell the people affected *if counsel says so*, fix the
+  cause. Each step records when, by whom and a note; only the two reporting steps can be "not
+  needed", and the record closes only when every step is settled. No deadlines are stated: the
+  clock is time since it was found. Every change is audited (`dpdp.incident_open` /
+  `dpdp.incident_update`) and the audit entries are the record's timeline. Migration 0102.
+- **J7 incident report:** the record page printed (browser print-to-PDF, as L1): facts, the case,
+  the steps, the timeline and the not-legal-advice line.
+- **Checked:** `test_guard_incidents` (bad text, future time, unknown kind, extra field, another
+  org's case refused; steps with who and notes; "not needed" only for reporting; no closing
+  before every step; reopen; timeline in order with names; another org's record is a 404;
+  admins only), `test_dpdp` (the retention item and list) and `test_guard_discovery` (the old
+  count kept or absent, and refused when impossible); agent `DiscoveryTests` (an old letter
+  counted; an impossible count not sent). On screen against the local backend: 12 items with
+  the retention list; a record started from a high case, steps settled with a note and "not
+  needed", closed, and its timeline.
+- **Needs the VM test:** a real scan reporting `old` (agent change; released with the phase).
+
+**J3 and J4 as built (19 Nov, branch `phase-3`):** printable pages from SAVIO's own records
+(browser print-to-PDF, as L1), behind the same entitlement as the rest of Reports.
+- **J3 Board report** (`GET /reports/board?days=30|90`, staff; Reports → Board report): a month
+  or a quarter on one page. Tiles (IT health as in L1, fixed by SAVIO and hours, ₹ saved,
+  DPDP readiness and breach records with AI Guard), the top five risks from the health check
+  with what to do, and the brief's sections for the period (J1 gains "month" and "quarter").
+  Counts only, never a person's name, so technicians can print it.
+- **J4 Compliance pack** (`GET /reports/compliance-pack?days=30|90`, admin; Reports →
+  Compliance pack): endpoint security per check and per PC (F1, USB posture), who can do what
+  (active users by role, staff by name, accounts switched off), the record of changes (audit log
+  counts by action) and, with AI Guard, data protection (the twelve DPDP items with evidence, the
+  contact, the retention list and the period's breach records). The admin ticks which parts go
+  in. A fixed line says it is evidence, not a certificate, and claims no standard is met.
+- **Checked:** `test_board_pack` (month / quarter, other periods refused, users refused; tiles
+  and sections; AI Guard numbers only when entitled, and no name in the report; the pack admin
+  only, PCs, roles, staff, change counts, data protection with the breach record). On screen
+  against the local backend: both pages with live data, the part switches, and the links on
+  Reports.
+
+**I4 as built (19 Nov, branch `phase-3`):** the Client-Audit Pack.
+- **Where:** Reports → Client-Audit Pack (`/audit-packs`, admin), behind a new `audit_pack`
+  add-on in no plan: the operator turns it on per org on the platform org page (every
+  questionnaire costs model calls).
+- **Upload:** an .xlsx or .csv up to 2 MB and 300 questions, sent as base64 JSON (no multipart
+  dependency) and read with the standard library: zip entry sizes capped before inflating, and
+  Python's expat refuses entity expansion. The column with the most question-length cells is
+  the question column; headers and section titles are skipped. Only the questions are kept.
+- **Evidence:** a fixed list of facts from SAVIO's records, each with a key, label and link:
+  the fleet and every F1 check in counts, USB, roles, the audit log, the fix tiers and, with AI
+  Guard, the twelve DPDP items and the breach workflow.
+- **Answering:** in the background, 25 questions a call, the model sees the evidence and the
+  questions (framed as data from someone else's file) and nothing else: no tools. Its JSON is
+  checked: citations must be evidence keys, an answer citing nothing becomes a gap, a question
+  left out is a gap. One questionnaire answering at a time per org; a run cut off shows as
+  failed after 30 minutes. No AI key, no upload (503): nothing is sent anywhere.
+- **Review and export:** each row shows the answer and links to its evidence; an admin edits an
+  answer or marks a gap (their name on it, audited), then downloads a CSV (audited) with every
+  cell that could be a spreadsheet formula escaped. Delete is audited too.
+- **Checked:** `test_audit_pack` (questions from CSV and xlsx with inline and shared strings and
+  an invisible character; wrong type, broken zip, no questions, over 2 MB, over 300, zip bomb
+  refused; the add-on, admin only, no AI key; the model's prompt has the evidence and the
+  questions as data and no tools; a made-up citation demoted, a missing answer a gap, an extra
+  one ignored; edit with name; CSV formula escaping; audit; one at a time; another org's 404;
+  delete; a model failure shown on the pack). On screen with a stand-in model on the local
+  backend: an 8-question CSV uploaded through the page, 7 answered with evidence links and one
+  gap, the gap edited, the CSV downloaded.
+- **Needs staging:** the real model's drafts (no AI key locally).
+
+#### 3b security review (19 Nov)
+Three `security-reviewer` passes over everything after the 3a review (cca65c5..4b72e7c): the
+agent, the extension (with the host code it calls), and the backend with the portal. 6 High,
+6 Medium, 10 Low, no Critical. Each finding was checked against the code. Batch 1 fixed:
+- **Extension**
+  - **H1:** after one allowed upload, the next file chosen in the same input skipped the check
+    (a "checked" mark outlived the re-sent events). The mark is gone: re-sent events are
+    untrusted and pass anyway. If the person chooses again during a check, that result is not
+    applied to the new choice (part of M1).
+  - **H2:** past 10 documents or 200 text files the rest were silently unscanned. Now the whole
+    check is "could not check".
+  - **H3:** text past the scanner's limit counted as clean. The host's `truncated` now makes a
+    scan incomplete, and the agent's document and text readers return "could not check" for
+    anything longer than they read, instead of cutting it.
+  - **L1:** tenant and org IDs in capitals were dropped silently; any case is accepted, sent in
+    lowercase.
+- **Agent**
+  - **H1:** the USB scan runs as SYSTEM on paths a user controls, and followed links: a junction
+    plus an object-manager link could make SYSTEM authenticate to an attacker's SMB server.
+    Now: Redirection Guard on in `--scan` and `--discover` (Windows 11 22H2+), no reparse point
+    anywhere on the path, the final path of the opened handle must be on the same drive, and the
+    bytes are read from that handle (`SafeOpen`). On older Windows a race at the open remains;
+    the upgrade path is running the scan as the console user.
+  - **M2:** a failed scan, a watcher overflow, or more than 5,000 pending files were recorded as
+    nothing. They are recorded as "could not check". USB hard drives and SSDs (Windows calls them
+    Fixed) are watched too, found by the disk's bus type; never the system drive.
+  - **L2:** a drive ID Windows made up (no serial of its own) cannot be approved: agent and
+    backend refuse it, and the portal says why instead of offering Approve.
+  - **L3:** "too many requests" now returns 429, and the Tray says so instead of "sent".
+- **Backend**
+  - **M1:** a tiny .xlsx naming a far-off column made the reader build a huge row. Columns stop
+    at three letters (Excel's XFD), rows are sparse, the parse runs off the event loop, and a bad
+    zip checksum or an over-long CSV field is a 422.
+  - **M2:** technicians could read breach-record text and step notes in the audit log, and case
+    reasons in remediation tasks. The audit now holds which fields and steps changed, never the
+    words, and case actions carry the fixed reason "AI Guard case".
+  - **L1:** S1 asks the model at most once per org every ten minutes.
+  - **L4:** the high-case notification, which every role sees, no longer carries the reasons.
+  - **L5:** a device can add at most one "other browser closed" audit row an hour.
+  - Two 500s: applying a Tracker suggestion with no browser policy, and the file errors above.
+- **Live test on a real PC (19 Nov, this laptop, agent 5c2e472 + fix, local backend):**
+  - **Works:** USB copy recording (counts only, the console user; PDFs read too); read-only;
+    write on request end to end (tray → IT approves → ban lifted in 35 s); company drives
+    blocking a new drive and allowing an approved one; the file map with PDFs and the two-year
+    count; paste and PDF-upload warnings with "proceeded" recorded; Microsoft tenant header in
+    the browser; Windows TRv2 correctly left alone where the company already sets it.
+  - **Fixed the same day:** `readPdf` (a boolean) was not writable to the Chrome/Edge registry,
+    so with PDF reading and an extension ID set the whole policy cycle threw and Edge, Firefox
+    and USB were skipped too. Booleans are now DWORD 0/1, and an unexpected value fails only
+    that browser.
+  - **Found, for batch 2:**
+    - **USB rules apply only on plug-in.** Read-only, write windows and company drives need the
+      drive replugged. A drive already in stays writable when read-only starts or a window
+      ends. A drive used before company-drives mode keeps working, and an approved drive that
+      was blocked earlier stays blocked, until its device entry is removed. The agent should
+      remove the device entries of USB disks (and remount) whenever the USB mode or approvals
+      change.
+    - **Pages that write their own iframes:** no check on the w3schools "Try it" file input
+      (worked on a plain page).
+    - **Policy changes reach a PC within the hour** (fetched hourly). Fine as designed, but the
+      portal should say so.
+    - **A self-contained tray build loops on start** (the hand-off relaunches the same exe).
+      The release ships framework-dependent, so this is test-only, but the hand-off should
+      refuse to relaunch itself.
+  - **Not tested here:** the USB link test (the pendrive is FAT32); USB hard drives; closing
+    other browsers (none installed).
+- **Batch 2, part 1 (20 Nov, tested on this laptop):**
+  - **Excel and CSV headings (review H4):** .xlsx is read as rows (shared strings back in their
+    cells, a tab between cells, a form feed between sheets; text no cell shows is scanned too),
+    and a bare number counts as Aadhaar or a card when its column's heading says so; in a table
+    with an account column only that column's numbers are account numbers. Live: a made-up HR
+    sheet copied to USB was recorded as 5 Aadhaar and 5 bank accounts (it scanned clean before).
+  - **USB 3 drives (review H2):** company drives block the USB mass-storage interface
+    (`USB\Class_08`), which serves UASP drives too, and approve a drive by its USB ID
+    (`USB\VID_xxxx&PID_yyyy\serial`); drives are recognised by their compatible IDs, so one Windows
+    refused is still listed. Approvals made before name the disk and are translated on the PC.
+    Agent, backend and portal accept both forms. SD cards in a PCIe reader are not covered.
+  - **USB rules apply now (live finding):** when the USB mode, the approved drives or the write
+    window changes, the agent reinstalls the drives it affects (safe removal first: a drive with
+    files open refuses and is reported, keeping the old rule until unplugged). Kept per PC, so a
+    restart does not redo it and a new install with USB off touches nothing. Live: unapproved
+    drive gone, approved drive back, read-only and back to off, all without unplugging.
+  - **Memory limit (review M1):** the scanner puts itself in a job object capped at 1 GB however
+    it was started.
+  - **Tray hand-off:** a self-contained build starts the live copy's own exe instead of itself.
+  - **Portal:** says a change reaches each PC within the hour.
+- **Batch 2, part 2 (20 Nov): company accounts hardened (review M2, the user's choice: block
+  other extensions, with an allowed list).** With a company-accounts rule SAVIO's extension
+  enforces (Microsoft in the browser, Claude, ChatGPT, Slack) and SAVIO's extension in a browser:
+  Chrome and Edge get private windows and guest mode off, `ExtensionInstallBlocklist ["*"]` and
+  `ExtensionInstallAllowlist` of SAVIO's extension plus the admin's Chrome/Edge IDs; Firefox gets
+  private browsing off and every extension blocked except SAVIO's and the admin's Firefox IDs.
+  New policy field `extension_allowlist` (50 IDs, Chrome/Edge or Firefox form, checked in the
+  backend and on the PC); the portal explains what turning company accounts on does. Live on
+  this laptop: the other extensions in every Chrome profile blocked, SAVIO Guard still on,
+  incognito refused; all of it removed again when the rule was taken off.
+- **Batch 2, part 3 (20 Nov):**
+  - **Rewritten frames (live finding):** a page that rewrites a frame with `document.open()` erased
+    the extension's listeners there; they are attached by one function, again whenever the
+    document is rewritten. Live: a file chosen in a self-written frame was checked.
+  - **Form changed during the check (review M1):** just before sending, the form is read again;
+    anything changed beyond what SAVIO hid is checked again (twice at most, then not sent). Live:
+    a field a page script filled while the prompt was open got its own warning.
+  - **Download origin (review L2):** shown as "likely came from" with a tooltip, case reasons say
+    "files that look downloaded from …", and private-window downloads are not remembered.
+  - **Cases (review L2, L3):** each site shows the PCs its events came from; a case is scored on
+    its latest 2,000 events.
+  - **Other browsers (review L1):** found by the file's own name too (a renamed portable browser),
+    with version info cached per file; closed through the handle opened when found, after
+    checking it is still the same file.
+- **USB link test, live (20 Nov):** on an NTFS pendrive, a file with 1 PAN written to
+  `E:\J\kyc.csv`, then `E:\J` swapped within the settle time for a junction to a folder on C:
+  whose `kyc.csv` holds 3 PANs. The SYSTEM scan refused the link and recorded "could not check"
+  with no counts: nothing outside the drive was read (review 3b H1).
+- **Batch 2, still to do:** watching a USB hard drive or SSD (needs one; the VM test).
+- **Batch 2, as first listed:**
+  - **Agent H2:** company-drives mode misses USB 3 (UASP) drives and SD cards. Needs blocking
+    by `USB\Class_08` and approval by the USB parent ID.
+  - **Extension H4:** in .xlsx files, number cells lose the column headings their detectors
+    need.
+  - **Agent M1:** the PDF and Office readers need a memory limit (a job object).
+  - **Extension M1:** the rest of the check-to-send gap on forms.
+  - **Extension M2:** company accounts only should force incognito off and block other
+    extensions when on.
+  - **Agent L1:** close other browsers by handle and by version info.
+  - **Backend L2/L3:** which PC each case event came from; cap events scored per case.
+  - **Extension L2:** show the download origin as "likely source".
 
 ---
 

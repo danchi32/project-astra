@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Phase 3 · D3: the native messaging host the SAVIO browser extension talks to. The browser
+       starts it per connection, as the signed-in user. It scans text with AstraAgent.Guard
+       and answers with counts only. It has no network code: E4 will also firewall it. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>savio-guard-host</AssemblyName>
+    <RootNamespace>AstraAgent.GuardHost</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AstraAgent.Guard\AstraAgent.Guard.csproj" />
+    <!-- PDF text for uploads and the file map, only where the org turns it on. Pure managed code,
+         Apache-2.0, no dependencies of its own on net8.0. -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AstraAgent.Service.Tests" />
+  </ItemGroup>
+
+</Project>

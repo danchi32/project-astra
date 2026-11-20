@@ -548,6 +548,30 @@ export default function ReportsPage() {
       </div>
 
       <HealthCheckLink />
+      {/* J3 / J4: printable pages. The pack names staff and PCs, so it is offered to admins only. */}
+      {isStaff && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Link href="/reports/board" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+            <BarChart3 size={18} style={{ color: "var(--accent)" }} />
+            <span><strong>Board report</strong> — the month or quarter on one printable page</span>
+          </Link>
+          {me?.role === "admin" && (
+            <Link href="/reports/compliance-pack" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+              <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
+              <span><strong>Compliance pack</strong> — the evidence an auditor, insurer or client asks for</span>
+            </Link>
+          )}
+          {me?.role === "admin" && me.entitlements?.includes("audit_pack") && (
+            <Link href="/reports/audit-pack" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
+              <ShieldCheck size={18} style={{ color: "var(--accent)" }} />
+              <span><strong>Client-Audit Pack</strong> — a client&apos;s security questionnaire, answered from SAVIO&apos;s evidence</span>
+            </Link>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-1 border-b" style={{ borderColor: "var(--border)" }}>
         {TABS.filter((t) => !["ai-safety", "value", "brief"].includes(t.key) || isStaff).map(({ key, label, icon: Icon }) => (

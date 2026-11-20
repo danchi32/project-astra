@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin, utcnow
@@ -55,6 +55,10 @@ class OrganizationSettings(TimestampMixin, Base):
         Integer, nullable=False, default=15, server_default="15"
     )
     it_hourly_cost: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # I1: who handles privacy complaints and data breaches for the org (DPDP readiness).
+    privacy_contact_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    privacy_contact_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False

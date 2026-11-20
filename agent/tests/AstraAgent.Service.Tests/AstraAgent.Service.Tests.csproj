@@ -16,6 +16,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AstraAgent.Service\AstraAgent.Service.csproj" />
     <ProjectReference Include="..\..\src\AstraAgent.Tray\AstraAgent.Tray.csproj" />
+    <ProjectReference Include="..\..\src\AstraAgent.Guard\AstraAgent.Guard.csproj" />
+    <ProjectReference Include="..\..\src\AstraAgent.GuardHost\AstraAgent.GuardHost.csproj" />
   </ItemGroup>
 
 </Project>

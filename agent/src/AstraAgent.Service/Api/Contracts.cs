@@ -208,3 +208,96 @@ public sealed record RemoteSupportPlan(
     // Sent rather than hardcoded so the agent and the relay's agentCustomization cannot
     // drift: it is the Windows service name AND the registry key the node id lives under.
     [property: JsonPropertyName("service_name")] string? ServiceName = null);
+
+/// <summary>Phase 3 · D5: one folder where the scan found something, in counts. Never a file
+/// name, never text.</summary>
+public sealed record DiscoveryFolder(
+    [property: JsonPropertyName("path")] string Path,
+    [property: JsonPropertyName("files")] int Files,
+    [property: JsonPropertyName("files_with_findings")] int FilesWithFindings,
+    [property: JsonPropertyName("counts")] Dictionary<string, int> Counts,
+    [property: JsonPropertyName("contact_lists")] int ContactLists,
+    [property: JsonPropertyName("old")] int Old = 0);   // I1: files with findings unchanged for 2 years
+
+/// <summary>Phase 3 · D5: what the native host's file scan found on this PC.</summary>
+public sealed record DiscoveryReport(
+    [property: JsonPropertyName("ok")] bool Ok,
+    [property: JsonPropertyName("files_scanned")] int FilesScanned,
+    [property: JsonPropertyName("files_skipped")] int FilesSkipped,
+    [property: JsonPropertyName("truncated")] bool Truncated,
+    [property: JsonPropertyName("folders")] IReadOnlyList<DiscoveryFolder> Folders);
+
+/// <summary>Phase 3 · D7: an approval in force on this device: one Windows account, one site, one
+/// channel, until a time.</summary>
+public sealed record AgentGuardApproval(
+    [property: JsonPropertyName("windows_user")] string WindowsUser,
+    [property: JsonPropertyName("site")] string Site,
+    [property: JsonPropertyName("channel")] string Channel,
+    [property: JsonPropertyName("valid_until")] DateTimeOffset ValidUntil);
+
+/// <summary>Phase 3c · C3b: a company drive the org approved (its name is for the portal only).</summary>
+public sealed record AgentApprovedDrive([property: JsonPropertyName("id")] string Id);
+
+/// <summary>Phase 3c · C3: the USB write window IT opened for this PC, if any (null = none).</summary>
+public sealed record AgentUsbWindow([property: JsonPropertyName("until")] DateTimeOffset? Until);
+
+/// <summary>Phase 3 · D10: the browser policy the backend serves this device. Version 0 with an
+/// empty policy means "none": the org has no AI Guard, or never set one, and the agent removes
+/// whatever it set before.</summary>
+public sealed record AgentBrowserPolicy(
+    [property: JsonPropertyName("version")] int Version,
+    [property: JsonPropertyName("policy")] AgentBrowserPolicyBody Policy);
+
+public sealed record AgentBrowserPolicyBody(
+    [property: JsonPropertyName("incognito_off")] bool IncognitoOff = false,
+    [property: JsonPropertyName("extension_developer_mode_off")] bool ExtensionDeveloperModeOff = false,
+    [property: JsonPropertyName("dev_tools_off")] bool DevToolsOff = false,
+    [property: JsonPropertyName("new_profiles_off")] bool NewProfilesOff = false,
+    [property: JsonPropertyName("blocked_sites")] IReadOnlyList<string>? BlockedSites = null,
+    [property: JsonPropertyName("allowed_sites")] IReadOnlyList<string>? AllowedSites = null,
+    [property: JsonPropertyName("google_allowed_domains")] IReadOnlyList<string>? GoogleAllowedDomains = null,
+    [property: JsonPropertyName("chrome_extension_id")] string? ChromeExtensionId = null,
+    [property: JsonPropertyName("edge_extension_id")] string? EdgeExtensionId = null,
+    [property: JsonPropertyName("firefox_extension_id")] string? FirefoxExtensionId = null,
+    [property: JsonPropertyName("firefox_extension_url")] string? FirefoxExtensionUrl = null,
+    [property: JsonPropertyName("guard_mode")] string? GuardMode = null,
+    [property: JsonPropertyName("guard_watched_sites")] IReadOnlyList<string>? GuardWatchedSites = null,
+    [property: JsonPropertyName("guard_ignore_kinds")] IReadOnlyList<string>? GuardIgnoreKinds = null,
+    [property: JsonPropertyName("guard_keywords")] IReadOnlyList<string>? GuardKeywords = null,
+    [property: JsonPropertyName("discovery_enabled")] bool DiscoveryEnabled = false,
+    [property: JsonPropertyName("extension_install")] string? ExtensionInstall = null,
+    [property: JsonPropertyName("microsoft_tenant_id")] string? MicrosoftTenantId = null,
+    [property: JsonPropertyName("microsoft_policy_id")] string? MicrosoftPolicyId = null,
+    [property: JsonPropertyName("claude_org_ids")] IReadOnlyList<string>? ClaudeOrgIds = null,
+    [property: JsonPropertyName("chatgpt_workspace_ids")] IReadOnlyList<string>? ChatGptWorkspaceIds = null,
+    [property: JsonPropertyName("slack_requester_id")] string? SlackRequesterId = null,
+    [property: JsonPropertyName("slack_allowed_ids")] IReadOnlyList<string>? SlackAllowedIds = null,
+    [property: JsonPropertyName("block_other_browsers")] bool BlockOtherBrowsers = false,
+    [property: JsonPropertyName("guard_read_pdfs")] bool GuardReadPdfs = false,
+    [property: JsonPropertyName("microsoft_on_windows")] bool MicrosoftOnWindows = false,
+    [property: JsonPropertyName("usb_mode")] string? UsbMode = null,
+    [property: JsonPropertyName("usb_observe")] bool UsbObserve = false,
+    [property: JsonPropertyName("usb_approved_drives")] IReadOnlyList<AgentApprovedDrive>? UsbApprovedDrives = null,
+    [property: JsonPropertyName("extension_allowlist")] IReadOnlyList<string>? ExtensionAllowlist = null)
+{
+    // A policy saved before D3 has no guard_* fields: the extension then gets its own defaults.
+    public Guard.BrowserPolicy ToPolicy() => new()
+    {
+        IncognitoOff = IncognitoOff, ExtensionDeveloperModeOff = ExtensionDeveloperModeOff,
+        DevToolsOff = DevToolsOff, NewProfilesOff = NewProfilesOff,
+        BlockedSites = BlockedSites ?? [], AllowedSites = AllowedSites ?? [],
+        GoogleAllowedDomains = GoogleAllowedDomains ?? [],
+        ChromeExtensionId = ChromeExtensionId, EdgeExtensionId = EdgeExtensionId,
+        FirefoxExtensionId = FirefoxExtensionId, FirefoxExtensionUrl = FirefoxExtensionUrl,
+        GuardMode = GuardMode ?? "log", GuardWatchedSites = GuardWatchedSites ?? [],
+        GuardIgnoreKinds = GuardIgnoreKinds ?? ["Email"], GuardKeywords = GuardKeywords ?? [],
+        DiscoveryEnabled = DiscoveryEnabled, ExtensionInstall = ExtensionInstall ?? "store",
+        MicrosoftTenantId = MicrosoftTenantId, MicrosoftPolicyId = MicrosoftPolicyId,
+        ClaudeOrgIds = ClaudeOrgIds ?? [], ChatGptWorkspaceIds = ChatGptWorkspaceIds ?? [],
+        SlackRequesterId = SlackRequesterId, SlackAllowedIds = SlackAllowedIds ?? [],
+        BlockOtherBrowsers = BlockOtherBrowsers, ReadPdfs = GuardReadPdfs, MicrosoftOnWindows = MicrosoftOnWindows,
+        UsbMode = UsbMode ?? "off", UsbObserve = UsbObserve,
+        UsbApprovedDrives = (UsbApprovedDrives ?? []).Select(d => d.Id).ToList(),
+        ExtensionAllowlist = ExtensionAllowlist ?? [],
+    };
+}

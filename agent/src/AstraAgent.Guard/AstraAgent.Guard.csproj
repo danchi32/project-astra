@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Phase 3 · D4: sensitive-data detectors. Pure functions, no I/O, no dependencies, so the
+       E4 isolated scanner process can host them with its network blocked. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AstraAgent.Guard</RootNamespace>
+  </PropertyGroup>
+
+</Project>

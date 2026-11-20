@@ -103,5 +103,81 @@ export const getBrief = (period: "day" | "week") =>
 export const emailBrief = (period: "day" | "week") =>
   apiClient.post<{ sent: boolean; to: string }>("/reports/brief/email", { period }).then((r) => r.data);
 
+// J3: the board report, a month (30) or quarter (90) on one printable page. Counts only.
+export interface BoardReport {
+  organization: string;
+  period_days: 30 | 90;
+  since: string;
+  generated_at: string;
+  title: string;
+  headline: string;
+  kpis: {
+    devices: number; health_score: number; fixed_unattended: number; hours_saved: number; inr_saved: number | null;
+    dpdp_score: number | null; breaches_found: number | null; breaches_open: number | null;   // null: no AI Guard
+  };
+  sections: Brief["sections"];
+  risks: { title: string; severity: string; count: number; advice: string }[];
+  footer: string;
+}
+export const getBoardReport = (days: 30 | 90) =>
+  apiClient.get<BoardReport>("/reports/board", { params: { days } }).then((r) => r.data);
+
+// J4: the compliance pack — evidence for an auditor, insurer or client (admin only).
+export interface CompliancePack {
+  organization: string;
+  period_days: 30 | 90;
+  since: string;
+  generated_at: string;
+  security: {
+    devices: number; security_score: number | null; compliant: number; at_risk: number; non_compliant: number; unknown: number;
+    checks: { key: string; label: string; passed: number; failed: number; unknown: number }[];
+    usb: { blocked: number; allowed: number; unknown: number };
+    per_device: { hostname: string; score: number; status: string; failed: string[] }[];
+  };
+  access: { by_role: Record<"admin" | "technician" | "user", number>; inactive: number; staff: { name: string; role: string }[] };
+  changes: { total: number; by_action: { action: string; count: number }[] };
+  data_protection: {
+    score: number; done: number; total: number;
+    items: { title: string; status: "done" | "todo"; detail: string }[];
+    contact: { name: string | null; email: string | null };
+    retention: { hostname: string; path: string; old: number; files_with_findings: number; contact_lists: number }[];
+    breaches: { title: string; found_at: string; status: "open" | "closed"; steps_settled: number }[];
+  } | null;
+  disclaimer: string;
+}
+export const getCompliancePack = (days: 30 | 90) =>
+  apiClient.get<CompliancePack>("/reports/compliance-pack", { params: { days } }).then((r) => r.data);
+
+// I4: a client's security questionnaire with SAVIO's draft answers (admin; an add-on).
+export interface AuditPackRow {
+  n: number;
+  question: string;
+  status: "pending" | "answered" | "gap";
+  answer: string | null;
+  evidence: { key: string; label: string; link: string }[];
+  edited_by?: string | null;
+}
+export interface AuditPackSummary {
+  id: string;
+  name: string;
+  status: "answering" | "ready" | "failed";
+  error: string | null;
+  created_at: string;
+  answered_at: string | null;
+  questions: number;
+  answered: number;
+  gaps: number;
+}
+export interface AuditPack extends AuditPackSummary { rows: AuditPackRow[] }
+export const getAuditPacks = () => apiClient.get<AuditPackSummary[]>("/audit-packs").then((r) => r.data);
+export const getAuditPack = (id: string) => apiClient.get<AuditPack>(`/audit-packs/${id}`).then((r) => r.data);
+export const uploadAuditPack = (name: string, content_base64: string) =>
+  apiClient.post<AuditPack>("/audit-packs", { name, content_base64 }).then((r) => r.data);
+export const editAuditPackRow = (id: string, n: number, answer: string, status: "answered" | "gap") =>
+  apiClient.patch<AuditPack>(`/audit-packs/${id}/rows/${n}`, { answer, status }).then((r) => r.data);
+export const exportAuditPack = (id: string) =>
+  apiClient.get<Blob>(`/audit-packs/${id}/export`, { responseType: "blob" }).then((r) => r);
+export const deleteAuditPack = (id: string) => apiClient.delete(`/audit-packs/${id}`);
+
 export const getValueReport = (days: number) =>
   apiClient.get<ValueReport>("/reports/value", { params: { days } }).then((r) => r.data);
