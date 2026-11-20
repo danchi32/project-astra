@@ -68,8 +68,8 @@ PILOT = timedelta(days=14)   # E8
 # uses (outlook.live.com, not live.com; web.whatsapp.com, not whatsapp.com; no Gmail or Drive,
 # which D2's Google domains handle). The hosts are copied into the policy when it is saved
 # (`category_hosts`, `allowed_category_hosts`), so a PC is only ever served what an admin saved.
-# Adult sites and malware or spam are not here on purpose: there are millions and they change
-# daily, so no list in code covers them; that needs a filtering DNS service, not this list.
+# Adult sites and malware or phishing are not here on purpose: there are millions and they change
+# daily, so no list in code covers them. `dns_filter` sends the browsers to a filtering DNS service.
 # ponytail: a fixed list in code. Upgrade path is a maintained category feed (or the browser's
 # own categories) once an org needs more than these.
 SITE_CATEGORIES: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -135,6 +135,10 @@ OTHER_BROWSERS: dict[str, str] = {   # name → how its installed-app name start
     "Brave": "brave", "Opera": "opera", "Vivaldi": "vivaldi", "Yandex Browser": "yandex",
     "Tor Browser": "tor browser", "Chromium": "chromium", "Waterfox": "waterfox", "LibreWolf": "librewolf",
 }
+# The browsers' secure DNS, through Cloudflare's 1.1.1.1 for Families: "security" blocks malware
+# and phishing, "family" adult content as well. Only the level is served; the agent holds the
+# server URLs, so a policy can never point a PC's browsers at a DNS server of its choosing.
+DnsFilter = Literal["off", "security", "family"]
 UsbMode = Literal["off", "read_only", "encrypted_only", "on_request", "block", "company_drives"]
 # C3b: a USB disk's Windows device instance ID, as the agent reports it. Never SCSI\ (internal disks).
 # A drive's USB storage interface (3b: covers USB 3 drives using UASP), or its disk as approved
@@ -223,6 +227,8 @@ class BrowserPolicyBody(BaseModel):
     # Whole kinds of site always allowed, as `allowed_sites` is: even if a block above covers them.
     allowed_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
     allowed_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
+    # The firewall-style categories no site list covers: adult content, malware and phishing.
+    dns_filter: DnsFilter = "off"
     google_allowed_domains: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     chrome_extension_id: str | None = None
     edge_extension_id: str | None = None
@@ -404,6 +410,7 @@ class ExceptionBody(BaseModel):
     block_sites: list[str] = Field(default_factory=list, max_length=MAX_EXCEPTION_SITES)
     allow_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
     block_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
+    dns_filter: DnsFilter | None = None
     # Google sign-in: [] lets personal Gmail in; domains allow only those accounts.
     google_allowed_domains: list[str] | None = Field(default=None, max_length=MAX_SITES)
     guard_mode: Literal["log", "warn", "justify", "redact", "approve", "block"] | None = None
@@ -435,7 +442,7 @@ def apply_exception(policy: dict, exc: dict) -> dict:
     """`policy` (a full policy as stored) with the exception's modules laid over it."""
     out = dict(policy)
     for key in ("incognito_off", "new_profiles_off", "dev_tools_off", "block_other_browsers",
-                "google_allowed_domains", "guard_mode", "usb_mode", "usb_observe"):
+                "google_allowed_domains", "guard_mode", "usb_mode", "usb_observe", "dns_filter"):
         if exc.get(key) is not None:
             out[key] = exc[key]
     # Categories are read from the list in code here, not copied: an exception's result has a

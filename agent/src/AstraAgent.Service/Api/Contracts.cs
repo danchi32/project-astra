@@ -277,6 +277,7 @@ public sealed record AgentBrowserPolicyBody(
     [property: JsonPropertyName("microsoft_on_windows")] bool MicrosoftOnWindows = false,
     [property: JsonPropertyName("usb_mode")] string? UsbMode = null,
     [property: JsonPropertyName("usb_observe")] bool UsbObserve = false,
+    [property: JsonPropertyName("dns_filter")] string? DnsFilter = null,
     [property: JsonPropertyName("usb_approved_drives")] IReadOnlyList<AgentApprovedDrive>? UsbApprovedDrives = null,
     [property: JsonPropertyName("extension_allowlist")] IReadOnlyList<string>? ExtensionAllowlist = null)
 {
@@ -296,7 +297,7 @@ public sealed record AgentBrowserPolicyBody(
         ClaudeOrgIds = ClaudeOrgIds ?? [], ChatGptWorkspaceIds = ChatGptWorkspaceIds ?? [],
         SlackRequesterId = SlackRequesterId, SlackAllowedIds = SlackAllowedIds ?? [],
         BlockOtherBrowsers = BlockOtherBrowsers, ReadPdfs = GuardReadPdfs, MicrosoftOnWindows = MicrosoftOnWindows,
-        UsbMode = UsbMode ?? "off", UsbObserve = UsbObserve,
+        UsbMode = UsbMode ?? "off", UsbObserve = UsbObserve, DnsFilter = DnsFilter ?? "off",
         UsbApprovedDrives = (UsbApprovedDrives ?? []).Select(d => d.Id).ToList(),
         ExtensionAllowlist = ExtensionAllowlist ?? [],
     };
