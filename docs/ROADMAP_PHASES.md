@@ -2239,7 +2239,22 @@ agent, the extension (with the host code it calls), and the backend with the por
   backend and on the PC); the portal explains what turning company accounts on does. Live on
   this laptop: the other extensions in every Chrome profile blocked, SAVIO Guard still on,
   incognito refused; all of it removed again when the rule was taken off.
-- **Batch 2, still to do:**
+- **Batch 2, part 3 (20 Nov):**
+  - **Rewritten frames (live finding):** a page that rewrites a frame with `document.open()` erased
+    the extension's listeners there; they are attached by one function, again whenever the
+    document is rewritten. Live: a file chosen in a self-written frame was checked.
+  - **Form changed during the check (review M1):** just before sending, the form is read again;
+    anything changed beyond what SAVIO hid is checked again (twice at most, then not sent). Live:
+    a field a page script filled while the prompt was open got its own warning.
+  - **Download origin (review L2):** shown as "likely came from" with a tooltip, case reasons say
+    "files that look downloaded from …", and private-window downloads are not remembered.
+  - **Cases (review L2, L3):** each site shows the PCs its events came from; a case is scored on
+    its latest 2,000 events.
+  - **Other browsers (review L1):** found by the file's own name too (a renamed portable browser),
+    with version info cached per file; closed through the handle opened when found, after
+    checking it is still the same file.
+- **Batch 2, still to do:** the USB link test on an NTFS drive and a USB hard drive (hardware).
+- **Batch 2, as first listed:**
   - **Agent H2:** company-drives mode misses USB 3 (UASP) drives and SD cards. Needs blocking
     by `USB\Class_08` and approval by the USB parent ID.
   - **Extension H4:** in .xlsx files, number cells lose the column headings their detectors

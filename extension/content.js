@@ -122,7 +122,7 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  window.addEventListener("paste", (e) => {
+  const onPaste = (e) => {
     if (!e.isTrusted) return;
     const files = [...(e.clipboardData?.files ?? [])];
     const text = e.clipboardData?.getData("text/plain") ?? "";
@@ -145,9 +145,9 @@
       // Nothing here can be rewritten (parts: []), so redact asks instead.
       await allowed("paste", { ...withFiles(f), parts: [] });
     });
-  }, true);
+  };
 
-  window.addEventListener("drop", async (e) => {
+  const onDrop = async (e) => {
     if (!e.isTrusted) return;
     const dt = e.dataTransfer;
     if (!dt) return;
@@ -163,7 +163,7 @@
     if (mode === "log") { check("drop", what); return; }
     if (await allowed("drop", what) && text) insert(e.target, text);
     // A dropped file is not re-dropped: the person can attach it again through the file picker.
-  }, true);
+  };
 
   // A file choice fires `input` then `change`; both are held while the files are checked.
   const onFiles = async (e) => {
@@ -205,31 +205,34 @@
       input.value = "";
     }
   };
-  window.addEventListener("input", onFiles, true);
-  window.addEventListener("change", onFiles, true);
+  // What a form will send: every field, including ones placed outside it with form="…" (L4).
+  function formValues(form, submitter) {
+    const data = new FormData(form, submitter ?? undefined);
+    return [...data.entries()]
+      .filter(([name, v]) => typeof v === "string" && !PASSWORD.test(name))
+      .map(([, v]) => v).filter(Boolean);
+  }
+  const same = (a, b) => a.length === b.length && [...a].sort().join("\u0000") === [...b].sort().join("\u0000");
 
-  window.addEventListener("submit", async (e) => {
+  const onSubmit = async (e) => {
     if (resubmitting || !e.isTrusted) return;
     const form = e.target;
     if (!(form instanceof HTMLFormElement)) return;
-    // Every field the form will send, including ones placed outside it with form="…" (L4).
-    let values = [];
-    try {
-      const data = new FormData(form, e.submitter ?? undefined);
-      values = [...data.entries()]
-        .filter(([name, v]) => typeof v === "string" && !PASSWORD.test(name))
-        .map(([, v]) => v).filter(Boolean);
-    } catch { return; }
+    let values;
+    try { values = formValues(form, e.submitter); } catch { return; }
     const text = values.join("\n");
     if (text.length < MIN_TEXT) return;
     if (mode === "log") { check("submit", { text }); return; }
     e.preventDefault();
     e.stopImmediatePropagation();
-    const submitter = e.submitter;
+    await checkAndSend(form, e.submitter, values, 0);
+  };
+
+  async function checkAndSend(form, submitter, values, round) {
     // In redact mode the text fields are parts that can be rewritten; every other value the
     // form sends is the fixed rest (one occurrence of each field's value taken out of it).
     let fields = [];
-    let what = { text };
+    let what = { text: values.join("\n") };
     if (mode === "redact") {
       const rest = [...values];
       fields = editableFields(form).filter((el) => {
@@ -239,11 +242,36 @@
       what = { text: rest.join("\n"), parts: fields.map((el) => el.value) };
     }
     const out = await handled("submit", what);
-    if (out !== null) {
-      fields.forEach((el, i) => { if (out.parts[i] !== el.value) setValue(el, out.parts[i]); });
-      if (fields.length) await new Promise((r) => setTimeout(r, 0));   // let the page's framework catch up
-      resubmitting = true;
-      try { form.requestSubmit(submitter && submitter.form === form ? submitter : undefined); } finally { resubmitting = false; }
+    if (out === null) return;
+    const before = fields.map((el) => el.value);
+    fields.forEach((el, i) => { if (out.parts[i] !== el.value) setValue(el, out.parts[i]); });
+    if (fields.length) await new Promise((r) => setTimeout(r, 0));   // let the page's framework catch up
+    // Security review 3b M1: what goes now must be what was checked (with what SAVIO hid). A
+    // field filled or changed while the check ran (a macro, a script) is checked again, twice at
+    // most; past that the form is not sent, and the person can send it again.
+    let now;
+    try { now = formValues(form, submitter && submitter.form === form ? submitter : undefined); } catch { return; }
+    const expected = [...values];
+    before.forEach((v, i) => { const j = expected.indexOf(v); if (j >= 0) expected[j] = out.parts[i]; });
+    if (!same(now, expected.filter(Boolean)) && now.join("\n").length >= MIN_TEXT) {
+      if (round < 2) await checkAndSend(form, submitter, now, round + 1);
+      return;
     }
-  }, true);
+    resubmitting = true;
+    try { form.requestSubmit(submitter && submitter.form === form ? submitter : undefined); } finally { resubmitting = false; }
+  }
+
+  // Security review 3b (live test): a page that rewrites a frame with document.open() erases
+  // every listener on it, SAVIO's too (the "Try it" panel of a code playground). So they are
+  // attached by one function, again whenever the document is rewritten. Adding the same
+  // listener twice does nothing, so attaching again is always safe.
+  function attach() {
+    window.addEventListener("paste", onPaste, true);
+    window.addEventListener("drop", onDrop, true);
+    window.addEventListener("input", onFiles, true);
+    window.addEventListener("change", onFiles, true);
+    window.addEventListener("submit", onSubmit, true);
+  }
+  attach();
+  new MutationObserver(attach).observe(document, { childList: true });
 })();

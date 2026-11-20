@@ -31,6 +31,15 @@ public class OtherBrowsersTests
         string process, string? company, string? product, string? path, string? expected) =>
         Assert.Equal(expected, OtherBrowsers.Match(process, company, product, path));
 
+    [Fact]
+    public void A_portable_browser_renamed_is_found_by_its_files_own_name()
+    {
+        // Review 3b L1: brave.exe copied to AppData as notes.exe is still Brave by its version info.
+        Assert.Equal("Brave", OtherBrowsers.Match("notes", "Brave Software, Inc.", "Brave Browser",
+                                                  @"C:\Users\a\AppData\Local\x\notes.exe", "brave.exe"));
+        Assert.Null(OtherBrowsers.Match("notes", "Microsoft Corporation", "Notepad", null, "notepad.exe"));
+    }
+
     readonly BrowserPolicyWorkerTests.Api _api = new();
     readonly SubscriptionState _subscription = new();
     readonly List<int> _killed = [];
@@ -49,7 +58,7 @@ public class OtherBrowsersTests
     OtherBrowserBlocker Blocker(BrowserPolicyWorker policy) => new(policy, _subscription, NullLogger<OtherBrowserBlocker>.Instance)
     {
         List = () => _running,
-        Kill = id => { _killed.Add(id); return true; },
+        Kill = p => { _killed.Add(p.Id); return true; },
         Notify = (s, n) => _notices.Add((s, n)),
     };
 

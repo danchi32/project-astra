@@ -787,7 +787,8 @@ class CaseSite(BaseModel):
     went_ahead: int
     blocked: int
     channels: list[str]
-    origins: list[str] = Field(default_factory=list)   # C2: where its files were downloaded from
+    origins: list[str] = Field(default_factory=list)   # C2: where its files were likely downloaded from
+    pcs: list[str] = Field(default_factory=list)       # review 3b L2: the PCs its events came from
 
 
 class CaseRead(BaseModel):

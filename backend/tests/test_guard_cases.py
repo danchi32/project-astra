@@ -47,7 +47,7 @@ def test_the_score_reads_the_whole_story():
                                                      origin="crm.zoho.com")], ignore, set())
     same_points, _, same = guard_cases.score([SimpleNamespace(**vars(_ev("wetransfer.com", counts={"Pan": 50})),
                                                               origin="dl.wetransfer.com")], ignore, set())
-    assert moved == round(plain * 1.5) and "files downloaded from crm.zoho.com" in s["reasons"]
+    assert moved == round(plain * 1.5) and "files that look downloaded from crm.zoho.com" in s["reasons"]
     assert s["sites"][0]["origins"] == ["crm.zoho.com"]
     assert same_points == plain and not any("downloaded" in r for r in same["reasons"])
     # C3b: a copy to a USB drive is as risky as personal file sharing, and says so in plain words.
@@ -81,7 +81,8 @@ async def test_events_become_one_case_and_only_a_high_one_notifies(client, admin
     r = (await client.get("/api/v1/guard/cases", headers=admin_headers)).json()
     case = r["cases"][0]
     assert len(r["cases"]) == 1 and case["level"] == "high" and case["sites"][0]["site"] == "wetransfer.com"
-    assert case["sites"][0]["origins"] == ["crm.zoho.com"] and "files downloaded from crm.zoho.com" in case["reasons"]
+    assert case["sites"][0]["origins"] == ["crm.zoho.com"] and "files that look downloaded from crm.zoho.com" in case["reasons"]
+    assert case["sites"][0]["pcs"] == [case["devices"][0]] and case["devices"]   # review 3b L2: which PC
     events = (await client.get("/api/v1/guard/events", headers=admin_headers)).json()
     assert {e["origin"] for e in events} == {None, "crm.zoho.com"}
     async with session_factory() as s:

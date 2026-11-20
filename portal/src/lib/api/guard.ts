@@ -294,7 +294,8 @@ export interface GuardCaseSite {
   went_ahead: number;
   blocked: number;
   channels: string[];
-  origins: string[];     // C2: where its files were downloaded from (host names)
+  origins: string[];     // C2: where its files were likely downloaded from (host names)
+  pcs?: string[];        // review 3b L2: the PCs its events came from
 }
 
 export interface GuardCase {

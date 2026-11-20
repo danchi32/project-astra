@@ -49,6 +49,7 @@ from app.services.notifications import NotificationService
 
 CASE_GAP = timedelta(hours=48)       # quiet this long and the next event starts a new case
 NEW_SITE = timedelta(days=7)         # a site first seen in the org this recently is "new"
+MAX_CASE_EVENTS = 2000               # the latest events a case is scored on (review 3b L3)
 HIGH, MEDIUM = 40, 10
 RISKY = {"file_sharing": 3, "personal_email": 3, "paste_sites": 3, "usb": 3, "ai_chat": 2, "messaging": 2,
          "social_media": 2}
@@ -154,7 +155,8 @@ def score(events, ignore: set[str], new_sites: set[str], known: dict[str, str] |
         reasons.append(f"to {s['site']}" + (f" ({what})" if what else ""))
     if origins:
         top = sorted(origins, key=lambda o: (-origins[o], o))[:2]
-        reasons.append("files downloaded from " + " and ".join(top))
+        # Matched by file name and size only (review 3b L2): a likely source, never proof.
+        reasons.append("files that look downloaded from " + " and ".join(top))
     if went_ahead:
         reasons.append("went ahead after a warning" + (f" {went_ahead} times" if went_ahead > 1 else ""))
     if blocked:
@@ -191,10 +193,12 @@ async def update(session: AsyncSession, org_id, windows_user: str, earliest_new)
     since = as_utc(case.opened_at) if case else as_utc(earliest_new)
     if last_closed is not None:
         since = max(since, as_utc(last_closed) + timedelta(microseconds=1))
-    events = [e for e in (await session.execute(
+    # The latest MAX_CASE_EVENTS only (review 3b L3): a case kept open for months must not reload
+    # everything since it opened on every batch. The newest events decide what it is now.
+    events = [e for e in reversed((await session.execute(
         select(GuardEvent).where(GuardEvent.org_id == org_id, GuardEvent.windows_user == windows_user,
                                  GuardEvent.occurred_at >= since)
-        .order_by(GuardEvent.occurred_at))).scalars() if e.site not in quiet]
+        .order_by(GuardEvent.occurred_at.desc()).limit(MAX_CASE_EVENTS))).scalars().all()) if e.site not in quiet]
     if case is not None:
         newer = [e for e in events if as_utc(e.occurred_at) > as_utc(case.last_event_at)]
         if newer and as_utc(newer[0].occurred_at) - as_utc(case.last_event_at) > CASE_GAP:
@@ -211,8 +215,16 @@ async def update(session: AsyncSession, org_id, windows_user: str, earliest_new)
     points, level, summary = score(events, ignore, new_sites, await guard_sites.learned(session))
     if not summary["events"]:
         return case
-    devices = (await session.execute(select(Device.hostname).where(
-        Device.id.in_({e.device_id for e in events})).order_by(Device.hostname))).scalars().all()
+    # Review 3b L2: which PC each site's events came from, so a case raised in someone's name from
+    # a PC that is not theirs shows it, before anyone acts on their session.
+    hosts = dict((await session.execute(select(Device.id, Device.hostname).where(
+        Device.id.in_({e.device_id for e in events})))).all())
+    per_site: dict[str, set[str]] = defaultdict(set)
+    for e in events:
+        per_site[e.site].add(hosts.get(e.device_id, "unknown PC"))
+    for s in summary["sites"]:
+        s["pcs"] = sorted(per_site.get(s["site"], ()))
+    devices = sorted(set(hosts.values()))
     if case is None:
         case = GuardCase(org_id=org_id, windows_user=windows_user, status="open",
                          opened_at=min(e.occurred_at for e in events))

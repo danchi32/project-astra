@@ -32,23 +32,29 @@ public static class OtherBrowsers
         ("librewolf", "LibreWolf", "LibreWolf"),
     ];
 
-    /// <summary>The reported name, or null if this process is not one of them.</summary>
-    public static string? Match(string processName, string? company, string? product, string? path)
+    /// <summary>The reported name, or null if this process is not one of them. The exe name may be
+    /// the one it runs as or the one its file was built as (<paramref name="originalName"/>, from
+    /// its version info): a portable browser copied and renamed is still found (review 3b L1).</summary>
+    public static string? Match(string processName, string? company, string? product, string? path,
+                                string? originalName = null)
     {
         var seen = $"{company}|{product}|{path}";
+        var original = Path.GetFileNameWithoutExtension(originalName ?? "");
         foreach (var (exe, marker, name) in Known)
-            if (string.Equals(processName, exe, StringComparison.OrdinalIgnoreCase) &&
+            if ((string.Equals(processName, exe, StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(original, exe, StringComparison.OrdinalIgnoreCase)) &&
                 seen.Contains(marker, StringComparison.OrdinalIgnoreCase))
                 return name;
         return null;
     }
 
-    internal static bool MaybeOne(string processName) =>
-        Known.Any(k => string.Equals(processName, k.Exe, StringComparison.OrdinalIgnoreCase));
 }
 
-/// <summary>A running process, as far as <see cref="OtherBrowserBlocker"/> needs one.</summary>
-public sealed record RunningProcess(int Id, int Session, string Name, string? Company, string? Product, string? Path);
+/// <summary>A running process, as far as <see cref="OtherBrowserBlocker"/> needs one. <c>Handle</c>
+/// is the process opened when it was found: it is closed through that, never looked up again by
+/// its ID, which Windows may have given to another process by then (review 3b L1).</summary>
+public sealed record RunningProcess(int Id, int Session, string Name, string? Company, string? Product, string? Path,
+                                    string? OriginalName = null, Microsoft.Win32.SafeHandles.SafeProcessHandle? Handle = null);
 
 /// <summary>
 /// Phase 3 · D10: where the org's policy says so, closes any of <see cref="OtherBrowsers"/> within
@@ -69,7 +75,7 @@ public sealed class OtherBrowserBlocker(
 
     /// <summary>The real process list, kill and notice. Tests replace them.</summary>
     internal Func<IEnumerable<RunningProcess>> List { get; init; } = Candidates;
-    internal Func<int, bool> Kill { get; init; } = KillProcess;
+    internal Func<RunningProcess, bool> Kill { get; init; } = KillProcess;
     internal Action<int, string> Notify { get; init; } = ShowNotice;
 
     readonly Dictionary<(int Session, string Name), DateTime> _noticed = [];
@@ -92,8 +98,9 @@ public sealed class OtherBrowserBlocker(
         var closed = new HashSet<(int Session, string Name)>();
         foreach (var p in List())
         {
-            if (OtherBrowsers.Match(p.Name, p.Company, p.Product, p.Path) is { } name && Kill(p.Id))
-                closed.Add((p.Session, name));
+            using (p.Handle)
+                if (OtherBrowsers.Match(p.Name, p.Company, p.Product, p.Path, p.OriginalName) is { } name && Kill(p))
+                    closed.Add((p.Session, name));
         }
         // One start of a browser is many processes: counted once per session and sweep.
         foreach (var (session, name) in closed)
@@ -108,20 +115,25 @@ public sealed class OtherBrowserBlocker(
         }
     }
 
+    /// <summary>Every process whose file says it is one of <see cref="OtherBrowsers"/>, opened for
+    /// closing. A file's version info is read once per path and time written, not every sweep.</summary>
     static IEnumerable<RunningProcess> Candidates()
     {
         foreach (var p in Process.GetProcesses())
         {
             using (p)
             {
-                if (!OtherBrowsers.MaybeOne(p.ProcessName))
-                    continue;
                 RunningProcess? r = null;
                 try
                 {
                     var path = ImagePath(p.Id);
-                    var info = path is null ? null : FileVersionInfo.GetVersionInfo(path);
-                    r = new RunningProcess(p.Id, p.SessionId, p.ProcessName, info?.CompanyName, info?.ProductName, path);
+                    if (path is null || Identify(path) is not { } info) continue;
+                    if (OtherBrowsers.Match(p.ProcessName, info.Company, info.Product, path, info.Original) is null) continue;
+                    var h = OpenProcess(Terminate | QueryLimited, false, p.Id);
+                    var handle = new Microsoft.Win32.SafeHandles.SafeProcessHandle(h, ownsHandle: true);
+                    // Still the same file: the ID was not handed to another process meanwhile.
+                    if (handle.IsInvalid || ImagePath(handle) != path) { handle.Dispose(); continue; }
+                    r = new RunningProcess(p.Id, p.SessionId, p.ProcessName, info.Company, info.Product, path, info.Original, handle);
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or IOException) { }   // gone, or unreadable: left alone
                 if (r is not null)
@@ -130,19 +142,27 @@ public sealed class OtherBrowserBlocker(
         }
     }
 
-    static bool KillProcess(int id)
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string? Company, string? Product, string? Original)?> Files = new();
+
+    static (string? Company, string? Product, string? Original)? Identify(string path)
     {
-        try
+        string key;
+        try { key = path + "|" + File.GetLastWriteTimeUtc(path).Ticks; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        if (Files.Count > 4096) Files.Clear();
+        return Files.GetOrAdd(key, _ =>
         {
-            using var p = Process.GetProcessById(id);
-            p.Kill();
-            return true;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
-        {
-            return false;   // already gone, or not ours to close
-        }
+            try
+            {
+                var v = FileVersionInfo.GetVersionInfo(path);
+                return (v.CompanyName, v.ProductName, v.OriginalFilename);
+            }
+            catch (Exception ex) when (ex is IOException or FileNotFoundException) { return null; }
+        });
     }
+
+    static bool KillProcess(RunningProcess p) =>
+        p.Handle is { IsInvalid: false } h && TerminateProcess(h, 1);   // not ours to close, or gone: false
 
     static void ShowNotice(int session, string name)
     {
@@ -156,21 +176,26 @@ public sealed class OtherBrowserBlocker(
 
     static string? ImagePath(int pid)
     {
-        var h = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+        var h = OpenProcess(QueryLimited, false, pid);
         if (h == IntPtr.Zero) return null;
-        try
-        {
-            var size = 1024;
-            var buffer = new StringBuilder(size);
-            return QueryFullProcessImageName(h, 0, buffer, ref size) ? buffer.ToString() : null;
-        }
-        finally { CloseHandle(h); }
+        using var handle = new Microsoft.Win32.SafeHandles.SafeProcessHandle(h, ownsHandle: true);
+        return ImagePath(handle);
     }
+
+    static string? ImagePath(Microsoft.Win32.SafeHandles.SafeProcessHandle h)
+    {
+        var size = 1024;
+        var buffer = new StringBuilder(size);
+        return QueryFullProcessImageName(h, 0, buffer, ref size) ? buffer.ToString() : null;
+    }
+
+    const uint Terminate = 0x0001, QueryLimited = 0x1000;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern IntPtr OpenProcess(uint access, bool inherit, int processId);
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    static extern bool QueryFullProcessImageName(IntPtr process, int flags, StringBuilder name, ref int size);
+    static extern bool QueryFullProcessImageName(Microsoft.Win32.SafeHandles.SafeProcessHandle process, int flags,
+                                                 StringBuilder name, ref int size);
     [DllImport("kernel32.dll", SetLastError = true)]
-    static extern bool CloseHandle(IntPtr handle);
+    static extern bool TerminateProcess(Microsoft.Win32.SafeHandles.SafeProcessHandle process, uint exitCode);
 }

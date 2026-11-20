@@ -40,7 +40,8 @@ chrome.downloads?.onChanged.addListener(async (delta) => {
   try {
     const [item] = await chrome.downloads.search({ id: delta.id });
     const origin = downloadOrigin(item);
-    if (!item || !origin) return;
+    // Review 3b L2: a private-window download is not remembered (it would outlive the window).
+    if (!item || !origin || item.incognito) return;
     const name = String(item.filename ?? "").split(/[\\/]/).pop();
     const { downloads = [] } = await chrome.storage.local.get("downloads");
     const since = Date.now() - DOWNLOAD_DAYS * 86_400_000;

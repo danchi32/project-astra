@@ -208,7 +208,7 @@ export default function GuardCasesPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr>
-                  {["Site", "Came from", "Events", "Sensitive items", "Contact lists", "Went ahead after a warning", "Blocked", "How"].map((h) => (
+                  {["Site", "PCs", "Likely came from", "Events", "Sensitive items", "Contact lists", "Went ahead after a warning", "Blocked", "How"].map((h) => (
                     <th key={h} className="text-left py-1 pr-3 uppercase whitespace-nowrap" style={muted}>{h}</th>
                   ))}
                 </tr>
@@ -217,7 +217,8 @@ export default function GuardCasesPage() {
                 {c.sites.map((s) => (
                   <tr key={s.site} style={{ color: "var(--text-primary)" }}>
                     <td className="py-1 pr-3 font-mono">{s.site === "usb" ? "USB drive" : s.site}{s.new && <span className="ml-1" style={{ color: "#f59e0b" }}>new</span>}</td>
-                    <td className="py-1 pr-3 font-mono" style={muted}>{s.origins?.length ? s.origins.join(", ") : "—"}</td>
+                    <td className="py-1 pr-3" style={muted}>{s.pcs?.length ? s.pcs.join(", ") : "—"}</td>
+                    <td className="py-1 pr-3 font-mono" style={muted} title="Matched by file name and size: likely, not proof">{s.origins?.length ? s.origins.join(", ") : "—"}</td>
                     <td className="py-1 pr-3">{s.events}</td>
                     <td className="py-1 pr-3">{s.items}</td>
                     <td className="py-1 pr-3">{s.contact_lists}</td>
