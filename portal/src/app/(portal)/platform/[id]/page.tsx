@@ -157,6 +157,10 @@ export default function OrgDetailPage({ params }: { params: Promise<{ id: string
               <> · Trial ends {new Date(org.trial_ends_at).toLocaleDateString()}</>
             )}
             {org.current_period_end && <> · Renews {new Date(org.current_period_end).toLocaleDateString()}</>}
+            {org.contact_phone && (
+              <> · Phone <a href={`tel:${org.contact_phone}`} className="hover:underline"
+                style={{ color: "var(--text-primary)" }}>{org.contact_phone}</a></>
+            )}
           </p>
         )}
         </div>

@@ -163,3 +163,7 @@ class Organization(TimestampMixin, Base):
     )
     #: Sized for IPv6. Recorded as evidence of the acceptance, not for tracking.
     terms_accepted_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+
+    #: The signing-up admin's phone, E.164 (+918595492500). Required by the signup form;
+    #: nullable because organisations created before it have none.
+    contact_phone: Mapped[str | None] = mapped_column(String(16), nullable=True)

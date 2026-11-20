@@ -10,7 +10,7 @@ from app.core.email_domains import corporate_domain, is_free_email_domain
 
 def _body(org, email, pw="password123", terms=True):
     return {"organization_name": org, "admin_name": "Admin", "admin_email": email,
-            "admin_password": pw, "terms_accepted": terms}
+            "admin_password": pw, "terms_accepted": terms, "phone": "+918595492500"}
 
 
 async def _register(client, org, email, pw="password123"):
@@ -70,14 +70,14 @@ async def test_otp_signup_path_is_gated_too(client):
     blocked = await client.post("/api/v1/auth/register/start", json={
         "organization_name": "Personal Co", "admin_name": "A",
         "admin_email": "alice@gmail.com", "admin_password": "password123",
-        "terms_accepted": True})
+        "terms_accepted": True, "phone": "+918595492500"})
     assert blocked.status_code == 400, blocked.text
     assert "work email" in blocked.json()["detail"].lower()
 
     allowed = await client.post("/api/v1/auth/register/start", json={
         "organization_name": "Work Co", "admin_name": "A",
         "admin_email": "admin@work-co.com", "admin_password": "password123",
-        "terms_accepted": True})
+        "terms_accepted": True, "phone": "+918595492500"})
     assert allowed.status_code in (200, 201, 202), allowed.text
 
 

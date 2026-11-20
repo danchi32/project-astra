@@ -199,6 +199,8 @@ class PlatformService:
             stmt = stmt.where(or_(
                 func.lower(Organization.name).like(like),
                 func.lower(Organization.email_domain).like(like),
+                # Stored without spaces, so "+91 85954" finds "+918595492500".
+                Organization.contact_phone.like(f"%{q.replace(' ', '')}%"),
             ))
         if plan:
             stmt = stmt.where(Organization.plan == plan)

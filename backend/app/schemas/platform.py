@@ -38,6 +38,8 @@ class OrganizationAdminRead(BaseModel):
     # need one.
     support_access_until: datetime | None = None
     is_demo: bool = False
+    #: From signup, E.164. Null for organisations that predate the field.
+    contact_phone: str | None = None
 
 
 class RemediationActionOption(BaseModel):

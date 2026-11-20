@@ -15,7 +15,7 @@ async def _issue_invite(session_factory) -> str:
 
 
 async def _register_org(client, session_factory, org, email):
-    return await client.post("/api/v1/auth/register", json={"terms_accepted": True,
+    return await client.post("/api/v1/auth/register", json={"terms_accepted": True, "phone": "+918595492500",
         "invite_code": await _issue_invite(session_factory), "organization_name": org,
         "admin_name": "Admin", "admin_email": email, "admin_password": _PW,
     })
@@ -86,7 +86,7 @@ async def test_audit_feed_records_operator_actions(client, session_factory):
 
 
 async def test_console_endpoints_require_platform_admin(client, session_factory):
-    reg = await client.post("/api/v1/auth/register", json={"terms_accepted": True,
+    reg = await client.post("/api/v1/auth/register", json={"terms_accepted": True, "phone": "+918595492500",
         "invite_code": await _issue_invite(session_factory), "organization_name": "Plain Co",
         "admin_name": "P", "admin_email": "p@plain.com", "admin_password": _PW,
     })

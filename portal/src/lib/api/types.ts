@@ -205,6 +205,8 @@ export interface OrganizationAdmin {
   /** Until when the customer lets SAVIO support view their portal; null = not granted. */
   support_access_until?: string | null;
   is_demo?: boolean;
+  /** From signup, E.164 (+918595492500). Null for organizations that predate it. */
+  contact_phone: string | null;
 }
 
 /** Whether SAVIO support may currently open a read-only view of this organization. */
