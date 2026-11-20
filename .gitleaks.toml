@@ -18,6 +18,11 @@
 #   3. agent/install/tests/Run-KeyParseTests.ps1 — a synthetic 64-character token assembled
 #      to exercise every character of the installer's key alphabet. It is test input for the
 #      key-parser, not a credential to anything.
+#   4. An RSA-2048 PUBLIC key (base64 SubjectPublicKeyInfo, always starting MIIBIjANBgkq…) —
+#      extension/manifest.json's "key", which fixes SAVIO Guard's Chrome/Edge ID. Browsers
+#      require it in the manifest, so it is public by design. Matched by the public-key header
+#      rather than by path, so a real secret pasted into the manifest is still caught. The
+#      private half lives outside the repository.
 
 title = "ASTRA secret scanning"
 
@@ -30,6 +35,7 @@ description = "Deliberately-fake credentials in tests and the local demo — not
 regexes = [
   '''fs-(secret|api-key|secret-key|round-trip|key)[-a-z0-9]*''',
   '''demo-secret-key-local-only-not-for-prod''',
+  '''MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA[A-Za-z0-9+/]{300,}={0,2}''',
 ]
 paths = [
   '''agent/install/tests/Run-KeyParseTests\.ps1''',

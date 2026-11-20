@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "SAVIO Guard",
   "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwV8czml/bLhCRYc4O+InG7H3DhMW5f2vRmnEYD2YVDivuXSyBtrrqSI67xLbKyYvBm2sUVTmygZLNje46vYnz44UkW2u0kCXcyWLQb9VJHzBnZl77Cpwap+ikapjTk755yiCP1/UNJmor9GsnuQQiSptF7rI3efP4YV/FuJfZ2V/xPs1wl07zvDFrzt+D24COBmvpTe7jQpKiwr33j+R/VgQ89MnWO55Y4NqVnv7zRrJJIQBSdqjvqimwUHzQoJtaLOYFg0KcPYW0V1BPhtS8cZ13GfDL0UP2DHNJ5vGyO4aqQRfIIgPnZ3JDvglItfPdZzxUxO4II6v45iZW1YL2QIDAQAB",
   "description": "On PCs your organization manages with SAVIO, checks text you paste, drop, upload (text files) or send in a form on websites for Aadhaar, PAN, card and bank numbers. Checks run on this PC; your organization sees what kind of data was found and where, never the text. If your organization asks, it also keeps sign-in to services such as Microsoft 365 and Slack to its own accounts. When a downloaded file is uploaded elsewhere, it notes which site the file came from (the site only).",
   "permissions": ["nativeMessaging", "storage", "declarativeNetRequest", "downloads"],
   "host_permissions": ["<all_urls>"],

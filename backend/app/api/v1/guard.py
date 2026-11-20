@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,8 +49,11 @@ class DeviceBrowserState(BaseModel):
     version: int
     results: list[BrowserResult]
     reported_at: datetime
-    # D1: which policy this PC should be on now: a group's name, or None for the org's.
-    policy_group: str | None = None
+    # Which policy this PC should be on now: a named policy's name, or None for the default. It
+    # follows the person the PC is assigned to in Assets (`assigned_to`).
+    policy_name: str | None = None
+    exceptions: list[str] = Field(default_factory=list)   # names of the exceptions laid over it
+    assigned_to: str | None = None
     policy_version: int = 0
     # D10: browsers the policy does not reach that are installed here, from the app inventory.
     other_browsers: list[str] = Field(default_factory=list)
@@ -126,7 +129,11 @@ async def browser_policy_devices(
 ) -> list[DeviceBrowserState]:
     states = await browser_policy.device_states(session, actor.org_id)
     org = await browser_policy.get(session, actor.org_id)
-    groups = await browser_policy.applies_to(session, actor.org_id, {s.device_id for s, _ in states})
+    ids = {s.device_id for s, _ in states}
+    covered = await browser_policy.applies_to(session, actor.org_id, ids)
+    owners = await browser_policy.assigned_users(session, actor.org_id, ids)
+    names = dict((await session.execute(select(User.id, User.full_name).where(
+        User.org_id == actor.org_id, User.id.in_(set(owners.values()))))).all()) if owners else {}
     apps: dict = {}
     for did, app in (await session.execute(
             select(DeviceInstalledApp.device_id, DeviceInstalledApp.name)
@@ -137,83 +144,131 @@ async def browser_policy_devices(
     windows = await browser_policy.usb_windows(session, actor.org_id)
     out = []
     for s, host in states:
-        name, row = groups.get(s.device_id, (None, org))
+        full, exceptions = covered.get(s.device_id, (None, []))
+        version, policy = browser_policy.layered(full or org, exceptions) if (full or org) else (0, {})
         out.append(DeviceBrowserState(device_id=s.device_id, hostname=host, version=s.version,
                                       results=[BrowserResult(**r) for r in s.results], reported_at=s.reported_at,
-                                      policy_group=name, policy_version=row.version if row else 0,
+                                      policy_name=full.name if full else None, exceptions=[e.name for e in exceptions],
+                                      policy_version=version, assigned_to=names.get(owners.get(s.device_id)),
                                       other_browsers=browser_policy.other_browsers(apps.get(s.device_id, [])),
-                                      usb_mode=((row.policy if row else None) or {}).get("usb_mode", "off"),
-                                      usb_write_until=windows.get(s.device_id)))
+                                      usb_mode=policy.get("usb_mode", "off"), usb_write_until=windows.get(s.device_id)))
     return out
 
 
-# ── D1: a device group's own policy ───────────────────────────────────────────────────────────
+# ── Named policies, for user teams and single users ──────────────────────────────────────────
 
-class GroupPolicyRead(BaseModel):
-    group_id: uuid.UUID
-    group_name: str
+class NamedPolicyRead(BaseModel):
+    id: uuid.UUID
+    name: str
     priority: int
+    kind: Literal["full", "exception"]
+    team_ids: list[uuid.UUID]
+    user_ids: list[uuid.UUID]
     version: int
-    policy: BrowserPolicyBody
+    policy: BrowserPolicyBody | None = None          # a full policy's settings
+    exception: browser_policy.ExceptionBody | None = None   # an exception's modules
     updated_at: datetime
 
 
-class GroupPolicyWrite(BaseModel):
+class NamedPolicyWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    # Lower wins when a PC is in more than one group with a policy.
+    name: str = Field(min_length=1, max_length=120)
+    # Lower wins when a person is named by more than one policy (directly or by a team).
     priority: int = Field(ge=1, le=1000)
-    policy: BrowserPolicyBody
+    team_ids: list[uuid.UUID] = Field(default_factory=list, max_length=200)
+    user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=1000)
+    # A full policy sends `policy`; an exception, which changes only some modules of whatever full
+    # policy the person gets, sends `exception`.
+    kind: Literal["full", "exception"] = "full"
+    policy: BrowserPolicyBody | None = None
+    exception: browser_policy.ExceptionBody | None = None
+
+    @model_validator(mode="after")
+    def _one_body(self) -> "NamedPolicyWrite":
+        if (self.policy is None) != (self.kind == "exception") or (self.exception is None) != (self.kind == "full"):
+            raise ValueError("A full policy sends `policy`; an exception sends `exception`")
+        return self
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v or browser_policy.has_control(v):
+            raise ValueError("Give the policy a name")
+        return v
 
 
-@router.get("/group-policies", response_model=list[GroupPolicyRead],
-            summary="Device groups with a browser policy of their own, in the order they win (staff)")
-async def list_group_policies(
+def _named(row, keywords: bool = True) -> NamedPolicyRead:
+    common = {"id": row.id, "name": row.name, "priority": row.priority, "kind": row.kind, "team_ids": row.team_ids,
+              "user_ids": row.user_ids, "version": row.version, "updated_at": row.updated_at}
+    if row.kind == "exception":
+        return NamedPolicyRead(**common, exception=browser_policy.ExceptionBody(**row.policy))
+    policy = BrowserPolicyBody(**row.policy)
+    if not keywords:
+        policy = policy.model_copy(update={"guard_keywords": []})   # as for the default policy (review L1)
+    return NamedPolicyRead(**common, policy=policy)
+
+
+@router.get("/policies", response_model=list[NamedPolicyRead],
+            summary="The organization's named browser policies, in the order they win (staff)")
+async def list_named_policies(
     actor: User = Depends(require_roles(UserRole.ADMIN, UserRole.TECHNICIAN)),
     session: AsyncSession = Depends(get_db),
-) -> list[GroupPolicyRead]:
-    out = []
-    for row, name in await browser_policy.group_policies(session, actor.org_id):
-        policy = BrowserPolicyBody(**row.policy)
-        if actor.role != UserRole.ADMIN:
-            policy = policy.model_copy(update={"guard_keywords": []})   # as for the org's policy (review L1)
-        out.append(GroupPolicyRead(group_id=row.group_id, group_name=name, priority=row.priority,
-                                   version=row.version, policy=policy, updated_at=row.updated_at))
-    return out
+) -> list[NamedPolicyRead]:
+    return [_named(r, actor.role == UserRole.ADMIN) for r in await browser_policy.named_policies(session, actor.org_id)]
 
 
-@router.put("/group-policies/{group_id}", response_model=GroupPolicyRead,
-            summary="Give a device group its own browser policy, or change it (admin; audited)",
-            responses={404: {"description": "No such group"},
-                        409: {"description": "No org policy yet, or a mode other than record-only in the pilot"}})
-async def put_group_policy(
-    group_id: uuid.UUID,
-    body: GroupPolicyWrite,
+async def _put_named(session, actor, policy_id, body: NamedPolicyWrite) -> NamedPolicyRead:
+    try:
+        row = await browser_policy.put_named(
+            session, actor=actor, policy_id=policy_id, name=body.name, priority=body.priority,
+            targets=browser_policy.PolicyTargets(team_ids=body.team_ids, user_ids=body.user_ids),
+            body=body.policy or body.exception)
+    except LookupError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from None
+    except (browser_policy.NoOrgPolicy, browser_policy.PilotActive, browser_policy.DuplicateName,
+            browser_policy.WrongKind) as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+    return _named(row)
+
+
+_NAMED_ERRORS = {404: {"description": "No such policy, team or user"},
+                 409: {"description": "No default policy yet, a name in use, a change of kind, or a mode other than "
+                                         "record-only in the pilot"}}
+
+
+@router.post("/policies", response_model=NamedPolicyRead, status_code=status.HTTP_201_CREATED,
+             summary="Create a browser policy for chosen teams and users (admin; audited)", responses=_NAMED_ERRORS)
+async def create_named_policy(
+    body: NamedPolicyWrite,
     actor: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
-) -> GroupPolicyRead:
-    try:
-        row = await browser_policy.put_group(session, actor=actor, group_id=group_id,
-                                             priority=body.priority, body=body.policy)
-    except LookupError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such group.") from None
-    except (browser_policy.NoOrgPolicy, browser_policy.PilotActive) as e:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
-    name = next(n for r, n in await browser_policy.group_policies(session, actor.org_id) if r.group_id == group_id)
-    return GroupPolicyRead(group_id=row.group_id, group_name=name, priority=row.priority, version=row.version,
-                           policy=BrowserPolicyBody(**row.policy), updated_at=row.updated_at)
+) -> NamedPolicyRead:
+    return await _put_named(session, actor, None, body)
 
 
-@router.delete("/group-policies/{group_id}", status_code=status.HTTP_204_NO_CONTENT,
-               summary="Remove a group's own policy; its PCs go back to the org's (admin; audited)")
-async def delete_group_policy(
-    group_id: uuid.UUID,
+@router.put("/policies/{policy_id}", response_model=NamedPolicyRead,
+            summary="Change a named browser policy or who it is for (admin; audited)", responses=_NAMED_ERRORS)
+async def update_named_policy(
+    policy_id: uuid.UUID,
+    body: NamedPolicyWrite,
+    actor: User = Depends(require_roles(UserRole.ADMIN)),
+    session: AsyncSession = Depends(get_db),
+) -> NamedPolicyRead:
+    return await _put_named(session, actor, policy_id, body)
+
+
+@router.delete("/policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT,
+               summary="Delete a named policy; its people's PCs go back to the default (admin; audited)")
+async def delete_named_policy(
+    policy_id: uuid.UUID,
     actor: User = Depends(require_roles(UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     try:
-        await browser_policy.delete_group(session, actor=actor, group_id=group_id)
+        await browser_policy.delete_named(session, actor=actor, policy_id=policy_id)
     except LookupError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "That group has no policy of its own.") from None
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such policy.") from None
 
 
 # ── E3: what the extension saw. These name people, so admins only. ─────────────────────────
@@ -720,7 +775,7 @@ class DriveSeenRead(BaseModel):
     unique_serial: bool
     pcs: list[str]
     last_seen: datetime
-    approved_in: list[str]   # "Everyone" and/or group names whose policy already approves it
+    approved_in: list[str]   # "Everyone" and/or names of the policies that already approve it
 
 
 @router.get("/drives", response_model=list[DriveSeenRead],

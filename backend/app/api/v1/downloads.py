@@ -16,6 +16,18 @@ from app.services.exceptions import NotFoundError
 
 router = APIRouter(prefix="/downloads", tags=["downloads"])
 
+# SAVIO Guard for "Load unpacked", until it is listed in the browsers' stores. Built by
+# extension/pack.py and committed; test_downloads.py fails when it no longer matches extension/.
+EXTENSION_ZIP = UNINSTALLER_ZIP.parent / "savio-guard-extension.zip"
+
+
+@router.get("/extension", summary="Download the SAVIO Guard browser extension (zip, for Load unpacked)")
+async def download_extension() -> FileResponse:
+    # Public like the uninstaller: the same code is in the public repository, with no org data in it.
+    if not EXTENSION_ZIP.is_file():
+        raise NotFoundError("The extension is not bundled with this deployment.")
+    return FileResponse(EXTENSION_ZIP, media_type="application/zip", filename="savio-guard-extension.zip")
+
 
 @router.get("/uninstaller", summary="Download the SAVIO agent uninstaller (zip)")
 async def download_uninstaller() -> FileResponse:

@@ -1,4 +1,15 @@
 import { apiClient } from "./client";
+import { triggerDownload } from "./devices";
+
+// SAVIO Guard's ID in Chrome and Edge, the same on every PC: fixed by the "key" in
+// extension/manifest.json, so a copy loaded unpacked is the one the policy names.
+export const SAVIO_EXTENSION_ID = "kcfglphbojefeekbfacfnfnholaipihh";
+
+// The extension as a zip for "Load unpacked", until it is listed in the stores.
+export const downloadExtension = async () => {
+  const res = await apiClient.get<Blob>("/downloads/extension", { responseType: "blob" });
+  triggerDownload(res.data, "savio-guard-extension.zip");
+};
 
 // Phase 3 · AI Guard: the org's browser policy (D10/D1/D2) and what each PC reported.
 export interface BrowserPolicy {
@@ -9,6 +20,8 @@ export interface BrowserPolicy {
   blocked_sites: string[];
   // D1: whole kinds of site on top of blocked_sites; "Always allowed" still wins.
   blocked_categories: string[];
+  // Whole kinds of site always allowed, even where a block covers them.
+  allowed_categories?: string[];
   allowed_sites: string[];
   google_allowed_domains: string[];
   chrome_extension_id: string | null;
@@ -91,8 +104,11 @@ export interface DeviceBrowserState {
   version: number;
   results: BrowserResult[];
   reported_at: string;
-  // D1: the policy this PC should be on: a group's name, or null for everyone's.
-  policy_group: string | null;
+  // The policy this PC should be on: a named policy, or null for the default. It follows the
+  // person the PC is assigned to in Assets (assigned_to).
+  policy_name: string | null;
+  exceptions: string[];   // names of the exception policies laid over it
+  assigned_to: string | null;
   policy_version: number;
   // D10: browsers the policy doesn't reach that are installed on this PC (from its app inventory).
   other_browsers: string[];
@@ -192,24 +208,49 @@ export const openUsbWindow =(deviceId: string, minutes: number) =>
 
 export const closeUsbWindow = (deviceId: string) => apiClient.delete(`/guard/devices/${deviceId}/usb-window`);
 
-// D1: a device group's own policy. A PC in several groups gets the lowest priority number's.
-export interface GroupPolicy {
-  group_id: string;
-  group_name: string;
+// A named policy for chosen user teams and users. A PC gets the one of the person it is
+// assigned to (lowest priority number wins), else the default policy.
+// An exception changes only some modules of whatever full policy the person gets. null or empty:
+// left to the full policy.
+export interface ExceptionBody {
+  incognito_off?: boolean | null;
+  new_profiles_off?: boolean | null;
+  dev_tools_off?: boolean | null;
+  block_other_browsers?: boolean | null;
+  allow_sites?: string[];
+  block_sites?: string[];
+  allow_categories?: string[];
+  block_categories?: string[];
+  google_allowed_domains?: string[] | null;   // []: personal Gmail allowed
+  guard_mode?: BrowserPolicy["guard_mode"] | null;
+  usb_mode?: BrowserPolicy["usb_mode"] | null;
+  usb_observe?: boolean | null;
+}
+
+export interface NamedPolicy {
+  id: string;
+  name: string;
   priority: number;
+  kind: "full" | "exception";
+  team_ids: string[];
+  user_ids: string[];
   version: number;
-  policy: BrowserPolicy;
+  policy: BrowserPolicy | null;
+  exception: ExceptionBody | null;
   updated_at: string;
 }
 
-export const getGroupPolicies = () =>
-  apiClient.get<GroupPolicy[]>("/guard/group-policies").then((r) => r.data);
+export type NamedPolicyWrite = Pick<NamedPolicy, "name" | "priority" | "kind" | "team_ids" | "user_ids" | "policy" | "exception">;
 
-export const putGroupPolicy = (groupId: string, priority: number, policy: BrowserPolicy) =>
-  apiClient.put<GroupPolicy>(`/guard/group-policies/${groupId}`, { priority, policy }).then((r) => r.data);
+export const getNamedPolicies = () =>
+  apiClient.get<NamedPolicy[]>("/guard/policies").then((r) => r.data);
 
-export const deleteGroupPolicy = (groupId: string) =>
-  apiClient.delete(`/guard/group-policies/${groupId}`).then(() => undefined);
+export const saveNamedPolicy = (id: string | null, body: NamedPolicyWrite) =>
+  (id ? apiClient.put<NamedPolicy>(`/guard/policies/${id}`, body) : apiClient.post<NamedPolicy>("/guard/policies", body))
+    .then((r) => r.data);
+
+export const deleteNamedPolicy = (id: string) =>
+  apiClient.delete(`/guard/policies/${id}`).then(() => undefined);
 
 export const getBrowserPolicy = () =>
   apiClient.get<BrowserPolicyRead>("/guard/browser-policy").then((r) => r.data);

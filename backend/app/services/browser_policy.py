@@ -9,8 +9,11 @@ service stores the policy, hands it to entitled PCs, and keeps each PC's last re
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unicodedata
+import uuid
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -19,19 +22,20 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    Asset,
     AuditLog,
     Device,
     DeviceBrowserPolicyState,
-    DeviceGroup,
-    DeviceGroupMember,
-    GroupBrowserPolicy,
     GuardUsbWindow,
+    NamedBrowserPolicy,
     Notification,
     NotificationCategory,
     NotificationSeverity,
     Organization,
     OrgBrowserPolicy,
     User,
+    UserTeam,
+    UserTeamMember,
 )
 from app.models.base import as_utc, utcnow
 from app.services.audit import AuditService
@@ -39,6 +43,8 @@ from app.services.entitlements import AI_GUARD, features_for
 from app.services.notifications import NotificationService
 
 MAX_SITES = 500
+# Versions of a policy with exceptions laid over it start here; the org's own count never gets there.
+LAYERED_VERSION_FLOOR = 1_000_000_000
 MAX_KEYWORDS = 200
 # The scanner's finding names (AstraAgent.Guard.Finding), which the extension sees in its counts.
 FINDING_KINDS = ("Aadhaar", "Pan", "Gstin", "PaymentCard", "IndianMobile", "Email", "BankAccount")
@@ -57,11 +63,13 @@ _REPORT_NAME = re.compile(r"^[A-Za-z0-9_.@\\{}: -]{1,100}$")
 TAMPER_NOTIFY_EVERY = timedelta(hours=1)
 PILOT = timedelta(days=14)   # E8
 
-# D1: sites to block by kind instead of one by one. A host covers its subdomains, so these name
-# the personal service, never a shared parent a business also uses (outlook.live.com, not
-# live.com; web.whatsapp.com, not whatsapp.com; no Gmail or Drive, which D2's Google domains
-# handle). The hosts are copied into the policy when it is saved (`category_hosts`), so a PC is
-# only ever served what an admin saved.
+# D1: sites to block or allow by kind instead of one by one, as a firewall's categories. A host
+# covers its subdomains, so these name the personal service, never a shared parent a business also
+# uses (outlook.live.com, not live.com; web.whatsapp.com, not whatsapp.com; no Gmail or Drive,
+# which D2's Google domains handle). The hosts are copied into the policy when it is saved
+# (`category_hosts`, `allowed_category_hosts`), so a PC is only ever served what an admin saved.
+# Adult sites and malware or spam are not here on purpose: there are millions and they change
+# daily, so no list in code covers them; that needs a filtering DNS service, not this list.
 # ponytail: a fixed list in code. Upgrade path is a maintained category feed (or the browser's
 # own categories) once an org needs more than these.
 SITE_CATEGORIES: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -82,8 +90,41 @@ SITE_CATEGORIES: dict[str, tuple[str, tuple[str, ...]]] = {
     "paste_sites": ("Paste sites", (
         "pastebin.com", "paste.ee", "hastebin.com", "justpaste.it", "controlc.com", "rentry.co", "dpaste.org",
         "privatebin.net")),
+    "streaming": ("Entertainment and streaming", (
+        "youtube.com", "netflix.com", "primevideo.com", "hotstar.com", "jiocinema.com", "sonyliv.com", "zee5.com",
+        "mxplayer.in", "spotify.com", "jiosaavn.com", "gaana.com", "wynk.in", "twitch.tv", "hulu.com",
+        "disneyplus.com")),
+    "gaming": ("Games", (
+        "store.steampowered.com", "steamcommunity.com", "epicgames.com", "roblox.com", "miniclip.com", "poki.com",
+        "crazygames.com", "battle.net", "riotgames.com", "ea.com", "y8.com", "friv.com")),
+    "gambling": ("Gambling and betting", (
+        "bet365.com", "1xbet.com", "betway.com", "parimatch.com", "stake.com", "pokerstars.com", "rummycircle.com",
+        "junglee.com", "jungleerummy.com", "pokerbaazi.com", "adda52.com", "my11circle.com", "dream11.com",
+        "mpl.live", "winzogames.com")),
+    "shopping": ("Shopping", (
+        "amazon.in", "amazon.com", "flipkart.com", "myntra.com", "ajio.com", "meesho.com", "nykaa.com",
+        "snapdeal.com", "tatacliq.com", "ebay.com", "aliexpress.com", "temu.com", "olx.in")),
+    "job_search": ("Job search", (
+        "naukri.com", "indeed.com", "foundit.in", "shine.com", "glassdoor.com", "glassdoor.co.in", "timesjobs.com",
+        "apna.co", "instahyre.com", "iimjobs.com", "hirist.tech", "cutshort.io")),
+    "dating": ("Dating", (
+        "tinder.com", "bumble.com", "hinge.co", "okcupid.com", "aisle.co", "trulymadly.com", "happn.com",
+        "badoo.com", "quackquack.in")),
+    "vpn_proxy": ("VPNs and web proxies", (
+        "nordvpn.com", "expressvpn.com", "protonvpn.com", "surfshark.com", "windscribe.com", "tunnelbear.com",
+        "hide.me", "hidemyass.com", "proxysite.com", "croxyproxy.com", "kproxy.com", "hidester.com",
+        "4everproxy.com", "proxyium.com")),
+    "piracy": ("Torrents and piracy", (
+        "thepiratebay.org", "1337x.to", "yts.mx", "torrentgalaxy.to", "limetorrents.lol", "nyaa.si",
+        "fitgirl-repacks.site", "eztvx.to", "kickasstorrents.to", "torrentz2.nz")),
+    "work_tools": ("Work tools", (
+        "office.com", "microsoft365.com", "sharepoint.com", "teams.microsoft.com", "docs.google.com",
+        "drive.google.com", "meet.google.com", "zoom.us", "slack.com", "notion.so", "atlassian.net",
+        "trello.com", "canva.com")),
 }
-SiteCategory = Literal["file_sharing", "personal_email", "ai_chat", "messaging", "social_media", "paste_sites"]
+SiteCategory = Literal["file_sharing", "personal_email", "ai_chat", "messaging", "social_media", "paste_sites",
+                       "streaming", "gaming", "gambling", "shopping", "job_search", "dating", "vpn_proxy", "piracy",
+                       "work_tools"]
 
 # D10: browsers SAVIO's policies and extension do not reach. Each name is the agent's own
 # (OtherBrowsers.cs), with the installed-app name it is recognised by in telemetry. Supported
@@ -149,6 +190,18 @@ def _slack_ids(v: list[str]) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def host_list(v: list[str]) -> list[str]:
+    """Host names as typed ("https://Example.com/") made plain and unique, or refused."""
+    out: list[str] = []
+    for raw in v:
+        host = (raw or "").strip().lower().removeprefix("https://").removeprefix("http://").rstrip("/")
+        if not _HOST.match(host):
+            raise ValueError(f"'{raw[:60]}' is not a host name (like example.com)")
+        if host not in out:
+            out.append(host)
+    return out
+
+
 def has_control(s: str) -> bool:
     """Any control, format (bidi overrides, zero-width), private-use or unassigned character.
     Text from a device or an admin that ends up on screens is refused if it has one."""
@@ -167,6 +220,8 @@ class BrowserPolicyBody(BaseModel):
     blocked_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     # D1: whole kinds of site, on top of `blocked_sites`. `allowed_sites` still wins.
     blocked_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
+    # Whole kinds of site always allowed, as `allowed_sites` is: even if a block above covers them.
+    allowed_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
     allowed_sites: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     google_allowed_domains: list[str] = Field(default_factory=list, max_length=MAX_SITES)
     chrome_extension_id: str | None = None
@@ -262,7 +317,7 @@ class BrowserPolicyBody(BaseModel):
             raise ValueError(f"'{bad[:40]}' is not a Chrome, Edge or Firefox extension ID")
         return out
 
-    @field_validator("guard_ignore_kinds", "blocked_categories")
+    @field_validator("guard_ignore_kinds", "blocked_categories", "allowed_categories")
     @classmethod
     def _kinds(cls, v: list[str]) -> list[str]:
         return list(dict.fromkeys(v))
@@ -284,20 +339,17 @@ class BrowserPolicyBody(BaseModel):
     @field_validator("blocked_sites", "allowed_sites", "google_allowed_domains", "guard_watched_sites")
     @classmethod
     def _hosts(cls, v: list[str]) -> list[str]:
-        out: list[str] = []
-        for raw in v:
-            host = (raw or "").strip().lower().removeprefix("https://").removeprefix("http://").rstrip("/")
-            if not _HOST.match(host):
-                raise ValueError(f"'{raw[:60]}' is not a host name (like example.com)")
-            if host not in out:
-                out.append(host)
-        return out
+        return host_list(v)
 
     @model_validator(mode="after")
     def _extension(self) -> BrowserPolicyBody:
         # The PC gets one block list, and refuses one over its limit.
         if len(set(self.blocked_sites) | set(category_hosts(self.blocked_categories))) > MAX_SITES:
             raise ValueError(f"Blocked sites and categories together come to more than {MAX_SITES} sites")
+        if len(set(self.allowed_sites) | set(category_hosts(self.allowed_categories))) > MAX_SITES:
+            raise ValueError(f"Allowed sites and categories together come to more than {MAX_SITES} sites")
+        if both := set(self.blocked_categories) & set(self.allowed_categories):
+            raise ValueError(f"'{SITE_CATEGORIES[min(both)][0]}' cannot be both blocked and allowed")
         for name, rx in (("chrome_extension_id", _CHROMIUM_ID), ("edge_extension_id", _CHROMIUM_ID),
                          ("firefox_extension_id", _FIREFOX_ID)):
             value = getattr(self, name)
@@ -330,6 +382,69 @@ class BrowserPolicyBody(BaseModel):
             if host not in FIREFOX_EXTENSION_HOSTS:
                 raise ValueError(f"The Firefox extension must come from {', '.join(FIREFOX_EXTENSION_HOSTS)}")
         return self
+
+
+MAX_EXCEPTION_SITES = 100
+
+
+class ExceptionBody(BaseModel):
+    """An exception policy: only the modules it sets change the person's full policy; everything
+    else stays as that policy has it. None means "leave it to the full policy"."""
+    model_config = ConfigDict(extra="forbid")
+
+    # Browser controls. Extension developer mode is left out: whether it may be on depends on how
+    # the full policy installs the extension, which an exception cannot see.
+    incognito_off: bool | None = None
+    new_profiles_off: bool | None = None
+    dev_tools_off: bool | None = None
+    block_other_browsers: bool | None = None
+    # Websites, added to the full policy's lists. An allowed site is taken off the block list and
+    # a blocked one off the allowed list, so the exception always means what it says.
+    allow_sites: list[str] = Field(default_factory=list, max_length=MAX_EXCEPTION_SITES)
+    block_sites: list[str] = Field(default_factory=list, max_length=MAX_EXCEPTION_SITES)
+    allow_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
+    block_categories: list[SiteCategory] = Field(default_factory=list, max_length=len(SITE_CATEGORIES))
+    # Google sign-in: [] lets personal Gmail in; domains allow only those accounts.
+    google_allowed_domains: list[str] | None = Field(default=None, max_length=MAX_SITES)
+    guard_mode: Literal["log", "warn", "justify", "redact", "approve", "block"] | None = None
+    usb_mode: UsbMode | None = None
+    usb_observe: bool | None = None
+
+    @field_validator("allow_sites", "block_sites")
+    @classmethod
+    def _sites(cls, v: list[str]) -> list[str]:
+        return host_list(v)
+
+    @field_validator("google_allowed_domains")
+    @classmethod
+    def _google(cls, v: list[str] | None) -> list[str] | None:
+        return None if v is None else host_list(v)
+
+    @model_validator(mode="after")
+    def _something(self) -> ExceptionBody:
+        if set(self.allow_sites) & set(self.block_sites) or set(self.allow_categories) & set(self.block_categories):
+            raise ValueError("A site or category cannot be both allowed and blocked by one exception")
+        if self.usb_mode == "company_drives":
+            raise ValueError("Company drives are approved in a full policy; an exception can't list them")
+        if not self.model_dump(exclude_defaults=True):
+            raise ValueError("An exception must change at least one thing")
+        return self
+
+
+def apply_exception(policy: dict, exc: dict) -> dict:
+    """`policy` (a full policy as stored) with the exception's modules laid over it."""
+    out = dict(policy)
+    for key in ("incognito_off", "new_profiles_off", "dev_tools_off", "block_other_browsers",
+                "google_allowed_domains", "guard_mode", "usb_mode", "usb_observe"):
+        if exc.get(key) is not None:
+            out[key] = exc[key]
+    # Categories are read from the list in code here, not copied: an exception's result has a
+    # version made from its content, so a changed list is a new version anyway.
+    allow = [*(exc.get("allow_sites") or []), *category_hosts(exc.get("allow_categories") or [])]
+    block = [*(exc.get("block_sites") or []), *category_hosts(exc.get("block_categories") or [])]
+    out["allowed_sites"] = list(dict.fromkeys([*(h for h in out.get("allowed_sites", []) if h not in block), *allow]))
+    out["blocked_sites"] = list(dict.fromkeys([*(h for h in out.get("blocked_sites", []) if h not in allow), *block]))
+    return out
 
 
 class BrowserResult(BaseModel):
@@ -412,26 +527,28 @@ def pilot_until(row: OrgBrowserPolicy | None) -> datetime | None:
     return row.pilot_until if row.pilot_until is not None and as_utc(row.pilot_until) > utcnow() else None
 
 
-def _check_pilot(org: OrgBrowserPolicy | None, body: BrowserPolicyBody) -> None:
+def _check_pilot(org: OrgBrowserPolicy | None, body: BrowserPolicyBody | ExceptionBody) -> None:
     # E8: the first 14 days only record, so the org sees what happens before anyone is
     # interrupted. Enforced here, under the policy page, group policies and suggestions alike.
     # Nothing switches on by itself when the pilot ends: an admin picks the mode.
-    if body.guard_mode != "log" and (until := pilot_until(org)) is not None:
+    if body.guard_mode not in (None, "log") and (until := pilot_until(org)) is not None:
         raise PilotActive(f"AI Guard only records until {as_utc(until):%d %b %Y}, its 14-day pilot. "
                           "End the pilot first to choose another mode.")
 
 
-def _save(row, org: OrgBrowserPolicy, body: BrowserPolicyBody, actor: User) -> list[str]:
+def _save(row, org: OrgBrowserPolicy, body: BrowserPolicyBody | ExceptionBody, actor: User) -> list[str]:
     """Write `body` into a policy row (the org's or a group's). A real change takes the org's
     next version number. Returns the fields that changed."""
     new = body.model_dump()
-    hosts = category_hosts(body.blocked_categories)
+    hosts = category_hosts(getattr(body, "blocked_categories", []))
+    allowed = category_hosts(getattr(body, "allowed_categories", []))
     changed = sorted(k for k in new if (row.policy or {}).get(k) != new[k])
-    if row.category_hosts != hosts:
+    if row.category_hosts != hosts or (row.allowed_category_hosts or []) != allowed:
         changed.append("category_hosts")   # same categories, list updated since: a new version too
     if changed:
         org.seq += 1
         row.policy, row.version, row.updated_by_user_id, row.category_hosts = new, org.seq, actor.id, hosts
+        row.allowed_category_hosts = allowed
     return changed
 
 
@@ -441,7 +558,8 @@ async def put(session: AsyncSession, *, actor: User, body: BrowserPolicyBody) ->
     if row is None:
         hosts = category_hosts(body.blocked_categories)
         row = OrgBrowserPolicy(org_id=actor.org_id, policy=body.model_dump(), version=1, seq=1,
-                               updated_by_user_id=actor.id, pilot_until=utcnow() + PILOT, category_hosts=hosts)
+                               updated_by_user_id=actor.id, pilot_until=utcnow() + PILOT, category_hosts=hosts,
+                               allowed_category_hosts=category_hosts(body.allowed_categories))
         session.add(row)
         changed = sorted(row.policy)
     else:
@@ -469,103 +587,177 @@ async def end_pilot(session: AsyncSession, *, actor: User) -> OrgBrowserPolicy:
     return row
 
 
-# ── D1: a group's own policy ────────────────────────────────────────────────────────────────
+# ── Named policies for people: user teams and single users ─────────────────────────────────
 
 class NoOrgPolicy(ValueError):
-    """Group policies start from, and fall back to, the org's policy: it must exist first."""
+    """Named policies start from, and fall back to, the org's policy: it must exist first."""
 
 
-async def group_policies(session: AsyncSession, org_id) -> list[tuple[GroupBrowserPolicy, str]]:
-    """The org's group policies with their group names, in the order they win."""
+class DuplicateName(ValueError):
+    """Two policies of one org may not share a name: admins pick them by it."""
+
+
+class WrongKind(ValueError):
+    """A saved policy changes its settings, never its kind."""
+
+
+class PolicyTargets(BaseModel):
+    """Who a named policy is for. Ids only; checked against the org when saved."""
+    model_config = ConfigDict(extra="forbid")
+    team_ids: list[uuid.UUID] = Field(default_factory=list, max_length=200)
+    user_ids: list[uuid.UUID] = Field(default_factory=list, max_length=1000)
+
+
+async def named_policies(session: AsyncSession, org_id) -> list[NamedBrowserPolicy]:
+    """The org's named policies, in the order they win: lowest priority, then name."""
     return list((await session.execute(
-        select(GroupBrowserPolicy, DeviceGroup.name)
-        .join(DeviceGroup, DeviceGroup.id == GroupBrowserPolicy.group_id)
-        .where(GroupBrowserPolicy.org_id == org_id)
-        .order_by(GroupBrowserPolicy.priority, DeviceGroup.name)
-    )).all())
+        select(NamedBrowserPolicy).where(NamedBrowserPolicy.org_id == org_id)
+        .order_by(NamedBrowserPolicy.priority, NamedBrowserPolicy.name)
+    )).scalars())
 
 
-async def put_group(session: AsyncSession, *, actor: User, group_id, priority: int,
-                    body: BrowserPolicyBody) -> GroupBrowserPolicy:
-    group = await session.get(DeviceGroup, group_id)
-    if group is None or group.org_id != actor.org_id:
-        raise LookupError("No such group.")
+async def _check_targets(session: AsyncSession, org_id, targets: PolicyTargets) -> tuple[list[str], list[str]]:
+    """The ids as stored (sorted strings), after checking every one belongs to this org."""
+    teams, users = set(targets.team_ids), set(targets.user_ids)
+    if teams and len((await session.execute(select(UserTeam.id).where(
+            UserTeam.org_id == org_id, UserTeam.id.in_(teams)))).all()) != len(teams):
+        raise LookupError("No such team.")
+    if users and len((await session.execute(select(User.id).where(
+            User.org_id == org_id, User.id.in_(users)))).all()) != len(users):
+        raise LookupError("No such user.")
+    return sorted(map(str, teams)), sorted(map(str, users))
+
+
+async def put_named(session: AsyncSession, *, actor: User, policy_id, name: str, priority: int,
+                    targets: PolicyTargets, body: BrowserPolicyBody | ExceptionBody) -> NamedBrowserPolicy:
+    """Create (policy_id None) or change a named policy. A settings change takes the org's next
+    version; renaming, re-ranking or reassigning does not: the version names the content."""
     org = await session.get(OrgBrowserPolicy, actor.org_id)
     if org is None:
-        raise NoOrgPolicy("Save the policy for everyone first; groups start from it.")
+        raise NoOrgPolicy("Save the default policy first; new policies start from it.")
     _check_pilot(org, body)
-    row = await session.get(GroupBrowserPolicy, group_id)
-    if row is None:
+    teams, users = await _check_targets(session, actor.org_id, targets)
+    same_name = select(NamedBrowserPolicy.id).where(NamedBrowserPolicy.org_id == actor.org_id,
+                                                    func.lower(NamedBrowserPolicy.name) == name.lower())
+    if policy_id is not None:
+        same_name = same_name.where(NamedBrowserPolicy.id != policy_id)
+    if (await session.execute(same_name)).first():
+        raise DuplicateName(f"A policy named {name!r} already exists.")
+    if policy_id is None:
         org.seq += 1
-        row = GroupBrowserPolicy(group_id=group_id, org_id=actor.org_id, priority=priority, policy=body.model_dump(),
-                                 version=org.seq, category_hosts=category_hosts(body.blocked_categories),
+        row = NamedBrowserPolicy(org_id=actor.org_id, name=name, priority=priority, team_ids=teams, user_ids=users,
+                                 kind="exception" if isinstance(body, ExceptionBody) else "full",
+                                 policy=body.model_dump(), version=org.seq,
+                                 category_hosts=category_hosts(getattr(body, "blocked_categories", [])),
+                                 allowed_category_hosts=category_hosts(getattr(body, "allowed_categories", [])),
                                  updated_by_user_id=actor.id)
         session.add(row)
-        changed = sorted(row.policy)
+        await session.flush()
+        changed = ["created"]
     else:
+        row = await session.get(NamedBrowserPolicy, policy_id)
+        if row is None or row.org_id != actor.org_id:
+            raise LookupError("No such policy.")
+        if row.kind != ("exception" if isinstance(body, ExceptionBody) else "full"):
+            raise WrongKind("A full policy stays full and an exception stays an exception: make a new one.")
         changed = _save(row, org, body, actor)
-    if row.priority != priority:
-        # Which policy a PC gets may change; its version already names the content, so no new one.
-        row.priority = priority
-        changed.append("priority")
+        for field, value in (("name", name), ("priority", priority), ("team_ids", teams), ("user_ids", users)):
+            if getattr(row, field) != value:
+                setattr(row, field, value)
+                changed.append(field)
     await AuditService(session).record(
-        org_id=actor.org_id, actor_id=actor.id, action="guard.group_policy_update",
-        target_type="device_group", target_id=str(group_id),
-        detail={"group": group.name, "changed": changed, "version": row.version, "priority": row.priority},
+        org_id=actor.org_id, actor_id=actor.id, action="guard.named_policy_update",
+        target_type="browser_policy", target_id=str(row.id),
+        detail={"name": row.name, "changed": changed, "version": row.version, "priority": row.priority,
+                "teams": len(teams), "users": len(users)},
     )
     await session.commit()
     return row
 
 
-async def delete_group(session: AsyncSession, *, actor: User, group_id) -> None:
-    """The group's PCs go back to the org's policy (a different version, so an update)."""
-    row = await session.get(GroupBrowserPolicy, group_id)
+async def delete_named(session: AsyncSession, *, actor: User, policy_id) -> None:
+    """Its people's PCs go back to the default policy (a different version, so an update)."""
+    row = await session.get(NamedBrowserPolicy, policy_id)
     if row is None or row.org_id != actor.org_id:
-        raise LookupError("That group has no policy of its own.")
-    group = await session.get(DeviceGroup, group_id)
+        raise LookupError("No such policy.")
     await AuditService(session).record(
-        org_id=actor.org_id, actor_id=actor.id, action="guard.group_policy_delete",
-        target_type="device_group", target_id=str(group_id), detail={"group": group.name if group else None},
+        org_id=actor.org_id, actor_id=actor.id, action="guard.named_policy_delete",
+        target_type="browser_policy", target_id=str(row.id), detail={"name": row.name},
     )
     await session.delete(row)
     await session.commit()
 
 
-async def applies_to(session: AsyncSession, org_id, device_ids) -> dict:
-    """Device id → (group name, its policy) for PCs a group policy covers; others get the org's."""
-    ranked = await group_policies(session, org_id)
-    if not ranked or not device_ids:
+async def assigned_users(session: AsyncSession, org_id, device_ids) -> dict:
+    """Device id → the user it is assigned to in Assets, the same link the Tracker reads."""
+    if not device_ids:
         return {}
-    members = (await session.execute(
-        select(DeviceGroupMember.group_id, DeviceGroupMember.device_id)
-        .where(DeviceGroupMember.group_id.in_([g.group_id for g, _ in ranked]),
-               DeviceGroupMember.device_id.in_(list(device_ids)))
-    )).all()
-    by_group: dict = {}
-    for gid, did in members:
-        by_group.setdefault(gid, set()).add(did)
     out: dict = {}
-    for g, name in ranked:                          # first match wins: lowest priority, then name
-        for did in by_group.get(g.group_id, ()):
-            out.setdefault(did, (name, g))
+    for did, uid in (await session.execute(
+            select(Asset.device_id, Asset.assigned_to_user_id)
+            .where(Asset.org_id == org_id, Asset.device_id.in_(list(device_ids)),
+                   Asset.assigned_to_user_id.isnot(None)).order_by(Asset.created_at))).all():
+        out.setdefault(did, uid)
     return out
 
 
+async def applies_to(session: AsyncSession, org_id, device_ids) -> dict:
+    """Device id → (the full named policy covering it or None for the default, [the exceptions
+    covering it, in priority order]), through the user it is assigned to: by name or by one of
+    their teams. A PC missing here gets the default policy alone."""
+    ranked = await named_policies(session, org_id)
+    owners = await assigned_users(session, org_id, device_ids) if ranked else {}
+    if not owners:
+        return {}
+    teams: dict = {}
+    for tid, uid in (await session.execute(
+            select(UserTeamMember.team_id, UserTeamMember.user_id)
+            .where(UserTeamMember.user_id.in_(set(owners.values()))))).all():
+        teams.setdefault(uid, set()).add(str(tid))
+    out: dict = {}
+    for did, uid in owners.items():
+        mine = teams.get(uid, set())
+        hits = [p for p in ranked if str(uid) in p.user_ids or mine & set(p.team_ids)]
+        full = next((p for p in hits if p.kind == "full"), None)
+        exceptions = [p for p in hits if p.kind == "exception"]
+        if full or exceptions:
+            out[did] = (full, exceptions)
+    return out
+
+
+def layered(base, exceptions: list) -> tuple[int, dict]:
+    """What a PC applies: `base` (the org's or a full named policy) with `exceptions` laid over it,
+    lowest priority number last so it wins, as one block list. The version is the base's when no
+    exception applies; otherwise a number made from the result, above any the org issues, so a
+    change to any part of it (or a move to another mix) is always a new version on the PC."""
+    # D1: the PC gets one block list and one allow list; categories are the portal's way of
+    # choosing them. An allowed site wins over a blocked one, as on the PC.
+    policy = {k: v for k, v in base.policy.items() if k not in ("blocked_categories", "allowed_categories")}
+    policy["allowed_sites"] = list(dict.fromkeys([*policy.get("allowed_sites", []), *(base.allowed_category_hosts or [])]))
+    allowed = set(policy["allowed_sites"])
+    policy["blocked_sites"] = list(dict.fromkeys(
+        [*policy.get("blocked_sites", []), *(h for h in (base.category_hosts or []) if h not in allowed)]))
+    for exc in reversed(exceptions):
+        policy = apply_exception(policy, exc.policy)
+    if not exceptions:
+        return base.version, policy
+    digest = hashlib.sha256(json.dumps(policy, sort_keys=True, default=str).encode()).hexdigest()
+    return LAYERED_VERSION_FLOOR + int(digest[:12], 16) % LAYERED_VERSION_FLOOR, policy
+
+
 async def for_device(session: AsyncSession, device: Device) -> dict:
-    """What a PC should apply: its group's policy if one covers it, else the org's. An org
-    without the add-on gets an empty policy at version 0, which tells the agent to remove
-    everything SAVIO set."""
+    """What a PC should apply: the full named policy of the person it is assigned to (else the
+    org's), with that person's exceptions laid over it. Read fresh on every fetch, so giving
+    someone another PC moves their policies with them. An org without the add-on gets an empty
+    policy at version 0, which tells the agent to remove everything SAVIO set."""
     if not await entitled(session, device.org_id):
         return {"version": 0, "policy": {}}
     row = await session.get(OrgBrowserPolicy, device.org_id)
     if row is None:
         return {"version": 0, "policy": {}}
-    if (hit := (await applies_to(session, device.org_id, {device.id})).get(device.id)) is not None:
-        row = hit[1]
-    # D1: the PC gets one block list; categories are the portal's way of choosing it.
-    policy = {k: v for k, v in row.policy.items() if k != "blocked_categories"}
-    policy["blocked_sites"] = list(dict.fromkeys([*policy.get("blocked_sites", []), *(row.category_hosts or [])]))
-    return {"version": row.version, "policy": policy}
+    full, exceptions = (await applies_to(session, device.org_id, {device.id})).get(device.id, (None, []))
+    version, policy = layered(full or row, exceptions)
+    return {"version": version, "policy": policy}
 
 
 # ── C3: USB write windows ───────────────────────────────────────────────────────────────────
@@ -682,7 +874,7 @@ async def drives_seen(session: AsyncSession, org_id) -> list[dict]:
     already approve it, so an admin can approve the company's own."""
     approved: dict[str, list[str]] = {}
     org = await session.get(OrgBrowserPolicy, org_id)
-    for scope, row in [("Everyone", org)] + [(name, g) for g, name in await group_policies(session, org_id)]:
+    for scope, row in [("Everyone", org)] + [(p.name, p) for p in await named_policies(session, org_id)]:
         for d in ((row.policy if row else None) or {}).get("usb_approved_drives", []):
             approved.setdefault(d["id"].upper(), []).append(scope)
     seen: dict[str, dict] = {}
