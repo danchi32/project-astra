@@ -116,7 +116,7 @@ export const downloadUninstaller = async () => {
 export const deleteDevice = (id: string) =>
   apiClient.delete(`/devices/${id}`).then((r) => r.data);
 
-function triggerDownload(blob: Blob, filename: string) {
+export function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

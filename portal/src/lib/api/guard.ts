@@ -1,4 +1,15 @@
 import { apiClient } from "./client";
+import { triggerDownload } from "./devices";
+
+// SAVIO Guard's ID in Chrome and Edge, the same on every PC: fixed by the "key" in
+// extension/manifest.json, so a copy loaded unpacked is the one the policy names.
+export const SAVIO_EXTENSION_ID = "kcfglphbojefeekbfacfnfnholaipihh";
+
+// The extension as a zip for "Load unpacked", until it is listed in the stores.
+export const downloadExtension = async () => {
+  const res = await apiClient.get<Blob>("/downloads/extension", { responseType: "blob" });
+  triggerDownload(res.data, "savio-guard-extension.zip");
+};
 
 // Phase 3 · AI Guard: the org's browser policy (D10/D1/D2) and what each PC reported.
 export interface BrowserPolicy {

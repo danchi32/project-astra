@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldAlert } from "lucide-react";
 import { getMe } from "@/lib/api/auth";
 import {
-  FINDING_KINDS, closeUsbWindow, deleteGroupPolicy, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices,
+  FINDING_KINDS, SAVIO_EXTENSION_ID, closeUsbWindow, deleteGroupPolicy, downloadExtension, endGuardPilot, getBrowserPolicy, getBrowserPolicyDevices,
   getDrivesSeen, getGroupPolicies, getSiteCategories, openUsbWindow, putBrowserPolicy, putGroupPolicy, type BrowserPolicy,
   type DeviceBrowserState, type FindingKind,
 } from "@/lib/api/guard";
@@ -106,6 +106,55 @@ function CompanyDrives({ form, setForm, canEdit }: {
     </div>
   );
 }
+/** Until the store listing: the extension loaded unpacked by IT, with the policy naming its fixed ID. */
+function ExtensionInstall({ form, setForm, canEdit }: {
+  form: BrowserPolicy; setForm: (f: BrowserPolicy) => void; canEdit: boolean;
+}) {
+  const [err, setErr] = useState<string | null>(null);
+  const muted = { color: "var(--text-secondary)" };
+  const box = { background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text-primary)" };
+  const byHand = form.extension_install === "manual" && !!(form.chrome_extension_id || form.edge_extension_id);
+  const turn = (on: boolean) => setForm(on
+    ? { ...form, extension_install: "manual", chrome_extension_id: SAVIO_EXTENSION_ID, edge_extension_id: SAVIO_EXTENSION_ID,
+        extension_developer_mode_off: false }
+    : { ...form, extension_install: "store", chrome_extension_id: null, edge_extension_id: null });
+  return (
+    <div className="rounded-lg p-3 space-y-3 text-sm" style={box}>
+      <label className="flex items-start gap-3">
+        <input type="checkbox" className="mt-1" disabled={!canEdit} checked={byHand} onChange={(e) => turn(e.target.checked)} />
+        <span>Use the SAVIO extension in Chrome and Edge, installed by hand for now
+          <span className="block text-xs" style={muted}>
+            The settings below then reach the extension wherever it is installed. Extension developer mode stays allowed,
+            because loading it needs it. Not Firefox yet: it only accepts the extension from Mozilla&apos;s store.
+          </span>
+        </span>
+      </label>
+      {byHand && (
+        <div className="space-y-2 text-xs">
+          <button type="button" className="px-3 py-1.5 rounded-lg font-medium" style={{ background: "var(--accent)", color: "#fff" }}
+            onClick={() => { setErr(null); downloadExtension().catch((e) => setErr(apiErrorMessage(e, "Could not download it."))); }}>
+            Download the extension (zip)
+          </button>
+          {err && <p style={{ color: "#ef4444" }}>{err}</p>}
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>Save the policy first, so the PC has it (within the hour).</li>
+            <li>On the PC, unzip it to a folder that stays, e.g. <span className="font-mono">C:\SAVIO\savio-guard</span>. The browser
+              loads it from there every time: deleting the folder removes the extension.</li>
+            <li>Chrome: open <span className="font-mono">chrome://extensions</span>. Edge: open <span className="font-mono">edge://extensions</span>.</li>
+            <li>Turn on <span className="font-medium">Developer mode</span>, click <span className="font-medium">Load unpacked</span> and pick
+              the <span className="font-mono">savio-guard</span> folder.</li>
+            <li>Check that its ID is <span className="font-mono">{SAVIO_EXTENSION_ID}</span>. Do this in each browser, and for each
+              person who signs in to that PC.</li>
+          </ol>
+          <p style={muted}>
+            A copy installed by hand can be removed by the person using the PC; one installed from the store, later, cannot.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const USB_MINUTES = [[15, "15 minutes"], [30, "30 minutes"], [60, "1 hour"], [240, "4 hours"], [480, "8 hours"]] as const;
 
 /** C3: one PC's USB write window: when it ends, or a way to open one. */
@@ -314,13 +363,19 @@ export default function GuardPage() {
 
       {form && (
         <div className="rounded-xl p-5 space-y-4" style={panel}>
-          {SWITCHES.map((s) => (
-            <label key={s.key} className="flex items-start gap-3 text-sm" style={{ color: "var(--text-primary)" }}>
-              <input type="checkbox" className="mt-1" disabled={!isAdmin} checked={!!form[s.key]}
-                onChange={(e) => setForm({ ...form, [s.key]: e.target.checked })} />
-              <span>{s.label}<span className="block text-xs" style={muted}>{s.help}</span></span>
-            </label>
-          ))}
+          {SWITCHES.map((s) => {
+            // Loading the extension by hand needs developer mode, so the two can't both be on.
+            const handHeld = s.key === "extension_developer_mode_off" && form.extension_install === "manual";
+            return (
+              <label key={s.key} className="flex items-start gap-3 text-sm" style={{ color: "var(--text-primary)" }}>
+                <input type="checkbox" className="mt-1" disabled={!isAdmin || handHeld} checked={!!form[s.key]}
+                  onChange={(e) => setForm({ ...form, [s.key]: e.target.checked })} />
+                <span>{s.label}<span className="block text-xs" style={muted}>
+                  {handHeld ? "Off while the SAVIO extension is installed by hand: loading it needs developer mode." : s.help}
+                </span></span>
+              </label>
+            );
+          })}
           <label className="block text-sm space-y-1" style={{ color: "var(--text-primary)" }}>
             <span>USB drives and phones</span>
             <select disabled={!isAdmin} value={form.usb_mode}
@@ -404,10 +459,11 @@ export default function GuardPage() {
               <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Sensitive data in the browser</h2>
               <p className="text-xs" style={muted}>
                 The SAVIO extension checks what is pasted, dropped, uploaded or sent on a page, on the PC itself. Only counts
-                (&ldquo;2 PAN numbers&rdquo;) are ever recorded, never the text. It is force-installed once it is published to
-                the browser stores; until then these settings wait.
+                (&ldquo;2 PAN numbers&rdquo;) are ever recorded, never the text. Until it is listed in the Chrome and Edge
+                stores, IT installs it by hand on each PC; then it will be installed automatically.
               </p>
             </div>
+            <ExtensionInstall form={form} setForm={setForm} canEdit={isAdmin} />
             {pilotUntil && (
               <div className="flex flex-wrap items-center gap-3 rounded-lg p-3 text-sm"
                 style={{ background: "rgba(37,99,235,0.08)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
