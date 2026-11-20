@@ -375,6 +375,7 @@ export default function PlatformOrganizationsPage() {
                 ["Discount", drawerOrg.discount_percent ? `${drawerOrg.discount_percent}%` : "—"],
                 ["Trial", trialInfo(drawerOrg)],
                 ["Billing rail", drawerOrg.billing_provider ?? "—"],
+                ["Phone", drawerOrg.contact_phone ?? "—"],
               ].map(([k, v]) => (
                 <div key={k}>
                   <dt className="text-xs" style={{ color: "var(--text-secondary)" }}>{k}</dt>

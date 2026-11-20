@@ -16,7 +16,7 @@ _PW = "Password12345"
 async def _register(client, sf, org, email):
     async with sf() as s:
         _, code = await InviteService(s).create(note="t", expires_in_days=30)
-    r = await client.post("/api/v1/auth/register", json={"terms_accepted": True,
+    r = await client.post("/api/v1/auth/register", json={"terms_accepted": True, "phone": "+918595492500",
         "invite_code": code, "organization_name": org,
         "admin_name": "A", "admin_email": email, "admin_password": _PW})
     return {"Authorization": f"Bearer {r.json()['access_token']}"}

@@ -55,6 +55,7 @@ class AuthService:
     async def _provision_org(
         self, *, organization_name: str, admin_name: str, email: str, hashed_password: str,
         email_domain: str | None = None, accepted_ip: str | None = None,
+        phone: str | None = None,
     ) -> tuple[Organization, User]:
         """Create the org + its first admin (no commit). Shared by every signup path.
 
@@ -72,6 +73,7 @@ class AuthService:
                 terms_version=settings.legal_terms_version,
                 terms_accepted_at=utcnow(),
                 terms_accepted_ip=accepted_ip,
+                contact_phone=phone,
             )
         )
         admin = await self.users.add(
@@ -162,7 +164,7 @@ class AuthService:
         org, admin = await self._provision_org(
             organization_name=data.organization_name, admin_name=data.admin_name,
             email=email, hashed_password=hash_password(data.admin_password),
-            email_domain=email_domain, accepted_ip=accepted_ip,
+            email_domain=email_domain, accepted_ip=accepted_ip, phone=data.phone,
         )
         if invite is not None:
             invite.used_at = utcnow()
@@ -200,6 +202,7 @@ class AuthService:
                 organization_name=data.organization_name.strip(),
                 admin_name=data.admin_name.strip(),
                 hashed_password=hash_password(data.admin_password),
+                phone=data.phone,
                 expires_at=utcnow() + timedelta(minutes=settings.otp_ttl_minutes),
             )
         )
@@ -242,7 +245,7 @@ class AuthService:
         org, admin = await self._provision_org(
             organization_name=pending.organization_name, admin_name=pending.admin_name,
             email=email, hashed_password=pending.hashed_password,
-            email_domain=email_domain, accepted_ip=accepted_ip,
+            email_domain=email_domain, accepted_ip=accepted_ip, phone=pending.phone,
         )
         await self.pending.delete_by_email(email)
         access = create_access_token(user_id=admin.id, org_id=admin.org_id, role=admin.role.value)
