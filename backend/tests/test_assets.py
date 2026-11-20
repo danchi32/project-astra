@@ -101,3 +101,66 @@ async def test_create_records_audit_log(client, admin_headers):
     assert logs.status_code == 200
     actions = [entry["action"] for entry in logs.json()["items"]]
     assert "asset.create" in actions
+
+
+async def _other_org_device(session_factory, other_org):
+    from app.models import Device
+
+    async with session_factory() as session:
+        device = Device(
+            org_id=other_org.id, hostname="GLOBEX-PC", machine_id="globex-pc",
+            os_version="Windows 11", agent_version="0.1.0", token_hash="globex-device-token",
+        )
+        session.add(device)
+        await session.commit()
+        return device
+
+
+async def test_create_refuses_other_orgs_user(client, admin_headers, other_org_user):
+    resp = await _create(client, admin_headers, assigned_to_user_id=str(other_org_user.id))
+    assert resp.status_code == 404
+    listed = await client.get("/api/v1/assets", headers=admin_headers)
+    assert listed.json()["items"] == []
+
+
+async def test_create_refuses_other_orgs_device(client, admin_headers, session_factory, other_org):
+    device = await _other_org_device(session_factory, other_org)
+    resp = await _create(client, admin_headers, device_id=str(device.id))
+    assert resp.status_code == 404
+    listed = await client.get("/api/v1/assets", headers=admin_headers)
+    assert listed.json()["items"] == []
+
+
+async def test_update_refuses_other_orgs_user(client, admin_headers, other_org_user):
+    asset_id = (await _create(client, admin_headers)).json()["id"]
+    resp = await client.patch(
+        f"/api/v1/assets/{asset_id}",
+        json={"assigned_to_user_id": str(other_org_user.id)},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 404
+    after = (await client.get(f"/api/v1/assets/{asset_id}", headers=admin_headers)).json()
+    assert after["assigned_to_user_id"] is None
+    assert after["assigned_to_name"] is None
+
+
+async def test_update_refuses_other_orgs_device(client, admin_headers, session_factory, other_org):
+    device = await _other_org_device(session_factory, other_org)
+    asset_id = (await _create(client, admin_headers)).json()["id"]
+    resp = await client.patch(
+        f"/api/v1/assets/{asset_id}", json={"device_id": str(device.id)}, headers=admin_headers
+    )
+    assert resp.status_code == 404
+    after = (await client.get(f"/api/v1/assets/{asset_id}", headers=admin_headers)).json()
+    assert after["device_id"] is None
+
+
+async def test_update_can_still_clear_links(client, admin_headers, admin_user):
+    asset_id = (await _create(client, admin_headers, assigned_to_user_id=str(admin_user.id))).json()["id"]
+    resp = await client.patch(
+        f"/api/v1/assets/{asset_id}",
+        json={"assigned_to_user_id": None, "device_id": None},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["assigned_to_user_id"] is None

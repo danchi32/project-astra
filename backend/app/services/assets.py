@@ -165,6 +165,7 @@ class AssetService:
     # -- Mutations (audited) ---------------------------------------------------
 
     async def create(self, *, actor: User, data: AssetCreate) -> AssetRead:
+        await self._check_links(actor.org_id, data.assigned_to_user_id, data.device_id)
         asset = Asset(org_id=actor.org_id, **data.model_dump())
         asset.warranty_source = "manual" if asset.warranty_expiry else None   # L5b
         newly_assigned = False
@@ -202,6 +203,9 @@ class AssetService:
         old_status = asset.status
         old_location = asset.location
         changes = data.model_dump(exclude_unset=True)
+        await self._check_links(
+            actor.org_id, changes.get("assigned_to_user_id"), changes.get("device_id")
+        )
         old_expiry = asset.warranty_expiry
         for field, value in changes.items():
             setattr(asset, field, value)
@@ -459,6 +463,21 @@ class AssetService:
         if asset is None or asset.org_id != org_id:
             raise NotFoundError("Asset not found")
         return asset
+
+    async def _check_links(
+        self, org_id: uuid.UUID, user_id: uuid.UUID | None, device_id: uuid.UUID | None
+    ) -> None:
+        """An asset may only point at a person or PC in its own org. Another org's id
+        is refused as not found rather than forbidden, so ids from other tenants can't
+        be probed for existence."""
+        if user_id is not None:
+            user = await self.users.get(user_id)
+            if user is None or user.org_id != org_id:
+                raise NotFoundError("User not found")
+        if device_id is not None:
+            device = await self.devices.get(device_id)
+            if device is None or device.org_id != org_id:
+                raise NotFoundError("Device not found")
 
     # -- Lifecycle events (the device passport) --------------------------------
 
