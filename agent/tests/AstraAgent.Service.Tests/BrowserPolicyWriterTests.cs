@@ -268,6 +268,61 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     }
 
     [Theory]
+    [InlineData("security", "https://security.cloudflare-dns.com/dns-query")]
+    [InlineData("family", "https://family.cloudflare-dns.com/dns-query")]
+    public void Dns_filter_sends_secure_dns_to_the_filtering_service_with_fallback(string level, string url)
+    {
+        var p = new BrowserPolicy { DnsFilter = level };
+        Assert.Empty(p.Validate());
+        Assert.Null(Chrome(p).Error);
+        using (var k = Policy(Browser.Chrome))
+        {
+            // Strings (REG_SZ), "automatic": a name only the office DNS knows still resolves.
+            Assert.Equal("automatic", k.GetValue("DnsOverHttpsMode"));
+            Assert.Equal(url, k.GetValue("DnsOverHttpsTemplates"));
+            Assert.Equal(RegistryValueKind.String, k.GetValueKind("DnsOverHttpsMode"));
+        }
+        Assert.Equal(url, BrowserPolicyMap.Chromium(p, Browser.Edge)["DnsOverHttpsTemplates"]);
+
+        Assert.Null(Firefox(p).Error);
+        var doh = Policies()["DNSOverHTTPS"]!;
+        Assert.True(doh["Enabled"]!.GetValue<bool>());
+        Assert.Equal(url, doh["ProviderURL"]!.GetValue<string>());
+        Assert.True(doh["Locked"]!.GetValue<bool>());
+        Assert.True(doh["Fallback"]!.GetValue<bool>());
+        Assert.False(Firefox(p).Changed);
+
+        // Off removes what SAVIO set, in both.
+        Assert.Contains("DnsOverHttpsMode", Chrome(new BrowserPolicy()).Removed);
+        using (var k = Policy(Browser.Chrome)) Assert.Null(k?.GetValue("DnsOverHttpsTemplates"));
+        Firefox(new BrowserPolicy());
+        Assert.Null(Policies()["DNSOverHTTPS"]);
+    }
+
+    [Fact]
+    public void Dns_filter_is_off_by_default_and_never_a_url_from_the_policy()
+    {
+        Assert.False(BrowserPolicyMap.Chromium(Full, Browser.Chrome).ContainsKey("DnsOverHttpsMode"));
+        Assert.False(BrowserPolicyMap.Firefox(Full).ContainsKey("DNSOverHTTPS"));
+        Assert.Equal("off", System.Text.Json.JsonSerializer.Deserialize<Api.AgentBrowserPolicyBody>("{}")!.ToPolicy().DnsFilter);
+        Assert.Equal("family", System.Text.Json.JsonSerializer.Deserialize<Api.AgentBrowserPolicyBody>(
+            """{"dns_filter": "family"}""")!.ToPolicy().DnsFilter);
+        foreach (var bad in new[] { "on", "", "https://dns.evil.example/dns-query" })
+            Assert.NotEmpty(new BrowserPolicy { DnsFilter = bad }.Validate());
+    }
+
+    [Fact]
+    public void Someone_elses_secure_dns_is_a_conflict_and_kept()
+    {
+        using (var k = _root.CreateSubKey(BrowserPolicyWriter.ChromiumPolicyPath(Browser.Chrome)))
+            k.SetValue("DnsOverHttpsMode", "off");
+        var r = Chrome(new BrowserPolicy { DnsFilter = "family" });
+        Assert.Contains("DnsOverHttpsMode", r.Conflicts);
+        using var after = Policy(Browser.Chrome);
+        Assert.Equal("off", after.GetValue("DnsOverHttpsMode"));
+    }
+
+    [Theory]
     [InlineData("shout")]
     [InlineData("")]
     public void A_bad_guard_mode_is_refused(string mode) => Assert.NotEmpty((Full with { GuardMode = mode }).Validate());

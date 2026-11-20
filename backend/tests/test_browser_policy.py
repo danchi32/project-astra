@@ -658,3 +658,31 @@ async def test_categories_can_be_allowed(client, admin_headers, session_factory,
     assert {"youtube.com"} <= set(p["allowed_sites"]) and {"youtube.com"}.isdisjoint(p["blocked_sites"])
     cats = {c["key"] for c in (await client.get("/api/v1/guard/site-categories", headers=admin_headers)).json()}
     assert {"streaming", "gaming", "gambling", "shopping", "job_search", "dating", "vpn_proxy", "piracy", "work_tools"} <= cats
+
+
+async def test_dns_filter(client, admin_headers, session_factory, admin_user, regular_user):
+    """Adult content and malware are blocked by a filtering DNS service, not a site list: the PC is
+    served the level only (the agent holds the server), and an exception can change it."""
+    await _guard_on(session_factory, admin_user.org_id)
+    put = lambda body: client.put("/api/v1/guard/browser-policy", headers=admin_headers, json=body)
+    assert (await put(POLICY)).json()["policy"]["dns_filter"] == "off"                 # off by default
+    for bad in ("on", "https://dns.evil.example/dns-query", None):
+        assert (await put({**POLICY, "dns_filter": bad})).status_code == 422, bad
+    v = (await put({**POLICY, "dns_filter": "security"})).json()["version"]
+    d, h = await _enroll(client, admin_headers, "DNS-1")
+    served = lambda: client.get("/api/v1/agent/browser-policy", headers=h)
+    s = (await served()).json()
+    assert s["version"] == v and s["policy"]["dns_filter"] == "security"
+
+    me = str(regular_user.id)
+    await client.post("/api/v1/assets", headers=admin_headers, json={"name": "L", "device_id": d, "assigned_to_user_id": me})
+    url = "/api/v1/guard/policies"
+    assert (await client.post(url, headers=admin_headers, json={
+        "name": "Bad", "priority": 1, "kind": "exception", "user_ids": [me],
+        "exception": {"dns_filter": "strict"}})).status_code == 422
+    exc = (await client.post(url, headers=admin_headers, json={
+        "name": "Family filter", "priority": 1, "kind": "exception", "user_ids": [me],
+        "exception": {"dns_filter": "family"}})).json()
+    assert exc["exception"]["dns_filter"] == "family"
+    p = (await served()).json()["policy"]
+    assert p["dns_filter"] == "family" and p["incognito_off"] is True                 # the rest is the default's

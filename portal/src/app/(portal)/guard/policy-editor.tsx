@@ -68,6 +68,7 @@ export function changesOf(x: ExceptionBody): string[] {
   if (x.allow_sites?.length || x.allow_categories?.length) out.push("Sites allowed");
   if (x.block_sites?.length || x.block_categories?.length) out.push("Sites blocked");
   if (x.google_allowed_domains != null) out.push(x.google_allowed_domains.length ? "Company Google only" : "Personal Gmail allowed");
+  if (x.dns_filter) out.push("Filtering DNS");
   if (x.guard_mode) out.push("Sensitive data mode");
   if (x.usb_mode || x.usb_observe != null) out.push("USB");
   return out;
@@ -111,6 +112,32 @@ const MODES: { value: BrowserPolicy["guard_mode"]; label: string; help: string }
   { value: "approve", label: "Needs IT approval", help: "Held until an admin approves it under Approvals." },
   { value: "block", label: "Block", help: "Paste, upload or send is refused. If the check itself fails, it warns instead." },
 ];
+
+// The firewall-style categories no site list covers. Cloudflare's family server blocks malware too.
+export const DNS_FILTERS: { value: BrowserPolicy["dns_filter"]; label: string; tone?: "bad" }[] = [
+  { value: "off", label: "No rule" },
+  { value: "security", label: "Block malware and phishing", tone: "bad" },
+  { value: "family", label: "Block those and adult content", tone: "bad" },
+];
+
+/** What the filtering DNS does and does not do, shown wherever it is set. */
+function DnsFilterNote() {
+  return (
+    <div className="px-5 pb-4 text-xs space-y-1" style={muted}>
+      <p>
+        Chrome, Edge and Firefox look sites up through Cloudflare&apos;s filtering DNS (1.1.1.1 for Families), which knows
+        millions of adult and malware sites and updates them daily. A blocked site does not open. Internal names that only
+        your office DNS knows (intranet, file server, printers) keep working: for a name the filter does not know, the
+        browser asks your own DNS.
+      </p>
+      <p style={{ color: "var(--health-warn)" }}>
+        Limits: on a network that blocks Cloudflare (a home router can), the browser silently falls back to unfiltered
+        lookups. Other apps and other browsers are not covered. &quot;Always allowed&quot; cannot unblock a site the filter
+        blocks; set this to No rule for those people with an exception instead.
+      </p>
+    </div>
+  );
+}
 
 export const USB_MODES: { value: BrowserPolicy["usb_mode"]; label: string; help: string }[] = [
   { value: "off", label: "Leave as they are", help: "SAVIO does not change anything about USB drives." },
@@ -401,12 +428,16 @@ function Sites({ draft, setDraft, setText, canEdit }: {
           <CategoryGrid categories={categories} canEdit={canEdit} neutral="No rule"
             allowed={form.allowed_categories ?? []} blocked={form.blocked_categories}
             onChange={(allowed, blocked) => setDraft({ ...draft, form: { ...form, allowed_categories: allowed, blocked_categories: blocked } })} />
-          <p className="px-5 pb-4 text-xs" style={muted}>
-            Adult sites and malware or spam are not listed: there are millions and they change daily, so blocking them needs
-            filtering DNS rather than a list.
-          </p>
         </Card>
       )}
+      <Card title="Adult content, malware and phishing"
+        description="Not a list: there are millions of these sites and they change daily, so they are blocked by a filtering DNS service.">
+        <Setting title="Filtering DNS" help="Adult content includes malware and phishing.">
+          <Choice label="Filtering DNS" value={form.dns_filter ?? "off"} options={DNS_FILTERS} disabled={!canEdit}
+            onChange={(v) => setDraft({ ...draft, form: { ...form, dns_filter: v } })} />
+        </Setting>
+        <DnsFilterNote />
+      </Card>
     </>
   );
 }
@@ -637,6 +668,14 @@ function ExceptionModules({ section, draft, setDraft, setText, canEdit, pilotUnt
               onChange={(allow_categories, block_categories) => set({ allow_categories, block_categories })} />
           </Card>
         )}
+        <Card title="Adult content, malware and phishing" description={intro}>
+          <Setting title="Filtering DNS" help={x.dns_filter ? "Adult content includes malware and phishing." : "As the full policy has it."}>
+            <Choice label="Filtering DNS" value={x.dns_filter ?? "leave"} disabled={!canEdit}
+              onChange={(v) => set({ dns_filter: v === "leave" ? null : v })}
+              options={[{ value: "leave" as const, label: NO_CHANGE }, ...DNS_FILTERS]} />
+          </Setting>
+          <DnsFilterNote />
+        </Card>
       </>
     );
   }

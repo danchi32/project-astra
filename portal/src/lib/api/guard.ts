@@ -57,6 +57,8 @@ export interface BrowserPolicy {
   usb_approved_drives: { id: string; name: string }[];
   // C3b: record what is copied onto USB drives, in counts, checked on the PC.
   usb_observe: boolean;
+  // Adult content and malware, through the browsers' secure DNS (Cloudflare 1.1.1.1 for Families).
+  dns_filter: "off" | "security" | "family";
 }
 
 export const FINDING_KINDS = {
@@ -225,6 +227,7 @@ export interface ExceptionBody {
   guard_mode?: BrowserPolicy["guard_mode"] | null;
   usb_mode?: BrowserPolicy["usb_mode"] | null;
   usb_observe?: boolean | null;
+  dns_filter?: BrowserPolicy["dns_filter"] | null;
 }
 
 export interface NamedPolicy {

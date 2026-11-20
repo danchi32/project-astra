@@ -25,6 +25,12 @@ public sealed record BrowserPolicy
     /// <summary>Host names (and their subdomains) to block, or to allow despite a block.</summary>
     public IReadOnlyList<string> BlockedSites { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> AllowedSites { get; init; } = Array.Empty<string>();
+    /// <summary>Adult content and malware, which no site list covers: the browsers' secure DNS goes
+    /// to a filtering service. off · security (malware and phishing) · family (adult content too).
+    /// Only the level comes from the backend; the server URLs are fixed here.</summary>
+    public string DnsFilter { get; init; } = "off";
+    static readonly string[] DnsFilters = ["off", "security", "family"];
+
     /// <summary>D2: Google sign-in only for these Workspace domains (X-GoogApps-Allowed-Domains).</summary>
     public IReadOnlyList<string> GoogleAllowedDomains { get; init; } = Array.Empty<string>();
     /// <summary>The SAVIO extension's store IDs, set once it is published. Empty = not forced.</summary>
@@ -144,6 +150,7 @@ public sealed record BrowserPolicy
         // These become request headers: only IDs of the expected shape, never anything else.
         if (MicrosoftTenantId is not null != MicrosoftPolicyId is not null) problems.Add("Microsoft needs a tenant ID and a policy ID");
         if (MicrosoftOnWindows && MicrosoftTenantId is null) problems.Add("Windows tenant restrictions need the Microsoft tenant ID and policy ID");
+        if (!DnsFilters.Contains(DnsFilter)) problems.Add($"DNS filter '{Trim(DnsFilter)}' is not off, security or family");
         if (!UsbModes.Contains(UsbMode)) problems.Add($"USB mode '{Trim(UsbMode)}' is not off, read_only, encrypted_only, on_request, block or company_drives");
         if (UsbApprovedDrives.Count > MaxApprovedDrives) problems.Add($"too many approved drives (max {MaxApprovedDrives})");
         if (UsbApprovedDrives.Any(d => !DriveId.IsMatch(d ?? ""))) problems.Add("an approved drive is not a USB drive's device ID");
@@ -185,6 +192,14 @@ public static class BrowserPolicyMap
     const string ChromeStore = "https://clients2.google.com/service/update2/crx";
     const string EdgeStore = "https://edge.microsoft.com/extensionwebstorebase/v1/crx";
 
+    /// <summary>Cloudflare's 1.1.1.1 for Families DoH servers. A blocked site resolves to 0.0.0.0.</summary>
+    public static string? DnsFilterUrl(BrowserPolicy p) => p.DnsFilter switch
+    {
+        "security" => "https://security.cloudflare-dns.com/dns-query",
+        "family" => "https://family.cloudflare-dns.com/dns-query",
+        _ => null,
+    };
+
     /// <summary>Chromium (Chrome, Edge): DWORD values (int), strings, or lists (string[]).</summary>
     public static IReadOnlyDictionary<string, object> Chromium(BrowserPolicy p, Browser b)
     {
@@ -202,6 +217,15 @@ public static class BrowserPolicyMap
         if (p.BlockedSites.Count > 0) v["URLBlocklist"] = p.BlockedSites.ToArray();
         if (p.AllowedSites.Count > 0) v["URLAllowlist"] = p.AllowedSites.ToArray();
         if (p.GoogleAllowedDomains.Count > 0) v["AllowedDomainsForApps"] = string.Join(",", p.GoogleAllowedDomains);
+        if (DnsFilterUrl(p) is { } doh)
+        {
+            // "automatic", not "secure": a name the filter does not know (an intranet host only the
+            // office DNS has) falls back to the PC's own DNS, so it still opens. A blocked site is an
+            // answer (0.0.0.0), not a failure, so it does not fall back. The ceiling: a network that
+            // makes the filter unreachable gets unfiltered lookups.
+            v["DnsOverHttpsMode"] = "automatic";
+            v["DnsOverHttpsTemplates"] = doh;
+        }
         var id = edge ? p.EdgeExtensionId : p.ChromeExtensionId;
         if (id is not null)
         {
@@ -265,6 +289,12 @@ public static class BrowserPolicyMap
                 ["Exceptions"] = p.AllowedSites.SelectMany(Patterns).ToArray(),
             };
         if (p.GoogleAllowedDomains.Count > 0) v["AllowedDomainsForApps"] = string.Join(",", p.GoogleAllowedDomains);
+        if (DnsFilterUrl(p) is { } doh)
+            // Fallback as Chrome's "automatic" (see above). Locked: the person cannot turn it off.
+            v["DNSOverHTTPS"] = new Dictionary<string, object>
+            {
+                ["Enabled"] = true, ["ProviderURL"] = doh, ["Locked"] = true, ["Fallback"] = true,
+            };
         if (p.FirefoxExtensionId is not null && (p.FirefoxExtensionUrl is not null || p.ManualInstall))
         {
             var settings = new Dictionary<string, object>(StringComparer.Ordinal);
