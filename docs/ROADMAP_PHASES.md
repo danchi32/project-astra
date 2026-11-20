@@ -2253,7 +2253,11 @@ agent, the extension (with the host code it calls), and the backend with the por
   - **Other browsers (review L1):** found by the file's own name too (a renamed portable browser),
     with version info cached per file; closed through the handle opened when found, after
     checking it is still the same file.
-- **Batch 2, still to do:** the USB link test on an NTFS drive and a USB hard drive (hardware).
+- **USB link test, live (20 Nov):** on an NTFS pendrive, a file with 1 PAN written to
+  `E:\J\kyc.csv`, then `E:\J` swapped within the settle time for a junction to a folder on C:
+  whose `kyc.csv` holds 3 PANs. The SYSTEM scan refused the link and recorded "could not check"
+  with no counts: nothing outside the drive was read (review 3b H1).
+- **Batch 2, still to do:** watching a USB hard drive or SSD (needs one; the VM test).
 - **Batch 2, as first listed:**
   - **Agent H2:** company-drives mode misses USB 3 (UASP) drives and SD cards. Needs blocking
     by `USB\Class_08` and approval by the USB parent ID.
