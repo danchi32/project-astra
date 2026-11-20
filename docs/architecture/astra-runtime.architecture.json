@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ASTRA runtime architecture",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [1280, 760]
+  },
+  "components": [
+    { "id": "end-user", "type": "external", "label": "End user", "sublabel": "Windows session", "pos": [60, 320], "size": [150, 72] },
+    { "id": "win-agent", "type": "frontend", "label": "Windows Agent", "sublabel": "Tray + Service", "tag": ".NET 8", "pos": [280, 320], "size": [160, 72] },
+    { "id": "api", "type": "backend", "label": "ASTRA API", "sublabel": "FastAPI · RBAC · audit", "tag": "Cloud Run", "pos": [540, 320], "size": [170, 72] },
+    { "id": "cognitive", "type": "backend", "label": "Cognitive Engine", "sublabel": "Agentic tool loop", "pos": [800, 320], "size": [170, 72] },
+    { "id": "claude", "type": "external", "label": "Claude API", "sublabel": "Reasoning model", "brand": "claude", "pos": [1070, 320], "size": [150, 72] },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "State + embeddings", "brand": "postgresql", "pos": [540, 540], "size": [170, 72] },
+    { "id": "remediation", "type": "security", "label": "Remediation Gate", "sublabel": "Tiers + allowlist", "pos": [800, 540], "size": [170, 72] },
+    { "id": "voyage", "type": "external", "label": "Voyage AI", "sublabel": "Embeddings", "pos": [1070, 110], "size": [150, 72] },
+    { "id": "it-admin", "type": "external", "label": "IT admin", "sublabel": "Browser", "pos": [60, 110], "size": [150, 72] },
+    { "id": "portal", "type": "frontend", "label": "Web Portal", "sublabel": "Next.js", "tag": "Vercel", "pos": [280, 110], "size": [160, 72] },
+    { "id": "relay", "type": "cloud", "label": "MeshCentral Relay", "sublabel": "Remote control", "pos": [280, 540], "size": [160, 72] },
+    { "id": "saas", "type": "external", "label": "Billing + Email", "sublabel": "Stripe · Resend/SMTP", "pos": [1070, 540], "size": [150, 72] }
+  ],
+  "boundaries": [
+    { "kind": "security-group", "label": "Customer endpoint · device token", "wraps": ["end-user", "win-agent"], "pad": 24 },
+    { "kind": "security-group", "label": "Operator browser · JWT", "wraps": ["it-admin", "portal"], "pad": 24 },
+    { "kind": "region", "label": "ASTRA cloud · trusted core", "wraps": ["api", "cognitive", "postgres", "remediation"], "pad": 28 },
+    { "kind": "region", "label": "Third-party SaaS", "wraps": ["claude", "voyage", "saas"], "pad": 24 }
+  ],
+  "connections": [
+    { "id": "user-to-agent", "from": "end-user", "to": "win-agent", "label": "tray chat", "variant": "emphasis" },
+    { "id": "agent-to-api", "from": "win-agent", "to": "api", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "api-to-cognitive", "from": "api", "to": "cognitive", "label": "diagnose", "variant": "emphasis" },
+    { "id": "cognitive-to-claude", "from": "cognitive", "to": "claude", "label": "tool use", "variant": "emphasis" },
+    { "id": "cognitive-to-gate", "from": "cognitive", "to": "remediation", "label": "propose fix", "fromSide": "bottom", "toSide": "top", "labelAt": [885, 466] },
+    { "id": "api-to-postgres", "from": "api", "to": "postgres", "label": "SQL", "fromSide": "bottom", "toSide": "top", "labelAt": [625, 466] },
+    { "id": "cognitive-to-voyage", "from": "cognitive", "to": "voyage", "label": "embed", "variant": "dashed", "fromSide": "top", "toSide": "bottom" },
+    { "id": "admin-to-portal", "from": "it-admin", "to": "portal", "label": "approve" },
+    { "id": "portal-to-api", "from": "portal", "to": "api", "label": "REST", "fromSide": "right", "toSide": "top" },
+    { "id": "agent-to-relay", "from": "win-agent", "to": "relay", "label": "opt-in", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelAt": [360, 466] }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Primary path", "items": ["User reports an issue in the tray", "Agent calls /agent/chat with its device token", "Engine gathers telemetry + knowledge before proposing"] },
+    { "dot": "amber", "title": "Human-in-the-loop", "items": ["automatic / approval_required / admin_only enforced in code", "operator_only actions never reach the model", "Agent claims only approved, allowlisted tasks via /agent/tasks"] },
+    { "dot": "violet", "title": "Off-path dependencies", "items": ["Voyage embeds knowledge; vectors live in Postgres", "Stripe billing and Resend/SMTP mail from the API", "Signed agent updates from GitHub Releases"] }
+  ]
+}
