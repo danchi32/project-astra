@@ -28,6 +28,8 @@ type SignupInput = {
   admin_name: string;
   admin_email: string;
   admin_password: string;
+  /** Required; E.164 with a leading + (see normalizePhone). */
+  phone: string;
   /** The clickwrap. The API rejects a signup without it — it is not optional here
    *  either, so that a caller cannot forget it and get a 400 at runtime instead. */
   terms_accepted: boolean;

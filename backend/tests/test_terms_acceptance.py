@@ -22,7 +22,7 @@ def _body(org: str, email: str, **overrides) -> dict:
         "admin_name": "Admin",
         "admin_email": email,
         "admin_password": _PW,
-        "terms_accepted": True,
+        "terms_accepted": True, "phone": "+918595492500",
     }
     body.update(overrides)
     return body

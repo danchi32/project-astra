@@ -20,5 +20,7 @@ class PendingRegistration(TimestampMixin, Base):
     organization_name: Mapped[str] = mapped_column(String(200), nullable=False)
     admin_name: Mapped[str] = mapped_column(String(200), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(200), nullable=False)
+    #: Nullable only for rows already pending when the column was added.
+    phone: Mapped[str | None] = mapped_column(String(16), nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

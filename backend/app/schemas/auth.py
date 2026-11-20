@@ -1,4 +1,26 @@
-from pydantic import BaseModel, EmailStr, Field
+import re
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+_PHONE_SEPARATORS = re.compile(r"[\s\-.()]")
+#: E.164: a country code that does not start with 0, at most 15 digits in all.
+_E164 = re.compile(r"\+[1-9]\d{6,14}")
+
+
+def normalize_phone(value: str) -> str:
+    """'+91 85954 92500' / '0091-85954-92500' -> '+918595492500', or ValueError.
+
+    The country code is required: without it a number is ambiguous, and guessing one
+    would store a wrong number that looks right.
+    """
+    phone = _PHONE_SEPARATORS.sub("", value)
+    if phone.startswith("00"):
+        phone = "+" + phone[2:]
+    if not _E164.fullmatch(phone):
+        raise ValueError(
+            "Enter a valid phone number with its country code, e.g. +91 85954 92500"
+        )
+    return phone
 
 
 class LoginRequest(BaseModel):
@@ -15,10 +37,18 @@ class RegisterRequest(BaseModel):
     admin_name: str = Field(min_length=1, max_length=200)
     admin_email: EmailStr
     admin_password: str = Field(min_length=8)
+    #: Required on every new signup; stored E.164-normalised. Existing organisations
+    #: predate it, which is why the column is nullable and this field is not.
+    phone: str = Field(max_length=40)
     #: The signup form's clickwrap. Defaults to False, so a client that omits it is
     #: REJECTED rather than silently treated as agreeing — the whole point of the record
     #: is that it proves a deliberate act, and a default of True would prove nothing.
     terms_accepted: bool = False
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize_phone(cls, value: str) -> str:
+        return normalize_phone(value)
 
 
 class RegisterVerifyRequest(BaseModel):

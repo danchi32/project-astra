@@ -1,10 +1,12 @@
 "use client";
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { ChevronDown, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerStart, registerVerify } from "@/lib/api/auth";
 import { apiErrorMessage } from "@/lib/utils";
+import { phoneWithCountry } from "@/lib/phone";
+import { COUNTRIES } from "@/lib/countries";
 
 // Policies live on the marketing site, which is where they are published and versioned.
 const TERMS_URL = "https://technomateai.com/terms/";
@@ -25,8 +27,12 @@ export default function RegisterPage() {
     organization_name: "",
     admin_name: "",
     admin_email: "",
+    phone: "",
     admin_password: "",
   });
+  // The phone's country, by ISO code (dial codes are shared: +1 is US and Canada). India by
+  // default, the market SAVIO sells in first.
+  const [country, setCountry] = useState("IN");
   // Unticked by default. A pre-ticked box is not acceptance of anything.
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [step, setStep] = useState<"details" | "code">("details");
@@ -42,6 +48,12 @@ export default function RegisterPage() {
   async function submitDetails(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    const dial = COUNTRIES.find((c) => c.iso === country)?.dial ?? "91";
+    const phone = phoneWithCountry(dial, form.phone);
+    if (!phone) {
+      setError("Enter a valid phone number for the selected country.");
+      return;
+    }
     if (form.admin_password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -54,7 +66,7 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      const res = await registerStart({ ...form, terms_accepted: termsAccepted });
+      const res = await registerStart({ ...form, phone, terms_accepted: termsAccepted });
       if (res.otp_required) {
         setStep("code");
       } else {
@@ -125,6 +137,28 @@ export default function RegisterPage() {
             <p className="text-xs mt-1.5" style={{ color: "var(--text-secondary)" }}>
               Use your company email — personal addresses (Gmail, Outlook, Yahoo…) aren&apos;t accepted.
             </p>
+          </div>
+          <div>
+            <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Phone number</label>
+            <div className="flex gap-2">
+              {/* A native select, invisible, over a compact "IN +91" label: closed, a full
+                  country name doesn't fit beside the number; open, the names are what
+                  people scan and type-search by. */}
+              <div className={`${authInputCls} relative flex items-center justify-between gap-1 focus-within:ring-2`}
+                style={{ ...authInputStyle, width: "6.5rem", flexShrink: 0 }}>
+                <span>{country} +{COUNTRIES.find((c) => c.iso === country)?.dial}</span>
+                <ChevronDown size={14} style={{ color: "var(--text-secondary)" }} />
+                <select aria-label="Country code" value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="absolute inset-0 w-full cursor-pointer opacity-0">
+                  {COUNTRIES.map((c) => (
+                    <option key={c.iso} value={c.iso}>{`${c.name} (+${c.dial})`}</option>
+                  ))}
+                </select>
+              </div>
+              <input type="tel" required autoComplete="tel-national" value={form.phone} onChange={set("phone")}
+                className={`${authInputCls} min-w-0`} style={authInputStyle} placeholder="85954 92500" />
+            </div>
           </div>
           <div>
             <label className={authLabelCls} style={{ color: "var(--text-secondary)" }}>Password</label>
