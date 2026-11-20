@@ -146,6 +146,21 @@ public sealed class BrowserPolicyWriterTests : IDisposable
     };
 
     [Fact]
+    public void Reading_pdfs_is_written_as_a_dword_and_kept()
+    {
+        // Found in the live test (19 Nov): readPdf is a boolean, which the writer did not know, so
+        // the whole cycle threw and left the extension's settings half written.
+        var r = Chrome(Guarded with { ReadPdfs = true });
+        Assert.Null(r.Error);
+        using (var ours = Policy(Browser.Chrome).OpenSubKey($@"3rdparty\extensions\{ChromeId}\policy")!)
+        {
+            Assert.Equal(1, ours.GetValue("readPdf"));
+            Assert.Equal(RegistryValueKind.DWord, ours.GetValueKind("readPdf"));
+        }
+        Assert.False(Chrome(Guarded with { ReadPdfs = true }).Changed);   // held, not rewritten every cycle
+    }
+
+    [Fact]
     public void Extension_settings_go_under_3rdparty_beside_other_extensions()
     {
         using (var other = _root.CreateSubKey($@"{BrowserPolicyWriter.ChromiumPolicyPath(Browser.Chrome)}\3rdparty\extensions\zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz\policy", true))

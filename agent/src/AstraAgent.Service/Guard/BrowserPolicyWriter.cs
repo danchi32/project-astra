@@ -187,7 +187,10 @@ public static class BrowserPolicyWriter
             return new ApplyReport(browser, set, repaired, removed, conflicts,
                 notStuck.Count == 0 ? null : $"Did not stick (something else rewrites them): {string.Join(", ", notStuck)}");
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+        // ArgumentException too (a value of a kind the writer does not know): that browser reports an
+        // error, and the other browsers and USB are still applied (live test, 19 Nov).
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException
+                                      or ArgumentException)
         {
             return new ApplyReport(browser, set, repaired, removed, conflicts, $"Could not write {browser} policy: {ex.Message}");
         }
@@ -416,6 +419,7 @@ public static class BrowserPolicyWriter
         return value switch
         {
             int i => current is int c && c == i && k.GetValueKind(name) == RegistryValueKind.DWord,
+            bool b => current is int c && c == (b ? 1 : 0) && k.GetValueKind(name) == RegistryValueKind.DWord,
             string s => current is string c && c == s,
             _ => false,
         };
@@ -435,6 +439,9 @@ public static class BrowserPolicyWriter
                     foreach (var (n, v) in map) WriteAt(sub, n, v);
                 break;
             case int i: k.SetValue(name, i, RegistryValueKind.DWord); break;
+            // A boolean in an extension's managed settings (readPdf): Chrome and Edge read policy
+            // booleans from the registry as a DWORD 0 / 1 (found in the live test, 19 Nov).
+            case bool b: k.SetValue(name, b ? 1 : 0, RegistryValueKind.DWord); break;
             case string s: k.SetValue(name, s, RegistryValueKind.String); break;
             default: throw new ArgumentException($"unsupported value for {name}");
         }

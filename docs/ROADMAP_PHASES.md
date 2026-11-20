@@ -2183,6 +2183,32 @@ agent, the extension (with the host code it calls), and the backend with the por
   - **L4:** the high-case notification, which every role sees, no longer carries the reasons.
   - **L5:** a device can add at most one "other browser closed" audit row an hour.
   - Two 500s: applying a Tracker suggestion with no browser policy, and the file errors above.
+- **Live test on a real PC (19 Nov, this laptop, agent 5c2e472 + fix, local backend):**
+  - **Works:** USB copy recording (counts only, the console user; PDFs read too); read-only;
+    write on request end to end (tray → IT approves → ban lifted in 35 s); company drives
+    blocking a new drive and allowing an approved one; the file map with PDFs and the two-year
+    count; paste and PDF-upload warnings with "proceeded" recorded; Microsoft tenant header in
+    the browser; Windows TRv2 correctly left alone where the company already sets it.
+  - **Fixed the same day:** `readPdf` (a boolean) was not writable to the Chrome/Edge registry,
+    so with PDF reading and an extension ID set the whole policy cycle threw and Edge, Firefox
+    and USB were skipped too. Booleans are now DWORD 0/1, and an unexpected value fails only
+    that browser.
+  - **Found, for batch 2:**
+    - **USB rules apply only on plug-in.** Read-only, write windows and company drives need the
+      drive replugged. A drive already in stays writable when read-only starts or a window
+      ends. A drive used before company-drives mode keeps working, and an approved drive that
+      was blocked earlier stays blocked, until its device entry is removed. The agent should
+      remove the device entries of USB disks (and remount) whenever the USB mode or approvals
+      change.
+    - **Pages that write their own iframes:** no check on the w3schools "Try it" file input
+      (worked on a plain page).
+    - **Policy changes reach a PC within the hour** (fetched hourly). Fine as designed, but the
+      portal should say so.
+    - **A self-contained tray build loops on start** (the hand-off relaunches the same exe).
+      The release ships framework-dependent, so this is test-only, but the hand-off should
+      refuse to relaunch itself.
+  - **Not tested here:** the USB link test (the pendrive is FAT32); USB hard drives; closing
+    other browsers (none installed).
 - **Batch 2, with the VM test (not done):**
   - **Agent H2:** company-drives mode misses USB 3 (UASP) drives and SD cards. Needs blocking
     by `USB\Class_08` and approval by the USB parent ID.
