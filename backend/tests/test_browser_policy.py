@@ -182,7 +182,7 @@ async def test_named_policies_follow_the_person(client, admin_headers, user_head
     assert (await served(ha)).json()["version"] == 1
     asset = await assign(a, str(regular_user.id), "Laptop A")
     pa = (await served(ha)).json()
-    assert pa["version"] == 2 and "facebook.com" in pa["policy"]["blocked_sites"]       # by the person's team
+    assert pa["version"] == 2 and {"facebook.com"} <= set(pa["policy"]["blocked_sites"])  # by the person's team
     assert (await served(hb)).json()["version"] == 1
 
     # A policy naming the user directly, ranked higher, wins over the team's.
@@ -607,7 +607,7 @@ async def test_exceptions_layer_over_the_full_policy(client, admin_headers, sess
     assert usb["kind"] == "exception" and usb["policy"] is None and usb["exception"]["usb_mode"] == "off"
     p = (await served(h)).json()
     assert p["policy"]["usb_mode"] == "off"                                        # the exception's
-    assert "netflix.com" in p["policy"]["blocked_sites"] and "facebook.com" in p["policy"]["blocked_sites"]  # Sales'
+    assert {"netflix.com", "facebook.com"} <= set(p["policy"]["blocked_sites"])  # Sales'
     assert p["version"] >= 1_000_000_000 and p["version"] != base["version"]
 
     # A second exception for the whole team: Facebook and personal Gmail allowed, USB read-only.
@@ -617,7 +617,7 @@ async def test_exceptions_layer_over_the_full_policy(client, admin_headers, sess
         "exception": {"allow_sites": ["facebook.com"], "google_allowed_domains": [], "usb_mode": "read_only"}})).json()
     p2 = (await served(h)).json()
     assert p2["policy"]["usb_mode"] == "off" and p2["policy"]["google_allowed_domains"] == []
-    assert "facebook.com" in p2["policy"]["allowed_sites"] and "facebook.com" not in p2["policy"]["blocked_sites"]
+    assert {"facebook.com"} <= set(p2["policy"]["allowed_sites"]) and {"facebook.com"}.isdisjoint(p2["policy"]["blocked_sites"])
     assert p2["version"] != p["version"] and (await served(h)).json()["version"] == p2["version"]   # stable
 
     # An exception keeps its kind, and the PC list names the exceptions on each PC.
@@ -632,7 +632,8 @@ async def test_exceptions_layer_over_the_full_policy(client, admin_headers, sess
     # Without the full policy, the exceptions sit on the default one.
     await client.delete(f"{url}/{sales['id']}", headers=admin_headers)
     p3 = (await served(h)).json()["policy"]
-    assert p3["usb_mode"] == "off" and "netflix.com" not in p3["blocked_sites"] and "facebook.com" in p3["allowed_sites"]
+    assert p3["usb_mode"] == "off" and {"netflix.com"}.isdisjoint(p3["blocked_sites"])
+    assert {"facebook.com"} <= set(p3["allowed_sites"])
 
 
 async def test_categories_can_be_allowed(client, admin_headers, session_factory, admin_user, regular_user):
@@ -644,8 +645,8 @@ async def test_categories_can_be_allowed(client, admin_headers, session_factory,
     assert r.status_code == 200 and r.json()["policy"]["allowed_categories"] == ["work_tools"]
     d, h = await _enroll(client, admin_headers, "CAT-1")
     p = (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]
-    assert "office.com" in p["allowed_sites"] and "zoom.us" in p["allowed_sites"]          # allowed wins on the PC
-    assert "youtube.com" in p["blocked_sites"] and "allowed_categories" not in p
+    assert {"office.com", "zoom.us"} <= set(p["allowed_sites"])          # allowed wins on the PC
+    assert {"youtube.com"} <= set(p["blocked_sites"]) and "allowed_categories" not in p
 
     me = str(regular_user.id)
     await client.post("/api/v1/assets", headers=admin_headers, json={"name": "L", "device_id": d, "assigned_to_user_id": me})
@@ -653,7 +654,7 @@ async def test_categories_can_be_allowed(client, admin_headers, session_factory,
         "name": "No video calls, but YouTube", "priority": 1, "kind": "exception", "user_ids": [me],
         "exception": {"block_categories": ["work_tools"], "allow_categories": ["streaming"]}})
     p = (await client.get("/api/v1/agent/browser-policy", headers=h)).json()["policy"]
-    assert "office.com" in p["blocked_sites"] and "office.com" not in p["allowed_sites"]
-    assert "youtube.com" in p["allowed_sites"] and "youtube.com" not in p["blocked_sites"]
+    assert {"office.com"} <= set(p["blocked_sites"]) and {"office.com"}.isdisjoint(p["allowed_sites"])
+    assert {"youtube.com"} <= set(p["allowed_sites"]) and {"youtube.com"}.isdisjoint(p["blocked_sites"])
     cats = {c["key"] for c in (await client.get("/api/v1/guard/site-categories", headers=admin_headers)).json()}
     assert {"streaming", "gaming", "gambling", "shopping", "job_search", "dating", "vpn_proxy", "piracy", "work_tools"} <= cats
