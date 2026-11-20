@@ -38,7 +38,7 @@ export default function DiscoveryPage() {
       if (apply) {
         const r = await applyGuardSuggestion(s);
         qc.setQueryData(["browser-policy"], r);
-        setMsg({ ok: true, text: `Applied: ${s.title}. Browser policy is now version ${r.version}; PCs pick it up within the hour.` });
+        setMsg({ ok: true, text: `Applied: ${s.title}. The default policy is now version ${r.version}; PCs pick it up within the hour.` });
       } else {
         await dismissGuardSuggestion(s.key);
         setMsg({ ok: true, text: `Dismissed: ${s.title}.` });
@@ -78,7 +78,7 @@ export default function DiscoveryPage() {
             <p className="text-xs max-w-2xl" style={muted}>
               Folders on your PCs that hold files with Aadhaar, PAN, card, bank or mobile numbers, from each PC&apos;s weekly
               check. The check runs on the PC itself; only the folder and the counts come here, never file names or contents.
-              Switch it on under Browser policy.
+              Switch it on under Browser policies.
             </p>
           </div>
         </div>
@@ -155,7 +155,7 @@ export default function DiscoveryPage() {
                 ))}
                 {!rows.length && (
                   <tr><td colSpan={4} className="px-4 py-6 text-center text-sm" style={muted}>
-                    {data.pcs ? "No sensitive files found on the PCs checked." : "No PC has reported yet. Switch the check on under Browser policy; each PC runs it within a couple of hours, then weekly."}
+                    {data.pcs ? "No sensitive files found on the PCs checked." : "No PC has reported yet. Switch the check on under Browser policies; each PC runs it within a couple of hours, then weekly."}
                   </td></tr>
                 )}
               </tbody>

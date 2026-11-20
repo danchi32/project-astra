@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import GUID, Base, TimestampMixin, utcnow
@@ -34,6 +34,8 @@ class OrgBrowserPolicy(TimestampMixin, Base):
     # D1: the hosts of `policy.blocked_categories` as they were when it was saved, served to PCs
     # beside `blocked_sites`. A copy, so a changed list reaches a PC only with a new version.
     category_hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # The same for policy.allowed_categories: their hosts, always allowed, as when it was saved.
+    allowed_category_hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # D1 groups: the last version number issued to any of this org's policies, this one or a
     # group's. Every saved change takes the next one, so a number names one policy's content
     # and is never reused. A PC moved between groups then always reports a different version,
@@ -41,25 +43,39 @@ class OrgBrowserPolicy(TimestampMixin, Base):
     seq: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
-class GroupBrowserPolicy(TimestampMixin, Base):
-    """Phase 3 · D1: a device group's own browser policy, instead of the org's.
+class NamedBrowserPolicy(TimestampMixin, Base):
+    """A named browser policy for chosen people: user teams and/or single users.
 
-    Groups overlap, so a PC in several gets the one with the lowest `priority` (then by group
-    name): exactly one policy per PC, never a merge. A PC in none gets the org's policy.
-    `version` comes from the org's `seq`."""
+    It follows the person, not the machine: a PC gets the policy of the user it is assigned to
+    in Assets, so assigning someone another PC moves their policy with them at its next fetch.
+    Assignments overlap, so the lowest `priority` (then name) wins: exactly one policy per PC,
+    never a merge. A PC whose user no policy names, or with no user, gets the org's (default)
+    policy. `version` comes from the org's `seq`."""
 
-    __tablename__ = "group_browser_policies"
+    __tablename__ = "browser_policies"
+    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_browser_policies_org_name"),)
 
-    group_id: Mapped[uuid.UUID] = mapped_column(
-        GUID, ForeignKey("device_groups.id", ondelete="CASCADE"), primary_key=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(
         GUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    # "full": a whole policy (`policy` is a BrowserPolicyBody); a PC gets one, the winning one.
+    # "exception": only some modules (`policy` is an ExceptionBody), laid over whatever full
+    # policy the person gets, e.g. USB allowed for two people of Sales. Every exception naming
+    # the person applies; where two set the same thing, the lower priority number wins.
+    kind: Mapped[str] = mapped_column(String(10), nullable=False, default="full")
+    # ponytail: id lists, not join tables. An org has a handful of policies, all read at once
+    # and matched in Python; an id whose team or user was deleted simply matches nothing. Move
+    # to join tables if policies ever need querying by member.
+    team_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    user_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     category_hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # The same for policy.allowed_categories: their hosts, always allowed, as when it was saved.
+    allowed_category_hosts: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

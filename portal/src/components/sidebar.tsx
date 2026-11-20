@@ -70,7 +70,7 @@ const ORG_NAV: NavEntry[] = [
   { group: "Tracker", icon: Clock, feature: "workforce_insights", lockedHref: "/tracker",
     children: TRACKER_SUBNAV },
   { group: "AI Guard", icon: ShieldAlert, feature: "ai_guard", lockedHref: "/guard",
-    children: [{ href: "/guard/cases", label: "Cases" }, { href: "/guard", label: "Browser policy" },
+    children: [{ href: "/guard/cases", label: "Cases" }, { href: "/guard", label: "Browser policies" },
                 { href: "/guard/events", label: "What was found" },
                 { href: "/guard/approvals", label: "Approvals" },
                 { href: "/guard/discovery", label: "Where data lives" },
